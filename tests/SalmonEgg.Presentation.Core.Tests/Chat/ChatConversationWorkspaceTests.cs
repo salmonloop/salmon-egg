@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -20,8 +21,13 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.ViewModels.Navigation;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -104,7 +110,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpRestoredConversationCwd()
+    public async Task RestoreAsync_WhenPersistedConversationCarriesSessionInfoCwd_EstablishesSessionWithIt()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore
@@ -115,47 +121,7 @@ public sealed class ChatConversationWorkspaceTests
                 {
                     new ConversationRecord
                     {
-                        ConversationId = "session-existing",
-                        DisplayName = "Session Existing",
-                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
-                        Cwd = @"C:\repo\restored"
-                    }
-                }
-            }
-        };
-
-        var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-existing", null);
-        var existing = sessionManager.GetSession("session-existing");
-        Assert.NotNull(existing);
-        Assert.Null(existing!.Cwd);
-
-        var preferences = CreatePreferences(syncContext);
-        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
-
-        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
-
-        var session = sessionManager.GetSession("session-existing");
-        Assert.NotNull(session);
-        Assert.Equal(@"C:\repo\restored", session!.Cwd);
-        var catalogItem = Assert.Single(workspace.GetCatalog(), item => item.ConversationId == "session-existing");
-        Assert.Equal(@"C:\repo\restored", catalogItem.Cwd);
-    }
-
-    [Fact]
-    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpSessionInfoCwd()
-    {
-        var syncContext = new ImmediateSynchronizationContext();
-        var store = new CapturingConversationStore
-        {
-            LoadResult = new ConversationDocument
-            {
-                Conversations =
-                {
-                    new ConversationRecord
-                    {
-                        ConversationId = "session-existing-info",
+                        ConversationId = "session-info-only",
                         DisplayName = "Session Existing",
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
@@ -169,16 +135,16 @@ public sealed class ChatConversationWorkspaceTests
         };
 
         var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-existing-info", null);
-
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
         await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
-        var session = sessionManager.GetSession("session-existing-info");
+        var session = sessionManager.GetSession("session-info-only");
         Assert.NotNull(session);
         Assert.Equal(@"C:\repo\info", session!.Cwd);
+        var catalogItem = Assert.Single(workspace.GetCatalog(), item => item.ConversationId == "session-info-only");
+        Assert.Equal(@"C:\repo\info", catalogItem.Cwd);
     }
 
     [Fact]
@@ -252,6 +218,57 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task FlushPendingSaveAsync_WithinSaveDebounceWindow_PersistsTheNewestState()
+    {
+        // Conversation state reaches disk through a debounce, so a process that ends inside that
+        // window would lose the newest turn unless the pending write is forced out.
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        store.Reset();
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-1", "newest turn")],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+        store.Reset();
+
+        // Schedules the debounced write; nothing has reached the store yet.
+        workspace.UpdateProjectAffinityOverride("session-1", "project-newest");
+        Assert.Null(store.LastSavedDocument);
+
+        await workspace.FlushPendingSaveAsync(TestContext.Current.CancellationToken);
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var conversation = Assert.Single(saved.Conversations);
+        Assert.Equal("project-newest", conversation.ProjectAffinityOverrideProjectId);
+    }
+
+    [Fact]
+    public async Task FlushPendingSaveAsync_WithNothingPending_DoesNotWrite()
+    {
+        // Teardown runs on every exit, including exits with no unsaved work; it must not manufacture
+        // a redundant write.
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        store.Reset();
+
+        await workspace.FlushPendingSaveAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(store.LastSavedDocument);
+    }
+
+    [Fact]
     public async Task SaveAsync_PersistsConversationSessionState()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -260,6 +277,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -325,6 +343,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             var message = CreateTextMessage("m-1", "hello");
             message.ProtocolMessageId = "protocol-1";
 
@@ -366,6 +385,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -375,11 +395,11 @@ public sealed class ChatConversationWorkspaceTests
                     Id = "tool-1",
                     ContentType = "tool_call",
                     ToolCallId = "call-1",
-                    ToolCallStatus = ToolCallStatus.InProgress,
-                    ToolCallContent = new List<ToolCallContent>
+                    ToolCallStatus = ToolCallStatus.InProgress.ToString(),
+                    ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                     {
                         new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/doc"))
-                    },
+                    }),
                     Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             ],
@@ -390,7 +410,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         var toolCall = Assert.Single(snapshot!.Transcript);
-        var structuredContent = Assert.Single(toolCall.ToolCallContent!);
+        var structuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(toolCall.ToolCallContent)!);
         var content = Assert.IsType<ContentToolCallContent>(structuredContent);
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
         Assert.Equal("https://example.com/doc", resourceLink.Uri);
@@ -400,7 +420,7 @@ public sealed class ChatConversationWorkspaceTests
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
         var savedToolCall = Assert.Single(conversation.Messages);
-        var savedStructuredContent = Assert.Single(savedToolCall.ToolCallContent!);
+        var savedStructuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(savedToolCall.ToolCallContent)!);
         var savedContent = Assert.IsType<ContentToolCallContent>(savedStructuredContent);
         var savedResourceLink = Assert.IsType<ResourceLinkContentBlock>(savedContent.Content);
         Assert.Equal("https://example.com/doc", savedResourceLink.Uri);
@@ -584,8 +604,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -622,6 +642,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -657,6 +678,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-old",
@@ -710,6 +732,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -763,6 +786,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -774,8 +798,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -815,7 +839,7 @@ public sealed class ChatConversationWorkspaceTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
 
         await workspace.SaveAsync(TestContext.Current.CancellationToken);
@@ -847,6 +871,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -858,8 +883,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -899,7 +924,7 @@ public sealed class ChatConversationWorkspaceTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
         workspace.UpdateRemoteBinding("session-1", remoteSessionId: null, boundProfileId: "profile-1");
 
         await workspace.SaveAsync(TestContext.Current.CancellationToken);
@@ -945,8 +970,8 @@ public sealed class ChatConversationWorkspaceTests
                             new ConversationPlanEntrySnapshot
                             {
                                 Content = "step-1",
-                                Status = PlanEntryStatus.InProgress,
-                                Priority = PlanEntryPriority.High
+                                Status = PlanEntryStatus.InProgress.ToString(),
+                                Priority = PlanEntryPriority.High.ToString()
                             }
                         },
                         AvailableModes =
@@ -981,7 +1006,7 @@ public sealed class ChatConversationWorkspaceTests
                         Usage = new ConversationUsageSnapshot(
                             3,
                             99,
-                            new ConversationUsageCostSnapshot(1.25m, "USD")),
+                            new ConversationUsageCostSnapshot(1.25, "USD")),
                         ShowPlanPanel = true,
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -1026,6 +1051,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         await workspace.RegisterConversationAsync("session-1", cancellationToken: TestContext.Current.CancellationToken);
         workspace.UpdateProjectAffinityOverride("session-1", "project-override");
@@ -1137,6 +1163,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1168,6 +1195,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1238,6 +1266,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1369,6 +1398,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1381,7 +1411,7 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
 
         await workspace.ApplySessionInfoUpdateAsync(
@@ -1402,6 +1432,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1414,7 +1445,7 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
 
         await workspace.ApplySessionInfoUpdateAsync(
@@ -1436,6 +1467,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1448,8 +1480,8 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Original title",
                 HasTitle = true,
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
+                AdditionalDirectories = [@"C:\shared\one"],
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -1462,7 +1494,6 @@ public sealed class ChatConversationWorkspaceTests
             "session-1",
             new ConversationSessionInfoSnapshot
             {
-                Description = "Updated description",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -1475,8 +1506,8 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Original title", sessionInfo.Title);
-        Assert.Equal("Updated description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal([@"C:\shared\one"], sessionInfo.AdditionalDirectories);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
         Assert.Equal("after", sessionInfo.Meta["shared"]);
@@ -1484,13 +1515,52 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_EmptyTitle_ReplacesRemoteTitleAndPreservesOtherFields()
+    public async Task ApplySessionInfoSnapshotAsync_AuthoritativeEmptyAdditionalDirectories_ClearsExistingList()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\one",
+                AdditionalDirectories = [@"C:\shared\old"]
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\one",
+                AdditionalDirectories = []
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+            workspace.GetConversationSnapshot("session-1")!.SessionInfo);
+        Assert.NotNull(sessionInfo.AdditionalDirectories);
+        Assert.Empty(sessionInfo.AdditionalDirectories);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_EmptyTitle_ReplacesRemoteTitleAndPreservesCwd()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1503,7 +1573,6 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Original title",
                 HasTitle = true,
-                Description = "Original description",
                 Cwd = @"C:\repo\one"
             }));
 
@@ -1512,7 +1581,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
@@ -1521,7 +1589,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal(string.Empty, sessionInfo.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -1538,6 +1605,7 @@ public sealed class ChatConversationWorkspaceTests
         session.DisplayName = "Original remote title";
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1582,6 +1650,7 @@ public sealed class ChatConversationWorkspaceTests
         session.DisplayName = "User chosen title";
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1621,6 +1690,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1632,7 +1702,6 @@ public sealed class ChatConversationWorkspaceTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = "Original title",
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -1647,7 +1716,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = " ",
-                Description = "\t",
                 Cwd = " ",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -1661,7 +1729,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal(" ", sessionInfo.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
@@ -1677,6 +1744,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1688,7 +1756,6 @@ public sealed class ChatConversationWorkspaceTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = "Original title",
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
             }));
@@ -1698,7 +1765,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
@@ -1706,7 +1772,6 @@ public sealed class ChatConversationWorkspaceTests
         var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal(string.Empty, sessionInfo!.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -1722,6 +1787,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1763,6 +1829,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1799,6 +1866,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1828,7 +1896,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_RemoteMetadataRefreshDoesNotOverrideEstablishedSessionCwd()
+    public async Task ApplySessionInfoSnapshotAsync_RemoteCwdReplacesStaleLocalCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1838,6 +1906,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1863,14 +1932,14 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Refreshed title", sessionInfo.Title);
-        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", sessionInfo.Cwd);
         Assert.Equal(
-            @"C:\repo\one",
+            @"C:\Users\shang\AppData\Local\SalmonEgg",
             sessionManager.GetSession("session-1")!.Cwd);
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_WhenWorkspaceSnapshotCarriesEstablishedCwd_PreservesThatCwd()
+    public async Task ApplySessionInfoSnapshotAsync_WhenWorkspaceCarriesStaleCwd_UsesRemoteCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1878,6 +1947,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1904,18 +1974,178 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Refreshed title", sessionInfo.Title);
-        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", sessionInfo.Cwd);
     }
 
     [Fact]
-    public async Task GetCatalog_WhenSessionManagerCwdDrifts_UsesWorkspaceSessionInfoCwdForProjection()
+    public async Task ApplySessionInfoSnapshotAsync_AuthoritativeCwd_IsPersistedBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var authoritativeCwd = @"C:\remote\workspace";
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+            await workspace.ApplySessionInfoSnapshotAsync(
+                "session-1",
+                new ConversationSessionInfoSnapshot
+                {
+                    Cwd = authoritativeCwd,
+                    HasTitle = true
+                },
+                allowRegisterWhenMissing: true,
+                cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var savedRecord = Assert.Single(saved.Conversations);
+        Assert.Equal(authoritativeCwd, savedRecord.Cwd);
+        Assert.Equal(authoritativeCwd, savedRecord.SessionInfo?.Cwd);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(
+            store,
+            new FakeSessionManager(),
+            preferences,
+            syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var restoredSnapshot = restoredWorkspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(restoredSnapshot);
+        Assert.Equal(authoritativeCwd, restoredSnapshot!.SessionInfo?.Cwd);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RemoteTrackingUnderRemoteIdOnly_PersistsCwdFromRemoteSessionSlot()
+    {
+        // A remote-backed conversation restored from a document with no persisted working directory,
+        // whose live session is tracked only under the remote id (not the conversation id). The session
+        // manager has no entry under the conversation id, so a save path that resolves the working
+        // directory through GetSession(conversationId) alone would miss and persist nothing. The save
+        // path must instead resolve through the binding, which hops to the remote-id tracking slot.
+        var syncContext = new ImmediateSynchronizationContext();
+        const string remoteCwd = @"C:\remote\workspace";
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        // Tracked only under the remote id — the conversation id has no slot.
+        var remoteSlot = sessionManager.GetOrCreateTrackingSlot("remote-1", remoteCwd);
+        remoteSlot.DisplayName = "Remote session";
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var savedRecord = Assert.Single(saved.Conversations);
+        Assert.Equal(remoteCwd, savedRecord.Cwd);
+    }
+
+    [Fact]
+    public async Task DeleteConversationAsync_Tombstone_IsPersistedBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1",
+                        Cwd = @"C:\remote\workspace"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+            await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        Assert.Contains("session-1", saved.DeletedConversationIds);
+        Assert.Empty(saved.Conversations);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(
+            store,
+            new FakeSessionManager(),
+            preferences,
+            syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+        await restoredWorkspace.ApplySessionInfoUpdateAsync(
+            "session-1",
+            title: "zombie",
+            updatedAtUtc: DateTime.UtcNow,
+            allowRegisterWhenMissing: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain("session-1", restoredWorkspace.GetKnownConversationIds());
+        Assert.Null(restoredWorkspace.GetConversationSnapshot("session-1"));
+    }
+
+    [Fact]
+    public async Task GetCatalog_WhenWorkspaceSessionInfoCarriesCwd_ProjectsItAheadOfTheLocalSession()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
 
-        var session = await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        // The local session and the workspace snapshot disagree. That cannot happen for an
+        // established conversation any more, but the projection order still has to be pinned: the
+        // catalog reports what the remote told us the session runs in, not a locally derived guess.
+        await sessionManager.CreateSessionAsync("session-1", @"C:\Users\shang\AppData\Local\SalmonEgg");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -1930,8 +2160,6 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Original title",
                 Cwd = @"C:\repo\one"
             }));
-
-        session.Cwd = @"C:\Users\shang\AppData\Local\SalmonEgg";
 
         var item = Assert.Single(workspace.GetCatalog());
         Assert.Equal(@"C:\repo\one", item.Cwd);
@@ -2045,6 +2273,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("remote-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -2114,6 +2343,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
                 Transcript: [],
@@ -2128,7 +2358,7 @@ public sealed class ChatConversationWorkspaceTests
                 Usage: new ConversationUsageSnapshot(
                     3,
                     99,
-                    new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                    new ConversationUsageCostSnapshot(1.25, "USD"))));
 
             await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
@@ -2141,10 +2371,10 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("Planning command", savedCommand.Description);
         Assert.Equal("target", savedCommand.InputHint);
         Assert.NotNull(savedConversation.Usage);
-        Assert.Equal(3, savedConversation.Usage!.Used);
-        Assert.Equal(99, savedConversation.Usage.Size);
+        Assert.Equal(3UL, savedConversation.Usage!.Used);
+        Assert.Equal(99UL, savedConversation.Usage.Size);
         Assert.NotNull(savedConversation.Usage.Cost);
-        Assert.Equal(1.25m, savedConversation.Usage.Cost!.Amount);
+        Assert.Equal(1.25, savedConversation.Usage.Cost!.Amount);
         Assert.Equal("USD", savedConversation.Usage.Cost.Currency);
 
         store.LoadResult = saved;
@@ -2158,21 +2388,22 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("Planning command", restoredCommand.Description);
         Assert.Equal("target", restoredCommand.InputHint);
         Assert.NotNull(restored.Usage);
-        Assert.Equal(3, restored.Usage!.Used);
-        Assert.Equal(99, restored.Usage.Size);
+        Assert.Equal(3UL, restored.Usage!.Used);
+        Assert.Equal(99UL, restored.Usage.Size);
         Assert.NotNull(restored.Usage.Cost);
-        Assert.Equal(1.25m, restored.Usage.Cost!.Amount);
+        Assert.Equal(1.25, restored.Usage.Cost!.Amount);
         Assert.Equal("USD", restored.Usage.Cost.Currency);
     }
 
     [Fact]
-    public void UpsertConversationSnapshot_DeletedConversation_DoesNotResurrectConversation()
+    public async Task UpsertConversationSnapshot_DeletedConversation_DoesNotResurrectConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2181,7 +2412,7 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2196,13 +2427,14 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public void UpdateRemoteBinding_DeletedConversation_DoesNotResurrectConversation()
+    public async Task UpdateRemoteBinding_DeletedConversation_DoesNotResurrectConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2211,7 +2443,7 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
 
         workspace.UpdateRemoteBinding("session-1", remoteSessionId: "remote-zombie", boundProfileId: "profile-zombie");
 
@@ -2472,6 +2704,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
                 Transcript: [CreateTextMessage("m-1", "alpha")],
@@ -2479,7 +2712,7 @@ public sealed class ChatConversationWorkspaceTests
                 ShowPlanPanel: false,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-            workspace.DeleteConversation("session-1");
+            await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
             await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
 
@@ -2517,17 +2750,12 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 6, 0, 1, 0, DateTimeKind.Utc),
-            ConnectionInstanceId: "conn-1",
-            RestoreProjectionItemKey: "msg:agent-001",
-            RestoreProjectionEpoch: 1),
-            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+            ConnectionInstanceId: "conn-1"));
 
         workspace.ClearConversationRuntimeContent("session-1");
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
-        Assert.Null(snapshot!.RestoreProjectionItemKey);
-        Assert.Null(snapshot.RestoreProjectionEpoch);
     }
 
     [Fact]
@@ -2608,6 +2836,68 @@ public sealed class ChatConversationWorkspaceTests
         await mutationTask;
 
         navigation.Verify(n => n.ActivateStartAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ConversationCatalogFacade_ArchiveCurrentConversation_WhenStartActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .Setup(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationMutationResult(true, true, null));
+
+        var selection = new Mock<IShellSelectionReadModel>();
+        selection.SetupGet(s => s.CurrentSelection)
+            .Returns(new NavigationSelectionState.Session("session-1"));
+
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator.Setup(n => n.ActivateStartAsync(null)).ReturnsAsync(false);
+
+        using var navigationViewModel = new MainNavigationViewModel(
+            Mock.Of<IConversationCatalog>(),
+            new NavigationProjectPreferencesAdapter(preferences),
+            ui.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<MainNavigationViewModel>>(),
+            new FakeNavigationPaneState(),
+            Mock.Of<IShellLayoutMetricsSink>(),
+            new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
+            new ShellNavigationRuntimeStateStore(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        var facade = new ConversationCatalogFacade(
+            workspace,
+            activationCoordinator.Object,
+            selection.Object,
+            new Lazy<INavigationCoordinator>(() => navigationCoordinator.Object),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance,
+            navigationViewModel: new Lazy<MainNavigationViewModel>(() => navigationViewModel));
+
+        var result = await facade.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.ClearedActiveConversation);
+        navigationCoordinator.Verify(n => n.ActivateStartAsync(null), Times.Once);
+        Assert.Equal(
+            ["Failed to open the start page. Please try again later."],
+            shownMessages);
     }
 
     [Fact]
@@ -2710,6 +3000,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2746,10 +3037,10 @@ public sealed class ChatConversationWorkspaceTests
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 20, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
 
-        sessionManager.UpdateSession(
-            "session-1",
-            session => session.LastActivityAt = new DateTime(2026, 3, 1, 0, 30, 0, DateTimeKind.Utc),
-            updateActivity: false);
+        var trackedSession = sessionManager.GetSession("session-1")!;
+        trackedSession.RestoreTimestamps(
+            trackedSession.CreatedAt,
+            new DateTime(2026, 3, 1, 0, 30, 0, DateTimeKind.Utc));
 
         Assert.Equal(new[] { "session-2", "session-1" }, workspace.GetKnownConversationIds());
 
@@ -2761,6 +3052,137 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal(
             new DateTime(2026, 3, 1, 0, 20, 0, DateTimeKind.Utc),
             catalog.Single(item => item.ConversationId == "session-2").CatalogUpdatedAt);
+    }
+
+    [Fact]
+    public async Task ArchiveConversationAsync_WhenStoreSaveFails_LeavesWorkspaceUnchangedAndReportsFailure()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new FailingConversationStore(new System.NotSupportedException("simulated persistence failure"));
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-2",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc)));
+        await workspace.CommitActivatedConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        var beforeVersion = workspace.ConversationListVersion;
+        var result = await workspace.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.FailureReason);
+
+        // In-memory catalog must still contain the conversation and its Session,
+        // and LastActiveConversationId must not have been cleared.
+        Assert.Contains("session-1", workspace.GetKnownConversationIds());
+        Assert.Contains("session-2", workspace.GetKnownConversationIds());
+        Assert.Equal("session-1", workspace.LastActiveConversationId);
+        Assert.NotNull(sessionManager.GetSession("session-1"));
+        // Deletion tombstone must not have been introduced.
+        Assert.Equal(@"C:\repo\one", sessionManager.GetSession("session-1")!.Cwd);
+        // Roll back should NOT decrement the list version below the pre-mutation snapshot.
+        Assert.True(workspace.ConversationListVersion >= beforeVersion);
+    }
+
+    [Fact]
+    public async Task DeleteConversationAsync_WhenStoreSaveFails_LeavesWorkspaceUnchangedAndReportsFailure()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new FailingConversationStore(new System.InvalidOperationException("simulated persistence failure"));
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var result = await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("session-1", workspace.GetKnownConversationIds());
+        Assert.NotNull(sessionManager.GetSession("session-1"));
+    }
+
+    [Fact]
+    public async Task ArchiveConversationAsync_WhenStoreSaveSucceeds_CommitsTombstoneAndRemovesSession()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var result = await workspace.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
+        Assert.Null(sessionManager.GetSession("session-1"));
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        Assert.Contains("session-1", saved.DeletedConversationIds);
+        Assert.DoesNotContain(saved.Conversations, c => c.ConversationId == "session-1");
+    }
+
+    [Fact]
+    public async Task SaveAsync_BeforeRestore_RefusesToOverwriteStore()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.SaveAsync(TestContext.Current.CancellationToken));
+
+        Assert.Null(store.LastSavedDocument);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AfterFailedRestore_KeepsRefusingToPersist()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new LoadFailingConversationStore(new IOException("disk busy"));
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(workspace.IsConversationListLoading);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.SaveAsync(TestContext.Current.CancellationToken));
+        Assert.Null(store.LastSavedDocument);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(
@@ -2786,6 +3208,18 @@ public sealed class ChatConversationWorkspaceTests
         }
     }
 
+
+    private sealed class FakeNavigationPaneState : INavigationPaneState
+    {
+        public bool IsPaneOpen => true;
+
+        public event EventHandler? PaneStateChanged
+        {
+            add { }
+            remove { }
+        }
+    }
+
     private static AppPreferencesViewModel CreatePreferences(SynchronizationContext syncContext)
     {
         var originalContext = SynchronizationContext.Current;
@@ -2800,13 +3234,16 @@ public sealed class ChatConversationWorkspaceTests
             var capabilities = new Mock<IPlatformCapabilityService>();
             var uiRuntime = new Mock<IUiRuntimeService>();
             return new AppPreferencesViewModel(
-                appSettingsService.Object,
-                startupService.Object,
-                languageService.Object,
-                capabilities.Object,
-                uiRuntime.Object,
-                Mock.Of<ILogger<AppPreferencesViewModel>>(),
-                new ImmediateUiDispatcher());
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         }
         finally
         {
@@ -2847,13 +3284,57 @@ public sealed class ChatConversationWorkspaceTests
             LastSavedDocument = document;
             return Task.CompletedTask;
         }
+
+        /// <summary>
+        /// Forgets writes made during setup so a test can assert on writes it actually caused.
+        /// </summary>
+        public void Reset() => LastSavedDocument = null;
+    }
+
+    private sealed class LoadFailingConversationStore : IConversationStore
+    {
+        private readonly Exception _exception;
+
+        public LoadFailingConversationStore(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public ConversationDocument? LastSavedDocument { get; private set; }
+
+        public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromException<ConversationDocument>(_exception);
+
+        public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
+        {
+            LastSavedDocument = document;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingConversationStore : IConversationStore
+    {
+        private readonly Exception _exception;
+
+        public FailingConversationStore(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public ConversationDocument LoadResult { get; set; } = new();
+
+        public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(LoadResult);
+
+        public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
+            => Task.FromException(_exception);
     }
 
     private sealed class FakeSessionManager : ISessionManager
     {
         private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd);
             _sessions[sessionId] = session;
@@ -2863,23 +3344,7 @@ public sealed class ChatConversationWorkspaceTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.UpdateActivity();
-            }
-
-            return true;
-        }
-
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
         public IEnumerable<Session> GetAllSessions()
@@ -2887,6 +3352,17 @@ public sealed class ChatConversationWorkspaceTests
 
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
+
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var session))
+            {
+                session = new Session(sessionId, cwd);
+                _sessions[sessionId] = session;
+            }
+
+            return session;
+        }
     }
 
 }

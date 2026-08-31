@@ -24,7 +24,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _projectionItemKey = string.Empty;
 
         [ObservableProperty]
-        private DateTime _timestamp;
+        [NotifyPropertyChangedFor(nameof(HasTimestamp))]
+        private DateTime? _timestamp;
 
         [ObservableProperty]
         private bool _isOutgoing;
@@ -43,6 +44,13 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         [ObservableProperty]
         private bool _isMarkdownFallbackSticky;
+
+        /// <summary>
+        /// Authoritative ACP protocol message id when the application Id is absent or secondary.
+        /// Carried on the VM so patch matching and restore keys share one fact owner.
+        /// </summary>
+        [ObservableProperty]
+        private string? _protocolMessageId;
 
         // 图片内容
         [ObservableProperty]
@@ -92,6 +100,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private IReadOnlyList<ToolCallDetailItem> _toolCallDetailItems = Array.Empty<ToolCallDetailItem>();
 
         [ObservableProperty]
+        private string? _toolCallSummary;
+
+        [ObservableProperty]
         private IReadOnlyList<ToolCallContent>? _toolCallContent;
 
         [ObservableProperty]
@@ -130,12 +141,13 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private ChatMarkdownPresentationState _markdownPresentation = ChatMarkdownPresentationState.PlainStreaming;
         private Func<string, Task<bool>>? _copyTextAsync;
         private Func<Uri, Task<bool>>? _openUriAsync;
+        private Func<ChatMessageViewModel, Task>? _reportContentAsync;
 
         public ChatMessageViewModel()
         {
             CopyTextCommand = new AsyncRelayCommand<string?>(CopyTextAsync, CanCopyText);
             OpenMarkdownLinkCommand = new AsyncRelayCommand<string?>(OpenMarkdownLinkAsync, CanOpenMarkdownLink);
-            Timestamp = DateTime.Now;
+            ReportContentCommand = new AsyncRelayCommand(ReportContentAsync, CanReportContent);
             RefreshMarkdownPresentation();
         }
 
@@ -143,14 +155,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public IAsyncRelayCommand<string?> OpenMarkdownLinkCommand { get; }
 
+        public IAsyncRelayCommand ReportContentCommand { get; }
+
         public static ChatMessageViewModel CreateFromTextContent(string id, ContentBlock content, bool isOutgoing = false)
         {
             var viewModel = new ChatMessageViewModel
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "text",
-                Timestamp = DateTime.Now
+                ContentType = "text"
             };
 
             if (content is TextContentBlock textContent)
@@ -167,8 +180,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "image",
-                Timestamp = DateTime.Now
+                ContentType = "image"
             };
 
             if (content is ImageContentBlock imageContent)
@@ -186,8 +198,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "audio",
-                Timestamp = DateTime.Now
+                ContentType = "audio"
             };
 
             if (content is AudioContentBlock audioContent)
@@ -214,8 +225,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallStatus = status,
                 ToolCallJson = toolCallJson,
                 ToolCallRawInputJson = rawInput,
-                ToolCallRawOutputJson = rawOutput,
-                Timestamp = DateTime.Now
+                ToolCallRawOutputJson = rawOutput
             };
 
             viewModel.RefreshToolCallDetails();
@@ -231,7 +241,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "plan_entry",
                 Title = entry.Content ?? string.Empty,
-                Timestamp = DateTime.Now,
                 PlanEntry = new PlanEntryViewModel
                 {
                     Content = entry.Content ?? string.Empty,
@@ -249,8 +258,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "mode_change",
                 ModeId = modeId,
-                Title = title ?? "Mode Changed",
-                Timestamp = DateTime.Now
+                Title = title ?? "Mode Changed"
             };
         }
 
@@ -262,7 +270,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "resource_content",
                 Title = "Resource Content",
-                Timestamp = DateTime.Now,
                 ResourceViewModel = ResourceViewModel.CreateFromContent(block)
             };
         }
@@ -275,7 +282,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "resource_link",
                 Title = block.Title ?? block.Name ?? "Resource Link",
-                Timestamp = DateTime.Now,
                 ResourceViewModel = ResourceViewModel.CreateFromLink(block)
             };
         }
@@ -283,6 +289,48 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public bool HasTitle => !string.IsNullOrEmpty(Title);
         public bool HasTextContent => !string.IsNullOrEmpty(TextContent);
+
+        /// <summary>
+        /// Visible body text for directional message templates. Prefer protocol text; when
+        /// a content type only carries a title (mode_change/plan_entry), surface that title.
+        /// Image/audio without dedicated templates project a plain mime fallback so ListView
+        /// rows never materialize as blank bubbles under Skia/WinUI (including old persisted
+        /// snapshots that never wrote TextContent).
+        /// </summary>
+        public string DisplayBodyText
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(TextContent))
+                {
+                    return TextContent;
+                }
+
+                if (!string.IsNullOrEmpty(Title))
+                {
+                    return Title;
+                }
+
+                if (string.Equals(ContentType, "image", StringComparison.Ordinal))
+                {
+                    return string.IsNullOrWhiteSpace(ImageMimeType)
+                        ? "[image]"
+                        : $"[image: {ImageMimeType}]";
+                }
+
+                if (string.Equals(ContentType, "audio", StringComparison.Ordinal))
+                {
+                    return string.IsNullOrWhiteSpace(AudioMimeType)
+                        ? "[audio]"
+                        : $"[audio: {AudioMimeType}]";
+                }
+
+                return string.Empty;
+            }
+        }
+
+        public bool HasDisplayBody => !string.IsNullOrEmpty(DisplayBodyText);
+        public bool HasTimestamp => Timestamp.HasValue;
         public ChatMarkdownPresentationState MarkdownPresentation
         {
             get => _markdownPresentation;
@@ -335,12 +383,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public void ConfigureShellActions(
              Func<string, Task<bool>> copyTextAsync,
-             Func<Uri, Task<bool>> openUriAsync)
+             Func<Uri, Task<bool>> openUriAsync,
+             Func<ChatMessageViewModel, Task>? reportContentAsync = null)
         {
             _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
             _openUriAsync = openUriAsync ?? throw new ArgumentNullException(nameof(openUriAsync));
+            _reportContentAsync = reportContentAsync;
             CopyTextCommand.NotifyCanExecuteChanged();
             OpenMarkdownLinkCommand.NotifyCanExecuteChanged();
+            ReportContentCommand.NotifyCanExecuteChanged();
         }
 
         public void MarkMarkdownRenderFailed()
@@ -367,27 +418,34 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             _applyingSnapshot = true;
             try
             {
+                // Sticky markdown failure is a UI attempt state, not protocol fact. Authoritative
+                // rehydrate always starts a fresh presentation attempt for the snapshot body.
+                IsMarkdownFallbackSticky = false;
+
                 Id = string.IsNullOrWhiteSpace(snapshot.Id)
                     ? string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString() : Id
                     : snapshot.Id;
                 ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, projectionIndex);
-                Timestamp = snapshot.Timestamp.ToLocalTime();
+                // The snapshot owns the authoritative time (UTC), or none. We localize it for
+                // display only when present; absent time stays null and the UI hides the clock.
+                Timestamp = ConversationMessageTimestamp.ToDisplayLocal(snapshot.Timestamp);
                 IsOutgoing = snapshot.IsOutgoing;
                 ContentType = snapshot.ContentType ?? string.Empty;
                 Title = snapshot.Title ?? string.Empty;
                 TextContent = snapshot.TextContent ?? string.Empty;
+                ProtocolMessageId = snapshot.ProtocolMessageId;
                 ImageData = snapshot.ImageData ?? string.Empty;
                 ImageMimeType = snapshot.ImageMimeType ?? string.Empty;
                 AudioData = snapshot.AudioData ?? string.Empty;
                 AudioMimeType = snapshot.AudioMimeType ?? string.Empty;
                 ToolCallId = snapshot.ToolCallId;
-                ToolCallKind = snapshot.ToolCallKind;
-                ToolCallStatus = snapshot.ToolCallStatus;
+                ToolCallKind = ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind);
+                ToolCallStatus = ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus);
                 ToolCallJson = snapshot.ToolCallJson;
                 ToolCallRawInputJson = snapshot.ToolCallRawInputJson;
                 ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson;
-                ToolCallContent = ToolCallContentSnapshots.CloneList(snapshot.ToolCallContent);
-                ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations);
+                ToolCallContent = ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent);
+                ToolCallLocations = ToolCallContentSnapshots.FromDomainLocations(snapshot.ToolCallLocations);
                 ModeId = snapshot.ModeId;
 
                 if (snapshot.PlanEntry is not null)
@@ -397,15 +455,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                         PlanEntry = new PlanEntryViewModel
                         {
                             Content = snapshot.PlanEntry.Content ?? string.Empty,
-                            Status = snapshot.PlanEntry.Status,
-                            Priority = snapshot.PlanEntry.Priority
+                            Status = ConversationPlanWire.ParseStatus(snapshot.PlanEntry.Status),
+                            Priority = ConversationPlanWire.ParsePriority(snapshot.PlanEntry.Priority)
                         };
                     }
                     else
                     {
                         PlanEntry.Content = snapshot.PlanEntry.Content ?? string.Empty;
-                        PlanEntry.Status = snapshot.PlanEntry.Status;
-                        PlanEntry.Priority = snapshot.PlanEntry.Priority;
+                        PlanEntry.Status = ConversationPlanWire.ParseStatus(snapshot.PlanEntry.Status);
+                        PlanEntry.Priority = ConversationPlanWire.ParsePriority(snapshot.PlanEntry.Priority);
                     }
                 }
                 else
@@ -417,15 +475,24 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 _applyingSnapshot = false;
                 OnPropertyChanged(nameof(HasTextContent));
+                NotifyDisplayBodyChanged();
                 CopyTextCommand.NotifyCanExecuteChanged();
+                ReportContentCommand.NotifyCanExecuteChanged();
                 RefreshMarkdownPresentation();
                 RefreshToolCallDetails();
                 UpdateToolCallState();
             }
         }
 
+        private void NotifyDisplayBodyChanged()
+        {
+            OnPropertyChanged(nameof(DisplayBodyText));
+            OnPropertyChanged(nameof(HasDisplayBody));
+        }
+
         partial void OnIsOutgoingChanged(bool value)
         {
+            ReportContentCommand.NotifyCanExecuteChanged();
             if (_applyingSnapshot)
             {
                 return;
@@ -441,6 +508,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 return;
             }
 
+            NotifyDisplayBodyChanged();
             RefreshMarkdownPresentation();
         }
 
@@ -452,8 +520,39 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             }
 
             OnPropertyChanged(nameof(HasTextContent));
+            NotifyDisplayBodyChanged();
             CopyTextCommand.NotifyCanExecuteChanged();
             RefreshMarkdownPresentation();
+        }
+
+        partial void OnTitleChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
+        }
+
+        partial void OnImageMimeTypeChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
+        }
+
+        partial void OnAudioMimeTypeChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
         }
 
         partial void OnIsMarkdownFallbackStickyChanged(bool value)
@@ -504,9 +603,22 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             _ = await _openUriAsync!(uri!).ConfigureAwait(true);
         }
 
+        private bool CanReportContent()
+            => !IsOutgoing && _reportContentAsync is not null;
+
+        private async Task ReportContentAsync()
+        {
+            if (!CanReportContent())
+            {
+                return;
+            }
+
+            await _reportContentAsync!(this).ConfigureAwait(true);
+        }
+
         private void UpdateToolCallState()
         {
-            IsToolCallInProgress = ToolCallStatus is SalmonEgg.Acp.Tool.ToolCallStatus.InProgress or SalmonEgg.Acp.Tool.ToolCallStatus.Pending;
+            IsToolCallInProgress = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress || ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Pending;
             IsToolCallCompleted = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Completed;
             IsToolCallFailed = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Failed;
             IsToolCallCancelled = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled;
@@ -514,11 +626,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         private void RefreshToolCallDetails()
         {
-            ToolCallDetailItems = ToolCallDetailProjector.Project(
-                ToolCallRawInputJson,
-                ToolCallRawOutputJson,
-                ToolCallContent,
-                ToolCallLocations);
+            ToolCallDetailItems = ToolCallDetailProjector.Project(ToolCallContent, ToolCallLocations);
+            ToolCallSummary = ToolCallDetailProjector.ProjectSummary(
+                ToolCallKind, ToolCallRawInputJson, ToolCallContent, ToolCallLocations);
         }
 
         partial void OnToolCallRawInputJsonChanged(string? value)
@@ -572,11 +682,31 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         }
     }
 
-    public sealed record ToolCallDetailItem(string? Label, string Value, ToolCallDetailKind Kind = ToolCallDetailKind.Text)
+    public sealed record ToolCallDetailItem(ToolCallDetailKind Kind)
     {
-        public bool HasLabel => !string.IsNullOrWhiteSpace(Label);
+        public string? Text { get; init; }
 
-        public string DisplayText => HasLabel ? $"{Label}: {Value}" : Value;
+        public string? Path { get; init; }
+
+        public uint? Line { get; init; }
+
+        public string? DiffOldText { get; init; }
+
+        public string? DiffNewText { get; init; }
+
+        public string? TerminalId { get; init; }
+
+        public string DisplayText => Kind switch
+        {
+            ToolCallDetailKind.Location => Line is null ? (Path ?? string.Empty) : $"{Path}:{Line}",
+            ToolCallDetailKind.Terminal => TerminalId ?? string.Empty,
+            ToolCallDetailKind.Diff => Path ?? string.Empty,
+            _ => Text ?? string.Empty
+        };
+
+        public bool HasPath => !string.IsNullOrWhiteSpace(Path);
+
+        public bool HasDiffNewText => !string.IsNullOrWhiteSpace(DiffNewText);
     }
 
     public enum ToolCallDetailKind
@@ -589,73 +719,172 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
     internal static class ToolCallDetailProjector
     {
+        private const int SummaryMaxLength = 200;
+
         public static IReadOnlyList<ToolCallDetailItem> Project(
-            string? rawInputJson,
-            string? rawOutputJson,
             IReadOnlyList<ToolCallContent>? content,
             IReadOnlyList<ToolCallLocation>? locations)
         {
             var items = new List<ToolCallDetailItem>();
-
-            AppendJson(items, rawInputJson, prefix: null);
-            AppendJson(items, rawOutputJson, prefix: "output");
             AppendContent(items, content);
             AppendLocations(items, locations);
-
             return items;
         }
 
-        private static void AppendJson(List<ToolCallDetailItem> items, string? json, string? prefix)
+        public static string ProjectSummary(
+            ToolCallKind? kind,
+            string? rawInputJson,
+            IReadOnlyList<ToolCallContent>? content,
+            IReadOnlyList<ToolCallLocation>? locations)
         {
-            if (string.IsNullOrWhiteSpace(json))
+            var fromInput = SummarizeInput(kind, rawInputJson);
+            if (!string.IsNullOrWhiteSpace(fromInput))
             {
-                return;
+                return Cap(fromInput);
+            }
+
+            if (content is not null)
+            {
+                foreach (var item in content)
+                {
+                    if (item is DiffToolCallContent diff && !string.IsNullOrWhiteSpace(diff.Path))
+                    {
+                        return Cap(diff.Path);
+                    }
+                }
+            }
+
+            if (locations is not null)
+            {
+                foreach (var location in locations)
+                {
+                    if (!string.IsNullOrWhiteSpace(location.Path))
+                    {
+                        return Cap(location.Line is null ? location.Path : $"{location.Path}:{location.Line}");
+                    }
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string SummarizeInput(ToolCallKind? kind, string? rawInputJson)
+        {
+            if (string.IsNullOrWhiteSpace(rawInputJson))
+            {
+                return string.Empty;
             }
 
             try
             {
-                using var document = JsonDocument.Parse(json);
-                AppendJsonElement(items, document.RootElement, prefix);
+                using var document = JsonDocument.Parse(rawInputJson);
+                var root = document.RootElement;
+                return root.ValueKind switch
+                {
+                    JsonValueKind.Object => SummarizeInputObject(kind, root),
+                    JsonValueKind.Array => SummarizeInputArray(root),
+                    _ => string.Empty
+                };
             }
             catch (JsonException)
             {
-                items.Add(new ToolCallDetailItem(prefix, json.Trim()));
+                return string.Empty;
             }
         }
 
-        private static void AppendJsonElement(List<ToolCallDetailItem> items, JsonElement element, string? prefix)
+        private static string SummarizeInputObject(ToolCallKind? kind, JsonElement root)
         {
-            switch (element.ValueKind)
+            if (kind == ToolCallKind.Search)
             {
-                case JsonValueKind.Object:
-                    foreach (var property in element.EnumerateObject())
-                    {
-                        var label = string.IsNullOrWhiteSpace(prefix)
-                            ? property.Name
-                            : $"{prefix}.{property.Name}";
-                        AppendJsonElement(items, property.Value, label);
-                    }
-
-                    break;
-                case JsonValueKind.Array:
-                    var index = 0;
-                    foreach (var item in element.EnumerateArray())
-                    {
-                        AppendJsonElement(items, item, $"{prefix ?? "item"}[{index}]");
-                        index++;
-                    }
-
-                    break;
-                case JsonValueKind.String:
-                    items.Add(new ToolCallDetailItem(prefix, element.GetString() ?? string.Empty));
-                    break;
-                case JsonValueKind.Null:
-                case JsonValueKind.Undefined:
-                    break;
-                default:
-                    items.Add(new ToolCallDetailItem(prefix, element.GetRawText()));
-                    break;
+                return FirstNonEmpty(
+                    TryGetString(root, "query", "Query"),
+                    TryGetString(root, "path", "Path", "SearchPath", "searchPath"));
             }
+
+            if (kind == ToolCallKind.Execute)
+            {
+                return BuildCommand(
+                    TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
+                    TryGetString(root, "Arguments", "arguments", "Args", "args"));
+            }
+
+            if (kind == ToolCallKind.Fetch)
+            {
+                return FirstNonEmpty(
+                    TryGetString(root, "query", "Query", "url", "Url", "uri", "Uri"));
+            }
+
+            return FirstNonEmpty(
+                TryGetString(root, "path", "Path", "SearchPath", "searchPath", "TargetFile", "targetFile"),
+                TryGetString(root, "query", "Query"),
+                BuildCommand(
+                    TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
+                    TryGetString(root, "Arguments", "arguments", "Args", "args")));
+        }
+
+        private static string SummarizeInputArray(JsonElement root)
+        {
+            foreach (var item in root.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                if (TryGetString(item, "type") is "diff")
+                {
+                    var path = TryGetString(item, "path");
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        return path;
+                    }
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string BuildCommand(string? command, string? arguments)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return arguments ?? string.Empty;
+            }
+
+            return string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
+        }
+
+        private static string FirstNonEmpty(params string?[] values)
+        {
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value!;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string Cap(string value)
+            => value.Length > SummaryMaxLength
+                ? string.Concat(value.AsSpan(0, SummaryMaxLength - 1), "…")
+                : value;
+
+        private static string? TryGetString(JsonElement root, params string[] propertyNames)
+        {
+            foreach (var propertyName in propertyNames)
+            {
+                if (root.TryGetProperty(propertyName, out var property))
+                {
+                    return property.ValueKind == JsonValueKind.String
+                        ? property.GetString()
+                        : property.GetRawText();
+                }
+            }
+
+            return null;
         }
 
         private static void AppendContent(List<ToolCallDetailItem> items, IReadOnlyList<ToolCallContent>? content)
@@ -670,30 +899,21 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 switch (item)
                 {
                     case ContentToolCallContent { Content: TextContentBlock textBlock } when !string.IsNullOrWhiteSpace(textBlock.Text):
-                        items.Add(new ToolCallDetailItem(null, textBlock.Text.Trim()));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Text) { Text = textBlock.Text.Trim() });
                         break;
                     case ContentToolCallContent { Content: ResourceLinkContentBlock resourceLink } when !string.IsNullOrWhiteSpace(resourceLink.Uri):
-                        items.Add(new ToolCallDetailItem("resource", resourceLink.Uri, ToolCallDetailKind.Location));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Location) { Path = resourceLink.Uri });
                         break;
                     case DiffToolCallContent diff:
-                        if (!string.IsNullOrWhiteSpace(diff.Path))
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Diff)
                         {
-                            items.Add(new ToolCallDetailItem("path", diff.Path, ToolCallDetailKind.Diff));
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(diff.OldText))
-                        {
-                            items.Add(new ToolCallDetailItem("oldText", diff.OldText, ToolCallDetailKind.Diff));
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(diff.NewText))
-                        {
-                            items.Add(new ToolCallDetailItem("newText", diff.NewText, ToolCallDetailKind.Diff));
-                        }
-
+                            Path = diff.Path,
+                            DiffOldText = diff.OldText,
+                            DiffNewText = diff.NewText
+                        });
                         break;
                     case TerminalToolCallContent terminal when !string.IsNullOrWhiteSpace(terminal.TerminalId):
-                        items.Add(new ToolCallDetailItem("terminalId", terminal.TerminalId, ToolCallDetailKind.Terminal));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Terminal) { TerminalId = terminal.TerminalId });
                         break;
                 }
             }
@@ -713,8 +933,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                     continue;
                 }
 
-                var value = location.Line is null ? location.Path : $"{location.Path}:{location.Line}";
-                items.Add(new ToolCallDetailItem("location", value, ToolCallDetailKind.Location));
+                items.Add(new ToolCallDetailItem(ToolCallDetailKind.Location) { Path = location.Path, Line = location.Line });
             }
         }
     }
@@ -728,9 +947,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _content = string.Empty;
 
         [ObservableProperty]
-        private SalmonEgg.Acp.Plan.PlanEntryStatus _status;
+        private SalmonEgg.Acp.Plan.PlanEntryStatus _status = SalmonEgg.Acp.Plan.PlanEntryStatus.Pending;
 
         [ObservableProperty]
-        private SalmonEgg.Acp.Plan.PlanEntryPriority _priority;
+        private SalmonEgg.Acp.Plan.PlanEntryPriority _priority = SalmonEgg.Acp.Plan.PlanEntryPriority.Low;
     }
 }

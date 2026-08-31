@@ -116,7 +116,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             var snapshot = new DiagnosticsSnapshot
             {
                 AppVersion = appVersion,
-                ProtocolVersion = new InitializeParams().ProtocolVersion.ToString(),
+                ProtocolVersion = AcpProtocolVersion.Default.ToString(),
                 OsDescription = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
                 FrameworkDescription = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 Properties =
@@ -134,14 +134,39 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateDiagnosticsBundle failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_CreateDiagnosticsBundleFailed"]).ConfigureAwait(true);
         }
     }
 
     [RelayCommand]
-    private Task ClearCacheAsync() => _maintenance.ClearCacheAsync();
+    private async Task ClearCacheAsync()
+    {
+        try
+        {
+            await _maintenance.ClearCacheAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_ClearCacheSuccess"]).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ClearCache failed");
+            await _ui.ShowInfoAsync(_localizer["General_ClearCacheFailed"]).ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
-    private Task ClearAllLocalDataAsync() => _maintenance.ClearAllLocalDataAsync();
+    private async Task ClearAllLocalDataAsync()
+    {
+        try
+        {
+            await _maintenance.ClearAllLocalDataAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ClearAllLocalDataSuccess"]).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ClearAllLocalData failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ClearAllLocalDataFailed"]).ConfigureAwait(true);
+        }
+    }
 
     private async Task ExportCurrentSessionAsync(string format)
     {
@@ -166,12 +191,14 @@ public partial class DataStorageSettingsViewModel : ObservableObject
                     message.ContentType,
                     message.Title,
                     message.TextContent)).ToList());
+
             var result = await _sessionExport.ExportAsync(request);
             await OpenExportResultOrNotifyAsync(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "ExportCurrentSession failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ExportSessionFailed"]).ConfigureAwait(true);
         }
     }
 
@@ -219,11 +246,18 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private Task NotifyLocalFileExportUnsupportedAsync() =>
         _ui.ShowInfoAsync(_localizer["Platform_LocalFileExportUnsupported"]);
 
-    private static DateTimeOffset ToExportTimestamp(DateTime timestamp)
+    private static DateTimeOffset? ToExportTimestamp(DateTime? timestamp)
     {
-        var utc = timestamp.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
-            : timestamp.ToUniversalTime();
+        if (!timestamp.HasValue)
+        {
+            // The source message carried no authoritative time; the export must not invent one.
+            return null;
+        }
+
+        var value = timestamp.Value;
+        var utc = value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value.ToUniversalTime();
         return new DateTimeOffset(utc);
     }
 }

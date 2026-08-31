@@ -1,8 +1,6 @@
 using System.Threading.Tasks;
-using System.Collections.Immutable;
-using SalmonEgg.Acp.JsonRpc;
+using System.Collections.Generic;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using Xunit;
 using SalmonEgg.Acp.Client;
@@ -16,15 +14,15 @@ public sealed class ChatInteractionDialogFactoryTests
     {
         var dismissed = false;
         var sut = ChatInteractionDialogFactory.CreatePermissionRequestViewModel(
-            new PermissionRequestEventArgs
-            {
-                MessageId = "permission-1",
-                SessionId = "remote-1",
-                Options =
+            new PermissionRequestEventArgs(
+                "permission-1",
+                "remote-1",
+                toolCall: null,
+                options:
                 [
-                    new PermissionOption("opt-1", "Option 1", "allow_once", "Allow one run")
-                ]
-            },
+                    new PermissionOption("opt-1", "Option 1", "allow_once")
+                ],
+                respond: static (_, _) => Task.CompletedTask),
             (messageId, outcome, optionId) =>
             {
                 Assert.Equal("permission-1", messageId);
@@ -34,7 +32,7 @@ public sealed class ChatInteractionDialogFactoryTests
             },
             () => dismissed = true);
 
-        Assert.Equal("Allow one run", sut.Options[0].Description);
+        Assert.Equal(string.Empty, sut.Options[0].Description);
 
         await sut.RespondCommand.ExecuteAsync(sut.Options[0]);
 
@@ -46,15 +44,15 @@ public sealed class ChatInteractionDialogFactoryTests
     {
         var dismissed = false;
         var sut = ChatInteractionDialogFactory.CreateFileSystemRequestViewModel(
-            new FileSystemRequestEventArgs
-            {
-                MessageId = "fs-1",
-                SessionId = "remote-1",
-                Method = "fs/read_text_file",
-                Kind = FileSystemRequestKind.ReadTextFile,
-                Path = "/tmp/file.txt",
-                Content = "abc"
-            },
+            new FileSystemRequestEventArgs(
+                "fs-1",
+                "remote-1",
+                "fs/read_text_file",
+                FileSystemRequestKind.ReadTextFile,
+                "/tmp/file.txt",
+                encoding: null,
+                content: "abc",
+                respond: static (_, _, _) => Task.CompletedTask),
             (messageId, success, content, message) =>
             {
                 Assert.Equal("fs-1", messageId);

@@ -16,8 +16,8 @@ public sealed class ChatPlanEntriesProjectionCoordinatorTests
         var result = coordinator.Replace(
             new[]
             {
-                new ConversationPlanEntrySnapshot { Content = "Step 1", Status = PlanEntryStatus.Pending, Priority = PlanEntryPriority.High },
-                new ConversationPlanEntrySnapshot { Content = "Step 2", Status = PlanEntryStatus.Completed, Priority = PlanEntryPriority.Low }
+                new ConversationPlanEntrySnapshot { Content = "Step 1", Status = PlanEntryStatus.Pending.ToString(), Priority = PlanEntryPriority.High.ToString() },
+                new ConversationPlanEntrySnapshot { Content = "Step 2", Status = PlanEntryStatus.Completed.ToString(), Priority = PlanEntryPriority.Low.ToString() }
             });
 
         Assert.Collection(
@@ -50,7 +50,7 @@ public sealed class ChatPlanEntriesProjectionCoordinatorTests
             entries,
             new[]
             {
-                new ConversationPlanEntrySnapshot { Content = "Step 1", Status = PlanEntryStatus.Completed, Priority = PlanEntryPriority.High }
+                new ConversationPlanEntrySnapshot { Content = "Step 1", Status = PlanEntryStatus.Completed.ToString(), Priority = PlanEntryPriority.High.ToString() }
             });
 
         Assert.Collection(

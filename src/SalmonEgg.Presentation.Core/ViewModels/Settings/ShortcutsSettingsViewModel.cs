@@ -6,15 +6,17 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class ShortcutsSettingsViewModel : ObservableObject
+public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisposable
 {
     private readonly AppPreferencesViewModel _preferences;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private bool _isApplyingPreferenceState;
 
     public ObservableCollection<ShortcutEntryViewModel> Shortcuts { get; } = new();
@@ -56,12 +58,33 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         }
     }
 
+    private bool _isActive;
+
+    // 构造函数只做依赖赋值：不得触发持久化副作用（PruneUnsupportedBindings 会写 _preferences）
+    // 或事件订阅（coding-standards §3.1 / AGENTS.md §11 缓存与持久化边界）。真正的初始化与
+    // 订阅推迟到 Activate，由页面 Loaded 驱动、Deactivate 对称解绑，支持 singleton 反复重载。
     public ShortcutsSettingsViewModel(
         AppPreferencesViewModel preferences,
-        IStringLocalizer<CoreStrings> localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
+    }
+
+    /// <summary>
+    /// 从 preferences 投影快捷键状态并订阅事件。幂等：重复调用不重复订阅、不重复 seed，
+    /// 支持页面反复 Loaded（VM 是 singleton）。
+    /// </summary>
+    public void Activate()
+    {
+        if (_isActive)
+        {
+            return;
+        }
+
+        _isActive = true;
 
         PruneUnsupportedBindings();
         SeedDefaults();
@@ -72,7 +95,38 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         {
             s.PropertyChanged += OnShortcutPropertyChanged;
         }
+
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
+
+    /// <summary>
+    /// 解绑 Activate 建立的订阅。幂等：未激活时无操作，可与 Activate 反复配对。
+    /// </summary>
+    public void Deactivate()
+    {
+        if (!_isActive)
+        {
+            return;
+        }
+
+        _isActive = false;
+
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
+        Shortcuts.CollectionChanged -= OnShortcutsCollectionChanged;
+        foreach (var shortcut in Shortcuts)
+        {
+            shortcut.PropertyChanged -= OnShortcutPropertyChanged;
+        }
+    }
+
+    public void Dispose() => Deactivate();
 
     private void SeedDefaults()
     {
@@ -85,7 +139,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         {
             Shortcuts.Add(new ShortcutEntryViewModel(
                 definition.ActionId,
-                definition.DisplayName,
+                ResolveActionDisplayName(definition),
                 definition.DefaultGesture));
         }
     }
@@ -187,6 +241,44 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ConflictMessage));
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => ReprojectLocalizedActionNames();
+
+    private void ReprojectLocalizedActionNames()
+    {
+        foreach (var shortcut in Shortcuts)
+        {
+            if (!AppShortcutCatalog.TryGet(shortcut.ActionId, out var definition))
+            {
+                continue;
+            }
+
+            shortcut.UpdateName(ResolveActionDisplayName(definition));
+        }
+
+        OnPropertyChanged(nameof(ConflictMessage));
+    }
+
+    private string ResolveActionDisplayName(AppShortcutDefinition definition)
+    {
+        var resourceKey = definition.ActionId switch
+        {
+            AppShortcutActionIds.NewSession => "ShortcutAction_NewSession",
+            AppShortcutActionIds.Search => "ShortcutAction_Search",
+            _ => null
+        };
+
+        if (resourceKey is null)
+        {
+            return definition.DisplayName;
+        }
+
+        var localized = _localizer[resourceKey];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? definition.DisplayName
+            : localized.Value;
+    }
+
     [RelayCommand]
     private void RestoreDefaults()
     {
@@ -208,7 +300,7 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
 
     public string ActionId { get; }
 
-    public string Name { get; }
+    public string Name { get; private set; }
 
     public string DefaultGesture { get; }
 
@@ -247,6 +339,17 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
         {
             Gesture = normalized;
         }
+    }
+
+    public void UpdateName(string name)
+    {
+        if (string.Equals(Name, name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Name = name;
+        OnPropertyChanged(nameof(Name));
     }
 
     private void RestoreDefault()

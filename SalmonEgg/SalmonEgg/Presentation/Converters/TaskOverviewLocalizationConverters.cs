@@ -9,15 +9,31 @@ namespace SalmonEgg.Presentation.Converters;
 public sealed class PlanStatusLabelConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is PlanEntryStatus status
-            ? TaskOverviewResourceLabels.Get(status switch
-            {
-                PlanEntryStatus.Pending => "TaskOverviewPlanStatusPending.Text",
-                PlanEntryStatus.InProgress => "TaskOverviewPlanStatusInProgress.Text",
-                PlanEntryStatus.Completed => "TaskOverviewPlanStatusCompleted.Text",
-                _ => "TaskOverviewPlanStatusUnknown.Text"
-            })
-            : string.Empty;
+    {
+        if (value is not PlanEntryStatus status)
+        {
+            return string.Empty;
+        }
+
+        // PlanEntryStatus is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (status == PlanEntryStatus.Pending)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanStatusPending.Text");
+        }
+
+        if (status == PlanEntryStatus.InProgress)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanStatusInProgress.Text");
+        }
+
+        if (status == PlanEntryStatus.Completed)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanStatusCompleted.Text");
+        }
+
+        return TaskOverviewResourceLabels.Get("TaskOverviewPlanStatusUnknown.Text");
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotSupportedException();
@@ -26,15 +42,31 @@ public sealed class PlanStatusLabelConverter : IValueConverter
 public sealed class PlanPriorityLabelConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
-        => value is PlanEntryPriority priority
-            ? TaskOverviewResourceLabels.Get(priority switch
-            {
-                PlanEntryPriority.Low => "TaskOverviewPlanPriorityLow.Text",
-                PlanEntryPriority.Medium => "TaskOverviewPlanPriorityMedium.Text",
-                PlanEntryPriority.High => "TaskOverviewPlanPriorityHigh.Text",
-                _ => "TaskOverviewPlanPriorityUnknown.Text"
-            })
-            : string.Empty;
+    {
+        if (value is not PlanEntryPriority priority)
+        {
+            return string.Empty;
+        }
+
+        // PlanEntryPriority is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (priority == PlanEntryPriority.Low)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanPriorityLow.Text");
+        }
+
+        if (priority == PlanEntryPriority.Medium)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanPriorityMedium.Text");
+        }
+
+        if (priority == PlanEntryPriority.High)
+        {
+            return TaskOverviewResourceLabels.Get("TaskOverviewPlanPriorityHigh.Text");
+        }
+
+        return TaskOverviewResourceLabels.Get("TaskOverviewPlanPriorityUnknown.Text");
+    }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
         => throw new NotSupportedException();

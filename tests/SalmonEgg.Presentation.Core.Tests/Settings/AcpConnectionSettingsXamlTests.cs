@@ -211,6 +211,7 @@ public sealed class AcpConnectionSettingsXamlTests
         string[] requiredResources =
         [
             "Acp_ProfileReconnect.Text",
+            "Acp_ProfileUnverified.Text",
             "AgentProfileEditor_CurrentConnectionSavedNoticeMessage"
         ];
 
@@ -237,6 +238,9 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("Severity=\"Informational\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOpen=\"{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Message=\"{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOpen=\"{x:Bind ViewModel.Profiles.IsOperationErrorOpen, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Message=\"{x:Bind ViewModel.Profiles.OperationErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Severity=\"Error\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.Profiles.RefreshCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OnAddProfileClick\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
@@ -247,22 +251,49 @@ public sealed class AcpConnectionSettingsXamlTests
     public void AcpConnectionSettingsPage_ProfileList_PreservesNativeSelectionAndActions()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+        var document = XDocument.Parse(xaml);
 
-        Assert.Contains("<ListView ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AcpProfilesList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedItem=\"{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionMode=\"Single\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ToggleSwitch", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOn=\"{x:Bind IsConnected, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ReconnectCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind Acp_ProfileReconnectText}\"", xaml, StringComparison.Ordinal);
+        AssertProfileMenuItem(document, "Acp_ProfileReconnect", "\uE72C");
+        Assert.DoesNotContain("Acp_ProfileReconnectText", xaml, StringComparison.Ordinal);
         Assert.Contains("<MenuFlyoutSeparator", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind IsTransitioning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{x:Bind IsStableDisconnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Toggled=\"OnProfileConnectionToggleToggled\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<Button.Flyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("<MenuFlyout>", xaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"OnEditProfileMenuClick\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Click=\"OnDeleteProfileMenuClick\"", xaml, StringComparison.Ordinal);
+        AssertProfileMenuItem(document, "Acp_ProfileEdit", "\uE70F");
+        AssertProfileMenuItem(document, "Acp_ProfileDelete", "\uE74D");
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_ProfileList_ProjectsUnverifiedSeparatelyFromConnectionState()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+        var document = XDocument.Parse(xaml);
+        var unverified = Assert.Single(document.Descendants(), element =>
+            string.Equals(
+                (string?)element.Attribute("AutomationProperties.AutomationId"),
+                "Acp.Profile.Unverified",
+                StringComparison.Ordinal));
+
+        Assert.Equal(
+            "{x:Bind IsUnverified, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            (string?)unverified.Attribute("Visibility"));
+        Assert.Contains(unverified.Descendants(), element =>
+            string.Equals(element.Name.LocalName, "TextBlock", StringComparison.Ordinal)
+            && string.Equals(
+                element.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "Uid")?.Value,
+                "Acp_ProfileUnverified",
+                StringComparison.Ordinal));
+
+        Assert.Contains("Visibility=\"{x:Bind IsStableConnected, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind IsStableDisconnected, Mode=OneWay", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -384,6 +415,38 @@ public sealed class AcpConnectionSettingsXamlTests
 
         Assert.False(string.IsNullOrWhiteSpace(value), $"Resource '{name}' must define a non-empty value.");
         return value!;
+    }
+
+    private static void AssertProfileMenuItem(XDocument document, string uid, string expectedGlyph)
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var item = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "MenuFlyoutItem"
+            && string.Equals((string?)element.Attribute(x + "Uid"), uid, StringComparison.Ordinal));
+        Assert.Null(item.Attribute("Text"));
+
+        var icon = Assert.Single(item.Descendants(), element =>
+            element.Name.LocalName == "FontIcon"
+            && string.Equals((string?)element.Attribute("Glyph"), expectedGlyph, StringComparison.Ordinal));
+        Assert.Equal("{ThemeResource SymbolThemeFontFamily}", (string?)icon.Attribute("FontFamily"));
+
+        switch (uid)
+        {
+            case "Acp_ProfileReconnect":
+                Assert.Equal("{x:Bind ReconnectCommand}", (string?)item.Attribute("Command"));
+                Assert.Equal("Acp.Profile.Reconnect", (string?)item.Attribute("AutomationProperties.AutomationId"));
+                break;
+            case "Acp_ProfileEdit":
+                Assert.Equal("{x:Bind ProfileId}", (string?)item.Attribute("Tag"));
+                Assert.Equal("OnEditProfileMenuClick", (string?)item.Attribute("Click"));
+                break;
+            case "Acp_ProfileDelete":
+                Assert.Equal("{x:Bind ProfileId}", (string?)item.Attribute("Tag"));
+                Assert.Equal("OnDeleteProfileMenuClick", (string?)item.Attribute("Click"));
+                Assert.Equal("{ThemeResource SystemFillColorCriticalBrush}", (string?)item.Attribute("Foreground"));
+                Assert.Equal("{ThemeResource SystemFillColorCriticalBrush}", (string?)icon.Attribute("Foreground"));
+                break;
+        }
     }
 
     private static string FindRepoRoot()

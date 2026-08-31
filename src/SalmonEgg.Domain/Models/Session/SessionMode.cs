@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Domain.Models.Session
@@ -77,6 +78,30 @@ namespace SalmonEgg.Domain.Models.Session
         /// </summary>
         public SessionModeState()
         {
+        }
+
+        /// <summary>
+        /// 深拷贝本状态：可用模式列表与其中每个 <see cref="SessionMode"/> 都会被复制，
+        /// <see cref="CurrentMode"/> 由副本自己的列表重新解析（而非照抄源对象的引用），
+        /// 使副本内部一致、与源对象完全不共享可变状态。
+        /// </summary>
+        /// <remarks>
+        /// 这里不实现 <c>ICloneable</c>：该接口无法表达"深拷贝还是浅拷贝"，官方设计准则
+        /// 因此不建议实现它，改为提供语义明确的具名方法。
+        /// 本类型可变，凡是跨越所有权边界（写入 <see cref="Session"/> 或从其读出）都必须复制，
+        /// 否则调用方与聚合会共享同一个可变对象，绕过聚合的同步。
+        /// </remarks>
+        public SessionModeState DeepCopy()
+        {
+            var copy = new SessionModeState
+            {
+                CurrentModeId = CurrentModeId,
+                AvailableModes = AvailableModes
+                    .Select(static mode => new SessionMode(mode.Id, mode.Name, mode.Description))
+                    .ToList()
+            };
+            copy.CurrentMode = copy.GetModeById(copy.CurrentModeId);
+            return copy;
         }
 
         /// <summary>

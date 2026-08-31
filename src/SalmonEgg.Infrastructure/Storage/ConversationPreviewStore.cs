@@ -269,7 +269,9 @@ public class ConversationPreviewStore : IConversationPreviewStore
         {
             hash.Add(entry.Sender, StringComparer.Ordinal);
             hash.Add(entry.Text, StringComparer.Ordinal);
-            hash.Add(entry.Timestamp.UtcTicks);
+            // null time must not collide with a real instant; pair the ticks with a presence flag.
+            hash.Add(entry.Timestamp.HasValue);
+            hash.Add(entry.Timestamp?.UtcTicks ?? 0L);
         }
 
         return hash.ToHashCode().ToString("X8");

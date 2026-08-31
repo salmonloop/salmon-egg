@@ -14,6 +14,123 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class AboutViewModelTests
 {
     [Fact]
+    public async Task JoinDiscordCommunityCommand_OpensCanonicalInviteUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.JoinDiscordCommunityCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://discord.gg/wAfJFrYPnf", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task JoinDiscordCommunityCommand_WhenInviteCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.JoinDiscordCommunityCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_DiscordOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task OpenGitHubRepositoryCommand_OpensCanonicalRepositoryUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.OpenGitHubRepositoryCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://github.com/salmonloop/salmon-egg", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task OpenKofiSupportCommand_OpensCanonicalSupportUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.OpenKofiSupportCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://ko-fi.com/shangxin", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task OpenGitHubRepositoryCommand_WhenPageCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.OpenGitHubRepositoryCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_GitHubOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task OpenKofiSupportCommand_WhenPageCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.OpenKofiSupportCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_KofiOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
     public async Task ReportInappropriateAiContentCommand_WhenSupportEmailConfigured_OpensMailtoUri()
     {
         var openedUris = new List<Uri>();
@@ -28,11 +145,15 @@ public sealed class AboutViewModelTests
         var supportInfo = new Mock<IAppSupportInfoService>();
         supportInfo.SetupGet(service => service.ReportInappropriateAiContentEmail)
             .Returns("report@example.test");
+        var launcher = new AiContentReportLauncher(
+            supportInfo.Object,
+            shell.Object,
+            new TestCoreStringLocalizer());
 
         var viewModel = CreateViewModel(
             Mock.Of<IOpenSourceAcknowledgementsProvider>(),
             shell: shell.Object,
-            supportInfo: supportInfo.Object);
+            aiContentReportLauncher: launcher);
 
         Assert.True(viewModel.CanReportInappropriateAiContent);
 
@@ -51,12 +172,42 @@ public sealed class AboutViewModelTests
         var supportInfo = new Mock<IAppSupportInfoService>();
         supportInfo.SetupGet(service => service.ReportInappropriateAiContentEmail)
             .Returns(string.Empty);
+        var launcher = new AiContentReportLauncher(
+            supportInfo.Object,
+            Mock.Of<IPlatformShellService>(),
+            new TestCoreStringLocalizer());
 
         var viewModel = CreateViewModel(
             Mock.Of<IOpenSourceAcknowledgementsProvider>(),
-            supportInfo: supportInfo.Object);
+            aiContentReportLauncher: launcher);
 
         Assert.False(viewModel.CanReportInappropriateAiContent);
+    }
+
+    [Fact]
+    public async Task ReportInappropriateAiContentCommand_WhenEmailAppCannotOpen_ShowsReportSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        launcher.Setup(service => service.TryOpenReportAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            aiContentReportLauncher: launcher.Object,
+            ui: ui.Object);
+
+        await viewModel.ReportInappropriateAiContentCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["AiContentReport_OpenFailed"]), Times.Once);
     }
 
     [Fact]
@@ -71,7 +222,8 @@ public sealed class AboutViewModelTests
                 new OpenSourceAcknowledgement("Alpha.Package", "1.2.3", "MIT", "https://example.test/alpha")
             });
 
-        var viewModel = CreateViewModel(acknowledgements.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(acknowledgements.Object, localizer: localizer);
 
         Assert.Collection(
             viewModel.OpenSourceAcknowledgements,
@@ -85,9 +237,9 @@ public sealed class AboutViewModelTests
             second =>
             {
                 Assert.Equal("Beta.Package", second.Name);
-                Assert.Equal("版本未列出", second.Version);
-                Assert.Equal("许可证未列出", second.License);
-                Assert.Equal("来源未列出", second.SourceUrl);
+                Assert.Equal(localizer["About_AcknowledgementVersionFallback"], second.Version);
+                Assert.Equal(localizer["About_AcknowledgementLicenseFallback"], second.License);
+                Assert.Equal(localizer["About_AcknowledgementSourceFallback"], second.SourceUrl);
             });
     }
 
@@ -129,7 +281,8 @@ public sealed class AboutViewModelTests
         IOpenSourceAcknowledgementsProvider acknowledgements,
         IStringLocalizer<CoreStrings>? localizer = null,
         IPlatformShellService? shell = null,
-        IAppSupportInfoService? supportInfo = null)
+        IAiContentReportLauncher? aiContentReportLauncher = null,
+        IUiInteractionService? ui = null)
     {
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(service => service.SupportsExternalFileOpen).Returns(true);
@@ -137,19 +290,28 @@ public sealed class AboutViewModelTests
         var documents = new Mock<IAppDocumentService>();
         documents.SetupGet(service => service.DocsRootPath).Returns("C:/app/docs");
 
-        var defaultSupportInfo = new Mock<IAppSupportInfoService>();
-        defaultSupportInfo.SetupGet(service => service.ReportInappropriateAiContentEmail)
-            .Returns("report@example.test");
+        var effectiveLocalizer = localizer ?? new TestCoreStringLocalizer();
+        var effectiveShell = shell ?? Mock.Of<IPlatformShellService>();
+        if (aiContentReportLauncher is null)
+        {
+            var defaultSupportInfo = new Mock<IAppSupportInfoService>();
+            defaultSupportInfo.SetupGet(service => service.ReportInappropriateAiContentEmail)
+                .Returns("report@example.test");
+            aiContentReportLauncher = new AiContentReportLauncher(
+                defaultSupportInfo.Object,
+                effectiveShell,
+                effectiveLocalizer);
+        }
 
         return new AboutViewModel(
-            shell ?? Mock.Of<IPlatformShellService>(),
-            supportInfo ?? defaultSupportInfo.Object,
+            effectiveShell,
+            aiContentReportLauncher,
             capabilities.Object,
             Mock.Of<IStorageLocationService>(),
             Mock.Of<IAppDataService>(),
             documents.Object,
-            Mock.Of<IUiInteractionService>(),
-            localizer ?? new TestCoreStringLocalizer(),
+            ui ?? Mock.Of<IUiInteractionService>(),
+            effectiveLocalizer,
             acknowledgements);
     }
 

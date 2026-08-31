@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
@@ -15,10 +14,6 @@ namespace SalmonEgg.Acp.Serialization;
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     AllowOutOfOrderMetadataProperties = true)]
-[JsonSerializable(typeof(JsonRpcRequest))]
-[JsonSerializable(typeof(JsonRpcResponse))]
-[JsonSerializable(typeof(JsonRpcNotification))]
-[JsonSerializable(typeof(JsonRpcError))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(InitializeParams))]
 [JsonSerializable(typeof(InitializeResponse))]
@@ -26,6 +21,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(ClientCapabilities))]
 [JsonSerializable(typeof(ClientSessionCapabilities))]
 [JsonSerializable(typeof(SessionConfigOptionsCapabilities))]
+[JsonSerializable(typeof(BooleanConfigOptionCapabilities))]
 [JsonSerializable(typeof(FsCapability))]
 [JsonSerializable(typeof(AgentInfo))]
 [JsonSerializable(typeof(AgentCapabilities))]
@@ -40,6 +36,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(SessionDeleteCapabilities))]
 [JsonSerializable(typeof(SessionAdditionalDirectoriesCapabilities))]
 [JsonSerializable(typeof(AuthMethodDefinition))]
+[JsonSerializable(typeof(List<AuthMethodDefinition>))]
 [JsonSerializable(typeof(SessionNewParams))]
 [JsonSerializable(typeof(SessionNewResponse))]
 [JsonSerializable(typeof(SessionModesState))]
@@ -48,6 +45,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(SessionPromptResponse))]
 [JsonSerializable(typeof(SessionLoadParams))]
 [JsonSerializable(typeof(SessionLoadResponse))]
+[JsonSerializable(typeof(SessionReplayFrom))]
 [JsonSerializable(typeof(SessionResumeParams))]
 [JsonSerializable(typeof(SessionResumeResponse))]
 [JsonSerializable(typeof(SessionCloseParams))]
@@ -71,9 +69,11 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(AskUserOption))]
 [JsonSerializable(typeof(AskUserResponse))]
 [JsonSerializable(typeof(PermissionOutcomeResult))]
+[JsonSerializable(typeof(PermissionOption))]
 [JsonSerializable(typeof(ReadTextFileResult))]
 [JsonSerializable(typeof(SessionUpdateParams))]
 [JsonSerializable(typeof(SessionUpdate))]
+[JsonSerializable(typeof(ContentChunkUpdate))]
 [JsonSerializable(typeof(AgentMessageUpdate))]
 [JsonSerializable(typeof(UserMessageUpdate))]
 [JsonSerializable(typeof(AgentThoughtUpdate))]
@@ -81,7 +81,6 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(ToolCallStatusUpdate))]
 [JsonSerializable(typeof(PlanUpdate))]
 [JsonSerializable(typeof(CurrentModeUpdate))]
-[JsonSerializable(typeof(ConfigUpdateUpdate))]
 [JsonSerializable(typeof(ConfigOptionUpdate))]
 [JsonSerializable(typeof(SessionInfoUpdate))]
 [JsonSerializable(typeof(UsageUpdate))]
@@ -91,6 +90,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(AvailableCommandInput))]
 [JsonSerializable(typeof(ConfigOption))]
 [JsonSerializable(typeof(ConfigOptionValue))]
+[JsonSerializable(typeof(ConfigOptionGroup))]
 [JsonSerializable(typeof(TerminalCreateRequest))]
 [JsonSerializable(typeof(TerminalCreateResponse))]
 [JsonSerializable(typeof(TerminalOutputRequest))]
@@ -107,6 +107,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(StdioMcpServer))]
 [JsonSerializable(typeof(HttpMcpServer))]
 [JsonSerializable(typeof(SseMcpServer))]
+[JsonSerializable(typeof(CustomMcpServer))]
 [JsonSerializable(typeof(McpHttpHeader))]
 [JsonSerializable(typeof(McpEnvVariable))]
 [JsonSerializable(typeof(ContentBlock))]
@@ -137,6 +138,8 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(object))]
 [JsonSerializable(typeof(List<ContentBlock>))]
 [JsonSerializable(typeof(List<ToolCallContent>))]
+[JsonSerializable(typeof(IReadOnlyList<ToolCallContent>))]
+[JsonSerializable(typeof(IReadOnlyList<ToolCallLocation>))]
 [JsonSerializable(typeof(List<ToolCallLocation>))]
 [JsonSerializable(typeof(List<SalmonEgg.Acp.Protocol.SessionMode>))]
 [JsonSerializable(typeof(List<ConfigOption>))]

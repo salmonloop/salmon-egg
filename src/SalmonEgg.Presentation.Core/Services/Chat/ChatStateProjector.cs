@@ -20,26 +20,23 @@ public interface IChatStateProjector
 public sealed class ChatStateProjector : IChatStateProjector
 {
     private readonly ChatSessionToolingProjector _sessionToolingProjector;
-    private readonly TranscriptProjectionRestoreTokenProjector _restoreTokenProjector;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
 
     public ChatStateProjector()
-        : this(new ChatSessionToolingProjector(), new TranscriptProjectionRestoreTokenProjector(), localizer: null)
+        : this(new ChatSessionToolingProjector(), localizer: null)
     {
     }
 
     public ChatStateProjector(IStringLocalizer<CoreStrings> localizer)
-        : this(new ChatSessionToolingProjector(), new TranscriptProjectionRestoreTokenProjector(), localizer)
+        : this(new ChatSessionToolingProjector(), localizer)
     {
     }
 
     public ChatStateProjector(
         ChatSessionToolingProjector sessionToolingProjector,
-        TranscriptProjectionRestoreTokenProjector restoreTokenProjector,
         IStringLocalizer<CoreStrings>? localizer = null)
     {
         _sessionToolingProjector = sessionToolingProjector ?? throw new ArgumentNullException(nameof(sessionToolingProjector));
-        _restoreTokenProjector = restoreTokenProjector ?? throw new ArgumentNullException(nameof(restoreTokenProjector));
         _localizer = localizer;
     }
 
@@ -74,7 +71,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         };
         var connectionError = connectionState.Error;
         var isAuthenticationRequired = connectionState.IsAuthenticationRequired;
-        var authenticationHintMessage = connectionState.AuthenticationHintMessage;
+        var authenticationHintMessage = ResolveAuthenticationHintMessage(connectionState);
 
         var activeTurn = GetVisibleActiveTurn(storeState.ActiveTurn, hydratedConversationId);
         var turnStatus = ChatTurnStatusPresentationPolicy.Resolve(activeTurn);
@@ -90,11 +87,6 @@ public sealed class ChatStateProjector : IChatStateProjector
         var planEntries = contentSlice?.PlanEntries
             ?? storeState.PlanEntries
             ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
-        var restoreProjection = _restoreTokenProjector.Project(
-            conversationId: hydratedConversationId ?? string.Empty,
-            transcript,
-            firstVisibleIndex: transcript.Count > 0 ? transcript.Count - 1 : -1);
-
         return new ChatUiProjection(
             HydratedConversationId: hydratedConversationId,
             ChatOwnerProfileId: chatOwnerProfileId,
@@ -118,7 +110,6 @@ public sealed class ChatStateProjector : IChatStateProjector
             CurrentPrompt: storeState.DraftText ?? string.Empty,
             DraftRevision: storeState.DraftRevision,
             Transcript: transcript,
-            RestoreProjection: restoreProjection,
             ShowPlanPanel: contentSlice?.ShowPlanPanel ?? storeState.ShowPlanPanel,
             PlanEntries: planEntries,
             AvailableModes: toolingProjection.AvailableModes,
@@ -168,6 +159,24 @@ public sealed class ChatStateProjector : IChatStateProjector
         return presentation.FormatArgument is null
             ? Localize(presentation.ResourceKey, presentation.FallbackText)
             : FormatLocalize(presentation.ResourceKey, presentation.FallbackText, presentation.FormatArgument);
+    }
+
+    private string? ResolveAuthenticationHintMessage(ChatConnectionState connectionState)
+    {
+        if (string.IsNullOrWhiteSpace(connectionState.AuthenticationHintResourceKey))
+        {
+            return connectionState.AuthenticationHintMessage;
+        }
+
+        var fallback = connectionState.AuthenticationHintFallback
+            ?? connectionState.AuthenticationHintMessage
+            ?? string.Empty;
+        return connectionState.AuthenticationHintFormatArgs is { Length: > 0 }
+            ? FormatLocalize(
+                connectionState.AuthenticationHintResourceKey,
+                fallback,
+                connectionState.AuthenticationHintFormatArgs)
+            : Localize(connectionState.AuthenticationHintResourceKey, fallback);
     }
 
     private string Localize(string key, string fallback)
@@ -223,7 +232,6 @@ public sealed record ChatUiProjection(
     string CurrentPrompt,
     long DraftRevision,
     IImmutableList<ConversationMessageSnapshot> Transcript,
-    TranscriptProjectionRestoreProjection RestoreProjection,
     bool ShowPlanPanel,
     IReadOnlyList<ConversationPlanEntrySnapshot> PlanEntries,
     IReadOnlyList<ConversationModeOptionSnapshot> AvailableModes,

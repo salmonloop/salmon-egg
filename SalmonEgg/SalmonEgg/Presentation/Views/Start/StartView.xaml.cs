@@ -32,33 +32,32 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
         Unloaded += OnUnloaded;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         HookSuggestionCollection();
+        HeroSuggestionLayoutStates.CurrentStateChanged += OnHeroSuggestionLayoutStateChanged;
         ViewModel.OnComposerLoaded();
         RefreshHeroSuggestionFocusTargets();
         _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
-
-        try
-        {
-            var ensureAcpProfilesLoadedTask = ViewModel.Chat.EnsureAcpProfilesLoadedAsync();
-            await ViewModel.Chat.RestoreConversationsAsync();
-            await ensureAcpProfilesLoadedTask;
-        }
-        catch
-        {
-        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         UnhookSuggestionCollection();
+        HeroSuggestionLayoutStates.CurrentStateChanged -= OnHeroSuggestionLayoutStateChanged;
         ViewModel.OnComposerUnloaded();
     }
 
     private void OnHeroSuggestionCardLoaded(object sender, RoutedEventArgs e)
     {
         RefreshHeroSuggestionFocusTargets();
+    }
+
+    private void OnHeroSuggestionLayoutStateChanged(object? sender, VisualStateChangedEventArgs e)
+    {
+        // The adaptive ItemsPanel swap rearranges the suggestion buttons; Loaded does not re-fire
+        // when only the panel changes, so re-wire directional focus targets for the new layout.
+        _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
     }
 
     private void HookSuggestionCollection()
@@ -135,6 +134,12 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
             promptBox.XYFocusUp = firstSuggestion;
         }
 
+        // Default ItemsPanel is vertical (Narrow); Wide is only active when the AdaptiveTrigger matches.
+        var isWideLayout = string.Equals(
+            HeroSuggestionLayoutStates.CurrentState?.Name,
+            "Wide",
+            StringComparison.Ordinal);
+
         for (var i = 0; i < ViewModel.Suggestions.Count; i++)
         {
             if (FindSuggestionButton(ViewModel.Suggestions[i].AutomationId) is not Button button)
@@ -142,39 +147,73 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
                 continue;
             }
 
-            var leftButton = i > 0
+            var previousButton = i > 0
                 ? FindSuggestionButton(ViewModel.Suggestions[i - 1].AutomationId)
                 : null;
-            var rightButton = i + 1 < ViewModel.Suggestions.Count
+            var nextButton = i + 1 < ViewModel.Suggestions.Count
                 ? FindSuggestionButton(ViewModel.Suggestions[i + 1].AutomationId)
                 : null;
             var promptFocusTarget = FindPromptBox();
 
-            if (leftButton is not null)
+            if (isWideLayout)
             {
-                button.XYFocusLeft = leftButton;
+                // Horizontal row: Left/Right neighbors; Down to the composer prompt.
+                if (previousButton is not null)
+                {
+                    button.XYFocusLeft = previousButton;
+                }
+                else
+                {
+                    button.ClearValue(Control.XYFocusLeftProperty);
+                }
+
+                if (nextButton is not null)
+                {
+                    button.XYFocusRight = nextButton;
+                }
+                else
+                {
+                    button.ClearValue(Control.XYFocusRightProperty);
+                }
+
+                button.ClearValue(Control.XYFocusUpProperty);
+
+                if (promptFocusTarget is not null)
+                {
+                    button.XYFocusDown = promptFocusTarget;
+                }
+                else
+                {
+                    button.ClearValue(Control.XYFocusDownProperty);
+                }
             }
             else
             {
+                // Vertical stack: Up/Down neighbors; only the last card drops into the prompt.
                 button.ClearValue(Control.XYFocusLeftProperty);
-            }
-
-            if (rightButton is not null)
-            {
-                button.XYFocusRight = rightButton;
-            }
-            else
-            {
                 button.ClearValue(Control.XYFocusRightProperty);
-            }
 
-            if (promptFocusTarget is not null)
-            {
-                button.XYFocusDown = promptFocusTarget;
-            }
-            else
-            {
-                button.ClearValue(Control.XYFocusDownProperty);
+                if (previousButton is not null)
+                {
+                    button.XYFocusUp = previousButton;
+                }
+                else
+                {
+                    button.ClearValue(Control.XYFocusUpProperty);
+                }
+
+                if (nextButton is not null)
+                {
+                    button.XYFocusDown = nextButton;
+                }
+                else if (promptFocusTarget is not null)
+                {
+                    button.XYFocusDown = promptFocusTarget;
+                }
+                else
+                {
+                    button.ClearValue(Control.XYFocusDownProperty);
+                }
             }
         }
     }

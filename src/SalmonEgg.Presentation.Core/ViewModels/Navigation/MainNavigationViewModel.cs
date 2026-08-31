@@ -27,7 +27,7 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
-public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable
+public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable, IConversationActivationEntryPoint
 {
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
     private const int VisibleSessionsPerProjectLimit = 20;
@@ -76,9 +76,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private NavigationViewProjection _projection = new(
         ControlSelectedItem: null,
-        IsSettingsSelected: false,
-        ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
-        SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal));
+        IsSettingsSelected: false);
 
     public NavigationSelectionState CurrentSelection => _shellSelection.CurrentSelection;
 
@@ -256,7 +254,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         SettingsItem.UpdateTitle(Localize("Nav_Settings", "Settings"));
         SessionsLabelItem.UpdateTitle(Localize("Nav_Sessions", "Sessions"));
 
-        var unclassifiedTitle = Localize("Nav_Unclassified", "未归类");
+        var unclassifiedTitle = Localize("Nav_Unclassified", "Unclassified");
         foreach (var project in Items
                      .OfType<ProjectNavItemViewModel>()
                      .Where(project => string.Equals(
@@ -283,6 +281,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             placeholder.Title = loadingTitle;
         }
+
+        RefreshRelativeTimes();
     }
 
     public void Dispose()
@@ -355,7 +355,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void OnShellRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))
+        if (e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.DesiredSessionId)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.IsSessionActivationInProgress)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.PendingShellContent))
         {
             ApplySelectionProjection();
         }
@@ -397,19 +400,167 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             if (!activated)
             {
                 PendingProjectIdForNewSession = null;
+                await NotifyOpenStartFailedAsync().ConfigureAwait(true);
                 return;
             }
 
             PendingProjectIdForNewSession = requestedProjectId;
         }
-        catch
+        catch (Exception ex)
         {
-            if (IsLatestPendingProjectIntent(intentVersion))
+            _logger.LogWarning(ex, "Prepare start for project failed. projectId={ProjectId}", requestedProjectId);
+            if (!IsLatestPendingProjectIntent(intentVersion))
             {
-                PendingProjectIdForNewSession = null;
+                return;
             }
+
+            PendingProjectIdForNewSession = null;
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
         }
     }
+
+    private Task NotifyOpenStartFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenStartFailed",
+                "Failed to open the start page. Please try again later."));
+
+    public async Task<bool> ActivateStartAsync(string? projectIdForNewSession = null)
+    {
+        try
+        {
+            var activated = await _navigationCoordinator
+                .ActivateStartAsync(projectIdForNewSession)
+                .ConfigureAwait(true);
+            if (activated)
+            {
+                return true;
+            }
+
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to start failed");
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    public async Task<bool> ActivateSettingsAsync(string sectionKey)
+    {
+        try
+        {
+            var opened = await _navigationCoordinator
+                .ActivateSettingsAsync(sectionKey)
+                .ConfigureAwait(true);
+            if (opened)
+            {
+                return true;
+            }
+
+            await NotifyOpenSettingsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to settings failed. sectionKey={SectionKey}", sectionKey);
+            await NotifyOpenSettingsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private Task NotifyOpenSettingsFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenSettingsFailed",
+                "Failed to open settings. Please try again later."));
+
+    public async Task<bool> ActivateDiscoverSessionsAsync()
+    {
+        try
+        {
+            var opened = await _navigationCoordinator.ActivateDiscoverSessionsAsync().ConfigureAwait(true);
+            if (opened)
+            {
+                return true;
+            }
+
+            await NotifyOpenDiscoverSessionsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to discover sessions failed");
+            await NotifyOpenDiscoverSessionsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private Task NotifyOpenDiscoverSessionsFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenDiscoverSessionsFailed",
+                "Failed to open Discover sessions. Please try again later."));
+
+    public async Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
+    {
+        try
+        {
+            var activated = await _navigationCoordinator
+                .ActivateSessionAsync(sessionId, projectId)
+                .ConfigureAwait(true);
+            if (activated)
+            {
+                return true;
+            }
+
+            if (ShouldSurfaceSessionActivationFailureInfo(sessionId))
+            {
+                await NotifyOpenSessionFailedAsync().ConfigureAwait(true);
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to session failed. sessionId={SessionId}", sessionId);
+            await NotifyOpenSessionFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private bool ShouldSurfaceSessionActivationFailureInfo(string sessionId)
+    {
+        // Once selection commits to the target session, the chat callout owns the failure surface.
+        var currentSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection);
+        if (string.Equals(currentSessionId, sessionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var activation = _shellRuntimeState.ActiveSessionActivation;
+        if (activation is { Phase: SessionActivationPhase.Faulted }
+            && activation.Matches(sessionId))
+        {
+            var reason = activation.Reason;
+            if (!string.IsNullOrWhiteSpace(reason)
+                && (reason.StartsWith("Superseded", StringComparison.Ordinal)
+                    || string.Equals(reason, "Canceled", StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Task NotifyOpenSessionFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenSessionFailed",
+                "Failed to open this session. Please try again later."));
 
     public void ClearPendingProjectForNewSession()
     {
@@ -460,6 +611,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Show sessions list failed");
+            await _ui.ShowInfoAsync(
+                    Localize(
+                        "Nav_ShowSessionsListFailed",
+                        "Failed to open the sessions list. Please try again later."))
+                .ConfigureAwait(true);
         }
     }
 
@@ -476,6 +632,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             chatSessionCatalog: _chatSessionCatalogActions,
             navigationState: _navigationState,
             uiDispatcher: _uiDispatcher,
+            localizer: _localizer,
             isPlaceholder: true);
     }
 
@@ -489,21 +646,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ActivateSessionFromSessionsList(string sessionId, string projectId)
     {
-        try
-        {
-            var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, projectId);
-            if (!activationTask.IsCompletedSuccessfully)
-            {
-                _ = ObserveSessionActivationAsync(activationTask);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Session activation from sessions list failed");
-        }
+        // Fire-and-forget: dialog pick must not block the list UI thread, but activation
+        // still routes through ActivateSessionAsync so failures share the nav owner feedback path.
+        _ = ObserveSessionActivationAsync(ActivateSessionAsync(sessionId, projectId));
     }
 
-    private async Task ObserveSessionActivationAsync(Task activationTask)
+    private async Task ObserveSessionActivationAsync(Task<bool> activationTask)
     {
         try
         {
@@ -511,6 +659,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
         catch (Exception ex)
         {
+            // ActivateSessionAsync already surfaces user-visible failures; keep this as a safety net.
             _logger.LogWarning(ex, "Session activation from sessions list failed");
         }
     }
@@ -586,29 +735,24 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 break;
 
             case AddProjectStatus.RejectedUnknownRemote:
-                await _ui.ShowInfoAsync(Localize("AddProject_RemoteProjectMissing", "该远程项目已不存在。"))
+                await _ui.ShowInfoAsync(Localize("AddProject_RemoteProjectMissing", "That remote project no longer exists."))
                     .ConfigureAwait(true);
                 break;
 
             case AddProjectStatus.Invalid:
+                await _ui.ShowInfoAsync(Localize(
+                        "AddProject_InvalidSelection",
+                        "That project selection is not valid. Please choose another folder or remote directory."))
+                    .ConfigureAwait(true);
+                break;
+
             default:
                 break;
         }
     }
 
-    private async Task NavigateToRemoteProjectSettingsAsync()
-    {
-        try
-        {
-            await _navigationCoordinator
-                .ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey)
-                .ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Navigating to remote project settings failed");
-        }
-    }
+    private Task NavigateToRemoteProjectSettingsAsync()
+        => ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey);
 
     public void RebuildTree()
     {
@@ -662,14 +806,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             var sessionsByProject = GetSessionsByProject(projects);
             var removedItemsToDispose = new List<MainNavItemViewModel>();
 #if DEBUG
-            if (CurrentSelection is NavigationSelectionState.Session selectedSession
-                && !string.IsNullOrWhiteSpace(selectedSession.SessionId))
+            var debugSelectedSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection);
+            if (debugSelectedSessionId is not null)
             {
                 var currentCatalogItem = _conversationCatalogPresenter.Snapshot
-                    .FirstOrDefault(item => string.Equals(item.ConversationId, selectedSession.SessionId, StringComparison.Ordinal));
-                _logger.LogInformation(
+                    .FirstOrDefault(item => string.Equals(item.ConversationId, debugSelectedSessionId, StringComparison.Ordinal));
+                _logger.LogDebug(
                     "Navigation rebuild evaluating selected session. SessionId={SessionId} CatalogCwd={CatalogCwd} BoundProfileId={BoundProfileId} RemoteSessionId={RemoteSessionId} SnapshotCount={SnapshotCount}",
-                    selectedSession.SessionId,
+                    debugSelectedSessionId,
                     currentCatalogItem?.Cwd,
                     currentCatalogItem?.BoundProfileId,
                     currentCatalogItem?.RemoteSessionId,
@@ -770,7 +914,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
+            _logger.LogWarning(ex, "Navigation tree rebuild failed and was swallowed to keep the shell stable.");
         }
     }
 
@@ -806,9 +950,22 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogDisplayItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
     {
-        var top = BuildVisibleSessionsForProject(sessions);
-        var remainingCount = Math.Max(0, sessions.Count - top.Count);
         var children = projectVm.Children;
+        var top = BuildVisibleSessionsForProject(sessions);
+        // While the pane is unsettled, hold already-rendered rows in place instead of applying a
+        // fresh recency order. Reordering a rendered row makes Uno's ItemsRepeater recycle its
+        // container (Move is decomposed into Remove+Add); the recycle pool keeps the selected flag
+        // and NavigationView's deselect of the previous item no-ops once the container is gone, so
+        // the mask strands across rows. See NavigationSessionOrderPolicy for the full rationale.
+        top = NavigationSessionOrderPolicy.ResolveAppliedOrder(
+            top,
+            children.OfType<SessionNavItemViewModel>()
+                .Where(session => !session.IsPlaceholder)
+                .Select(session => session.SessionId)
+                .ToList(),
+            ShouldPreserveRenderedSessionOrder(),
+            static session => session.ConversationId);
+        var remainingCount = Math.Max(0, sessions.Count - top.Count);
 
         int childIndex = 0;
         foreach (var session in top)
@@ -816,7 +973,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             var title = string.IsNullOrWhiteSpace(session.DisplayName)
                 ? SessionNamePolicy.CreateDefault(session.ConversationId)
                 : session.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt);
+            var relative = NavTimeFormatter.ToRelativeText(session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt, _localizer);
 
             SessionNavItemViewModel? sessionVm = null;
 
@@ -834,12 +991,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
             if (sessionVm == null)
             {
-                // Look for it elsewhere in children to avoid full re-creation if it moved
+                // Look for it elsewhere in children to avoid full re-creation if it moved.
                 sessionVm = children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.ConversationId, StringComparison.Ordinal));
                 if (sessionVm != null)
                 {
-                    // Note: We don't dispose here because we are re-inserting it at a new position
-                    children.Remove(sessionVm);
+                    // The session already owns a realized NavigationViewItem container. Relocate it
+                    // with a single Move (not Remove+Insert): NavigationView translates the existing
+                    // container and carries its native selection visual with it. Remove+Insert instead
+                    // recycles a container for a different data item and can strand the selected gray
+                    // mask on the vacated slot, so several sessions end up masked at once.
+                    var existingIndex = children.IndexOf(sessionVm);
+                    if (existingIndex != childIndex)
+                    {
+                        children.Move(existingIndex, childIndex);
+                    }
+
                     sessionVm.Title = title;
                     sessionVm.RemoteSessionId = session.RemoteSessionId;
                     sessionVm.RelativeTimeText = relative;
@@ -857,10 +1023,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                             shell: _shell,
                             chatSessionCatalog: _chatSessionCatalogActions,
                             navigationState: _navigationState,
-                            uiDispatcher: _uiDispatcher);
+                            uiDispatcher: _uiDispatcher,
+                localizer: _localizer);
                     sessionVm.HasUnreadAttention = session.HasUnreadAttention;
+                    children.Insert(childIndex, sessionVm);
                 }
-                children.Insert(childIndex, sessionVm);
             }
 
             targetSessionIndex[session.ConversationId] = sessionVm;
@@ -922,24 +1089,49 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
+    /// <summary>
+    /// Whether the pane is currently unsettled, in which case already-rendered session rows must
+    /// keep their positions so no realized container is recycled mid-selection.
+    /// </summary>
+    /// <remarks>
+    /// Unsettled means a session activation is in flight (the control has already self-selected the
+    /// invoked leaf via <c>SelectsOnInvoked</c> while the outgoing row is still painted selected) or
+    /// the conversation catalog is still loading and therefore still churning the sort key. Both are
+    /// navigation-owned state; nothing here reads or writes the control's own selection.
+    /// </remarks>
+    private bool ShouldPreserveRenderedSessionOrder()
+        => IsConversationListLoading
+           || _shellRuntimeState.IsSessionActivationInProgress
+           || ResolveActiveSessionActivationProjectionSessionId() is not null;
+
     private List<ConversationCatalogDisplayItem> BuildVisibleSessionsForProject(List<ConversationCatalogDisplayItem> sessions)
     {
         var visible = sessions.Take(VisibleSessionsPerProjectLimit).ToList();
-        if (CurrentSelection is not NavigationSelectionState.Session currentSession
-            || string.IsNullOrWhiteSpace(currentSession.SessionId)
-            || visible.Any(item => string.Equals(item.ConversationId, currentSession.SessionId, StringComparison.Ordinal)))
+        EnsureRequiredVisibleSession(
+            sessions,
+            visible,
+            NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection));
+        EnsureRequiredVisibleSession(sessions, visible, ResolveActiveSessionActivationProjectionSessionId());
+        return visible;
+    }
+
+    private static void EnsureRequiredVisibleSession(
+        IReadOnlyList<ConversationCatalogDisplayItem> sessions,
+        ICollection<ConversationCatalogDisplayItem> visible,
+        string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || visible.Any(item => string.Equals(item.ConversationId, sessionId, StringComparison.Ordinal)))
         {
-            return visible;
+            return;
         }
 
         var selected = sessions.FirstOrDefault(
-            item => string.Equals(item.ConversationId, currentSession.SessionId, StringComparison.Ordinal));
+            item => string.Equals(item.ConversationId, sessionId, StringComparison.Ordinal));
         if (selected is not null)
         {
             visible.Add(selected);
         }
-
-        return visible;
     }
 
     private List<(ProjectDefinition Project, bool IsSystem)> GetProjectDefinitions()
@@ -949,7 +1141,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             (new ProjectDefinition
             {
                 ProjectId = UnclassifiedProjectId,
-                Name = Localize("Nav_Unclassified", "未归类"),
+                Name = Localize("Nav_Unclassified", "Unclassified"),
                 RootPath = string.Empty
             }, true)
         };
@@ -1023,9 +1215,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 StartItem,
                 DiscoverSessionsItem,
                 SettingsItem,
-                _sessionIndex,
-                _projectIndex);
-            ApplyVisualSelectionState(_projection);
+                _sessionIndex);
             OnPropertyChanged(nameof(IsSettingsSelected));
             OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }
@@ -1034,15 +1224,24 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private void ApplySelectionProjection()
     {
         var previousProjection = _projection;
-        var projectedSelection = GetProjectedSelectionState();
+        // Project the committed semantic selection faithfully, except while the
+        // coordinator owns a non-terminal session activation. That pending session is a
+        // view projection of the same latest-intent chain that drives the chat overlay;
+        // it is not committed to CurrentSelection until SwitchConversationAsync succeeds.
+        var projectedSelection = ResolveProjectedSelection();
 
-        if (projectedSelection is NavigationSelectionState.Session selectionState
-            && !string.IsNullOrWhiteSpace(selectionState.SessionId)
-            && _sessionIndex.TryGetValue(selectionState.SessionId, out var sessionItem))
+        if (TryMaterializeProjectedSession(projectedSelection))
+        {
+            return;
+        }
+
+        var projectedSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(projectedSelection);
+        if (projectedSessionId is not null
+            && _sessionIndex.TryGetValue(projectedSessionId, out var sessionItem))
         {
             _logger.LogDebug(
                 "SelectionProjection sessionId={SessionId} projectId={ProjectId} paneOpen={PaneOpen} projectIndexHas={ProjectIndexHas} semantic={SemanticSelection} previewActive={PreviewActive}",
-                selectionState.SessionId,
+                projectedSessionId,
                 sessionItem.ProjectId,
                 _navigationState.IsPaneOpen,
                 _projectIndex.ContainsKey(sessionItem.ProjectId),
@@ -1055,11 +1254,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             StartItem,
             DiscoverSessionsItem,
             SettingsItem,
-            _sessionIndex,
-            _projectIndex);
+            _sessionIndex);
 
         _projection = nextProjection;
-        ApplyVisualSelectionState(_projection);
         if (previousProjection.IsSettingsSelected != _projection.IsSettingsSelected)
         {
             OnPropertyChanged(nameof(IsSettingsSelected));
@@ -1071,24 +1268,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private NavigationSelectionState GetProjectedSelectionState()
-    {
-        if (CurrentSelection is NavigationSelectionState.Session currentSession
-            && (string.IsNullOrWhiteSpace(currentSession.SessionId)
-                || !_sessionIndex.ContainsKey(currentSession.SessionId)))
-        {
-            return NavigationSelectionState.StartSelection;
-        }
-
-        return CurrentSelection;
-    }
-
     private bool TryMaterializeSelectedSession()
+        => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection));
+
+    private bool TryMaterializeProjectedSession(NavigationSelectionState selection)
+        => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(selection));
+
+    private bool TryMaterializeSession(string? sessionId)
     {
-        if (CurrentSelection is not NavigationSelectionState.Session currentSession
-            || string.IsNullOrWhiteSpace(currentSession.SessionId)
-            || _sessionIndex.ContainsKey(currentSession.SessionId)
-            || !CanMaterializeSelectedSession(currentSession.SessionId))
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || _sessionIndex.ContainsKey(sessionId)
+            || !CanMaterializeSelectedSession(sessionId))
         {
             return false;
         }
@@ -1096,6 +1286,23 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         RebuildTreeCore();
         return true;
     }
+
+    private NavigationSelectionState ResolveProjectedSelection()
+        => NavigationSelectionProjectionPolicy.ResolveProjectedSelection(
+            CurrentSelection,
+            _shellRuntimeState.ActiveSessionActivation,
+            _shellRuntimeState.PendingShellContent,
+            _shellRuntimeState.LatestActivationToken,
+            CanProjectSession);
+
+    private string? ResolveActiveSessionActivationProjectionSessionId()
+        => NavigationSelectionProjectionPolicy.ResolveActiveSessionActivationProjectionSessionId(
+            _shellRuntimeState.ActiveSessionActivation,
+            _shellRuntimeState.PendingShellContent,
+            _shellRuntimeState.LatestActivationToken);
+
+    private bool CanProjectSession(string sessionId)
+        => _sessionIndex.ContainsKey(sessionId) || CanMaterializeSelectedSession(sessionId);
 
     private bool CanMaterializeSelectedSession(string sessionId)
     {
@@ -1110,32 +1317,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return _projectIndex.ContainsKey(projectId)
             || GetProjectDefinitions().Any(
                 project => string.Equals(project.Project.ProjectId, projectId, StringComparison.Ordinal));
-    }
-
-    private void ApplyVisualSelectionState(NavigationViewProjection projection)
-    {
-        // Visual selection state is now handled by NavigationView's native projection behavior
-        // We only need to maintain the logical state for our internal logic
-        SessionsLabelItem.IsLogicallySelected = false;
-        AddProjectItem.IsLogicallySelected = false;
-
-        foreach (var project in _projectVms.Values)
-        {
-            project.IsLogicallySelected = false;
-            project.IsActiveDescendant = projection.ActiveProjectIds.Contains(project.ProjectId);
-
-            foreach (var child in project.Children)
-            {
-                if (child is SessionNavItemViewModel sessionItem)
-                {
-                    child.IsLogicallySelected = projection.SelectedSessionIds.Contains(sessionItem.SessionId);
-                }
-                else
-                {
-                    child.IsLogicallySelected = false;
-                }
-            }
-        }
     }
 
     private void RefreshRelativeTimes()
@@ -1161,7 +1342,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
 
             var timestamp = session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt;
-            var relative = NavTimeFormatter.ToRelativeText(timestamp);
+            var relative = NavTimeFormatter.ToRelativeText(timestamp, _localizer);
             if (!string.Equals(sessionItem.RelativeTimeText, relative, StringComparison.Ordinal))
             {
                 sessionItem.RelativeTimeText = relative;
@@ -1181,7 +1362,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         var project = new ProjectDefinition
         {
             ProjectId = UnclassifiedProjectId,
-            Name = Localize("Nav_Unclassified", "未归类"),
+            Name = Localize("Nav_Unclassified", "Unclassified"),
             RootPath = string.Empty
         };
         var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState, _uiDispatcher) { IsExpanded = true };
@@ -1210,7 +1391,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return sessions.Select(s =>
         {
             var title = string.IsNullOrWhiteSpace(s.DisplayName) ? SessionNamePolicy.CreateDefault(s.ConversationId) : s.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(s.CatalogUpdatedAt == default ? s.CreatedAt : s.CatalogUpdatedAt);
+            var relative = NavTimeFormatter.ToRelativeText(s.CatalogUpdatedAt == default ? s.CreatedAt : s.CatalogUpdatedAt, _localizer);
             var vm = new SessionNavItemViewModel(
                 sessionId: s.ConversationId,
                 remoteSessionId: s.RemoteSessionId,
@@ -1221,7 +1402,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 shell: _shell,
                 chatSessionCatalog: _chatSessionCatalogActions,
                 navigationState: _navigationState,
-                uiDispatcher: _uiDispatcher);
+                uiDispatcher: _uiDispatcher,
+                localizer: _localizer);
             vm.HasUnreadAttention = s.HasUnreadAttention;
             return vm;
         }).ToList();

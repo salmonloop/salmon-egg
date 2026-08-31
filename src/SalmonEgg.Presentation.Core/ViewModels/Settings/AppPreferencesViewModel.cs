@@ -7,28 +7,35 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public partial class AppPreferencesViewModel : ObservableObject
+public partial class AppPreferencesViewModel : ObservableObject, IApplicationNotificationSettings
 {
     private readonly IAppSettingsService _appSettingsService;
     private readonly IAppStartupService _startupService;
     private readonly IAppLanguageService _languageService;
     private readonly IPlatformCapabilityService _capabilities;
     private readonly IUiRuntimeService _uiRuntime;
+    private readonly IUiInteractionService _ui;
+    private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<AppPreferencesViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly ISystemNotificationService _systemNotificationService;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private CancellationTokenSource? _saveCts;
+    private CancellationTokenSource? _notificationPermissionCts;
     private bool _isInitialized;
     private bool _suppressSave;
+    private string _appliedLanguage = "System";
 
     [ObservableProperty]
     private string _theme = "System";
@@ -46,6 +53,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     private bool _minimizeToTray = true;
 
     [ObservableProperty]
+    private bool _systemNotificationsEnabled;
+
+    [ObservableProperty]
     private string _language = "System";
 
     [ObservableProperty]
@@ -56,6 +66,18 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     [ObservableProperty]
     private int _cacheRetentionDays = 7;
+
+    // Telemetry：默认开启（opt-out 模式，与 VS Code / Firefox 一致）。
+    // 修改在设置保存成功后立即重建遥测管线；ViewModel 只表达用户意图，
+    // provider 生命周期由 Infrastructure 的重配置服务拥有。
+    [ObservableProperty]
+    private bool _telemetrySharingEnabled = true;
+
+    [ObservableProperty]
+    private string? _telemetryCustomEndpoint;
+
+    [ObservableProperty]
+    private string? _telemetryAuthHeader;
 
     [ObservableProperty]
     private CloudConfigSyncSettings _cloudConfigSync = new();
@@ -115,6 +137,12 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     public bool IsMinimizeToTraySupported => _capabilities.SupportsTray;
 
+    // Notification support is read from the notification platform service rather than
+    // IPlatformCapabilityService on purpose: the answer depends on the native notification stack
+    // (e.g. AppNotificationManager.IsSupported()), which only the platform service can see. Copying
+    // it into the capability service would create a second owner of the same fact.
+    public bool IsSystemNotificationsSupported => _systemNotificationService.IsSupported;
+
     public bool IsLanguageOverrideSupported => _capabilities.SupportsLanguageOverride;
 
     public bool IsMiniWindowSupported => _capabilities.SupportsMiniWindow;
@@ -131,16 +159,22 @@ public partial class AppPreferencesViewModel : ObservableObject
         IAppLanguageService languageService,
         IPlatformCapabilityService capabilities,
         IUiRuntimeService uiRuntime,
+        IUiInteractionService ui,
+        IStringLocalizer<CoreStrings> localizer,
         ILogger<AppPreferencesViewModel> logger,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        ISystemNotificationService systemNotificationService)
     {
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _startupService = startupService ?? throw new ArgumentNullException(nameof(startupService));
         _languageService = languageService ?? throw new ArgumentNullException(nameof(languageService));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _uiRuntime = uiRuntime ?? throw new ArgumentNullException(nameof(uiRuntime));
+        _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
+        _systemNotificationService = systemNotificationService ?? throw new ArgumentNullException(nameof(systemNotificationService));
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
@@ -195,12 +229,30 @@ public partial class AppPreferencesViewModel : ObservableObject
         var markLoaded = true;
         var previousLanguage = "System";
         var nextLanguage = "System";
+#if DEBUG
+        _logger.LogDebug(
+            "App settings load started. ReloadShellOnLanguageChange={ReloadShellOnLanguageChange} IsInitialized={IsInitialized} IsLoaded={IsLoaded} CurrentLanguage={CurrentLanguage} AppliedLanguage={AppliedLanguage}",
+            reloadShellOnLanguageChange,
+            _isInitialized,
+            IsLoaded,
+            Language,
+            _appliedLanguage);
+#endif
         try
         {
             _suppressSave = true;
             cancellationToken.ThrowIfCancellationRequested();
             var settings = await _appSettingsService.LoadAsync();
             var launchOnStartup = settings.LaunchOnStartup;
+#if DEBUG
+            _logger.LogDebug(
+                "App settings file loaded. SettingsLanguage={SettingsLanguage} SettingsTheme={SettingsTheme} LastSelectedServerId={LastSelectedServerId} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount}",
+                settings.Language,
+                settings.Theme,
+                settings.LastSelectedServerId,
+                settings.Projects.Count,
+                settings.AgentRemoteDirectories.Count);
+#endif
 
             try
             {
@@ -224,10 +276,15 @@ public partial class AppPreferencesViewModel : ObservableObject
                 Backdrop = settings.Backdrop;
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
+                SystemNotificationsEnabled = settings.SystemNotificationsEnabled;
                 Language = nextLanguage;
+                _appliedLanguage = nextLanguage;
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                TelemetrySharingEnabled = settings.TelemetrySharingEnabled;
+                TelemetryCustomEndpoint = settings.TelemetryCustomEndpoint;
+                TelemetryAuthHeader = settings.TelemetryAuthHeader;
                 CloudConfigSync = CloneCloudConfigSyncSettings(settings.CloudConfigSync);
                 KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
@@ -282,12 +339,41 @@ public partial class AppPreferencesViewModel : ObservableObject
                     KeyBindings.Add(new KeyBindingPairViewModel(kvp.Key, kvp.Value));
                 }
             }).ConfigureAwait(false);
+#if DEBUG
+            _logger.LogDebug(
+                "App settings UI projection completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount} NavigationRemoteDirectoryIdCount={NavigationRemoteDirectoryIdCount} KeyBindingCount={KeyBindingCount}",
+                previousLanguage,
+                nextLanguage,
+                Projects.Count,
+                AgentRemoteDirectories.Count,
+                NavigationRemoteDirectoryIds.Count,
+                KeyBindings.Count);
+#endif
 
             cancellationToken.ThrowIfCancellationRequested();
+#if DEBUG
+            _logger.LogDebug(
+                "Applying language override from app settings. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ReloadShellOnLanguageChange={ReloadShellOnLanguageChange}",
+                previousLanguage,
+                nextLanguage,
+                reloadShellOnLanguageChange);
+#endif
             await _languageService.ApplyLanguageOverrideAsync(nextLanguage).ConfigureAwait(false);
+#if DEBUG
+            _logger.LogDebug(
+                "Language override from app settings completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                previousLanguage,
+                nextLanguage);
+#endif
             if (reloadShellOnLanguageChange &&
                 !string.Equals(previousLanguage, nextLanguage, StringComparison.Ordinal))
             {
+#if DEBUG
+                _logger.LogDebug(
+                    "Reloading shell after app settings language change. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                    previousLanguage,
+                    nextLanguage);
+#endif
                 _uiRuntime.ReloadShell();
             }
         }
@@ -299,6 +385,21 @@ public partial class AppPreferencesViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load app settings");
+#if DEBUG
+            _logger.LogDebug(
+                "Surfacing app settings load failure. MarkLoaded={MarkLoaded} PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                markLoaded,
+                previousLanguage,
+                nextLanguage);
+#endif
+            try
+            {
+                await _ui.ShowInfoAsync(_localizer["General_AppSettingsLoadFailed"]).ConfigureAwait(false);
+            }
+            catch (Exception showEx)
+            {
+                _logger.LogWarning(showEx, "Failed to surface app settings load failure");
+            }
         }
         finally
         {
@@ -310,6 +411,13 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
 
                 _suppressSave = false;
+#if DEBUG
+                _logger.LogDebug(
+                    "App settings load finalized. MarkLoaded={MarkLoaded} IsLoaded={IsLoaded} SuppressSave={SuppressSave}",
+                    markLoaded,
+                    IsLoaded,
+                    _suppressSave);
+#endif
             }).ConfigureAwait(false);
         }
     }
@@ -347,14 +455,35 @@ public partial class AppPreferencesViewModel : ObservableObject
     }
     partial void OnLaunchOnStartupChanged(bool value)
     {
+        if (_suppressSave)
+        {
+            return;
+        }
+
         ScheduleSave();
         _ = ApplyLaunchOnStartupAsync(value);
     }
     partial void OnMinimizeToTrayChanged(bool value) => ScheduleSave();
-    partial void OnLanguageChanged(string value)
+    partial void OnSystemNotificationsEnabledChanged(bool value)
     {
-        var normalized = AppLanguageCatalog.NormalizeTag(value);
-        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        if (_suppressSave)
+        {
+            return;
+        }
+
+        if (!value)
+        {
+            CancelNotificationPermissionRequest();
+            ScheduleSave();
+            return;
+        }
+
+        _ = EnableSystemNotificationsAsync();
+    }
+    partial void OnLanguageChanged(string? oldValue, string newValue)
+    {
+        var normalized = AppLanguageCatalog.NormalizeTag(newValue);
+        if (!string.Equals(newValue, normalized, StringComparison.Ordinal))
         {
             Language = normalized;
             return;
@@ -372,7 +501,12 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
 
         ScheduleSave();
-        _ = ApplyLanguageChangeAsync(normalized);
+        if (string.Equals(normalized, _appliedLanguage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = ApplyLanguageChangeAsync(_appliedLanguage, normalized);
     }
     partial void OnSelectedLanguageOptionChanged(AppLanguageOptionViewModel? value)
     {
@@ -404,6 +538,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnTelemetrySharingEnabledChanged(bool value) => ScheduleSave();
+    partial void OnTelemetryCustomEndpointChanged(string? value) => ScheduleSave();
+    partial void OnTelemetryAuthHeaderChanged(string? value) => ScheduleSave();
     partial void OnCloudConfigSyncChanged(CloudConfigSyncSettings value) => ScheduleSave();
     partial void OnKeyboardShortcutsEnabledChanged(bool value)
     {
@@ -496,17 +633,45 @@ public partial class AppPreferencesViewModel : ObservableObject
         ShortcutConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task ApplyLanguageChangeAsync(string normalized)
+    private async Task ApplyLanguageChangeAsync(string previousLanguage, string normalized)
     {
         try
         {
             await _languageService.ApplyLanguageOverrideAsync(normalized).ConfigureAwait(false);
+            _appliedLanguage = normalized;
             _uiRuntime.ReloadShell();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to apply language override");
+            await RevertLanguageAsync(previousLanguage).ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_LanguageApplyFailed"]).ConfigureAwait(false);
         }
+    }
+
+    private Task RevertLanguageAsync(string previousLanguage)
+    {
+        var normalizedPrevious = AppLanguageCatalog.NormalizeTag(previousLanguage);
+        return _uiDispatcher.EnqueueAsync(() =>
+        {
+            if (string.Equals(Language, normalizedPrevious, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Suppress apply/save re-entry while restoring the last successful language.
+            _suppressSave = true;
+            try
+            {
+                Language = normalizedPrevious;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+
+            ScheduleSave();
+        });
     }
 
     public void SetKeyBinding(string actionId, string gesture)
@@ -555,10 +720,15 @@ public partial class AppPreferencesViewModel : ObservableObject
             Backdrop = "System";
             LaunchOnStartup = false;
             MinimizeToTray = true;
+            SystemNotificationsEnabled = false;
             Language = "System";
+            _appliedLanguage = "System";
             LastSelectedServerId = null;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
+            TelemetrySharingEnabled = true;
+            TelemetryCustomEndpoint = null;
+            TelemetryAuthHeader = null;
             CloudConfigSync = new CloudConfigSyncSettings();
             KeyboardShortcutsEnabled = true;
             AcpEnableConnectionEviction = false;
@@ -601,12 +771,20 @@ public partial class AppPreferencesViewModel : ObservableObject
                     await _appSettingsService.SaveAsync(snapshot).ConfigureAwait(false);
                 }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to save app settings");
+                try
+                {
+                    await _ui.ShowInfoAsync(_localizer["General_AppSettingsSaveFailed"]).ConfigureAwait(false);
+                }
+                catch (Exception showEx)
+                {
+                    _logger.LogWarning(showEx, "Failed to surface app settings save failure");
+                }
             }
         }, token);
     }
@@ -626,10 +804,18 @@ public partial class AppPreferencesViewModel : ObservableObject
             Backdrop = Backdrop,
             LaunchOnStartup = LaunchOnStartup,
             MinimizeToTray = MinimizeToTray,
+            SystemNotificationsEnabled = SystemNotificationsEnabled,
             Language = AppLanguageCatalog.NormalizeTag(Language),
             LastSelectedServerId = LastSelectedServerId,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
+            TelemetrySharingEnabled = TelemetrySharingEnabled,
+            // 空白输入归一化为 null，使 TelemetrySettings.Build 正确回退到部署环境变量；
+            // 应用自身不配置默认 collector。
+            // 反向验证记录：移除这三行会使 ScheduleSave_PersistsTelemetryToggle 与
+            // ScheduleSave_TrimsTelemetryEndpointWhitespace 失败。
+            TelemetryCustomEndpoint = NormalizeOptional(TelemetryCustomEndpoint),
+            TelemetryAuthHeader = NormalizeOptional(TelemetryAuthHeader),
             CloudConfigSync = CloneCloudConfigSyncSettings(CloudConfigSync),
             KeyboardShortcutsEnabled = KeyboardShortcutsEnabled,
             AcpEnableConnectionEviction = AcpEnableConnectionEviction,
@@ -666,6 +852,16 @@ public partial class AppPreferencesViewModel : ObservableObject
         CloudConfigSync = CloneCloudConfigSyncSettings(settings);
     }
 
+    /// <summary>
+    /// 把空白输入归一化为 null。
+    ///
+    /// 必要性：<c>TelemetrySettings.Build</c> 用空值判定用户是否自定义了端点；
+    /// 空字符串必须视作未配置，才能回退到部署环境变量。
+    /// 用户清空输入框后必须落成 null，才能正确回退到部署环境变量。
+    /// </summary>
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private async Task ApplyLaunchOnStartupAsync(bool enabled)
     {
         if (!_startupService.IsSupported)
@@ -679,12 +875,121 @@ public partial class AppPreferencesViewModel : ObservableObject
             if (!ok)
             {
                 _logger.LogWarning("LaunchOnStartup request failed or was denied.");
+                await RevertLaunchOnStartupAsync(enabled).ConfigureAwait(false);
+                await _ui.ShowInfoAsync(_localizer["General_LaunchOnStartupFailed"]).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply launch-on-startup setting");
+            await RevertLaunchOnStartupAsync(enabled).ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_LaunchOnStartupFailed"]).ConfigureAwait(false);
         }
+    }
+
+    private async Task EnableSystemNotificationsAsync()
+    {
+        var service = _systemNotificationService;
+        if (!service.IsSupported)
+        {
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            return;
+        }
+
+        CancelNotificationPermissionRequest();
+        var cts = new CancellationTokenSource();
+        _notificationPermissionCts = cts;
+        try
+        {
+            var result = await service.RequestPermissionAsync(cts.Token).ConfigureAwait(false);
+            if (!IsCurrentNotificationPermissionRequest(cts))
+            {
+                return;
+            }
+
+            if (result == SystemNotificationPermissionResult.Granted)
+            {
+                ScheduleSave();
+                return;
+            }
+
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_SystemNotificationsPermissionDenied"]).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!IsCurrentNotificationPermissionRequest(cts))
+            {
+                return;
+            }
+
+            _logger.LogWarning(ex, "System notification permission request failed.");
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_SystemNotificationsPermissionDenied"]).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ReferenceEquals(_notificationPermissionCts, cts))
+            {
+                _notificationPermissionCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private Task RevertSystemNotificationsAsync()
+        => _uiDispatcher.EnqueueAsync(() =>
+        {
+            _suppressSave = true;
+            try
+            {
+                SystemNotificationsEnabled = false;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+        });
+
+    private void CancelNotificationPermissionRequest()
+    {
+        var cts = _notificationPermissionCts;
+        _notificationPermissionCts = null;
+        if (cts is null)
+        {
+            return;
+        }
+
+        cts.Cancel();
+    }
+
+    private bool IsCurrentNotificationPermissionRequest(CancellationTokenSource cts)
+        => ReferenceEquals(_notificationPermissionCts, cts);
+
+    private Task RevertLaunchOnStartupAsync(bool attemptedEnabled)
+    {
+        return _uiDispatcher.EnqueueAsync(() =>
+        {
+            if (LaunchOnStartup == !attemptedEnabled)
+            {
+                return;
+            }
+
+            // Suppress ScheduleSave/Apply while restoring authoritative OS state.
+            _suppressSave = true;
+            try
+            {
+                LaunchOnStartup = !attemptedEnabled;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+        });
     }
 
     private static CloudConfigSyncSettings CloneCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
@@ -698,6 +1003,11 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             Enabled = settings.Enabled,
             ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
+            // Revision 是云同步基线的一部分，投影必须原样带回。
+            // 丢掉它会让任意普通偏好保存把 app.yaml 的修订号写回 0，
+            // 指纹随之判定本地已变，启动自动同步按 fail-closed 报人工冲突（issue #82）。
+            // 反向验证记录：移除此行会使 ScheduleSave_PreservesCloudConfigSyncRevision 失败（Expected 42, Actual 0）。
+            Revision = settings.Revision,
             IncludeSecrets = settings.IncludeSecrets,
             ProviderOptions = CloneProviderOptions(settings.ProviderOptions)
         };
@@ -883,22 +1193,32 @@ public partial class AppPreferencesViewModel : ObservableObject
                 option.Tag,
                 option.DisplayNameResourceKey)));
 
+    // 值域来自 AppSettingValueCatalog（与 CLI settings set 共享的单一事实源）；
+    // 本处只负责把值映射到展示资源键。
     private static ObservableCollection<SettingsOptionViewModel> CreateThemeOptions() =>
-        new(
-        [
-            new SettingsOptionViewModel("System", "Appearance_ThemeSystem.Content"),
-            new SettingsOptionViewModel("Light", "Appearance_ThemeLight.Content"),
-            new SettingsOptionViewModel("Dark", "Appearance_ThemeDark.Content")
-        ]);
+        new(AppSettingValueCatalog.ThemeValues.Select(MakeThemeOption));
+
+    private static SettingsOptionViewModel MakeThemeOption(string value) => new(
+        value,
+        value switch
+        {
+            "Light" => "Appearance_ThemeLight.Content",
+            "Dark" => "Appearance_ThemeDark.Content",
+            _ => "Appearance_ThemeSystem.Content"
+        });
 
     private static ObservableCollection<SettingsOptionViewModel> CreateBackdropOptions() =>
-        new(
-        [
-            new SettingsOptionViewModel("System", "Appearance_BackdropSystem.Content"),
-            new SettingsOptionViewModel("Mica", "Appearance_BackdropMica.Content"),
-            new SettingsOptionViewModel("Acrylic", "Appearance_BackdropAcrylic.Content"),
-            new SettingsOptionViewModel("Solid", "Appearance_BackdropSolid.Content")
-        ]);
+        new(AppSettingValueCatalog.BackdropValues.Select(MakeBackdropOption));
+
+    private static SettingsOptionViewModel MakeBackdropOption(string value) => new(
+        value,
+        value switch
+        {
+            "Mica" => "Appearance_BackdropMica.Content",
+            "Acrylic" => "Appearance_BackdropAcrylic.Content",
+            "Solid" => "Appearance_BackdropSolid.Content",
+            _ => "Appearance_BackdropSystem.Content"
+        });
 
     private AppLanguageOptionViewModel ResolveLanguageOption(string? tag)
     {

@@ -1,18 +1,29 @@
 name: Release Packaging
 
+# One authoritative entry point: pushing a `v*` tag. docs/release-guide.md documents exactly that, and
+# the workflow creates the GitHub release itself when the tag build reaches the publish job.
+#
+# `release: [created]` used to be a second entry. It made the same tag reachable through two independent
+# runs — push the tag, then create a release from it in the UI, and both fire. Both then race to
+# `gh release upload --clobber` on the same assets, and because the concurrency group keys on github.ref
+# (which differs between the two events) neither cancels the other. Removing it costs nothing: creating a
+# release from an existing tag no longer needs to rebuild what that tag already produced.
 on:
   push:
     tags: ["v*"]
-  release:
-    types: [created]
   workflow_dispatch:
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
   group: release-packaging-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  DOTNET_VERSION: "10.0.x"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -26,12 +37,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Install WASM workload
         run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
@@ -41,8 +54,14 @@ jobs:
           cd SalmonEgg/SalmonEgg
           dotnet publish -f net10.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
 
+      # A green publish is not evidence the bundle boots. Assert the payload the browser actually needs
+      # exists before this becomes a release asset.
+      - name: Verify WebAssembly artifact contract
+        shell: bash
+        run: scripts/gates/run-release-artifact-contract-gate.sh wasm publish/wasm
+
       - name: Upload WebAssembly artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wasm-build
           path: publish/wasm
@@ -53,12 +72,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish Desktop (Windows)
         run: |
@@ -81,6 +102,15 @@ jobs:
           $installerDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\installer"
           New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
 
+          # Evaluate the shared release identity instead of scraping project XML. The version comes
+          # from the git tag via MinVer, so running the MinVer target is what produces it; the checkout
+          # above uses fetch-depth: 0 so the tag is reachable. Only MSBuild evaluation sees imports and
+          # conditions the way the build itself does.
+          $displayVersion = (dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo).Trim()
+          if ($displayVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "SalmonEggDisplayVersion must be a three-part numeric version, got: $displayVersion"
+          }
+
           $harvestPath = Join-Path $installerDir "Harvest.wxs"
           heat dir $desktopDir `
             -cg SalmonEggDesktopFiles `
@@ -96,7 +126,7 @@ jobs:
           $productXml = @(
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">'
-            '  <Product Id="*" Name="SalmonEgg (Desktop)" Language="1033" Version="1.0.0" Manufacturer="SalmonLoop" UpgradeCode="A2F958DF-D4A4-4E9A-A487-E7CFF31E3271">'
+            "  <Product Id=`"*`" Name=`"SalmonEgg (Desktop)`" Language=`"1033`" Version=`"$displayVersion`" Manufacturer=`"SalmonLoop`" UpgradeCode=`"A2F958DF-D4A4-4E9A-A487-E7CFF31E3271`">"
             '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited" />'
             '    <MajorUpgrade DowngradeErrorMessage="A newer version of SalmonEgg is already installed." />'
             '    <MediaTemplate EmbedCab="yes" />'
@@ -139,13 +169,44 @@ jobs:
             (Join-Path $wixObjDir "Harvest.wixobj")
 
       - name: Upload Desktop artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-build
           path: publish/desktop-windows
 
+      # The CLI MSI verifies its own Environment table (scripts/release/build-cli-msi.ps1); this MSI had
+      # no equivalent, so a heat harvest that picked up nothing would still emit a valid, installable,
+      # and empty package. Read the built package's own tables rather than trusting the authoring above.
+      #
+      # The rule itself lives in scripts/release/DesktopMsiContract.ps1 so that
+      # scripts/gates/run-desktop-msi-contract-gate.ps1 can rehearse it on every push. It used to be
+      # inline here, and being unrehearsable is how it shipped with `SELECT COUNT(*)` -- SQL Windows
+      # Installer cannot parse -- and took down the v1.3.0 release build from inside OpenView.
+      #
+      # Native COM calls, matching build-cli-msi.ps1 after 2690a1eb: the GetType().InvokeMember(...) form
+      # was tried and replaced there, and GitHubWorkflowContractTests pins the native shape. Using the
+      # rejected form here would reintroduce what that commit removed.
+      - name: Verify Windows Skia MSI contract
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path artifacts/installer -Filter *.msi | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw "No .msi was produced under artifacts/installer."
+          }
+
+          . ./scripts/release/DesktopMsiContract.ps1
+
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi.FullName, 0)
+          try {
+            Assert-DesktopMsiContract -Database $database
+          }
+          finally {
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+          }
       - name: Upload Windows Skia MSI artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-skia-msi
           path: artifacts/installer/*.msi
@@ -156,12 +217,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore WinUI app for isolated MSIX build
         shell: pwsh
@@ -206,6 +269,25 @@ jobs:
           $pfxPath = Join-Path $certDir "salmonegg-msix.pfx"
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
 
+          $expectedPublisher = "CN=0B694F0E-510C-433A-A6F7-1484D6A39E19"
+          $certPassword = ConvertTo-SecureString $env:MSIX_PFX_PASSWORD -AsPlainText -Force
+          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfxPath,
+            $env:MSIX_PFX_PASSWORD,
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+          if (-not $certificate.HasPrivateKey) {
+            throw "MSIX signing certificate does not contain a private key."
+          }
+          if ($certificate.Subject -ne $expectedPublisher) {
+            throw "MSIX signing certificate subject '$($certificate.Subject)' does not match '$expectedPublisher'."
+          }
+          if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
+            throw "MSIX signing certificate expired at $($certificate.NotAfter.ToUniversalTime().ToString('o'))."
+          }
+          Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $certPassword | Out-Null
+          "MSIX_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Publish Windows MSIX
         shell: pwsh
         run: |
@@ -220,21 +302,37 @@ jobs:
             /p:BuildProjectReferences=false `
             /p:DisableCustomWinSdkXamlReferences=true `
             /p:AppxPackageSigningEnabled=true `
-            /p:PackageCertificateKeyFile="${{ github.workspace }}\artifacts\signing\salmonegg-msix.pfx" `
-            /p:PackageCertificatePassword="${{ secrets.MSIX_PFX_PASSWORD }}" `
+            /p:PackageCertificateThumbprint="$env:MSIX_CERT_THUMBPRINT" `
             /p:Restore=false `
             /v:minimal
 
+      # Same contract the PR-level packaging gate enforces, applied to the signed package that actually
+      # ships. A signed package with missing shell assets is still a package with missing shell assets.
+      - name: Verify MSIX package contract
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path artifacts/msix -Recurse -Filter *.msix |
+            Select-Object -First 1
+          if ($null -eq $package) {
+            throw "MSIX publish produced no .msix under artifacts/msix."
+          }
+
+          ./scripts/gates/run-msix-package-contract-gate.ps1 -Package $package.FullName
+
       - name: Upload Windows MSIX artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-msix
           path: artifacts/msix/**/*.msix
 
   package-macos:
     name: Package macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 60
+    # Signing secrets are job-scoped env, so downstream jobs cannot re-evaluate them. Publish the
+    # single fact the release job actually needs: whether a .dmg was produced and uploaded.
+    outputs:
+      dmg-produced: ${{ steps.collect-dmg.outputs.dmg-produced }}
     env:
       MACOS_RID: osx-arm64
       MACOS_APP_CODESIGN_KEY: ${{ secrets.MACOS_APP_CODESIGN_KEY }}
@@ -242,12 +340,14 @@ jobs:
       MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish macOS app bundle
         shell: pwsh
@@ -301,6 +401,7 @@ jobs:
             @notaryArgs
 
       - name: Collect macOS disk image
+        id: collect-dmg
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
         run: |
           set -euo pipefail
@@ -311,65 +412,193 @@ jobs:
             exit 1
           fi
           cp "$DMG_PATH" publish/dmg/
+          echo "dmg-produced=true" >> "$GITHUB_OUTPUT"
+
+      # The bundle is a directory contract, and an Info.plist naming an executable that is not there
+      # produces an app that installs and then does nothing. Check it here, not after a user reports it.
+      - name: Verify macOS bundle contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find publish/macos-bundle -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle was collected." >&2
+            exit 1
+          fi
+          scripts/gates/run-release-artifact-contract-gate.sh macos-bundle "$APP_PATH"
 
       - name: Upload macOS bundle artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-macos-bundle
           path: publish/macos-bundle/*
 
       - name: Upload macOS .dmg artifact
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
 
+  package-cli:
+    # One job per officially supported CLI runtime identifier. Each publishes on its own native runner,
+    # smokes the executable it just produced, and only then packages it — a cross-compiled artifact that
+    # nothing has executed is not something this repository is willing to release.
+    name: Package CLI (${{ matrix.rid }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runs-on: ubuntu-latest
+            deb-architecture: amd64
+          - rid: win-x64
+            runs-on: windows-latest
+          # Pinned for the same reason as the macOS package job: a rolling image alias silently changes
+          # the toolchain that produced a released binary.
+          - rid: osx-arm64
+            runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Build CLI artifact
+        id: build-cli
+        shell: bash
+        run: scripts/release/build-cli-artifacts.sh --rid ${{ matrix.rid }} --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the published CLI executable
+        shell: bash
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.build-cli.outputs.executable-path }}"
+
+      - name: Build Debian package
+        if: matrix.deb-architecture != ''
+        id: build-deb
+        shell: bash
+        run: >-
+          scripts/release/build-cli-deb.sh
+          --executable "${{ steps.build-cli.outputs.executable-path }}"
+          --version "${{ steps.build-cli.outputs.display-version }}"
+          --architecture ${{ matrix.deb-architecture }}
+
+      - name: Smoke the Debian package install and PATH registration
+        if: matrix.deb-architecture != ''
+        shell: bash
+        run: scripts/gates/run-cli-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
+
+      - name: Install WiX Toolset
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: choco install wixtoolset -y --no-progress
+
+      - name: Build Windows MSI
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        env:
+          CLI_EXECUTABLE: ${{ steps.build-cli.outputs.executable-path }}
+          CLI_VERSION: ${{ steps.build-cli.outputs.display-version }}
+        run: |
+          $executable = $env:CLI_EXECUTABLE
+          if ($executable -match '^/([A-Za-z])/(.+)$') {
+            $executable = "$($matches[1].ToUpperInvariant()):\$($matches[2] -replace '/', '\')"
+          }
+
+          ./scripts/release/build-cli-msi.ps1 -Executable $executable -Version $env:CLI_VERSION
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: cli-${{ matrix.rid }}
+          path: |
+            artifacts/cli/*.tar.gz
+            artifacts/cli/*.zip
+            artifacts/cli/*.deb
+            artifacts/cli/*.msi
+            artifacts/cli/*.sha256
+          if-no-files-found: error
+
   publish-release-assets:
     name: Publish Release Assets
-    needs: [package-wasm, package-desktop, package-windows-msix, package-macos]
+    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+    # Only a tag build publishes. workflow_dispatch remains available for rehearsing the packaging jobs
+    # without creating or touching a release.
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
+      # Checkout leads this job because the step below reads global.json out of the workspace. When
+      # `Setup .NET` came first the SDK pin resolved against an empty workspace and every tag build died
+      # on "The specified global.json file 'global.json' does not exist" -- after all seven packaging jobs
+      # had already succeeded, so the release ended up tagged with zero assets.
+      #
+      # The tree lands in `repo/` rather than the workspace root so the artifact downloads below own the
+      # root without colliding with tracked paths, and `global-json-file` is pointed at it. Full history
+      # is required: the CLI asset step reads the display version from MinVer, which needs the tags.
+      - name: Checkout for release tooling
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: repo
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: repo/global.json
+
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-windows-msix
           path: windows-msix
 
       - name: Download WebAssembly artifact
         if: needs.package-wasm.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: wasm-build
           path: wasm-build
 
       - name: Download Windows Skia MSI artifact
         if: needs.package-desktop.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-windows-skia-msi
           path: windows-skia-msi
 
       - name: Download macOS bundle artifact
         if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-macos-bundle
           path: macos-bundle
 
       - name: Download macOS .dmg artifact
-        if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
-        uses: actions/download-artifact@v5
+        if: needs.package-macos.outputs.dmg-produced == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-macos-dmg
           path: macos-dmg
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: cli-artifacts
 
       - name: Ensure GitHub release exists
         shell: bash
@@ -431,6 +660,58 @@ jobs:
           if [ -d "wasm-build" ]; then
             zip -r "release-assets/SalmonEgg-wasm.zip" "wasm-build"
           fi
+
+      - name: Prepare CLI release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          # Every supported runtime identifier must be present. A release that silently ships two of the
+          # three advertised platforms is worse than a failed release: the support matrix in the docs would
+          # be wrong for whoever downloads it.
+          supported_rids="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
+            -getProperty:SalmonEggCliSupportedRuntimeIdentifiers -nologo | tr -d '\r' | tail -n 1)"
+          display_version="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
+            -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
+
+          missing=""
+          IFS=';' read -ra rids <<< "$supported_rids"
+          for rid in "${rids[@]}"; do
+            [ -n "$rid" ] || continue
+            case "$rid" in
+              win-*) archive="salmon-egg-cli-$display_version-$rid.zip" ;;
+              *) archive="salmon-egg-cli-$display_version-$rid.tar.gz" ;;
+            esac
+            if [ ! -f "cli-artifacts/$archive" ]; then
+              missing="$missing $archive"
+              continue
+            fi
+            if [ ! -f "cli-artifacts/$archive.sha256" ]; then
+              missing="$missing $archive.sha256"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "Missing CLI release assets for the supported matrix ($supported_rids):$missing" >&2
+            exit 1
+          fi
+
+          cp cli-artifacts/*.tar.gz cli-artifacts/*.zip cli-artifacts/*.sha256 release-assets/
+
+          # Installer packages are copied only when present. An unmatched glob would otherwise pass the
+          # literal pattern to cp and fail the whole job under `set -e`.
+          find cli-artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.msi' \) \
+            -exec cp {} release-assets/ \;
+
+          # The formula's checksums are read from the sidecars produced by this run, so it can only ever
+          # describe archives that were actually built and uploaded.
+          repo/scripts/release/build-cli-homebrew-formula.sh \
+            --version "$display_version" \
+            --release-tag "${RELEASE_TAG}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --artifact-dir cli-artifacts \
+            --output release-assets/salmon-egg-cli.rb
 
       - name: Upload release assets
         shell: bash

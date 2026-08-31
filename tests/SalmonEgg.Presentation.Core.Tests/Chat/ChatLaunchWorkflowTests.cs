@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,8 +15,13 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -28,7 +33,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -46,7 +51,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest("project-1"), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest("project-1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.PromptDispatched, completion);
 
         sessionManager.Verify(s => s.CreateSessionAsync(It.IsAny<string>(), @"C:\repo\demo"), Times.Once);
         Assert.Equal(1, navigation.ActivateSessionCount);
@@ -61,7 +68,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -79,7 +86,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Failed, completion);
 
         Assert.Equal(1, navigation.ActivateSessionCount);
         Assert.Equal(0, chat.AutoConnectCallCount);
@@ -88,11 +97,42 @@ public sealed class ChatLaunchWorkflowTests
     }
 
     [Fact]
+    public async Task StartSessionAndSendAsync_WhenNoWorkingDirectory_FailsWithoutCreatingSession()
+    {
+        // A launch whose working directory could not be resolved must not reach the session manager
+        // (which rejects an empty cwd with ArgumentException and would otherwise throw on both the
+        // initial attempt and the retry). It should fail the launch cleanly instead.
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
+
+        var chat = new FakeChatLaunchWorkflowChatFacade { IsConnected = true };
+        var navigation = new RecordingNavigationCoordinator(chat) { ApplyActivatedSessionToChat = true };
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            navigation,
+            Mock.Of<ILogger<ChatLaunchWorkflow>>());
+
+        var completion = await workflow.StartSessionAndSendAsync(
+            CreateRequest(cwd: null),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Failed, completion);
+        sessionManager.Verify(
+            s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()),
+            Times.Never);
+        Assert.Equal(0, navigation.ActivateSessionCount);
+        Assert.Equal(0, chat.SendPromptCount);
+    }
+
+    [Fact]
     public async Task StartSessionAndSendAsync_WhenAutoConnectStillInProgress_DoesNotOpenSettingsOrSend()
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -116,7 +156,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
@@ -129,7 +171,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -153,13 +195,83 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(1, navigation.ActivateSettingsCount);
         Assert.Equal(SettingsSectionCatalog.GeneralKey, navigation.LastSettingsKey);
         Assert.True(chat.ShowTransportConfigPanel);
         Assert.Equal(0, chat.SendPromptCount);
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_WhenRequiresConfigurationAndSettingsActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
+
+        var chat = new FakeChatLaunchWorkflowChatFacade
+        {
+            IsConnected = false,
+            AutoConnectAction = facade =>
+            {
+                facade.IsConnected = false;
+                facade.IsConnecting = false;
+                facade.IsInitializing = false;
+            }
+        };
+
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator
+            .Setup(coordinator => coordinator.ActivateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync(true);
+        navigationCoordinator
+            .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+            .ReturnsAsync(false);
+
+        using var navigationViewModel = new MainNavigationViewModel(
+            Mock.Of<IConversationCatalog>(),
+            new NavigationProjectPreferencesAdapter(CreatePreferences()),
+            ui.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<MainNavigationViewModel>>(),
+            new FakeNavigationPaneState(),
+            Mock.Of<IShellLayoutMetricsSink>(),
+            new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
+            new ShellNavigationRuntimeStateStore(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<ChatLaunchWorkflow>>(),
+            catalogFacade: null,
+            navigationViewModel: navigationViewModel);
+
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
+        Assert.True(chat.ShowTransportConfigPanel);
+        navigationCoordinator.Verify(
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey),
+            Times.Once);
+        Assert.Equal(
+            ["Failed to open settings. Please try again later."],
+            shownMessages);
     }
 
     [Fact]
@@ -200,7 +312,9 @@ public sealed class ChatLaunchWorkflowTests
             logger.Object,
             catalogFacade);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.PromptDispatched, completion);
 
         Assert.Single(workspace.GetKnownConversationIds());
         Assert.Equal(1, workspace.ConversationListVersion);
@@ -216,6 +330,7 @@ public sealed class ChatLaunchWorkflowTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(lastSelectedProjectId: null);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         using var catalogFacade = new ConversationCatalogFacade(
             workspace,
             Mock.Of<IConversationActivationCoordinator>(),
@@ -252,7 +367,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -281,7 +396,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -328,8 +443,11 @@ public sealed class ChatLaunchWorkflowTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private sealed class FakeChatLaunchWorkflowChatFacade : IChatLaunchWorkflowChatFacade
@@ -441,13 +559,13 @@ public sealed class ChatLaunchWorkflowTests
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey)
+        public Task<bool> ActivateSettingsAsync(string settingsKey)
         {
             ActivateSettingsCount++;
             LastSettingsKey = settingsKey;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
@@ -487,6 +605,18 @@ public sealed class ChatLaunchWorkflowTests
         public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 
+
+    private sealed class FakeNavigationPaneState : INavigationPaneState
+    {
+        public bool IsPaneOpen => true;
+
+        public event EventHandler? PaneStateChanged
+        {
+            add { }
+            remove { }
+        }
+    }
+
     private sealed class CapturingConversationStore : IConversationStore
     {
         private readonly TaskCompletionSource<ConversationDocument> _saveTcs =
@@ -522,7 +652,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd);
             _sessions[sessionId] = session;
@@ -532,23 +662,7 @@ public sealed class ChatLaunchWorkflowTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.UpdateActivity();
-            }
-
-            return true;
-        }
-
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
         public IEnumerable<Session> GetAllSessions()
@@ -556,6 +670,18 @@ public sealed class ChatLaunchWorkflowTests
 
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
+
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
+        {
+            if (_sessions.TryGetValue(sessionId, out var existing))
+            {
+                return existing;
+            }
+
+            var session = new Session(sessionId, cwd);
+            _sessions[sessionId] = session;
+            return session;
+        }
     }
 
     private static ChatConversationWorkspace CreateWorkspace(

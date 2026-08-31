@@ -5,22 +5,26 @@ namespace SalmonEgg.Infrastructure.Tests.Architecture;
 
 public sealed class SecureStorageRegistrationContractTests
 {
+    // §5.6 回归护栏:desktop composition root 的 native keychain 与 plaintext 回退链,
+    // 以及移动端 composition root 的 native backend,都不得被移除。desktop 部分另由
+    // DesktopConfigurationServiceCollectionExtensionsTests 作真实容器断言；这里仅确保
+    // 平台专属实现仍在各自 owner 中，且不锁具体语法形态(§5.5)。
     [Fact]
-    public void DependencyInjection_RegistersPlainTextFallbackSecureStorage()
+    public void CompositionRoots_KeepAllSupportedSecureStorageBackends()
     {
-        var source = LoadText("SalmonEgg/SalmonEgg/DependencyInjection.cs");
+        var desktopSource = LoadText("src/SalmonEgg.Infrastructure.Desktop/DependencyInjection/DesktopConfigurationServiceCollectionExtensions.cs");
+        var applicationSource = LoadText("SalmonEgg/SalmonEgg/DependencyInjection.cs");
 
-        Assert.True(File.Exists(Path.Combine(FindRepoRoot(), "src/SalmonEgg.Infrastructure/Storage/PlainTextFileSecureStorage.cs")));
-        Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Linux)", source, StringComparison.Ordinal);
-        Assert.Contains("new LinuxSecretServiceSecureStorage()", source, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)", source, StringComparison.Ordinal);
-        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.OSX)", source, StringComparison.Ordinal);
-        Assert.Contains("new MacOSKeychainSecureStorage()", source, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", source, StringComparison.Ordinal);
+        Assert.Contains("PlainTextFileSecureStorage", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("OSPlatform.Windows", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("WindowsDpapiSecureStorage", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("OSPlatform.Linux", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("LinuxSecretServiceSecureStorage", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("OSPlatform.OSX", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("MacOSKeychainSecureStorage", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("FallbackSecureStorage", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("AndroidKeyStoreSecureStorage", applicationSource, StringComparison.Ordinal);
+        Assert.Contains("IosKeychainSecureStorage", applicationSource, StringComparison.Ordinal);
     }
 
     private static string LoadText(string relativePath)

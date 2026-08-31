@@ -20,6 +20,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
     private readonly IReadOnlyDictionary<string, ICloudConfigStorageProvider> _providers;
     private readonly ConfigSyncPackageService _packageService;
     private readonly CloudConfigSyncStateStore _stateStore;
+    private readonly ConfigContentFingerprint _fingerprint;
     private readonly IConfigChangeSignal _configChangeSignal;
     private readonly IAppDataService _appData;
     private readonly ILogger<CloudConfigSyncCoordinator> _logger;
@@ -38,6 +39,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         IEnumerable<ICloudConfigStorageProvider> providers,
         ConfigSyncPackageService packageService,
         CloudConfigSyncStateStore stateStore,
+        ConfigContentFingerprint fingerprint,
         IConfigChangeSignal configChangeSignal,
         IAppDataService appData,
         ILogger<CloudConfigSyncCoordinator> logger)
@@ -47,6 +49,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         _providers = providers.ToDictionary(provider => provider.Descriptor.ProviderId, StringComparer.OrdinalIgnoreCase);
         _packageService = packageService ?? throw new ArgumentNullException(nameof(packageService));
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
+        _fingerprint = fingerprint ?? throw new ArgumentNullException(nameof(fingerprint));
         _configChangeSignal = configChangeSignal ?? throw new ArgumentNullException(nameof(configChangeSignal));
         _appData = appData ?? throw new ArgumentNullException(nameof(appData));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -83,6 +86,14 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
 
     public Task SyncNowAsync(CancellationToken cancellationToken = default) =>
         RunOperationAsync(CloudSyncOperationKind.SyncNow, SyncNowCoreAsync, cancellationToken);
+
+    public Task ResolveConflictAsync(
+        CloudSyncConflictResolution resolution,
+        CancellationToken cancellationToken = default) =>
+        RunOperationAsync(
+            CloudSyncOperationKind.SyncNow,
+            (intentVersion, token) => ResolveConflictCoreAsync(resolution, intentVersion, token),
+            cancellationToken);
 
     public Task DisableAsync(CancellationToken cancellationToken = default) =>
         RunOperationAsync(CloudSyncOperationKind.Disable, DisableCoreAsync, cancellationToken);
@@ -323,12 +334,14 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             provider.Descriptor.ProviderId,
             normalizedOptions);
         ApplyCandidateConfiguration(packageSettings, candidate, draft.IncludeSecrets);
+        // 激活已有云配置：基线未知时显式 PreferRemote，禁止时钟 LWW。
         var transfer = await SynchronizeAsync(
             sessionResult.Session!,
             provider.Descriptor.ProviderId,
             draft.IncludeSecrets,
             packageSettings,
             resolvedSecrets,
+            CloudSyncFirstAdoptPolicy.PreferRemote,
             cancellationToken).ConfigureAwait(false);
         if (transfer.Phase == CloudTransferPhase.Failed)
         {
@@ -434,6 +447,153 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task ResolveConflictCoreAsync(
+        CloudSyncConflictResolution resolution,
+        long intentVersion,
+        CancellationToken cancellationToken)
+    {
+        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
+        var configuration = CreateConfiguration(settings.CloudConfigSync);
+        if (!configuration.Enabled || !TryGetProvider(configuration.ProviderId, out var provider))
+        {
+            PublishConfigurationFailure(
+                intentVersion,
+                configuration,
+                configuration.Enabled ? CloudProviderReadiness.NeedsConfiguration : CloudProviderReadiness.Disabled,
+                new CloudSyncFailure(CloudSyncFailureKind.Validation, "Cloud sync is not configured."));
+            return;
+        }
+
+        // 仅允许从当前 RemoteConflict 失败态进入显式解决；禁止旁路 3-way 静默选边。
+        if (Current.LastFailure?.Kind != CloudSyncFailureKind.RemoteConflict &&
+            Current.Transfer.Failure?.Kind != CloudSyncFailureKind.RemoteConflict)
+        {
+            PublishFailure(
+                intentVersion,
+                new CloudSyncFailure(
+                    CloudSyncFailureKind.Validation,
+                    "No pending cloud configuration conflict to resolve."));
+            return;
+        }
+
+        var sessionResult = await provider.CreateSessionAsync(
+            configuration.Options,
+            new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase),
+            interactive: false,
+            cancellationToken).ConfigureAwait(false);
+        if (!sessionResult.Succeeded)
+        {
+            PublishConfigurationFailure(
+                intentVersion,
+                configuration,
+                ToReadiness(sessionResult.Credential),
+                sessionResult.Failure!);
+            return;
+        }
+
+        PublishIfLatest(intentVersion, Current with
+        {
+            Configuration = configuration,
+            Credential = sessionResult.Credential,
+            Transfer = Current.Transfer with { Phase = CloudTransferPhase.Syncing, Failure = null }
+        });
+
+        CloudTransferState transfer;
+        try
+        {
+            var state = await _stateStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            var includeSecrets = settings.CloudConfigSync.IncludeSecrets;
+            transfer = resolution switch
+            {
+                CloudSyncConflictResolution.KeepLocal => await UploadLocalAsync(
+                        sessionResult.Session!,
+                        state,
+                        configuration.ProviderId,
+                        expectedETag: null, // 用户显式覆盖远端，不用 If-Match 拦。
+                        includeSecrets,
+                        settingsOverride: null,
+                        secretOverrides: null,
+                        CloudSyncFirstAdoptPolicy.RequireManual,
+                        allowPreconditionRetry: false,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                CloudSyncConflictResolution.ApplyRemote => await ApplyRemoteResolutionAsync(
+                        sessionResult.Session!,
+                        state,
+                        configuration.ProviderId,
+                        includeSecrets,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                _ => new CloudTransferState(
+                    CloudTransferPhase.Failed,
+                    CreateLastSuccess(state),
+                    new CloudSyncFailure(CloudSyncFailureKind.Validation, "Unknown conflict resolution."))
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            transfer = new CloudTransferState(
+                CloudTransferPhase.Failed,
+                CreateLastSuccess(await _stateStore.LoadAsync(cancellationToken).ConfigureAwait(false)),
+                ClassifyFailure(ex));
+        }
+
+        var publishedConfiguration = configuration;
+        if (transfer.Phase == CloudTransferPhase.Succeeded &&
+            transfer.LastSuccess?.Outcome is CloudTransferOutcome.Restored)
+        {
+            var restoredSettings = await _appSettings.LoadAsync().ConfigureAwait(false);
+            publishedConfiguration = CreateConfiguration(restoredSettings.CloudConfigSync);
+        }
+
+        PublishIfLatest(intentVersion, Current with
+        {
+            Initialization = CloudSyncInitializationState.Ready,
+            Configuration = publishedConfiguration,
+            Readiness = transfer.Phase == CloudTransferPhase.Succeeded
+                ? CloudProviderReadiness.Ready
+                : ToReadiness(transfer.Failure!),
+            Transfer = transfer,
+            Operation = null,
+            LastFailure = transfer.Failure
+        });
+    }
+
+    private async Task<CloudTransferState> ApplyRemoteResolutionAsync(
+        ICloudConfigStorageSession session,
+        CloudConfigSyncState state,
+        string providerId,
+        bool includeSecrets,
+        CancellationToken cancellationToken)
+    {
+        var remote = await session.TryDownloadAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (remote is null)
+        {
+            return new CloudTransferState(
+                CloudTransferPhase.Failed,
+                CreateLastSuccess(state),
+                new CloudSyncFailure(
+                    CloudSyncFailureKind.RemoteConflict,
+                    "Remote package is no longer available to apply."));
+        }
+
+        var remoteFingerprint = _fingerprint.ComputeFromPackage(remote.Content, includeSecrets);
+        return await RestoreRemoteAsync(
+                state,
+                providerId,
+                remote,
+                remoteFingerprint,
+                includeSecrets,
+                CloudTransferOutcome.Restored,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task DisableCoreAsync(long intentVersion, CancellationToken cancellationToken)
     {
         var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
@@ -495,16 +655,18 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         bool includeSecrets,
         CancellationToken cancellationToken)
     {
+        // 日常 SyncNow / 自动同步：基线未知时 fail-closed，不静默覆盖本地。
         var transfer = await SynchronizeAsync(
             session,
             configuration.ProviderId,
             includeSecrets,
             null,
             null,
+            CloudSyncFirstAdoptPolicy.RequireManual,
             cancellationToken).ConfigureAwait(false);
         var publishedConfiguration = configuration;
         if (transfer.Phase == CloudTransferPhase.Succeeded &&
-            transfer.LastSuccess?.Outcome is CloudTransferOutcome.Restored or CloudTransferOutcome.ConflictRemoteApplied)
+            transfer.LastSuccess?.Outcome is CloudTransferOutcome.Restored)
         {
             var restoredSettings = await _appSettings.LoadAsync().ConfigureAwait(false);
             publishedConfiguration = CreateConfiguration(restoredSettings.CloudConfigSync);
@@ -529,6 +691,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         bool includeSecrets,
         AppSettings? settingsOverride,
         IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
+        CloudSyncFirstAdoptPolicy firstAdoptPolicy,
         CancellationToken cancellationToken)
     {
         try
@@ -546,36 +709,32 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                         includeSecrets,
                         settingsOverride,
                         secretOverrides,
+                        firstAdoptPolicy,
+                        allowPreconditionRetry: true,
                         cancellationToken)
                     .ConfigureAwait(false);
             }
 
-            if (string.IsNullOrWhiteSpace(state.RemoteETag) ||
+            // Provider 切换时丢弃旧基线，按首次采用处理。
+            if (!string.IsNullOrWhiteSpace(state.ProviderId) &&
                 !string.Equals(state.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))
             {
-                return await RestoreRemoteAsync(state, providerId, remote, CloudTransferOutcome.Restored, cancellationToken)
-                    .ConfigureAwait(false);
+                state.SyncedFingerprint = string.Empty;
+                state.RemoteETag = string.Empty;
             }
 
-            if (!string.Equals(state.RemoteETag, remote.ETag, StringComparison.Ordinal))
-            {
-                return await RestoreRemoteAsync(
+            return await ResolveByContentAsync(
+                    session,
                     state,
                     providerId,
                     remote,
-                    CloudTransferOutcome.ConflictRemoteApplied,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            return await UploadLocalAsync(
-                session,
-                state,
-                providerId,
-                remote.ETag,
-                includeSecrets,
-                settingsOverride,
-                secretOverrides,
-                cancellationToken).ConfigureAwait(false);
+                    includeSecrets,
+                    settingsOverride,
+                    secretOverrides,
+                    firstAdoptPolicy,
+                    allowPreconditionRetry: true,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -590,6 +749,119 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         }
     }
 
+    /// <summary>
+    /// 内容寻址 3-way：指纹计算 + 纯函数判定 + 副作用执行。
+    /// ETag 仅作上传 If-Match；方向判定不读时钟、不做 LWW。
+    /// </summary>
+    private async Task<CloudTransferState> ResolveByContentAsync(
+        ICloudConfigStorageSession session,
+        CloudConfigSyncState state,
+        string providerId,
+        CloudConfigRemoteFile remote,
+        bool includeSecrets,
+        AppSettings? settingsOverride,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
+        CloudSyncFirstAdoptPolicy firstAdoptPolicy,
+        bool allowPreconditionRetry,
+        CancellationToken cancellationToken)
+    {
+        var localFingerprint = await _fingerprint.ComputeLocalAsync(
+                includeSecrets,
+                settingsOverride,
+                providerId,
+                secretOverrides,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var remoteFingerprint = _fingerprint.ComputeFromPackage(remote.Content, includeSecrets);
+        var syncedFingerprint = state.SyncedFingerprint ?? string.Empty;
+        // includeSecrets 与写入基线时不一致 → 旧指纹不可比，按基线未知处理。
+        var baselineKnown = !string.IsNullOrWhiteSpace(syncedFingerprint) &&
+            string.Equals(state.ProviderId, providerId, StringComparison.OrdinalIgnoreCase) &&
+            state.SyncedIncludeSecrets == includeSecrets;
+
+        var decision = CloudSyncContentDecisionMaker.Decide(new CloudSyncContentDecisionInput(
+            localFingerprint,
+            remoteFingerprint,
+            syncedFingerprint,
+            baselineKnown,
+            firstAdoptPolicy));
+
+        _logger.LogInformation(
+            "Cloud sync content decision {Action}: {Reason}; baselineKnown={BaselineKnown}; includeSecrets={IncludeSecrets}",
+            decision.Action,
+            decision.Reason,
+            baselineKnown,
+            includeSecrets);
+
+        return decision.Action switch
+        {
+            CloudSyncContentAction.RefreshBaseline => await RefreshBaselineAsync(
+                    state,
+                    providerId,
+                    remote.ETag,
+                    remoteFingerprint,
+                    includeSecrets,
+                    cancellationToken)
+                .ConfigureAwait(false),
+
+            CloudSyncContentAction.UploadLocal => await UploadLocalAsync(
+                    session,
+                    state,
+                    providerId,
+                    // 基线未知时不用 If-Match，避免空/未知并发令牌导致无意义 PreconditionFailed。
+                    baselineKnown ? remote.ETag : null,
+                    includeSecrets,
+                    settingsOverride,
+                    secretOverrides,
+                    firstAdoptPolicy,
+                    allowPreconditionRetry,
+                    cancellationToken)
+                .ConfigureAwait(false),
+
+            CloudSyncContentAction.RestoreRemote => await RestoreRemoteAsync(
+                    state,
+                    providerId,
+                    remote,
+                    remoteFingerprint,
+                    includeSecrets,
+                    CloudTransferOutcome.Restored,
+                    cancellationToken)
+                .ConfigureAwait(false),
+
+            _ => await FailClosedConflictAsync(state, remote, decision.Reason, cancellationToken)
+                .ConfigureAwait(false)
+        };
+    }
+
+    private async Task<CloudTransferState> FailClosedConflictAsync(
+        CloudConfigSyncState state,
+        CloudConfigRemoteFile remote,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        // 不改本地 config、不改 SyncedFingerprint；只落冲突工件供人工决策。
+        string? artifactPath = null;
+        try
+        {
+            artifactPath = await _packageService.PersistConflictArtifactsAsync(remote.Content, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist cloud config conflict artifacts");
+        }
+
+        return new CloudTransferState(
+            CloudTransferPhase.Failed,
+            CreateLastSuccess(state),
+            new CloudSyncFailure(
+                CloudSyncFailureKind.RemoteConflict,
+                string.IsNullOrWhiteSpace(reason)
+                    ? "Local and remote configs both changed; manual resolution required."
+                    : reason,
+                artifactPath));
+    }
+
     private async Task<CloudTransferState> UploadLocalAsync(
         ICloudConfigStorageSession session,
         CloudConfigSyncState state,
@@ -598,6 +870,8 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         bool includeSecrets,
         AppSettings? settingsOverride,
         IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
+        CloudSyncFirstAdoptPolicy firstAdoptPolicy,
+        bool allowPreconditionRetry,
         CancellationToken cancellationToken)
     {
         var package = await _packageService.CreatePackageAsync(
@@ -611,6 +885,8 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         cancellationToken.ThrowIfCancellationRequested();
         if (upload.Status == CloudConfigUploadStatus.PreconditionFailed)
         {
+            // 预条件失败：重新下载并走 3-way，而非无条件 restore。
+            // 仅重试一次，避免 If-Match 与远端持续错位时无限递归。
             var remote = await session.TryDownloadAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (remote is null)
@@ -621,12 +897,27 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                     upload.Failure ?? new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "Remote conflict could not be resolved."));
             }
 
-            return await RestoreRemoteAsync(
-                state,
-                providerId,
-                remote,
-                CloudTransferOutcome.ConflictRemoteApplied,
-                cancellationToken).ConfigureAwait(false);
+            if (!allowPreconditionRetry)
+            {
+                return new CloudTransferState(
+                    CloudTransferPhase.Failed,
+                    CreateLastSuccess(state),
+                    upload.Failure ?? new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "Remote conflict could not be resolved."));
+            }
+
+            // 方向改由内容 3-way 重新判定；不再允许二次 PreconditionFailed 重入。
+            return await ResolveByContentAsync(
+                    session,
+                    state,
+                    providerId,
+                    remote,
+                    includeSecrets,
+                    settingsOverride,
+                    secretOverrides,
+                    firstAdoptPolicy,
+                    allowPreconditionRetry: false,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (upload.Status != CloudConfigUploadStatus.Uploaded)
@@ -637,10 +928,32 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                 upload.Failure ?? new CloudSyncFailure(CloudSyncFailureKind.Network, "Cloud upload failed."));
         }
 
+        // 指纹以实际落地的包内容为准（与远端将看到的一致）。
+        var fingerprint = _fingerprint.ComputeFromPackage(package, includeSecrets);
+        // WebDAV 等实现可能不在 PUT 响应返回 ETag；回读一次补强乐观并发令牌。
+        var remoteETag = upload.ETag;
+        if (string.IsNullOrWhiteSpace(remoteETag))
+        {
+            try
+            {
+                var head = await session.TryDownloadAsync(cancellationToken).ConfigureAwait(false);
+                if (head is not null &&
+                    string.Equals(
+                        _fingerprint.ComputeFromPackage(head.Content, includeSecrets),
+                        fingerprint,
+                        StringComparison.Ordinal))
+                {
+                    remoteETag = head.ETag;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to reconcile remote ETag after upload");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
-        state.ProviderId = providerId;
-        state.RemoteETag = upload.ETag ?? string.Empty;
-        state.LastSyncUtc = now.ToString("O");
+        CommitSyncedState(state, providerId, remoteETag, fingerprint, includeSecrets, now);
         await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
         return new CloudTransferState(
             CloudTransferPhase.Succeeded,
@@ -651,14 +964,14 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         CloudConfigSyncState state,
         string providerId,
         CloudConfigRemoteFile remote,
+        string remoteFingerprint,
+        bool includeSecrets,
         CloudTransferOutcome outcome,
         CancellationToken cancellationToken)
     {
         var backupPath = await _packageService.RestorePackageAsync(remote.Content, cancellationToken).ConfigureAwait(false);
         var now = DateTimeOffset.UtcNow;
-        state.ProviderId = providerId;
-        state.RemoteETag = remote.ETag ?? string.Empty;
-        state.LastSyncUtc = now.ToString("O");
+        CommitSyncedState(state, providerId, remote.ETag, remoteFingerprint, includeSecrets, now);
         await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
         return new CloudTransferState(
             CloudTransferPhase.Succeeded,
@@ -667,6 +980,39 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                 now,
                 state.RemoteETag,
                 Directory.Exists(backupPath) ? backupPath : null));
+    }
+
+    private async Task<CloudTransferState> RefreshBaselineAsync(
+        CloudConfigSyncState state,
+        string providerId,
+        string? remoteETag,
+        string fingerprint,
+        bool includeSecrets,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        // 收敛刷新：保留已有 ETag（若本次远端未带回）。
+        var effectiveETag = !string.IsNullOrEmpty(remoteETag) ? remoteETag : state.RemoteETag;
+        CommitSyncedState(state, providerId, effectiveETag, fingerprint, includeSecrets, now);
+        await _stateStore.SaveAsync(state, cancellationToken).ConfigureAwait(false);
+        return new CloudTransferState(
+            CloudTransferPhase.Succeeded,
+            new CloudTransferSuccess(CloudTransferOutcome.None, now, state.RemoteETag));
+    }
+
+    private static void CommitSyncedState(
+        CloudConfigSyncState state,
+        string providerId,
+        string? remoteETag,
+        string fingerprint,
+        bool includeSecrets,
+        DateTimeOffset completedAt)
+    {
+        state.ProviderId = providerId;
+        state.RemoteETag = remoteETag ?? string.Empty;
+        state.SyncedFingerprint = fingerprint;
+        state.SyncedIncludeSecrets = includeSecrets;
+        state.LastSyncUtc = completedAt.ToString("O");
     }
 
     private async Task<CloudTransferState> LoadIdleTransferStateAsync(
@@ -880,6 +1226,8 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         CloudSyncFailureKind.CredentialMissing or CloudSyncFailureKind.Authentication =>
             CloudProviderReadiness.AuthenticationRequired,
         CloudSyncFailureKind.Network => CloudProviderReadiness.Unavailable,
+        // 内容冲突不是连接故障：保持 Ready，允许用户显式 ResolveConflict / 再次 SyncNow。
+        CloudSyncFailureKind.RemoteConflict => CloudProviderReadiness.Ready,
         _ => CloudProviderReadiness.Faulted
     };
 

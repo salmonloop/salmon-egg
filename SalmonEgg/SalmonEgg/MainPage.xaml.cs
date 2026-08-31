@@ -23,6 +23,7 @@ using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using SalmonEgg.Presentation.Diagnostics;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Models.Settings;
@@ -44,11 +45,6 @@ namespace SalmonEgg;
 public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
-    private const double NavPaneMinWidth = 240;
-    private const double NavPaneMaxWidth = 480;
-    private const double NavPaneAnimationDurationMs = 180;
-    private const double RightPanelMinWidth = 240;
-    private const double RightPanelMaxWidth = 520;
     private bool _isResizingRightPanel;
     private double _rightPanelResizeStartX;
     private double _rightPanelResizeStartWidth;
@@ -56,9 +52,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
 
-    private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly Dictionary<KeyboardAccelerator, string> _appShortcutActions = new();
-    private string? _pendingArchiveSessionId;
 #if WINDOWS
     // Title bar hosting/interactive-region state is encapsulated by MainWindowTitleBarAdapter.
 #endif
@@ -70,6 +64,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly ChatViewModel _chatViewModel;
     public ChatViewModel ChatVM => _chatViewModel;
     public ShellSessionActivationOverlayViewModel ShellOverlayVM { get; }
+    public ShellShutdownOverlayViewModel ShutdownOverlayVM { get; }
     public ShellLayoutViewModel LayoutVM { get; }
     private readonly WindowMetricsProvider _metricsProvider;
     private readonly AppActivationSignalSource _appActivationSignalSource;
@@ -81,7 +76,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly IGamepadInputService _gamepadInputService;
     private readonly IGamepadShortcutDispatcher _gamepadShortcutDispatcher;
     private readonly IGamepadContextIntentDispatcher _gamepadContextIntentDispatcher;
-    private readonly IShellStartupNavigationService _startupNavigation;
+    private readonly IApplicationStartupWorkflow _startupWorkflow;
     private readonly ContentFrameNavigationAdapter _contentNavigation;
     private bool _isGamepadInputAttached;
     private long _contentFrameNavigationVersion;
@@ -94,19 +89,19 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         NavVM = App.ServiceProvider.GetRequiredService<MainNavigationViewModel>();
         _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
         ShellOverlayVM = App.ServiceProvider.GetRequiredService<ShellSessionActivationOverlayViewModel>();
+        ShutdownOverlayVM = App.ServiceProvider.GetRequiredService<ShellShutdownOverlayViewModel>();
         SearchVM = App.ServiceProvider.GetRequiredService<GlobalSearchViewModel>();
 
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _appActivationSignalSource = App.ServiceProvider.GetRequiredService<AppActivationSignalSource>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
-        var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
         _windowBackdropService = App.ServiceProvider.GetRequiredService<WindowBackdropService>();
         _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
         _gamepadShortcutDispatcher = App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
         _gamepadContextIntentDispatcher = App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
-        _startupNavigation = App.ServiceProvider.GetRequiredService<IShellStartupNavigationService>();
+        _startupWorkflow = App.ServiceProvider.GetRequiredService<IApplicationStartupWorkflow>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
             "1",
@@ -114,9 +109,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         this.InitializeComponent();
         _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
-        _mainNavigationViewAdapter = new MainNavigationViewAdapter(
-            NavVM,
-            navigationCoordinator);
+        _mainNavigationViewAdapter = new MainNavigationViewAdapter(NavVM);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
             AppTitleBar,
             AppTitleBarLayoutRoot,
@@ -129,7 +122,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             TitleBarBackButton,
             ContentFrame,
             DispatcherQueue,
-            navigationCoordinator,
+            NavVM,
             _logger);
         BootLogDebug("MainPage: InitializeComponent done");
 
@@ -159,18 +152,30 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        var selectedSessionId = (MainNavView.SelectedItem as SessionNavItemViewModel)?.SessionId
-            ?? ((MainNavView.SelectedItem as NavigationViewItem)?.DataContext is SessionNavItemViewModel navSession
-                ? navSession.SessionId
-                : null)
-            ?? _chatViewModel.CurrentSessionId;
-
-        if (string.IsNullOrWhiteSpace(selectedSessionId))
+        var session = TryResolveAutomationArchiveSession();
+        if (session is null || session.IsPlaceholder || string.IsNullOrWhiteSpace(session.SessionId))
         {
             return;
         }
 
-        _ = await _chatViewModel.ArchiveConversationAsync(selectedSessionId).ConfigureAwait(true);
+        // Single archive path: automation invokes the exact per-session command the
+        // session context menu uses, so both flows share one behavior contract.
+        await session.ArchiveCommand.ExecuteAsync(null);
+    }
+
+    private SessionNavItemViewModel? TryResolveAutomationArchiveSession()
+    {
+        if (MainNavView.SelectedItem is SessionNavItemViewModel selectedSession)
+        {
+            return selectedSession;
+        }
+
+        if ((MainNavView.SelectedItem as NavigationViewItem)?.DataContext is SessionNavItemViewModel containerSession)
+        {
+            return containerSession;
+        }
+
+        return TryResolveSessionItemById(_chatViewModel.CurrentSessionId);
     }
 
     [Conditional("DEBUG")]
@@ -181,29 +186,15 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 #endif
     }
 
-    private bool ShouldSuppressPolledGamepadShortcut(GamepadShortcutIntent intent)
-    {
-        return false;
-    }
-
-    private bool ShouldSuppressPolledGamepadContextIntent(GamepadContextIntent intent)
-    {
-        return false;
-    }
-
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
+        // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
+        // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
         DetachGamepadInput();
         DetachDebugKeyLogging();
-        Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-        Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
-        NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
-        NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
-        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         _metricsProvider.Detach();
-        _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
-        _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
         _titleBarAdapter.Detach();
+        DetachAppWindowClosing();
         DisposePlatformTray();
     }
 
@@ -430,22 +421,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         }
 
         BootLogDebug($"Session archive command scheduled: sessionId={session.SessionId}.");
-        _pendingArchiveSessionId = null;
         _ = DispatcherQueue.TryEnqueue(() =>
         {
             _ = session.ArchiveCommand.ExecuteAsync(null);
         });
-    }
-
-    private void OnSessionNavFlyoutClosed(object sender, object e)
-    {
-        if (!string.IsNullOrWhiteSpace(_pendingArchiveSessionId))
-        {
-            var sessionId = _pendingArchiveSessionId;
-            _pendingArchiveSessionId = null;
-            _archiveOnFlyoutClosed.TryConsume(sessionId);
-        }
-
     }
 
     private async ValueTask<ShellNavigationResult> EnsureChatContentAsync(long? activationToken = null)
@@ -590,22 +569,48 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     }
 
     private string ResolveTaskOverviewStatusLabel(PlanEntryStatus? status)
-        => status switch
+    {
+        // PlanEntryStatus is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (status == PlanEntryStatus.Pending)
         {
-            PlanEntryStatus.Pending => ResolveResourceString("TaskOverviewPlanStatusPending.Text", "Pending"),
-            PlanEntryStatus.InProgress => ResolveResourceString("TaskOverviewPlanStatusInProgress.Text", "In progress"),
-            PlanEntryStatus.Completed => ResolveResourceString("TaskOverviewPlanStatusCompleted.Text", "Completed"),
-            _ => ResolveResourceString("TaskOverviewPlanStatusUnknown.Text", "Unknown")
-        };
+            return ResolveResourceString("TaskOverviewPlanStatusPending.Text", "Pending");
+        }
+
+        if (status == PlanEntryStatus.InProgress)
+        {
+            return ResolveResourceString("TaskOverviewPlanStatusInProgress.Text", "In progress");
+        }
+
+        if (status == PlanEntryStatus.Completed)
+        {
+            return ResolveResourceString("TaskOverviewPlanStatusCompleted.Text", "Completed");
+        }
+
+        return ResolveResourceString("TaskOverviewPlanStatusUnknown.Text", "Unknown");
+    }
 
     private string ResolveTaskOverviewPriorityLabel(PlanEntryPriority? priority)
-        => priority switch
+    {
+        // PlanEntryPriority is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (priority == PlanEntryPriority.Low)
         {
-            PlanEntryPriority.Low => ResolveResourceString("TaskOverviewPlanPriorityLow.Text", "Low"),
-            PlanEntryPriority.Medium => ResolveResourceString("TaskOverviewPlanPriorityMedium.Text", "Medium"),
-            PlanEntryPriority.High => ResolveResourceString("TaskOverviewPlanPriorityHigh.Text", "High"),
-            _ => ResolveResourceString("TaskOverviewPlanPriorityUnknown.Text", "Unknown")
-        };
+            return ResolveResourceString("TaskOverviewPlanPriorityLow.Text", "Low");
+        }
+
+        if (priority == PlanEntryPriority.Medium)
+        {
+            return ResolveResourceString("TaskOverviewPlanPriorityMedium.Text", "Medium");
+        }
+
+        if (priority == PlanEntryPriority.High)
+        {
+            return ResolveResourceString("TaskOverviewPlanPriorityHigh.Text", "High");
+        }
+
+        return ResolveResourceString("TaskOverviewPlanPriorityUnknown.Text", "Unknown");
+    }
 
     private DataTemplate GetBottomPanelButtonIconTemplate(BottomPanelMode mode)
         => GetAuxiliaryIconTemplate(mode == BottomPanelMode.Dock
@@ -680,18 +685,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         var currentX = e.GetCurrentPoint(this).Position.X;
         var delta = currentX - _rightPanelResizeStartX;
-        var newWidth = _rightPanelResizeStartWidth - delta;
+        var requestedWidth = _rightPanelResizeStartWidth - delta;
 
-        if (newWidth < RightPanelMinWidth)
-        {
-            newWidth = RightPanelMinWidth;
-        }
-        else if (newWidth > RightPanelMaxWidth)
-        {
-            newWidth = RightPanelMaxWidth;
-        }
-
-        _metricsSink.ReportRightPanelWidth(newWidth);
+        _metricsSink.ReportRightPanelWidth(requestedWidth);
         e.Handled = true;
     }
 
@@ -722,13 +718,13 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     {
         AttachGamepadInput();
         AttachDebugKeyLogging();
+        AttachAppWindowClosing();
         _titleBarAdapter.Configure(App.MainWindowInstance);
         _appActivationSignalSource.Attach(App.MainWindowInstance!);
         _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter);
         UpdateNavPaneToggleUi();
-        NavVM.RebuildTree();
         UpdateMainNavAutomationSelectionState();
-        await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);
+        await _startupWorkflow.ActivateShellAsync().ConfigureAwait(true);
         BootLogDebug("MainPage: initial shell content activated");
         _ = DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -737,7 +733,16 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
                 _ = TryMoveFocusFromCurrentContentIntoMainNavigation();
             });
         InitializeTray();
-        await _chatViewModel.RestoreAsync();
+        await _startupWorkflow.InitializeRuntimeAsync().ConfigureAwait(true);
+
+        // Diagnostics-only left-nav selection-mask stress driver. It owns its own dependencies and
+        // self-gates on the environment; the shell only offers it the service provider once the
+        // navigation tree is live. No-op unless explicitly enabled.
+        NavigationMaskProbeDriver.TryStart(App.ServiceProvider);
+
+        // Diagnostics-only NumberBox theme probe. Navigation, focus cycling, and realized-template
+        // sampling remain owned by the independent probe; the page only exposes the live shell root.
+        NumberBoxThemeProbeDriver.TryStart(App.ServiceProvider, this);
     }
 
     private void AttachGamepadInput()
@@ -779,14 +784,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        if (ShouldSuppressPolledGamepadShortcut(intent))
-        {
-            _logger.LogDebug(
-                "Gamepad shortcut intent suppressed due duplicate native keydown. Intent={Intent}.",
-                intent);
-            return;
-        }
-
         var consumed = _gamepadShortcutDispatcher.TryDispatch(intent);
         _logger.LogDebug(
             "Gamepad shortcut intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
@@ -802,14 +799,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
                 "Gamepad context intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
                 intent);
             _ = DispatcherQueue.TryEnqueue(() => OnGamepadContextIntentRaised(sender, intent));
-            return;
-        }
-
-        if (ShouldSuppressPolledGamepadContextIntent(intent))
-        {
-            _logger.LogDebug(
-                "Gamepad context intent suppressed due duplicate native keydown. Intent={Intent}.",
-                intent);
             return;
         }
 
@@ -1187,6 +1176,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         var state = BuildMainNavAutomationSelectionState();
         MainNavAutomationSelectionStateText.Text = state;
         AutomationProperties.SetName(MainNavAutomationSelectionStateText, state);
+        AuditRealizedNavSelection();
     }
 
     private string BuildMainNavAutomationSelectionState()
@@ -1239,12 +1229,16 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             sessionId = currentSession.SessionId;
         }
 
+        return TryResolveSessionItemById(sessionId);
+    }
+
+    private SessionNavItemViewModel? TryResolveSessionItemById(string? sessionId)
+    {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             return null;
         }
 
-        // Try to find the session item in the navigation view model
         return NavVM.Items
             .OfType<ProjectNavItemViewModel>()
             .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
@@ -1268,6 +1262,74 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
            && container.Visibility == Visibility.Visible
            && container.ActualWidth > 0
            && container.ActualHeight > 0;
+
+    /// <summary>
+    /// Reports every realized <see cref="NavigationViewItem"/> under the pane together with its
+    /// <see cref="NavigationViewItem.IsSelected"/> flag.
+    /// </summary>
+    /// <remarks>
+    /// NavigationView guarantees that "the entire NavigationView will show no more than one
+    /// selection indicator", so more than one selected container is a defect. Counting them needs
+    /// the realized container tree, which only the view can reach; the existing automation reader
+    /// resolves three known containers and cannot see a strand on any other row. This is a
+    /// read-only observation written to boot.log alongside the other automation markers.
+    /// </remarks>
+    [Conditional("DEBUG")]
+    private void AuditRealizedNavSelection()
+    {
+#if DEBUG
+        if (!IsGuiAutomationMode)
+        {
+            return;
+        }
+
+        var containers = new List<NavigationViewItem>();
+        CollectNavigationViewItems(MainNavView, containers);
+
+        var selectedCount = 0;
+        var descriptions = new List<string>(containers.Count);
+        foreach (var container in containers)
+        {
+            if (container.IsSelected)
+            {
+                selectedCount++;
+            }
+
+            descriptions.Add($"{DescribeNavContainer(container)}:IsSelected={container.IsSelected}");
+        }
+
+        App.BootLog(
+            $"NavSelectionAudit realized={containers.Count} selectedCount={selectedCount}"
+            + $" controlSelectedItem={DescribeNavSelection(MainNavView.SelectedItem)}"
+            + $" containers=[{string.Join(" | ", descriptions)}]");
+#endif
+    }
+
+    private static string DescribeNavContainer(NavigationViewItem container)
+    {
+        var automationId = container.GetValue(AutomationProperties.AutomationIdProperty) as string;
+        return string.IsNullOrWhiteSpace(automationId)
+            ? container.DataContext?.GetType().Name ?? container.GetType().Name
+            : automationId;
+    }
+
+    private static void CollectNavigationViewItems(DependencyObject root, List<NavigationViewItem> sink)
+    {
+        if (root is NavigationViewItem item)
+        {
+            sink.Add(item);
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is not null)
+            {
+                CollectNavigationViewItems(child, sink);
+            }
+        }
+    }
 
     private static string ResolveResourceString(string resourceKey, string fallback)
     {
@@ -1312,22 +1374,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         var currentX = e.GetCurrentPoint(this).Position.X;
         var delta = currentX - _leftNavResizeStartX;
-        var newWidth = _leftNavResizeStartWidth + delta;
+        var requestedWidth = _leftNavResizeStartWidth + delta;
 
-        if (newWidth < NavPaneMinWidth)
-        {
-            newWidth = NavPaneMinWidth;
-        }
-        else if (newWidth > NavPaneMaxWidth)
-        {
-            newWidth = NavPaneMaxWidth;
-        }
-
-        _metricsSink.ReportLeftNavWidth(newWidth);
+        _metricsSink.ReportLeftNavWidth(requestedWidth);
         e.Handled = true;
     }
-
-    // Debug line removed
 
     private void OnLeftNavResizerPointerReleased(object sender, PointerRoutedEventArgs e)
     {
@@ -1377,6 +1428,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
     partial void UpdateTrayState();
 
+    partial void HideMainWindowToTray();
+
     partial void DisposePlatformTray();
 
     partial void AttachDebugKeyLogging();
@@ -1391,11 +1444,16 @@ public sealed partial class MainPage
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        // Navigation-scoped teardown: constructor-time subscriptions against singleton
+        // view models and the content-frame adapter end when the shell leaves navigation.
+        // Loaded/Unloaded must NOT be removed here — WinUI raises OnNavigatedFrom before
+        // Unloaded, so detaching them would permanently skip the tree-scoped cleanup in
+        // OnMainPageUnloaded on every shell reload (e.g. language switch).
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
+        NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
+        NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
-
-        Loaded -= OnMainPageLoaded;
-        Unloaded -= OnMainPageUnloaded;
         _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
         _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
     }

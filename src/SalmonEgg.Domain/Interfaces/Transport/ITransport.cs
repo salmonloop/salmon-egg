@@ -7,8 +7,10 @@ namespace SalmonEgg.Domain.Interfaces.Transport
     /// <summary>
     /// 传输层接口。
     /// 定义了与 Agent 通信的底层传输方法。
+    /// 传输独占进程/套接字/HttpClient 等非托管资源，其生命周期由持有者（ACP 客户端）拥有，
+    /// 因此契约包含 <see cref="IDisposable"/>：断连只停止流量，释放才归还底层资源。
     /// </summary>
-    public interface ITransport
+    public interface ITransport : IDisposable
     {
         /// <summary>
         /// 消息接收事件。当收到消息时触发。
@@ -95,7 +97,14 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         StdoutReadFailed,
         StderrReadFailed,
         DisconnectFailed,
-        NotConnected
+        NotConnected,
+
+        /// <summary>
+        /// The agent wrote something to stdout that was never an ACP frame. ACP reserves stdout
+        /// for protocol messages and directs diagnostics to stderr, so this is misrouted agent
+        /// logging rather than a failure of ours — treated like <see cref="AgentStderr"/>.
+        /// </summary>
+        StdoutProtocolViolation
     }
 
     public class TransportErrorEventArgs : EventArgs

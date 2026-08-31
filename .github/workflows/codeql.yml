@@ -1,0 +1,102 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Directory.Build.props"
+      - "NuGet.config"
+      - "global.json"
+      - ".github/workflows/codeql.yml"
+  pull_request:
+    branches: [develop]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Directory.Build.props"
+      - "NuGet.config"
+      - "global.json"
+      - ".github/workflows/codeql.yml"
+  # A vulnerability can be published against code that has not changed. Push-triggered analysis alone
+  # would only re-evaluate this repository whenever someone happened to commit, so the schedule is what
+  # makes the coverage continuous rather than incidental.
+  schedule:
+    - cron: "37 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Include the event name in the group, for the same reason the platform canary does. A scheduled scan
+  # runs against the default branch, so a group keyed only on the ref makes it share a slot with pushes to
+  # that branch — and the next commit cancels the one run whose entire purpose is to re-evaluate code that
+  # nobody touched. The weekly scan is the only trigger that catches an advisory published against
+  # unchanged code, so it is the run least able to afford being cancelled.
+  group: codeql-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  CONFIGURATION: "Release"
+
+jobs:
+  analyze:
+    name: Analyze C#
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      # Only this job writes, and only to the code-scanning API.
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@42947a340483f03ba47bb1a039b2c519aab3df85 # v3.37.8
+        with:
+          languages: csharp
+          build-mode: manual
+          # security-extended, not security-and-quality: the quality suite reports maintainability and
+          # style findings that this repository already governs through analyzers and dotnet format in
+          # code-quality.yml, and duplicating them here would bury the security findings this workflow
+          # exists to surface. security-extended keeps the lower-precision security queries.
+          queries: security-extended
+
+      # Deliberately not `autobuild`, and deliberately not the whole solution. Every project analyzed
+      # here targets plain net10.0; the app head (SalmonEgg.csproj) additionally targets desktop,
+      # browserwasm, and windows heads that need installed workloads and, for the WinUI target, Windows
+      # itself. Building those on a Linux CodeQL runner cannot succeed, and letting autobuild attempt it
+      # would fail the analysis for a toolchain reason rather than a code reason. The platform heads are
+      # thin shells over these libraries, which is where the analyzable logic lives.
+      - name: Build analyzable projects
+        run: |
+          set -euo pipefail
+          for project in \
+            src/SalmonEgg.Domain/SalmonEgg.Domain.csproj \
+            src/SalmonEgg.Application/SalmonEgg.Application.csproj \
+            src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj \
+            src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj \
+            src/SalmonEgg.Infrastructure.Desktop/SalmonEgg.Infrastructure.Desktop.csproj \
+            src/SalmonEgg.Acp/SalmonEgg.Acp.csproj \
+            src/SalmonEgg.Cli/SalmonEgg.Cli.csproj
+          do
+            echo "::group::build ${project}"
+            dotnet build "${project}" \
+              --configuration "${CONFIGURATION}" \
+              --framework net10.0 \
+              -v minimal
+            echo "::endgroup::"
+          done
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@42947a340483f03ba47bb1a039b2c519aab3df85 # v3.37.8
+        with:
+          category: "/language:csharp"

@@ -65,14 +65,15 @@ public sealed class LiveLogViewerViewModelTests
     {
         var service = new TestLiveLogStreamService();
         var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
-        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), localizer);
 
         await viewModel.StartStreamingAsync();
         await service.Started.Task;
         await service.EmitAsync(new LiveLogStreamUpdate("C:/logs/app.log", string.Empty, hasFileSwitched: true));
 
         Assert.Equal("C:/logs/app.log", viewModel.CurrentLogFilePath);
-        Assert.Equal("已切换到最新日志文件", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusSwitchedToLatest"], viewModel.StatusText);
     }
 
     [Fact]
@@ -95,12 +96,13 @@ public sealed class LiveLogViewerViewModelTests
     {
         var service = new TestLiveLogStreamService();
         var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
-        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), localizer);
 
         Assert.True(viewModel.CanStartStreaming);
         Assert.False(viewModel.CanPauseStreaming);
         Assert.False(viewModel.CanResumeStreaming);
-        Assert.Equal("未启动", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusNotStarted"], viewModel.StatusText);
     }
 
     [Fact]
@@ -108,7 +110,8 @@ public sealed class LiveLogViewerViewModelTests
     {
         var service = new TestLiveLogStreamService();
         var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
-        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), localizer);
 
         await viewModel.StartStreamingAsync();
         await service.Started.Task;
@@ -117,7 +120,7 @@ public sealed class LiveLogViewerViewModelTests
         Assert.False(viewModel.CanStartStreaming);
         Assert.False(viewModel.CanPauseStreaming);
         Assert.True(viewModel.CanResumeStreaming);
-        Assert.Equal("已暂停", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusPaused"], viewModel.StatusText);
     }
 
     [Fact]
@@ -125,7 +128,8 @@ public sealed class LiveLogViewerViewModelTests
     {
         var service = new TestLiveLogStreamService();
         var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
-        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), localizer);
 
         viewModel.IsExpanded = true;
 
@@ -133,7 +137,7 @@ public sealed class LiveLogViewerViewModelTests
         Assert.False(viewModel.IsStreaming);
         Assert.Equal(0, service.StartCallCount);
         Assert.True(viewModel.CanStartStreaming);
-        Assert.Equal("未启动", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusNotStarted"], viewModel.StatusText);
     }
 
     [Fact]
@@ -141,14 +145,15 @@ public sealed class LiveLogViewerViewModelTests
     {
         var service = new TestLiveLogStreamService();
         var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
-        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new LiveLogViewerViewModel(service, "C:/logs", logger.Object, new ImmediateUiDispatcher(), localizer);
 
         await viewModel.StartStreamingAsync();
         await service.Started.Task;
         await service.EmitAsync(new LiveLogStreamUpdate(null, string.Empty, hasFileSwitched: true));
 
         Assert.Null(viewModel.CurrentLogFilePath);
-        Assert.Equal("未找到可用日志文件", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusNoLogFile"], viewModel.StatusText);
     }
 
     [Fact]
@@ -181,6 +186,7 @@ public sealed class LiveLogViewerViewModelTests
         var localizer = CreateLocalizer();
         languageService.SetupGet(s => s.CurrentLanguageTag).Returns(() => currentLanguageTag);
 
+        localizer.SetLanguageTag("zh-Hans");
         var viewModel = new LiveLogViewerViewModel(
             service,
             "C:/logs",
@@ -192,13 +198,13 @@ public sealed class LiveLogViewerViewModelTests
         await viewModel.StartStreamingAsync();
         await service.Started.Task;
 
-        Assert.Equal("正在实时查看", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusStreaming"], viewModel.StatusText);
 
         currentLanguageTag = "en-US";
         localizer.SetLanguageTag("en-US");
         languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
 
-        Assert.Equal("Streaming live logs", viewModel.StatusText);
+        Assert.Equal(localizer["LiveLog_StatusStreaming"], viewModel.StatusText);
     }
 
     private sealed class TestLiveLogStreamService : ILiveLogStreamService
@@ -249,7 +255,7 @@ public sealed class LiveLogViewerViewModelTests
         localizer.Set("zh-Hans", "LiveLog_StatusNoLogFile", "未找到可用日志文件");
         localizer.Set("zh-Hans", "LiveLog_StatusSwitchedToLatest", "已切换到最新日志文件");
         localizer.Set("en-US", "LiveLog_StatusNotStarted", "Not started");
-        localizer.Set("en-US", "LiveLog_StatusStreaming", "Streaming live logs");
+        localizer.Set("en-US", "LiveLog_StatusStreaming", "Viewing live");
         localizer.Set("en-US", "LiveLog_StatusStopped", "Stopped");
         localizer.Set("en-US", "LiveLog_StatusPaused", "Paused");
         localizer.Set("en-US", "LiveLog_StatusReadFailed", "Failed to read, try again later");

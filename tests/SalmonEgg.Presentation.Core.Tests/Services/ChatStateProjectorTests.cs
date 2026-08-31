@@ -58,6 +58,55 @@ public sealed class ChatStateProjectorTests
     }
 
     [Fact]
+    public void Apply_AuthenticationHintWithResourceIdentity_UsesCurrentLanguage()
+    {
+        // Arrange
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_FailedWithDetail", "认证失败：{0}");
+        localizer.Set("en-US", "ChatAuth_FailedWithDetail", "Authentication failed: {0}");
+        var projector = new ChatStateProjector(localizer);
+        var connectionState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "认证失败：denied",
+            AuthenticationHintResourceKey = "ChatAuth_FailedWithDetail",
+            AuthenticationHintFallback = "Authentication failed: {0}",
+            AuthenticationHintFormatArgs = ["denied"]
+        };
+
+        // Act
+        var zhProjection = projector.Apply(ChatState.Empty, connectionState, null, null);
+        localizer.SetLanguageTag("en-US");
+        var enProjection = projector.Apply(ChatState.Empty, connectionState, null, null);
+
+        // Assert
+        Assert.Equal("认证失败：denied", zhProjection.AuthenticationHintMessage);
+        Assert.Equal("Authentication failed: denied", enProjection.AuthenticationHintMessage);
+    }
+
+    [Fact]
+    public void Apply_AuthenticationHintWithoutResourceIdentity_PreservesProtocolText()
+    {
+        // Arrange
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_Required", "需要认证");
+        localizer.Set("en-US", "ChatAuth_Required", "Authentication required");
+        var projector = new ChatStateProjector(localizer);
+        var connectionState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "Open the agent sign-in page."
+        };
+
+        // Act
+        localizer.SetLanguageTag("en-US");
+        var projection = projector.Apply(ChatState.Empty, connectionState, null, null);
+
+        // Assert
+        Assert.Equal("Open the agent sign-in page.", projection.AuthenticationHintMessage);
+    }
+
+    [Fact]
     public void Apply_ProjectsTailStatusFromActiveTurn()
     {
         var projector = new ChatStateProjector();
@@ -81,7 +130,8 @@ public sealed class ChatStateProjectorTests
     [Fact]
     public void Apply_ProjectsTurnStatusTextFromCoreStringResources()
     {
-        var projector = new ChatStateProjector(new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var projector = new ChatStateProjector(localizer);
         var storeState = ChatState.Empty with
         {
             ActiveTurn = new ActiveTurnState(
@@ -95,7 +145,7 @@ public sealed class ChatStateProjectorTests
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
 
-        Assert.Equal("正在运行工具：read_file", projection.TurnStatusText);
+        Assert.Equal(localizer["ChatTurnStatus_ToolRunning", "read_file"].Value, projection.TurnStatusText);
     }
 
     [Theory]
@@ -158,7 +208,8 @@ public sealed class ChatStateProjectorTests
     [Fact]
     public void Apply_PreservesFailedTurnVisibilityWithoutRepeatingFailureDetails()
     {
-        var projector = new ChatStateProjector(new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var projector = new ChatStateProjector(localizer);
         var storeState = ChatState.Empty with
         {
             ActiveTurn = new ActiveTurnState(
@@ -179,13 +230,13 @@ public sealed class ChatStateProjectorTests
         Assert.False(projection.IsPromptInFlight);
         Assert.False(projection.IsPromptSubmitInFlight);
         Assert.Equal(ChatTurnPhase.Failed, projection.TurnPhase);
-        Assert.Equal("失败", projection.TurnStatusText);
+        Assert.Equal(localizer["ChatTurnStatus_Failed"], projection.TurnStatusText);
         Assert.DoesNotContain("provider failed", projection.TurnStatusText, StringComparison.Ordinal);
         Assert.True(projection.IsTurnFailureVisible);
-        Assert.Equal("本轮回复失败", projection.TurnFailureTitle);
+        Assert.Equal(localizer["ChatTurnFailure_Title"], projection.TurnFailureTitle);
         Assert.Equal("provider failed", projection.TurnFailureMessage);
-        Assert.Equal("复制失败详情", projection.TurnFailureCopyActionText);
-        Assert.Equal("关闭失败详情", projection.TurnFailureDismissActionText);
+        Assert.Equal(localizer["ChatTurnFailure_CopyAction"], projection.TurnFailureCopyActionText);
+        Assert.Equal(localizer["ChatTurnFailure_DismissAction"], projection.TurnFailureDismissActionText);
     }
 
     [Fact]

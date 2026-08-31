@@ -14,21 +14,54 @@
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
     </Page.Resources>
 
-    <ScrollViewer Padding="40,24"
+    <Grid>
+        <!-- Nested under SettingsShell; keep ScrollViewer padding 0 to avoid double chrome.
+             Short windows densify stack spacing/breadcrumb margin (MinWindowHeight=760). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="AgentProfileEditorHeightStates">
+                <VisualState x:Name="AgentProfileEditorHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AgentProfileEditorContent.Padding" Value="0,0,0,16" />
+                        <Setter Target="AgentProfileEditorContent.Spacing" Value="12" />
+                        <Setter Target="AgentProfileEditorBreadcrumb.Margin" Value="0,0,0,6" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="AgentProfileEditorHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AgentProfileEditorContent.Padding" Value="0,0,0,32" />
+                        <Setter Target="AgentProfileEditorContent.Spacing" Value="18" />
+                        <Setter Target="AgentProfileEditorBreadcrumb.Margin" Value="0,0,0,10" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+    <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
             <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
                 <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="18">
-                    <controls:SettingsBreadcrumbBar ItemsSource="{x:Bind BreadcrumbItems, Mode=OneWay}"
-                                                   Margin="0,0,0,10" />
+                <StackPanel x:Name="AgentProfileEditorContent"
+                            Spacing="12"
+                            Padding="{StaticResource SettingsPageVerticalPadding}">
+                    <controls:SettingsBreadcrumbBar x:Name="AgentProfileEditorBreadcrumb"
+                                                   ItemsSource="{x:Bind BreadcrumbItems, Mode=OneWay}"
+                                                   Margin="0,0,0,6" />
 
                     <InfoBar IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                              Severity="Error"
                              Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
-                             IsClosable="True"/>
+                             IsClosable="{x:Bind ViewModel.CanDismissError, Mode=OneWay}">
+                        <InfoBar.ActionButton>
+                            <Button Content="{x:Bind ViewModel.RetryProfileLoadLabel, Mode=OneWay}"
+                                    Command="{x:Bind ViewModel.RetryProfileLoadCommand}"
+                                    Visibility="{x:Bind ViewModel.CanRetryProfileLoad, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
 
                     <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -136,15 +169,15 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button x:Uid="AgentProfileEditorCancelButton"
-                                Style="{StaticResource SubtleButtonStyle}"
                                 Click="OnCancelClick"/>
                         <Button x:Uid="AgentProfileEditorSaveButton"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OnSaveClick"
-                                IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                IsEnabled="{x:Bind ViewModel.CanSaveConfiguration, Mode=OneWay}"/>
                     </StackPanel>
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

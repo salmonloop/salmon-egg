@@ -218,6 +218,107 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         Assert.Equal("tool_call", newItem.ContentType);
     }
 
+    [Fact]
+    public void Reset_WhenUncachedProtocolMessageIdChanges_PublishesReplace()
+    {
+        // ProtocolMessageId is restore/identity-relevant fact. Uncached equality must
+        // treat its change as projection-relevant (not ignore it while comparing other fields).
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedEventArgs>();
+        sut.CollectionChanged += (_, args) => events.Add(args);
+        sut.Reset(
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "m-1",
+                ContentType = "text",
+                TextContent = "hello",
+                ProtocolMessageId = null
+            }),
+            Project,
+            MatchesSnapshot,
+            PatchProjectedMessage);
+        events.Clear();
+
+        sut.Reset(
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "m-1",
+                ContentType = "text",
+                TextContent = "hello",
+                ProtocolMessageId = "proto-1"
+            }),
+            Project,
+            MatchesSnapshot,
+            PatchProjectedMessage);
+
+        var replace = Assert.Single(events);
+        Assert.Equal(NotifyCollectionChangedAction.Replace, replace.Action);
+    }
+
+    [Fact]
+    public void CreateItem_DoesNotRegisterSourceCache_SoStreamingEmitsReplaceInsteadOfPatch()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedAction>();
+        sut.CollectionChanged += (_, args) => events.Add(args.Action);
+        sut.Reset("conv-1", BuildTranscript(1), Project, MatchesSnapshot, PatchProjectedMessage);
+
+        var orphan = sut.CreateItem(0);
+        events.Clear();
+
+        var streamed = BuildTranscript(1).SetItem(
+            0,
+            new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "streamed markdown + tool mix"
+            });
+
+        sut.Reset("conv-1", streamed, Project, MatchesSnapshot, PatchProjectedMessage);
+
+        Assert.Equal([NotifyCollectionChangedAction.Replace], events);
+        Assert.False(sut.MatchesItem(0, orphan));
+        Assert.Equal("Message 0", orphan.TextContent);
+        Assert.NotSame(orphan, sut[0]);
+        Assert.Equal("streamed markdown + tool mix", sut[0].TextContent);
+    }
+
+    [Fact]
+    public void Indexer_RegistersSourceCache_SoStreamingPatchesWithoutCollectionChange()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedAction>();
+        sut.CollectionChanged += (_, args) => events.Add(args.Action);
+        sut.Reset("conv-1", BuildTranscript(1), Project, MatchesSnapshot, PatchProjectedMessage);
+
+        var bound = sut[0];
+        var propertyChanges = new List<string?>();
+        bound.PropertyChanged += (_, args) => propertyChanges.Add(args.PropertyName);
+        events.Clear();
+
+        var streamed = BuildTranscript(1).SetItem(
+            0,
+            new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "streamed markdown + tool mix"
+            });
+
+        sut.Reset("conv-1", streamed, Project, MatchesSnapshot, PatchProjectedMessage);
+
+        Assert.Empty(events);
+        Assert.Same(bound, sut[0]);
+        Assert.True(sut.MatchesItem(0, bound));
+        Assert.Equal("streamed markdown + tool mix", bound.TextContent);
+        Assert.Contains(nameof(ChatMessageViewModel.TextContent), propertyChanges);
+    }
+
     private static ImmutableList<ConversationMessageSnapshot> BuildTranscript(int count) =>
         Enumerable.Range(0, count)
             .Select(CreateMessage)
@@ -237,7 +338,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         {
             Id = snapshot.Id ?? string.Empty,
             ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, index),
-            Timestamp = snapshot.Timestamp.ToLocalTime(),
+            Timestamp = snapshot.Timestamp?.ToLocalTime(),
             IsOutgoing = snapshot.IsOutgoing,
             ContentType = snapshot.ContentType ?? string.Empty,
             Title = snapshot.Title ?? string.Empty,
@@ -258,7 +359,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
 
     private static bool MatchesSnapshot(ChatMessageViewModel viewModel, ConversationMessageSnapshot snapshot) =>
         string.Equals(viewModel.Id, snapshot.Id, StringComparison.Ordinal)
-        && viewModel.Timestamp == snapshot.Timestamp.ToLocalTime()
+        && Nullable.Equals(viewModel.Timestamp, snapshot.Timestamp?.ToLocalTime())
         && viewModel.IsOutgoing == snapshot.IsOutgoing
         && string.Equals(viewModel.ContentType ?? string.Empty, snapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
         && string.Equals(viewModel.Title ?? string.Empty, snapshot.Title ?? string.Empty, StringComparison.Ordinal)

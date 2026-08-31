@@ -15,10 +15,10 @@ public interface ITransportFactory
     /// <summary>
     /// 根据指定的传输类型创建新的传输实例。
     /// </summary>
-    /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
+    /// <param name="transportType">传输类型（Stdio, WebSocket, StreamableHttp）</param>
     /// <param name="command">命令（仅用于 Stdio 传输）</param>
     /// <param name="arguments">命令行参数（仅用于 Stdio 传输）</param>
-    /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
+    /// <param name="url">连接 URL（用于 WebSocket 和 StreamableHttp 传输）</param>
     /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
     /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
     /// <exception cref="NotSupportedException">当指定的传输类型未实现时抛出</exception>

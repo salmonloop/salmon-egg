@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -216,6 +217,32 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             ?? HydrationCompletionModeOptions.FirstOrDefault();
         OnPropertyChanged(nameof(SelectedTransportName));
         OnPropertyChanged(nameof(SelectedHydrationCompletionModeDescription));
+
+        foreach (var row in RemoteDirectoryRows)
+        {
+            if (string.IsNullOrWhiteSpace(row.ValidationMessageResourceKey))
+            {
+                continue;
+            }
+
+            row.SetValidationMessage(
+                Localize(row.ValidationMessageResourceKey, row.ValidationMessage),
+                row.ValidationMessageResourceKey);
+        }
+    }
+
+    private const string RemotePathRequiredValidationKey =
+        "AcpRemoteDirectories_SaveValidationRemotePathRequired";
+
+    private const string RemotePathRequiredValidationFallback =
+        "Enter an absolute remote project path before saving.";
+
+    private string Localize(string key, string fallback)
+    {
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private void OnAgentRemoteDirectoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -273,11 +300,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         var options = new ObservableCollection<TransportOptionViewModel>();
         if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
-            options.Add(new TransportOptionViewModel(TransportType.Stdio, localizer["AcpConnection_TransportStdio"]));
+            options.Add(new TransportOptionViewModel(TransportType.Stdio, localizer[AcpTransportLocalization.StdioResourceKey]));
         }
 
-        options.Add(new TransportOptionViewModel(TransportType.WebSocket, localizer["AcpConnection_TransportWebSocket"]));
-        options.Add(new TransportOptionViewModel(TransportType.HttpSse, localizer["AcpConnection_TransportHttpSse"]));
+        options.Add(new TransportOptionViewModel(TransportType.WebSocket, localizer[AcpTransportLocalization.WebSocketResourceKey]));
+        options.Add(new TransportOptionViewModel(TransportType.StreamableHttp, localizer[AcpTransportLocalization.StreamableHttpResourceKey]));
         return options;
     }
 
@@ -346,6 +373,9 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to profile {ProfileId}", profile.Id);
+            Profiles.ReportOperationError(
+                "AcpProfiles_ConnectFailed",
+                "Failed to connect to the agent profile. Please try again later.");
         }
     }
 
@@ -370,6 +400,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to handle ACP connection toggle (ShouldConnect={ShouldConnect})", shouldConnect);
+            Profiles.ReportOperationError(
+                shouldConnect ? "AcpProfiles_ConnectFailed" : "AcpProfiles_DisconnectFailed",
+                shouldConnect
+                    ? "Failed to connect to the agent profile. Please try again later."
+                    : "Failed to disconnect the agent profile. Please try again later.");
         }
     }
 
@@ -468,7 +503,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         var remotePath = row.RemotePathDraft?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(remotePath) || !ProtocolPathRules.IsAbsolutePath(remotePath))
         {
-            row.SetValidationMessage(_localizer["AcpRemoteDirectories_SaveValidationRemotePathRequired"]);
+            row.SetValidationMessage(
+                Localize(
+                    RemotePathRequiredValidationKey,
+                    RemotePathRequiredValidationFallback),
+                RemotePathRequiredValidationKey);
             SetEditingRemoteDirectory(row);
             return Task.CompletedTask;
         }
@@ -802,7 +841,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
 
     internal void BeginEditing()
     {
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         if (!IsEditing)
         {
             DisplayNameDraft = DisplayName;
@@ -817,7 +856,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
     {
         DisplayNameDraft = DisplayName;
         RemotePathDraft = RemotePath;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
     }
 
     internal void Commit(AgentRemoteDirectory directory)
@@ -828,7 +867,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
         RemotePath = directory.RemotePath;
         DisplayNameDraft = directory.DisplayName;
         RemotePathDraft = directory.RemotePath;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         IsNew = false;
         IsEditing = false;
 
@@ -838,13 +877,16 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
     internal void CancelEditing()
     {
         IsEditing = false;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         NotifyCommandStatesChanged();
     }
 
-    internal void SetValidationMessage(string message)
+    internal string? ValidationMessageResourceKey { get; private set; }
+
+    internal void SetValidationMessage(string message, string? resourceKey = null)
     {
         ValidationMessage = message ?? string.Empty;
+        ValidationMessageResourceKey = string.IsNullOrWhiteSpace(resourceKey) ? null : resourceKey;
     }
 
     internal void NotifyCommandStatesChanged()

@@ -73,19 +73,26 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
             var sessionParams = await CreateSessionNewParamsAsync(CancellationToken.None).ConfigureAwait(false);
             var response = await CreateRemoteSessionAsync(sessionParams, CancellationToken.None).ConfigureAwait(false);
             var localConversationId = await CreateAndActivateLocalConversationAsync(sessionParams.Cwd).ConfigureAwait(false);
+            operationOwner = localConversationId;
             await BindLocalConversationToRemoteSessionAsync(localConversationId, response.SessionId).ConfigureAwait(false);
             await ApplyCreatedSessionProjectionAsync(localConversationId, response).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to create session");
-            SetError($"Failed to create session: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_CreateSessionFailed",
+                    "Failed to create session: {0}",
+                    ex.Message)
+                .ConfigureAwait(false);
         }
     }
 
@@ -116,7 +123,11 @@ public partial class ChatViewModel
             if (!authenticated)
             {
                 _sendPromptCts = null;
-                ShowTransientNotificationToast(AuthenticationHintMessage ?? "The agent requires authentication before it can respond.");
+                ShowTransientNotificationToast(
+                    AuthenticationHintMessage
+                    ?? Localize(
+                        "ChatAuth_Required",
+                        "The agent requires authentication before it can respond."));
                 return;
             }
 
@@ -177,14 +188,20 @@ public partial class ChatViewModel
         try
         {
             var copied = await _platformShell.CopyToClipboardAsync(message).ConfigureAwait(true);
-            if (!copied)
+            if (copied)
             {
-                Logger.LogWarning("Failed to copy turn failure detail to clipboard");
+                return;
             }
+
+            Logger.LogWarning("Failed to copy turn failure detail to clipboard");
+            ShowTransientNotificationToast(
+                Localize("About_ClipboardUnsupported", "Clipboard copy is not supported on this platform."));
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to copy turn failure detail to clipboard");
+            ShowTransientNotificationToast(
+                Localize("ChatTurnFailure_CopyFailed", "Failed to copy the failure detail. Please try again later."));
         }
     }
 
@@ -193,8 +210,7 @@ public partial class ChatViewModel
         var profile = ResolveNewSessionDraftProfile(SelectedProfileId);
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             GetActiveSessionCwdOrDefault(),
-            profile,
-            _preferences.AgentRemoteDirectories);
+            profile);
 
         if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
         {
@@ -204,12 +220,13 @@ public partial class ChatViewModel
                 ResolveNewSessionDraftProfile(SelectedProfileId)?.Transport,
                 GetActiveSessionCwdOrDefault(),
                 cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
-            throw new InvalidOperationException(AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+            throw new InvalidOperationException(
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }
 
         return new(
             cwdResolution.Cwd,
-            McpServerJsonConverter.CloneServers(
+            McpServerSnapshots.CloneServers(
                 await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false)));
     }
 
@@ -221,7 +238,8 @@ public partial class ChatViewModel
 
         if (_chatService == null)
         {
-            throw new InvalidOperationException("Chat service is not initialized");
+            throw new InvalidOperationException(
+                Localize("ChatService_NotInitialized", "Chat service is not initialized"));
         }
 
         try
@@ -240,7 +258,7 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task<string> CreateAndActivateLocalConversationAsync(string? cwd)
+    private async Task<string> CreateAndActivateLocalConversationAsync(string cwd)
     {
         var localConversationId = Guid.NewGuid().ToString("N");
         await _sessionManager.CreateSessionAsync(localConversationId, cwd).ConfigureAwait(false);
@@ -252,7 +270,10 @@ public partial class ChatViewModel
         var switched = await ActivateConversationAsync(localConversationId).ConfigureAwait(false);
         if (!switched)
         {
-            throw new InvalidOperationException("Failed to activate local conversation before applying session response.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatConversation_ActivateLocalFailed",
+                    "Failed to activate local conversation before applying session response."));
         }
 
         return localConversationId;
@@ -268,7 +289,13 @@ public partial class ChatViewModel
         if (bindingResult.Status is not BindingUpdateStatus.Success)
         {
             throw new InvalidOperationException(
-                $"Failed to bind new conversation ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
+                FormatLocalize(
+                    "ChatBinding_BindNewFailedWithStatus",
+                    "Failed to bind new conversation ({0}): {1}",
+                    bindingResult.Status,
+                    string.IsNullOrWhiteSpace(bindingResult.ErrorMessage)
+                        ? Localize("ChatBinding_UnknownError", "UnknownError")
+                        : bindingResult.ErrorMessage.Trim()));
         }
     }
 
@@ -290,7 +317,13 @@ public partial class ChatViewModel
         }
 
         var promptText = CurrentPrompt;
-        var userSnapshot = CreateContentSnapshot(new TextContentBlock { Text = promptText }, isOutgoing: true);
+        // A locally-emitted user prompt is the one case with an authoritative message time:
+        // this client owns the emit instant. Protocol-sourced messages (session/load replay,
+        // live agent/user chunks) have no per-message timestamp and stay null.
+        var userSnapshot = CreateContentSnapshot(
+            new TextContentBlock { Text = promptText },
+            isOutgoing: true,
+            timestamp: DateTime.UtcNow);
         return new PromptSendContext(
             CurrentSessionId,
             Guid.NewGuid().ToString(),
@@ -301,7 +334,7 @@ public partial class ChatViewModel
 
     private async Task BeginPromptSendAsync(PromptSendContext context)
     {
-        ClearError();
+        QueueClearConversationOperationFailure(context.ConversationId);
         _sendPromptCts?.Cancel();
         _sendPromptCts = new CancellationTokenSource();
         await _chatStore.Dispatch(new BeginTurnAction(
@@ -474,10 +507,10 @@ public partial class ChatViewModel
 
     private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
-            Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
-            Error: Localize("Selector_Mode_Error", "模式不可用"),
-            Default: Localize("Selector_Mode_Default", "默认模式"));
+            Unresolved: Localize("Selector_Mode_Unresolved", "Mode is not ready"),
+            Loading: Localize("Selector_Mode_Loading", "Loading modes..."),
+            Error: Localize("Selector_Mode_Error", "Mode unavailable"),
+            Default: Localize("Selector_Mode_Default", "Default mode"));
 
     private SelectorProjectionResult ResolveChatModelSelectorProjection()
     {
@@ -528,9 +561,9 @@ public partial class ChatViewModel
 
     private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
-            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
-            Error: Localize("Selector_Model_Error", "模型不可用"));
+            Unresolved: Localize("Selector_Model_Unresolved", "Model is not ready"),
+            Loading: Localize("Selector_Model_Loading", "Loading models..."),
+            Error: Localize("Selector_Model_Error", "Models unavailable"));
 
     private string Localize(string key, string fallback)
     {
@@ -542,6 +575,19 @@ public partial class ChatViewModel
         var localized = _localizer[key];
         return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
             ? fallback
+            : localized.Value;
+    }
+
+    private string FormatLocalize(string key, string fallback, params object[] arguments)
+    {
+        if (_localizer is null)
+        {
+            return string.Format(CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = _localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(CultureInfo.CurrentCulture, fallback, arguments)
             : localized.Value;
     }
 
@@ -642,9 +688,12 @@ public partial class ChatViewModel
             if (!permission.IsGranted && !permission.RequiresAuthorization)
             {
                 ClearPendingVoiceInputAuthorizationRetry();
+                var permissionFallback = Localize(
+                    "VoiceInput_PermissionCheckFailed",
+                    "Voice input permission check failed.");
                 var permissionMessage = VoiceInputErrorMessageSanitizer.Normalize(
                     permission.Message,
-                    "Voice input permission check failed.");
+                    permissionFallback);
                 VoiceInputErrorMessage = permissionMessage;
                 ShowTransientNotificationToast(permissionMessage);
                 SetVoiceInputTransportState(VoiceInputTransportState.Idle);
@@ -716,16 +765,20 @@ public partial class ChatViewModel
                 ClearPendingVoiceInputAuthorizationRetry();
             }
 
-            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
+            var failedFallback = Localize("VoiceInput_Failed", "Voice input failed.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, failedFallback);
             Logger.LogWarning(
                 ex,
                 "Voice input start failed before recognizer ready. RequestId={RequestId}",
                 requestId);
             VoiceInputErrorMessage = message;
             ShowTransientNotificationToast(
-                string.Equals(message, "Voice input failed.", StringComparison.Ordinal)
+                string.Equals(message, failedFallback, StringComparison.Ordinal)
                     ? message
-                    : $"Voice input failed: {message}");
+                    : FormatLocalize(
+                        "VoiceInput_FailedWithDetail",
+                        "Voice input failed: {0}",
+                        message));
             if (requestId is not null && IsCurrentVoiceInputRequest(requestId))
             {
                 IsVoiceInputListening = false;
@@ -929,12 +982,18 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             RestoreVoiceInputFrontSession(requestId);
-            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Failed to stop voice input.");
+            var stopFailedFallback = Localize(
+                "VoiceInput_StopFailed",
+                "Failed to stop voice input.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, stopFailedFallback);
             VoiceInputErrorMessage = message;
             ShowTransientNotificationToast(
-                string.Equals(message, "Failed to stop voice input.", StringComparison.Ordinal)
+                string.Equals(message, stopFailedFallback, StringComparison.Ordinal)
                     ? message
-                    : $"Failed to stop voice input: {message}");
+                    : FormatLocalize(
+                        "VoiceInput_StopFailedWithDetail",
+                        "Failed to stop voice input: {0}",
+                        message));
         }
     }
 
@@ -1060,7 +1119,9 @@ public partial class ChatViewModel
                 return;
             }
 
-            var message = VoiceInputErrorMessageSanitizer.Normalize(result.Message, "Voice input failed.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(
+                result.Message,
+                Localize("VoiceInput_Failed", "Voice input failed."));
             VoiceInputErrorMessage = message;
             IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
@@ -1219,13 +1280,14 @@ public partial class ChatViewModel
             {
                 var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(false);
                 await CancelPendingPermissionRequestAsync(activeBinding?.RemoteSessionId).ConfigureAwait(false);
-                await _acpConnectionCommands.CancelPromptAsync(this, "User cancelled").ConfigureAwait(false);
+                await _acpConnectionCommands.CancelPromptAsync(this).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Cancel prompt failed");
-            ShowTransientNotificationToast("Cancellation failed.");
+            ShowTransientNotificationToast(
+                Localize("ChatPrompt_CancelFailed", "Cancellation failed."));
         }
     }
 
@@ -1331,10 +1393,11 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1361,7 +1424,12 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch mode");
-            SetError($"Failed to switch mode: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_SwitchModeFailed",
+                    "Failed to switch mode: {0}",
+                    ex.Message)
+                .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -1415,10 +1483,11 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1434,7 +1503,12 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch model");
-            SetError($"Failed to switch model: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_SwitchModelFailed",
+                    "Failed to switch model: {0}",
+                    ex.Message)
+                .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -1464,10 +1538,11 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task CancelSessionAsync()
     {
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1475,11 +1550,7 @@ public partial class ChatViewModel
                 return;
             }
 
-            var cancelParams = new SessionCancelParams
-            {
-                SessionId = activeBinding.RemoteSessionId!,
-                Reason = "User cancelled"
-            };
+            var cancelParams = new SessionCancelParams(activeBinding.RemoteSessionId!);
 
             if (_chatService != null)
             {
@@ -1491,7 +1562,12 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to cancel session");
-            SetError($"Failed to cancel session: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_CancelSessionFailed",
+                    "Failed to cancel session: {0}",
+                    ex.Message)
+                .ConfigureAwait(true);
         }
         finally
         {
@@ -1517,10 +1593,11 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task DisconnectAsync()
     {
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
             await _acpConnectionCommands.DisconnectAsync(this);
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
             _panelStateCoordinator.ClearAskUserRequests();
@@ -1529,7 +1606,12 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to disconnect");
-            SetError($"Failed to disconnect: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_DisconnectFailed",
+                    "Failed to disconnect: {0}",
+                    ex.Message)
+                .ConfigureAwait(true);
         }
         finally
         {
@@ -1672,5 +1754,6 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowTranscriptSurface));
         OnPropertyChanged(nameof(ShouldLoadTranscriptSurface));
         OnPropertyChanged(nameof(ShouldShowConversationInputSurface));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
     }
 }

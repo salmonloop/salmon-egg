@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Domain.Services;
@@ -21,7 +22,15 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
     private readonly SalmonEgg.Domain.Services.IAppMaintenanceService? _maintenanceService;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
+    private readonly ILogger<App>? _startupLogger;
 
+    // Set once the shell completes its first navigation; drives the unhandled-exception
+    // policy (startup failures must exit with logs instead of hanging a blank window).
+    private volatile bool _isShellFirstFrameReady;
+
+    // Diagnostic-only boot trail. Conditional so Release does not evaluate message
+    // arguments or retain call sites; body remains DEBUG-gated for the file write.
+    [Conditional("DEBUG")]
     internal static void BootLog(string message)
     {
 #if DEBUG
@@ -33,6 +42,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         }
         catch
         {
+            // Boot diagnostics must never disrupt startup.
         }
 #endif
     }
@@ -41,7 +51,8 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     {
         try
         {
-            var window = MainWindowInstance;
+            var app = Current as App;
+            var window = app?.MainWindow;
             if (window?.DispatcherQueue == null)
             {
                 return;
@@ -51,13 +62,29 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             {
                 if (window.Content is Frame frame)
                 {
-                    frame.BackStack.Clear();
-                    frame.Navigate(typeof(MainPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
+                    // BrowserWasm retains the current Page for same-frame navigation even
+                    // after clearing Frame.Content. Replacing the root Frame gives every
+                    // x:Uid resource a fresh native load after the language override.
+                    frame.NavigationFailed -= app!.OnNavigationFailed;
+                    frame.Navigated -= app.OnRootFrameFirstNavigated;
+
+                    var replacementFrame = new Frame { AllowDrop = false };
+                    // The shell theme is owned by the root content element, so the replacement
+                    // must inherit it before it renders; otherwise reloaded content falls back
+                    // to the default theme brushes.
+                    replacementFrame.RequestedTheme = frame.RequestedTheme;
+                    replacementFrame.NavigationFailed += app.OnNavigationFailed;
+                    replacementFrame.Navigated += app.OnRootFrameFirstNavigated;
+                    window.Content = replacementFrame;
+                    replacementFrame.Navigate(typeof(MainPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
                 }
             });
         }
-        catch
+        catch (Exception ex)
         {
+            // Shell reload is best-effort, but the failure must stay visible in release logs.
+            (Current as App)?._startupLogger?.LogError(ex, "Failed to schedule main shell reload.");
+            BootLog("ReloadMainShell failed: " + ex);
         }
     }
 
@@ -67,9 +94,13 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         services.AddSalmonEgg();
         ServiceProvider = services.BuildServiceProvider();
 
+        // 遥测不在此处初始化：那需要读取用户设置（异步 IO），在构造函数里同步阻塞会违反
+        // 启动副作用所有权约束。真实配置由 IApplicationStartupWorkflow 异步加载后落地。
+
         // Resolve DI dependencies before InitializeComponent() so x:Bind has stable inputs.
         _maintenanceService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
         _windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();
+        _startupLogger = ServiceProvider.GetService<ILogger<App>>();
 
         this.InitializeComponent();
 
@@ -78,18 +109,36 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         // snapping) can be clipped by the renderer. Load a small host-specific override dictionary only on Skia.
         TryAddSkiaThemeOverrides();
 #endif
+#if __UNO_SKIA__ || __WASM__
+        // Uno's NumberBox focus template has a renderer-specific theme mismatch on Skia and BrowserWasm. Keep this
+        // workaround outside the Windows WinUI 3 path until unoplatform/uno#24021 is fixed in our dependency line.
+        TryApplyUnoNumberBoxThemeOverride();
+#endif
 
         this.UnhandledException += (_, e) =>
         {
+            // Log first: release builds must never swallow a crash silently.
+            _startupLogger?.LogCritical(
+                e.Exception,
+                "Unhandled UI exception. ShellFirstFrameReady={ShellFirstFrameReady}",
+                _isShellFirstFrameReady);
             BootLog("App.UnhandledException: " + e.Exception);
-            e.Handled = true;
+            // Before the first shell frame is ready, swallowing leaves a blank hung window;
+            // let the process exit with logs instead. Afterwards keep the shell alive so a
+            // single stray exception cannot take down the whole app.
+            e.Handled = _isShellFirstFrameReady;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
+            _startupLogger?.LogCritical(
+                e.ExceptionObject as Exception,
+                "Unhandled AppDomain exception. IsTerminating={IsTerminating}",
+                e.IsTerminating);
             BootLog("AppDomain.UnhandledException: " + e.ExceptionObject);
         };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            _startupLogger?.LogError(e.Exception, "Unobserved task exception.");
             BootLog("TaskScheduler.UnobservedTaskException: " + e.Exception);
             e.SetObserved();
         };
@@ -112,11 +161,79 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     }
 #endif
 
+#if __UNO_SKIA__ || __WASM__
+    private void TryApplyUnoNumberBoxThemeOverride()
+    {
+        try
+        {
+            var overrides = new Microsoft.UI.Xaml.ResourceDictionary
+            {
+                Source = new Uri("ms-appx:///Styles/Skia/UnoNumberBoxThemeOverrides.xaml")
+            };
+
+            Resources.MergedDictionaries.Add(overrides);
+            if (overrides["UnoNumberBoxStyleOverride"] is not Microsoft.UI.Xaml.Style numberBoxStyle)
+            {
+                throw new InvalidOperationException("The Uno NumberBox style override was not found.");
+            }
+
+            Resources[typeof(Microsoft.UI.Xaml.Controls.NumberBox)] = numberBoxStyle;
+        }
+        catch (Exception ex)
+        {
+            // Best-effort; the app should still run with the framework default if the optional resource is unavailable.
+            _startupLogger?.LogWarning(ex, "Failed to apply the Uno NumberBox theme override.");
+        }
+    }
+#endif
+
     protected Microsoft.UI.Xaml.Window? MainWindow { get; private set; }
+
+    /// <summary>
+    /// Hands a cold-start notification click to the notification service before the shell exists.
+    /// </summary>
+    /// <remarks>
+    /// Windows delivers a click on a notification for a process that is not running through COM
+    /// activation, and the arguments are only readable from the launch activation args. Reading them
+    /// here — the earliest point the app controls — keeps the activation from being lost; the service
+    /// parks it and replays it once the conversation catalog exists.
+    /// </remarks>
+    private static void CaptureNotificationLaunchActivation()
+    {
+#if WINDOWS
+        try
+        {
+            var notifications = ServiceProvider.GetService<Platforms.Windows.WindowsSystemNotificationService>();
+
+            // The Windows App SDK requires Register before GetActivatedEventArgs, otherwise a
+            // cold-start click is not reported at all.
+            notifications?.EnsureActivationListenerRegistered();
+
+            var activatedArgs = global::Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent()
+                .GetActivatedEventArgs();
+            if (activatedArgs?.Kind
+                    != global::Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification
+                || activatedArgs.Data
+                    is not global::Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs notificationArgs)
+            {
+                return;
+            }
+
+            notifications?.CaptureLaunchActivation(notificationArgs);
+        }
+        catch (Exception ex)
+        {
+            // A host without the notification stack cannot report activations; a normal launch is
+            // unaffected, so this must never block startup.
+            BootLog($"OnLaunched: notification launch activation unavailable ({ex.GetType().Name})");
+        }
+#endif
+    }
 
     protected override async void OnLaunched(global::Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         BootLog("OnLaunched: start");
+        CaptureNotificationLaunchActivation();
         MainWindow = new Microsoft.UI.Xaml.Window();
         BootLog("OnLaunched: window created");
 
@@ -125,6 +242,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             rootFrame = new Frame { AllowDrop = false };
             MainWindow.Content = rootFrame;
             rootFrame.NavigationFailed += OnNavigationFailed;
+            rootFrame.Navigated += OnRootFrameFirstNavigated;
             BootLog("OnLaunched: root frame created");
         }
 
@@ -135,8 +253,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             uiRuntimeService?.InitializeAnimations();
             BootLog("OnLaunched: motion policy initialized");
         }
-        catch
+        catch (Exception ex)
         {
+            // 启动韧性:初始化失败不阻断启动,但 Release 下也必须留下可诊断的日志。
+            _startupLogger?.LogWarning(ex, "Failed to initialize motion policy during launch.");
             BootLog("OnLaunched: failed to initialize motion policy");
         }
 
@@ -150,8 +270,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 BootLog("OnLaunched: cloud config sync initialized");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Cloud config sync initialization failed during launch.");
             BootLog("OnLaunched: cloud config sync initialization failed");
         }
 
@@ -174,8 +295,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 BootLog("OnLaunched: config projection reload coordinator initialized");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Failed to initialize preferences during launch.");
             BootLog("OnLaunched: failed to initialize preferences");
         }
 
@@ -184,8 +306,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             _windowBackdropService?.Attach(MainWindow);
             BootLog("OnLaunched: backdrop service attached");
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Window backdrop service attach failed during launch.");
             BootLog("OnLaunched: backdrop service attach failed");
         }
 
@@ -207,27 +330,58 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                     {
                         await _maintenanceService.CleanupCacheAsync(cacheRetentionDays).ConfigureAwait(false);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        _startupLogger?.LogWarning(ex, "Background cache cleanup failed.");
                     }
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Failed to schedule cache cleanup during launch.");
         }
 
-        // Applies the Uno.Resizetizer-generated window icon to the native window (Desktop/Windows).
-#if HAS_UNO
-        MainWindow.SetWindowIcon();
-#endif
+        // Shell identity (taskbar/Alt+Tab title + native window icon) must be in place before the
+        // first activation so the shell never observes the framework defaults.
+        WindowShellIdentity.Apply(MainWindow);
         MainWindow.Activate();
         BootLog("OnLaunched: window activated");
+    }
+
+    /// <summary>
+    /// Runs application teardown before the process ends.
+    /// </summary>
+    /// <remarks>
+    /// Every close path routes here so that runtime state is flushed exactly once by its owning
+    /// workflow. Hosts must await this before letting the window close; the window closing itself is
+    /// not a durability boundary because the flush is asynchronous.
+    /// </remarks>
+    internal static Task ShutdownRuntimeAsync()
+    {
+        // 遥测 flush 也由该 workflow 负责：teardown 只有一个 owner，宿主不直接触碰
+        // TelemetryManager，否则关闭路径会出现两处各自 flush 的第二套 owner。
+        var shutdown = ServiceProvider?.GetService<IApplicationShutdownWorkflow>();
+        return shutdown is null
+            ? Task.CompletedTask
+            : shutdown.ShutdownAsync();
     }
 
     void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
     {
         throw new InvalidOperationException($"Failed to load {e.SourcePageType.FullName}: {e.Exception}");
+    }
+
+    private void OnRootFrameFirstNavigated(object sender, NavigationEventArgs e)
+    {
+        // One-shot: only the first successful shell navigation flips the crash policy.
+        if (sender is Frame frame)
+        {
+            frame.Navigated -= OnRootFrameFirstNavigated;
+        }
+
+        _isShellFirstFrameReady = true;
+        BootLog("OnLaunched: first shell frame ready");
     }
 
     public static void InitializeLogging()

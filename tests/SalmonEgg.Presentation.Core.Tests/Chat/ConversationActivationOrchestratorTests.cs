@@ -81,6 +81,33 @@ public sealed class ConversationActivationOrchestratorTests
         Assert.DoesNotContain("conv-1", sink.CompletedConversationIds);
     }
 
+    [Fact]
+    public async Task SupersedeCurrentActivation_WhenConversationIsRemoved_CancelsInFlightActivationAndPreventsCompletion()
+    {
+        using var orchestrator = new ConversationActivationOrchestrator(
+            NullLogger<ConversationActivationOrchestrator>.Instance);
+        var sink = new RecordingSink
+        {
+            WaitForCancellationOnFirstExecution = true
+        };
+
+        var activationTask = orchestrator.ActivateAsync(
+            new ConversationActivationOrchestratorRequest("conv-1", true),
+            sink,
+            TestContext.Current.CancellationToken);
+
+        await sink.WaitForExecuteStartedAsync();
+        var activationVersion = orchestrator.CurrentActivationVersion;
+
+        var supersedingVersion = orchestrator.SupersedeCurrentActivation("ConversationRemoved");
+        var result = await activationTask;
+
+        Assert.True(result.WasSuperseded);
+        Assert.True(supersedingVersion > activationVersion);
+        Assert.False(orchestrator.IsLatestActivationVersion(activationVersion));
+        Assert.Empty(sink.CompletedConversationIds);
+    }
+
     private sealed class RecordingSink : IConversationActivationOrchestratorSink
     {
         private readonly TaskCompletionSource<object?> _executeStarted =

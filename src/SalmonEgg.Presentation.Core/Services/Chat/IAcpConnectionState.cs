@@ -102,6 +102,15 @@ public interface IAcpChatCoordinatorSink : IAcpConnectionState
 
     string? GetSessionCwdOrDefault(string conversationId);
 
+    ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default);
+
+    Task ApplyConversationRemoteSessionInfoAsync(
+        string conversationId,
+        AgentSessionInfo sessionInfo,
+        CancellationToken cancellationToken = default);
+
     Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default);
 
     Task SetConversationHydratingAsync(

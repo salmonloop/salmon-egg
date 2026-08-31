@@ -25,11 +25,12 @@ public sealed class CloudConfigSettingsViewModelTests
             providerId: string.Empty,
             options: new Dictionary<string, string>(),
             transfer: new CloudTransferState(CloudTransferPhase.Idle));
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.Equal("尚未设置云同步", viewModel.StatusHeadline);
+        Assert.Equal(localizer["DataStorage_CloudSyncNotConfiguredHeadline"], viewModel.StatusHeadline);
         Assert.Empty(viewModel.ConnectionContextText);
-        Assert.Equal("尚未同步", viewModel.TransferStatusText);
+        Assert.Equal(localizer["DataStorage_CloudSyncNeverSynced"], viewModel.TransferStatusText);
     }
 
     [Fact]
@@ -46,11 +47,23 @@ public sealed class CloudConfigSettingsViewModelTests
             transfer: new CloudTransferState(
                 CloudTransferPhase.Idle,
                 new CloudTransferSuccess(CloudTransferOutcome.Uploaded, completedAt)));
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.Equal("云同步已关闭", viewModel.StatusHeadline);
-        Assert.Equal("已保留 WebDAV 连接设置", viewModel.ConnectionContextText);
-        Assert.StartsWith("上次同步：已上传本地配置 · ", viewModel.TransferStatusText, StringComparison.Ordinal);
+        Assert.Equal(localizer["DataStorage_CloudSyncDisabledHeadline"], viewModel.StatusHeadline);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncSavedConnectionContext"],
+                "WebDAV"),
+            viewModel.ConnectionContextText);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncTransferWithTime"],
+                localizer["DataStorage_CloudSyncUploadedLocal"].Value,
+                completedAt.ToLocalTime()),
+            viewModel.TransferStatusText);
     }
 
     [Fact]
@@ -65,10 +78,21 @@ public sealed class CloudConfigSettingsViewModelTests
             },
             transfer: new CloudTransferState(CloudTransferPhase.Idle),
             readiness: CloudProviderReadiness.Ready);
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.Equal("云同步已开启 · WebDAV", viewModel.StatusHeadline);
-        Assert.Equal("同步位置：https://dav.example.test/config/", viewModel.ConnectionContextText);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncEnabledHeadline"],
+                "WebDAV"),
+            viewModel.StatusHeadline);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncTargetContext"],
+                "https://dav.example.test/config/"),
+            viewModel.ConnectionContextText);
     }
 
     [Fact]
@@ -114,34 +138,41 @@ public sealed class CloudConfigSettingsViewModelTests
     [Fact]
     public void ActionProjection_OnlyShowsActionsRelevantToCurrentState()
     {
-        var unconfigured = CreateViewModel(new FakeCoordinator(CreateSnapshot(
-            enabled: false,
-            providerId: string.Empty,
-            options: new Dictionary<string, string>(),
-            transfer: new CloudTransferState(CloudTransferPhase.Idle))));
+        var localizer = new TestCoreStringLocalizer();
+        var unconfigured = CreateViewModel(
+            new FakeCoordinator(CreateSnapshot(
+                enabled: false,
+                providerId: string.Empty,
+                options: new Dictionary<string, string>(),
+                transfer: new CloudTransferState(CloudTransferPhase.Idle))),
+            localizer: localizer);
         Assert.True(unconfigured.ShowEditAction);
-        Assert.Equal("设置云同步", unconfigured.EditActionText);
+        Assert.Equal(localizer["DataStorage_CloudSyncSetupAction"], unconfigured.EditActionText);
         Assert.False(unconfigured.ShowSyncAction);
         Assert.False(unconfigured.ShowDisableAction);
         Assert.False(unconfigured.ShowRemoveAction);
 
-        var disabled = CreateViewModel(new FakeCoordinator(CreateSnapshot(
-            enabled: false,
-            providerId: "webdav",
-            options: new Dictionary<string, string>(),
-            transfer: new CloudTransferState(CloudTransferPhase.Idle))));
+        var disabled = CreateViewModel(
+            new FakeCoordinator(CreateSnapshot(
+                enabled: false,
+                providerId: "webdav",
+                options: new Dictionary<string, string>(),
+                transfer: new CloudTransferState(CloudTransferPhase.Idle))),
+            localizer: localizer);
         Assert.True(disabled.ShowEditAction);
-        Assert.Equal("编辑或重新开启", disabled.EditActionText);
+        Assert.Equal(localizer["DataStorage_CloudSyncReopenAction"], disabled.EditActionText);
         Assert.False(disabled.ShowSyncAction);
         Assert.False(disabled.ShowDisableAction);
         Assert.True(disabled.ShowRemoveAction);
 
-        var enabled = CreateViewModel(new FakeCoordinator(CreateReadySnapshot(
-            "webdav",
-            new Dictionary<string, string>(),
-            CloudCredentialState.Available)));
+        var enabled = CreateViewModel(
+            new FakeCoordinator(CreateReadySnapshot(
+                "webdav",
+                new Dictionary<string, string>(),
+                CloudCredentialState.Available)),
+            localizer: localizer);
         Assert.True(enabled.ShowEditAction);
-        Assert.Equal("编辑云同步设置", enabled.EditActionText);
+        Assert.Equal(localizer["DataStorage_CloudSyncEditAction"], enabled.EditActionText);
         Assert.True(enabled.ShowSyncAction);
         Assert.True(enabled.ShowDisableAction);
         Assert.True(enabled.ShowRemoveAction);
@@ -232,9 +263,16 @@ public sealed class CloudConfigSettingsViewModelTests
                     ? new CloudSyncFailure(CloudSyncFailureKind.Network, "Network failed.")
                     : null),
             readiness: CloudProviderReadiness.Ready);
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.StartsWith("上次同步：已上传本地配置 · ", viewModel.TransferStatusText, StringComparison.Ordinal);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncTransferWithTime"],
+                localizer["DataStorage_CloudSyncUploadedLocal"].Value,
+                completedAt.ToLocalTime()),
+            viewModel.TransferStatusText);
     }
 
     [Fact]
@@ -252,11 +290,67 @@ public sealed class CloudConfigSettingsViewModelTests
                 CloudSyncFailureKind.CredentialStoreUnavailable,
                 "Secure storage unavailable.")
         };
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.Equal("云同步需要处理", viewModel.StatusHeadline);
-        Assert.Equal("无法访问安全存储。请重试。", viewModel.ErrorText);
+        Assert.Equal(localizer["DataStorage_CloudSyncFaultedHeadline"], viewModel.StatusHeadline);
+        Assert.Equal(localizer["DataStorage_CloudSyncCredentialStoreUnavailable"], viewModel.ErrorText);
         Assert.False(viewModel.IsChecking);
+    }
+
+    [Fact]
+    public void StatusProjection_WhenRemoteConflictPending_ExposesResolutionActionsAndBlocksSync()
+    {
+        var snapshot = CreateSnapshot(
+            enabled: true,
+            providerId: "webdav",
+            options: new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/config.zip" },
+            transfer: new CloudTransferState(
+                CloudTransferPhase.Failed,
+                Failure: new CloudSyncFailure(
+                    CloudSyncFailureKind.RemoteConflict,
+                    "true conflict",
+                    ArtifactPath: "/tmp/conflict")),
+            readiness: CloudProviderReadiness.Ready) with
+        {
+            LastFailure = new CloudSyncFailure(
+                CloudSyncFailureKind.RemoteConflict,
+                "true conflict",
+                ArtifactPath: "/tmp/conflict")
+        };
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
+
+        Assert.True(viewModel.HasPendingConflict);
+        Assert.True(viewModel.CanResolveConflict);
+        Assert.False(viewModel.CanSync);
+        Assert.Equal(localizer["DataStorage_CloudSyncConflictNeedsResolution"], viewModel.ErrorText);
+        Assert.Equal(localizer["DataStorage_CloudSyncKeepLocal"], viewModel.KeepLocalConflictText);
+        Assert.Equal(localizer["DataStorage_CloudSyncApplyRemote"], viewModel.ApplyRemoteConflictText);
+    }
+
+    [Fact]
+    public async Task KeepLocalConflictCommand_WhenPending_InvokesCoordinatorWithKeepLocal()
+    {
+        var snapshot = CreateSnapshot(
+            enabled: true,
+            providerId: "webdav",
+            options: new Dictionary<string, string>(),
+            transfer: new CloudTransferState(
+                CloudTransferPhase.Failed,
+                Failure: new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "true conflict")),
+            readiness: CloudProviderReadiness.Ready) with
+        {
+            LastFailure = new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "true conflict")
+        };
+        var coordinator = new FakeCoordinator(snapshot);
+        var viewModel = CreateViewModel(coordinator);
+
+        await viewModel.KeepLocalConflictCommand.ExecuteAsync(null);
+
+        Assert.Equal(CloudSyncConflictResolution.KeepLocal, coordinator.LastConflictResolution);
+        Assert.False(viewModel.HasPendingConflict);
+        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
     }
 
     [Fact]
@@ -271,14 +365,15 @@ public sealed class CloudConfigSettingsViewModelTests
             },
             CloudCredentialState.Available));
 
-        var viewModel = CreateViewModel(coordinator);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(coordinator, localizer: localizer);
 
         Assert.True(viewModel.IsEnabled);
         Assert.False(viewModel.IsEditing);
         Assert.Equal("", viewModel.WebDavPassword);
-        Assert.Equal("已保存登录信息。留空会继续使用现有密码或访问密钥。", viewModel.CredentialStatusText);
-        Assert.Equal("新密码（可选）", viewModel.WebDavPasswordHeaderText);
-        Assert.Equal("留空以继续使用已保存的密码", viewModel.WebDavPasswordPlaceholderText);
+        Assert.Equal(localizer["DataStorage_CloudSyncCredentialAvailable"], viewModel.CredentialStatusText);
+        Assert.Equal(localizer["DataStorage_CloudSyncWebDavPasswordSavedHeader"], viewModel.WebDavPasswordHeaderText);
+        Assert.Equal(localizer["DataStorage_CloudSyncWebDavPasswordSavedPlaceholder"], viewModel.WebDavPasswordPlaceholderText);
         Assert.False(viewModel.HasError);
     }
 
@@ -294,9 +389,10 @@ public sealed class CloudConfigSettingsViewModelTests
                 ["username"] = "alice"
             },
             transfer: new CloudTransferState(CloudTransferPhase.Idle));
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
 
-        Assert.Equal("WebDAV 密码", viewModel.WebDavPasswordHeaderText);
+        Assert.Equal(localizer["DataStorage_CloudSyncWebDavPasswordHeader"], viewModel.WebDavPasswordHeaderText);
         Assert.Empty(viewModel.WebDavPasswordPlaceholderText);
         Assert.Empty(viewModel.S3AccessKeyIdPlaceholderText);
         Assert.Empty(viewModel.S3SecretAccessKeyPlaceholderText);
@@ -368,7 +464,8 @@ public sealed class CloudConfigSettingsViewModelTests
                 message = capturedMessage;
             })
             .ReturnsAsync(false);
-        var viewModel = CreateViewModel(coordinator, ui.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(coordinator, ui.Object, localizer);
         viewModel.EditCommand.Execute(null);
         viewModel.SelectedProviderId = "s3";
         viewModel.S3Endpoint = "https://s3.example.test";
@@ -377,9 +474,18 @@ public sealed class CloudConfigSettingsViewModelTests
 
         await viewModel.ApplyCommand.ExecuteAsync(null);
 
-        Assert.Equal("切换到 S3 compatible 并同步？", title);
         Assert.Equal(
-            "这会停止使用 WebDAV。如果 S3 compatible 中已有配置，将先备份本机配置，再应用云端版本。",
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncSwitchConfirmTitle"],
+                "S3 compatible"),
+            title);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncSwitchConfirmMessage"],
+                "WebDAV",
+                "S3 compatible"),
             message);
         Assert.Null(coordinator.LastDraft);
         Assert.True(viewModel.IsEditing);
@@ -402,13 +508,19 @@ public sealed class CloudConfigSettingsViewModelTests
                 It.IsAny<string>()))
             .Callback<string, string, string, string>((capturedTitle, _, _, _) => title = capturedTitle)
             .ReturnsAsync(true);
-        var viewModel = CreateViewModel(coordinator, ui.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(coordinator, ui.Object, localizer);
         viewModel.EditCommand.Execute(null);
         await viewModel.RetryCredentialCheckCommand.ExecuteAsync(null);
 
         await viewModel.ApplyCommand.ExecuteAsync(null);
 
-        Assert.Equal("使用 OneDrive 开始同步？", title);
+        Assert.Equal(
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncActivationConfirmTitle"],
+                "OneDrive"),
+            title);
         Assert.NotNull(coordinator.LastDraft);
         Assert.Equal("onedrive", coordinator.LastDraft!.ProviderId);
     }
@@ -463,15 +575,19 @@ public sealed class CloudConfigSettingsViewModelTests
                 primary = capturedPrimary;
             })
             .ReturnsAsync(false);
-        var viewModel = CreateViewModel(coordinator, ui.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(coordinator, ui.Object, localizer);
 
         await viewModel.ForgetCommand.ExecuteAsync(null);
 
-        Assert.Equal("移除此设备上的 WebDAV 同步设置？", title);
         Assert.Equal(
-            "这会关闭同步，并删除此设备保存的连接设置、登录信息和同步记录。不会删除云端数据或当前应用配置。",
-            message);
-        Assert.Equal("移除本机设置", primary);
+            string.Format(
+                CultureInfo.CurrentUICulture,
+                localizer["DataStorage_CloudSyncForgetTitle"],
+                "WebDAV"),
+            title);
+        Assert.Equal(localizer["DataStorage_CloudSyncForgetMessage"], message);
+        Assert.Equal(localizer["DataStorage_CloudSyncForgetPrimary"], primary);
         Assert.Equal(0, coordinator.ForgetCount);
     }
 
@@ -491,13 +607,12 @@ public sealed class CloudConfigSettingsViewModelTests
                 It.IsAny<string>()))
             .Callback<string, string, string, string>((_, capturedMessage, _, _) => message = capturedMessage)
             .ReturnsAsync(false);
-        var viewModel = CreateViewModel(coordinator, ui.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(coordinator, ui.Object, localizer);
 
         await viewModel.ForgetCommand.ExecuteAsync(null);
 
-        Assert.Equal(
-            "这会关闭同步，并从此设备移除 Salmon Egg 保存的所有 OneDrive 登录账户和同步记录。不会删除 OneDrive 中的数据或当前应用配置。",
-            message);
+        Assert.Equal(localizer["DataStorage_CloudSyncForgetOneDriveMessage"], message);
     }
 
     [Fact]
@@ -515,16 +630,17 @@ public sealed class CloudConfigSettingsViewModelTests
             Readiness = CloudProviderReadiness.AuthenticationRequired,
             LastFailure = new CloudSyncFailure(CloudSyncFailureKind.CredentialMissing, "Missing.")
         };
-        var viewModel = CreateViewModel(new FakeCoordinator(snapshot));
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
         viewModel.EditCommand.Execute(null);
 
         await viewModel.RetryCredentialCheckCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.CanApply);
         Assert.NotEmpty(viewModel.ValidationMessage);
-        Assert.Equal("未找到已保存的登录信息。请输入密码或访问密钥。", viewModel.CredentialStatusText);
-        Assert.Equal("WebDAV 密码", viewModel.WebDavPasswordHeaderText);
-        Assert.Equal("输入 WebDAV 密码", viewModel.WebDavPasswordPlaceholderText);
+        Assert.Equal(localizer["DataStorage_CloudSyncCredentialMissingAction"], viewModel.CredentialStatusText);
+        Assert.Equal(localizer["DataStorage_CloudSyncWebDavPasswordHeader"], viewModel.WebDavPasswordHeaderText);
+        Assert.Equal(localizer["DataStorage_CloudSyncWebDavPasswordMissingPlaceholder"], viewModel.WebDavPasswordPlaceholderText);
 
         viewModel.WebDavPassword = "replacement";
 
@@ -533,11 +649,12 @@ public sealed class CloudConfigSettingsViewModelTests
 
     private static CloudConfigSettingsViewModel CreateViewModel(
         FakeCoordinator coordinator,
-        IUiInteractionService? ui = null) => new(
+        IUiInteractionService? ui = null,
+        TestCoreStringLocalizer? localizer = null) => new(
             coordinator,
             ui ?? Mock.Of<IUiInteractionService>(),
             new ImmediateUiDispatcher(),
-            new TestCoreStringLocalizer());
+            localizer ?? new TestCoreStringLocalizer());
 
     private static CloudConfigSyncSnapshot CreateReadySnapshot(
         string providerId,
@@ -616,6 +733,29 @@ public sealed class CloudConfigSettingsViewModelTests
         }
 
         public Task SyncNowAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public CloudSyncConflictResolution? LastConflictResolution { get; private set; }
+
+        public Task ResolveConflictAsync(
+            CloudSyncConflictResolution resolution,
+            CancellationToken cancellationToken = default)
+        {
+            LastConflictResolution = resolution;
+            Current = Current with
+            {
+                Transfer = new CloudTransferState(
+                    CloudTransferPhase.Succeeded,
+                    new CloudTransferSuccess(
+                        resolution == CloudSyncConflictResolution.KeepLocal
+                            ? CloudTransferOutcome.Uploaded
+                            : CloudTransferOutcome.Restored,
+                        DateTimeOffset.UtcNow)),
+                Operation = null,
+                LastFailure = null
+            };
+            SnapshotChanged?.Invoke(this, Current);
+            return Task.CompletedTask;
+        }
 
         public Task DisableAsync(CancellationToken cancellationToken = default)
         {

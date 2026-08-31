@@ -44,6 +44,33 @@ public sealed class AcpChatServiceAdapterTests
     }
 
     [Fact]
+    public void Dispose_CascadesToInnerChatService()
+    {
+        // 本适配器是链最外层装饰器,独占内层 IChatService(进而独占 ACP 客户端/传输)。
+        // Dispose 必须沿所有权链下传,否则内层客户端/传输永远得不到释放。
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        var adapter = BuildAdapter(inner, uiDispatcher);
+
+        adapter.Dispose();
+
+        Assert.Equal(1, inner.DisposeCount);
+    }
+
+    [Fact]
+    public void Dispose_IsIdempotent_CascadesOnce()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        var adapter = BuildAdapter(inner, uiDispatcher);
+
+        adapter.Dispose();
+        adapter.Dispose();
+
+        Assert.Equal(1, inner.DisposeCount);
+    }
+
+    [Fact]
     public void SessionUpdateReceived_BufferOverflow_TriggersResyncRequired()
     {
         // Arrange
@@ -536,6 +563,13 @@ public sealed class AcpChatServiceAdapterTests
 
     private sealed class FakeChatService : IChatService
     {
+        public int DisposeCount { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+        }
+
         public string? CurrentSessionId => null;
 
         public bool IsInitialized => true;
@@ -628,7 +662,7 @@ public sealed class AcpChatServiceAdapterTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

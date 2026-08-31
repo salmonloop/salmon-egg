@@ -16,6 +16,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
@@ -134,56 +135,15 @@ public sealed class MainNavigationViewModelPaneTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static INavigationProjectPreferences CreateProjectPreferences(AppPreferencesViewModel preferences)
         => new NavigationProjectPreferencesAdapter(preferences);
-
-    private sealed class FakeChatSessionCatalog : IConversationCatalog
-    {
-        private readonly List<string> _conversationIds;
-
-        public FakeChatSessionCatalog(params string[] conversationIds)
-        {
-            _conversationIds = new List<string>(conversationIds);
-        }
-
-        public bool IsConversationListLoading { get; set; }
-
-        public int ConversationListVersion { get; private set; }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public string[] GetKnownConversationIds() => _conversationIds.ToArray();
-
-        public IReadOnlyList<ConversationCatalogItem> CreateSnapshot()
-        {
-            var now = DateTime.UtcNow;
-            return _conversationIds.ConvertAll(id => new ConversationCatalogItem(
-                id,
-                id,
-                @"C:\repo\demo",
-                now,
-                now,
-                now));
-        }
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public void RaiseConversationListChanged()
-        {
-            ConversationListVersion++;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConversationListVersion)));
-        }
-    }
 
     private static MutableConversationCatalogDisplayReadModel CreatePresenter(IConversationCatalog chatCatalog)
     {
@@ -243,9 +203,9 @@ public sealed class MainNavigationViewModelPaneTests
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 

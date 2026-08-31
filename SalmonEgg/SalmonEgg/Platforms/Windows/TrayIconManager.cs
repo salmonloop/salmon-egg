@@ -138,8 +138,8 @@ public sealed class TrayIconManager : IDisposable
     private void ShowContextMenu()
     {
         var menu = CreatePopupMenu();
-        AppendMenu(menu, MF_STRING, CmdOpen, "打开");
-        AppendMenu(menu, MF_STRING, CmdExit, "退出");
+        AppendMenu(menu, MF_STRING, CmdOpen, "Open");
+        AppendMenu(menu, MF_STRING, CmdExit, "Exit");
 
         GetCursorPos(out var pt);
         SetForegroundWindow(_hwnd);

@@ -18,11 +18,6 @@ public static class AcpSessionRecoveryPolicy
             return AcpSessionRecoveryMode.Load;
         }
 
-        if (capabilities?.SupportsSessionResume == true)
-        {
-            return AcpSessionRecoveryMode.Resume;
-        }
-
         return AcpSessionRecoveryMode.None;
     }
 
@@ -40,4 +35,11 @@ public static class AcpSessionRecoveryPolicy
 
         return AcpSessionRecoveryMode.None;
     }
+
+    /// <summary>
+    /// Stable V1 cold hydration requires <c>session/load</c>, because V1
+    /// <c>session/resume</c> reattaches without replaying conversation history.
+    /// </summary>
+    public static bool ExpectsHistoryReplayForHydration(AcpSessionRecoveryMode recoveryMode)
+        => recoveryMode == AcpSessionRecoveryMode.Load;
 }

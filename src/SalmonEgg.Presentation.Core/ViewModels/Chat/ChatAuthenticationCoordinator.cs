@@ -14,6 +14,12 @@ using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
+public sealed record AuthenticationHintPresentation(
+    string Message,
+    string? ResourceKey = null,
+    string? Fallback = null,
+    object[]? FormatArgs = null);
+
 public sealed class ChatAuthenticationCoordinator
 {
     private IReadOnlyList<AuthMethodDefinition>? _advertisedAuthMethods;
@@ -50,18 +56,27 @@ public sealed class ChatAuthenticationCoordinator
         ILogger logger,
         Action<string> showTransientNotificationToast,
         AuthMethodDefinition? method,
-        string? messageOverride = null)
+        AuthenticationHintPresentation? messageOverride = null,
+        AuthenticationHintPresentation? requiredFallback = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(showTransientNotificationToast);
 
-        var message =
+        var presentation =
             messageOverride
-            ?? method?.Description
-            ?? "The agent requires authentication before it can respond.";
+            ?? (method?.Description is { } description
+                ? new AuthenticationHintPresentation(description)
+                : null)
+            ?? requiredFallback
+            ?? new AuthenticationHintPresentation(
+                "The agent requires authentication before it can respond.");
 
-        _ = coordinator.SetAuthenticationRequiredAsync(message);
+        _ = coordinator.SetAuthenticationRequiredAsync(
+            presentation.Message,
+            presentation.ResourceKey,
+            presentation.Fallback,
+            presentation.FormatArgs);
 
         if (method != null)
         {
@@ -69,14 +84,16 @@ public sealed class ChatAuthenticationCoordinator
                 "Agent requires authentication. id={MethodId}, name={Name}, hint={Hint}",
                 method.Id,
                 method.Name,
-                message);
+                presentation.Message);
         }
         else
         {
-            logger.LogInformation("Agent requires authentication but did not advertise a usable methodId. hint={Hint}", message);
+            logger.LogInformation(
+                "Agent requires authentication but did not advertise a usable methodId. hint={Hint}",
+                presentation.Message);
         }
 
-        showTransientNotificationToast(message);
+        showTransientNotificationToast(presentation.Message);
     }
 
     public async Task<bool> TryAuthenticateAsync(
@@ -85,7 +102,9 @@ public sealed class ChatAuthenticationCoordinator
         IAcpConnectionCoordinator coordinator,
         ILogger logger,
         Action<string> showTransientNotificationToast,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AuthenticationHintPresentation? requiredFallback = null,
+        Func<string, AuthenticationHintPresentation>? formatAuthenticationFailed = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
@@ -99,11 +118,21 @@ public sealed class ChatAuthenticationCoordinator
         var method = GetPrimaryAuthMethod();
         if (method == null || string.IsNullOrWhiteSpace(method.Id))
         {
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                requiredFallback: requiredFallback);
             return false;
         }
 
-        MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+        MarkAuthenticationRequired(
+            coordinator,
+            logger,
+            showTransientNotificationToast,
+            method,
+            requiredFallback: requiredFallback);
 
         try
         {
@@ -116,13 +145,27 @@ public sealed class ChatAuthenticationCoordinator
         }
         catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
         {
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                requiredFallback: requiredFallback);
             return false;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Authenticate failed");
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method, $"Authentication failed: {ex.Message}");
+            var failedPresentation = formatAuthenticationFailed is null
+                ? new AuthenticationHintPresentation($"Authentication failed: {ex.Message}")
+                : formatAuthenticationFailed(ex.Message);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                messageOverride: failedPresentation,
+                requiredFallback: requiredFallback);
             return false;
         }
     }
@@ -131,12 +174,7 @@ public sealed class ChatAuthenticationCoordinator
         => ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
 
     private AuthMethodDefinition? GetPrimaryAuthMethod()
-        => _advertisedAuthMethods?.FirstOrDefault(IsAgentHandledAuthMethod);
-
-    private static bool IsAgentHandledAuthMethod(AuthMethodDefinition method)
-        => !string.IsNullOrWhiteSpace(method.Id)
-            && (string.IsNullOrWhiteSpace(method.Type)
-                || string.Equals(method.Type, "agent", StringComparison.Ordinal));
+        => _advertisedAuthMethods?.FirstOrDefault(static method => !string.IsNullOrWhiteSpace(method.Id));
 
     private static string? ResolveDisplayedAgentName(AgentInfo? agentInfo)
     {

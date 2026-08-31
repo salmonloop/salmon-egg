@@ -14,16 +14,37 @@
         <Style TargetType="navViews:RemoteProjectSelectionDialog"
                BasedOn="{StaticResource DefaultContentDialogStyle}" />
         <x:Double x:Key="RemoteProjectSelectionDialogMaxWidth">560</x:Double>
-        <x:Double x:Key="RemoteProjectSelectionDialogMaxHeight">560</x:Double>
+        <x:Double x:Key="RemoteProjectSelectionDialogMaxHeight">360</x:Double>
         <x:Double x:Key="RemoteProjectSelectionIconSize">32</x:Double>
         <x:Double x:Key="RemoteProjectSelectionTextSpacing">2</x:Double>
         <x:Double x:Key="RemoteProjectSelectionEmptySpacing">8</x:Double>
         <Thickness x:Key="RemoteProjectSelectionItemPadding">12,10</Thickness>
     </ContentDialog.Resources>
 
-    <Grid MaxWidth="{StaticResource RemoteProjectSelectionDialogMaxWidth}"
+    <Grid x:Name="RemoteProjectSelectionRoot"
+          MaxWidth="{StaticResource RemoteProjectSelectionDialogMaxWidth}"
           MaxHeight="{StaticResource RemoteProjectSelectionDialogMaxHeight}"
           HorizontalAlignment="Stretch">
+        <!-- Short windows: densify dialog max height so the list fits short viewports.
+             Comfortable restores 560 at MinWindowHeight=760. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="RemoteProjectSelectionHeightStates">
+                <VisualState x:Name="RemoteProjectSelectionHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="RemoteProjectSelectionRoot.MaxHeight" Value="360" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="RemoteProjectSelectionHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RemoteProjectSelectionRoot.MaxHeight" Value="560" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <!-- Populated state: a single-selection list projected from the authoritative remote directories. -->
         <ListView x:Name="RemoteProjectList"
                   AutomationProperties.AutomationId="RemoteProjectSelectionDialog.List"
@@ -32,7 +53,8 @@
                   SelectionChanged="OnSelectionChanged"
                   Visibility="{x:Bind ViewModel.HasProjects, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
+                <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
             </ListView.ItemContainerStyle>
@@ -62,7 +84,8 @@
                     VerticalAlignment="Center"
                     Spacing="{StaticResource RemoteProjectSelectionEmptySpacing}"
                     Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-            <FontIcon Glyph="&#xE968;"
+            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                      Glyph="&#xE968;"
                       FontSize="{StaticResource RemoteProjectSelectionIconSize}"
                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                       HorizontalAlignment="Center"

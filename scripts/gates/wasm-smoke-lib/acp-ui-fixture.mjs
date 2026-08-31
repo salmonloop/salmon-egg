@@ -65,7 +65,15 @@ export async function createWebSocketProfile(page, profileName, serverUrl) {
       body: (document.body?.innerText ?? "").slice(0, 2_000)
     }));
     await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
+    await page.waitForSelector(
+      [
+        '[aria-label="StartView.Title"]',
+        '[aria-label="StartView.PromptBox"]',
+        '[aria-label="StartView.Suggestion.ReportGuidance"]',
+        '[aria-label="StartView.AgentSelector"]',
+        '[aria-label="MainNavView"]'
+      ].join(", "),
+      { timeout: 60_000 });
     await navigateToSettingsSection(
       page,
       { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },
@@ -127,7 +135,15 @@ export async function expectPersistedProfileAfterReload(page, baseUrl, profileNa
       await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.waitForTimeout(500);
-      await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
+      await page.waitForSelector(
+      [
+        '[aria-label="StartView.Title"]',
+        '[aria-label="StartView.PromptBox"]',
+        '[aria-label="StartView.Suggestion.ReportGuidance"]',
+        '[aria-label="StartView.AgentSelector"]',
+        '[aria-label="MainNavView"]'
+      ].join(", "),
+      { timeout: 60_000 });
       await navigateToSettingsSection(
         page,
         { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },

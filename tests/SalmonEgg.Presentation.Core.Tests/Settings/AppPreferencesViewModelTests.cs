@@ -9,6 +9,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Threading;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
 
@@ -27,8 +28,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         appSettingsService.Verify(service => service.LoadAsync(), Times.Never);
     }
@@ -69,8 +73,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         uiRuntime.Invocations.Clear();
@@ -116,8 +123,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -146,8 +156,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -170,8 +183,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.Language = "en-US";
@@ -193,8 +209,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.SelectedLanguageOption = vm.LanguageOptions.Single(option => option.Tag == "en-US");
@@ -215,8 +234,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.SelectedThemeOption = vm.ThemeOptions.Single(option => option.Value == "Dark");
@@ -239,8 +261,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.Theme = "Light";
@@ -257,10 +282,19 @@ public class AppPreferencesViewModelTests
     {
         var appSettingsService = new Mock<IAppSettingsService>();
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+        // 捕获最后一次持久化的语言：debounce 的保存在后台线程触发，直接枚举 Moq.Invocations 会
+        // 与并发写竞态，故用回调投影到线程安全 holder（数组元素可作 Volatile 的 ref 目标）供轮询。
+        var lastSavedLanguage = new string?[1];
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .Callback<AppSettings>(settings => Volatile.Write(ref lastSavedLanguage[0], settings.Language))
+            .Returns(Task.CompletedTask);
 
         var startupService = new Mock<IAppStartupService>();
         var languageService = new Mock<IAppLanguageService>();
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
         var capabilities = new Mock<IPlatformCapabilityService>();
         var uiRuntime = new Mock<IUiRuntimeService>();
 
@@ -270,16 +304,23 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         languageService.Invocations.Clear();
         uiRuntime.Invocations.Clear();
+        Volatile.Write(ref lastSavedLanguage[0], null);
 
         vm.Language = "zh-CN";
 
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        // 语言变更经 debounce 后才落副作用；持久化是最后一步，轮询到它落盘即保证整条链完成，
+        // 避免固定 sleep 的时序脆弱，也避免抢在 debounce 保存之前断言。
+        await WaitForConditionAsync(() =>
+            string.Equals(Volatile.Read(ref lastSavedLanguage[0]), "zh-Hans", StringComparison.Ordinal));
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
@@ -361,7 +402,162 @@ public class AppPreferencesViewModelTests
             });
     }
 
-    private static AppPreferencesViewModel CreateViewModel(FakeAppSettingsService settingsService)
+    [Fact]
+    public async Task LoadAsync_RestoresTelemetrySettings()
+    {
+        // 用非默认值，确保断言的是"真的读到了持久化值"而非恰好等于默认值。
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "http://collector.internal:4317",
+            TelemetryAuthHeader = "api-key=test-token"
+        });
+        var vm = CreateViewModel(settingsService);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(vm.TelemetrySharingEnabled);
+        Assert.Equal("http://collector.internal:4317", vm.TelemetryCustomEndpoint);
+        Assert.Equal("api-key=test-token", vm.TelemetryAuthHeader);
+    }
+
+    [Fact]
+    public async Task TelemetrySharingEnabled_DefaultsToOptOut()
+    {
+        // 产品决策：默认开启（opt-out），与 VS Code / Firefox 一致。
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(vm.TelemetrySharingEnabled);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_PersistsTelemetryToggle()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetrySharingEnabled = false;
+
+        // 若 BuildSettings 或 On*Changed 漏接，用户的关闭意图会静默丢失。
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved?.TelemetrySharingEnabled == false);
+    }
+
+    [Fact]
+    public async Task SystemNotifications_WhenPermissionGranted_PersistsEnabledPreference()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var notifications = new RecordingSystemNotificationService(SystemNotificationPermissionResult.Granted);
+        var vm = CreateViewModel(settingsService, notifications);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.SystemNotificationsEnabled = true;
+
+        await WaitForConditionAsync(() => settingsService.LastSaved?.SystemNotificationsEnabled == true);
+
+        Assert.Equal(1, notifications.PermissionRequestCount);
+    }
+
+    [Fact]
+    public async Task SystemNotifications_WhenPermissionDenied_RevertsToggle()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var notifications = new RecordingSystemNotificationService(SystemNotificationPermissionResult.Denied);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var vm = CreateViewModel(settingsService, notifications, ui.Object);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.SystemNotificationsEnabled = true;
+
+        await WaitForConditionAsync(() => !vm.SystemNotificationsEnabled);
+
+        Assert.Equal(1, notifications.PermissionRequestCount);
+        ui.Verify(service => service.ShowInfoAsync("System notification permission was not granted."), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_PreservesCloudConfigSyncRevision()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            CloudConfigSync = new CloudConfigSyncSettings
+            {
+                Enabled = true,
+                ProviderId = "webdav",
+                Revision = 42,
+                IncludeSecrets = true
+            }
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetrySharingEnabled = false;
+
+        await WaitForConditionAsync(() => settingsService.LastSaved is not null);
+
+        Assert.Equal(42, settingsService.LastSaved!.CloudConfigSync.Revision);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_NormalizesBlankTelemetryEndpointToNull()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetryCustomEndpoint = "http://old.endpoint:4317"
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        // 用户清空输入框：必须落成 null，否则空串会被当作无效自定义端点，
+        // 阻断 TelemetrySettings.Build 回退到部署环境变量。
+        vm.TelemetryCustomEndpoint = "   ";
+
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved is not null
+            && settingsService.LastSaved.TelemetryCustomEndpoint is null);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_TrimsTelemetryEndpointWhitespace()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetryCustomEndpoint = "  http://collector:4317  ";
+
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved?.TelemetryCustomEndpoint == "http://collector:4317");
+    }
+
+    [Fact]
+    public async Task ResetToDefaults_RestoresTelemetryDefaults()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "http://custom:4317",
+            TelemetryAuthHeader = "api-key=secret"
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.ResetToDefaults();
+
+        Assert.True(vm.TelemetrySharingEnabled);
+        Assert.Null(vm.TelemetryCustomEndpoint);
+        Assert.Null(vm.TelemetryAuthHeader);
+    }
+
+    private static AppPreferencesViewModel CreateViewModel(
+        FakeAppSettingsService settingsService,
+        ISystemNotificationService? notifications = null,
+        IUiInteractionService? ui = null)
     {
         var startupService = new Mock<IAppStartupService>();
         startupService.SetupGet(s => s.IsSupported).Returns(false);
@@ -375,8 +571,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            ui ?? Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            notifications ?? TestSystemNotificationService.Instance);
     }
 
     private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 5000, int pollDelayMilliseconds = 20)
@@ -409,6 +608,8 @@ public class AppPreferencesViewModelTests
 
         public AppSettings? LastSaved { get; private set; }
 
+        public event EventHandler<AppSettingsSavedEventArgs>? Saved;
+
         public Task<AppSettings> LoadAsync()
         {
             var result = _settings;
@@ -419,8 +620,29 @@ public class AppPreferencesViewModelTests
         public Task SaveAsync(AppSettings settings)
         {
             LastSaved = settings;
+            Saved?.Invoke(this, new AppSettingsSavedEventArgs(settings));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class RecordingSystemNotificationService(SystemNotificationPermissionResult permissionResult)
+        : ISystemNotificationService
+    {
+        public bool IsSupported => true;
+
+        public int PermissionRequestCount { get; private set; }
+
+        public Task<SystemNotificationPermissionResult> RequestPermissionAsync(
+            CancellationToken cancellationToken = default)
+        {
+            PermissionRequestCount++;
+            return Task.FromResult(permissionResult);
+        }
+
+        public Task<SystemNotificationResult> ShowAsync(
+            SystemNotificationRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SystemNotificationResult.Shown);
     }
 
     [Fact]
@@ -460,8 +682,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -501,8 +726,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -530,8 +758,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -546,7 +777,19 @@ public class AppPreferencesViewModelTests
         {
             KeyboardShortcutsEnabled = true
         });
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+        // debounce 的持久化在后台线程触发；用 TaskCompletionSource 等待首个「关闭」落盘，
+        // 避免固定 sleep 的时序脆弱，也避免并发枚举 Moq.Invocations。
+        var shortcutsDisabledSaved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .Returns(Task.CompletedTask)
+            .Callback<AppSettings>(settings =>
+            {
+                if (!settings.KeyboardShortcutsEnabled)
+                {
+                    shortcutsDisabledSaved.TrySetResult();
+                }
+            });
 
         var vm = new AppPreferencesViewModel(
             appSettingsService.Object,
@@ -554,17 +797,255 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.KeyboardShortcutsEnabled = false;
 
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        await shortcutsDisabledSaved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.KeyboardShortcutsEnabled == false)),
             Times.AtLeastOnce);
     }
+
+    [Fact]
+    public async Task LaunchOnStartup_WhenOsApplyDenied_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            LaunchOnStartup = false
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(true);
+        startupService.Setup(s => s.GetLaunchOnStartupAsync()).ReturnsAsync(false);
+        startupService.Setup(s => s.SetLaunchOnStartupAsync(true)).ReturnsAsync(false);
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            Mock.Of<IAppLanguageService>(),
+            capabilities.Object,
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.False(vm.LaunchOnStartup);
+
+        vm.LaunchOnStartup = true;
+
+        // ApplyLaunchOnStartupAsync is fire-and-forget; wait for revert + dialog.
+        for (var i = 0; i < 50 && vm.LaunchOnStartup; i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(vm.LaunchOnStartup);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to update launch on startup. Please try again later."),
+            Times.Once);
+        startupService.Verify(s => s.SetLaunchOnStartupAsync(true), Times.Once);
+        startupService.Verify(s => s.SetLaunchOnStartupAsync(false), Times.Never);
+    }
+
+    [Fact]
+    public async Task LaunchOnStartup_WhenOsApplyThrows_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            LaunchOnStartup = false
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(true);
+        startupService.Setup(s => s.GetLaunchOnStartupAsync()).ReturnsAsync(false);
+        startupService.Setup(s => s.SetLaunchOnStartupAsync(true))
+            .ThrowsAsync(new InvalidOperationException("denied"));
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            Mock.Of<IAppLanguageService>(),
+            capabilities.Object,
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.LaunchOnStartup = true;
+
+        for (var i = 0; i < 50 && vm.LaunchOnStartup; i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(vm.LaunchOnStartup);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to update launch on startup. Please try again later."),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenApplyFails_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            Language = "en-US"
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync("en-US"))
+            .Returns(Task.CompletedTask);
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync("zh-Hans"))
+            .ThrowsAsync(new InvalidOperationException("apply failed"));
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLanguageOverride).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var uiRuntime = new Mock<IUiRuntimeService>();
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("en-US", vm.Language);
+        languageService.Invocations.Clear();
+        uiRuntime.Invocations.Clear();
+
+        vm.Language = "zh-Hans";
+
+        for (var i = 0; i < 50 && string.Equals(vm.Language, "zh-Hans", StringComparison.Ordinal); i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("en-US", vm.Language);
+        Assert.Equal("en-US", vm.SelectedLanguageOption?.Tag);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to change language. Please try again later."),
+            Times.Once);
+        uiRuntime.Verify(s => s.ReloadShell(), Times.Never);
+        languageService.Verify(s => s.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
+        languageService.Verify(s => s.ApplyLanguageOverrideAsync("en-US"), Times.Never);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_WhenSaveFails_SurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .ThrowsAsync(new InvalidOperationException("disk full"));
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        ui.Invocations.Clear();
+
+        vm.IsAnimationEnabled = !vm.IsAnimationEnabled;
+
+        for (var i = 0; i < 80; i++)
+        {
+            if (ui.Invocations.Count > 0)
+            {
+                break;
+            }
+
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to save app settings. Please try again later."),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WhenLoadFails_SurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService
+            .Setup(s => s.LoadAsync())
+            .ThrowsAsync(new InvalidOperationException("corrupt settings"));
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to load app settings. Please try again later."),
+            Times.Once);
+        Assert.True(vm.IsLoaded);
+    }
+
 }

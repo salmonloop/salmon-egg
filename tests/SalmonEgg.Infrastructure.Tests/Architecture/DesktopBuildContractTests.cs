@@ -65,7 +65,15 @@ public sealed class DesktopBuildContractTests
                 .Any(static write => (string?)write.Attribute("File") == "$(SalmonEggGeneratedApplicationManifest)"))
             .Single();
 
-        Assert.Equal("'$(SalmonEggGeneratedApplicationManifest)' != ''", (string?)manifestGenerationTarget.Attribute("Condition"));
+        // The condition mirrors MinVer's own skip conditions: a design-time or skipped MinVer would
+        // make the DependsOnTargets reference resolve to a missing target (MSB4057).
+        Assert.Equal(
+            "'$(SalmonEggGeneratedApplicationManifest)' != '' AND '$(DesignTimeBuild)' != 'true' AND '$(MinVerSkip)' != 'true'",
+            (string?)manifestGenerationTarget.Attribute("Condition"));
+        // The version substitution needs MinVer's output, and the WindowsAppSDK mt.exe merge consumes
+        // the manifest before BeforeCompile, so the target must pull MinVer in itself rather than
+        // hang off AfterTargets="MinVer" (that hook fires too late on a clean obj).
+        Assert.Equal("MinVer", (string?)manifestGenerationTarget.Attribute("DependsOnTargets"));
     }
 
     private static string LoadText(string relativePath)

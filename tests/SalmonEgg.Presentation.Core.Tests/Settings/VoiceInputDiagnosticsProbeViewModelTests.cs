@@ -20,7 +20,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
     {
         var service = new FakeVoiceInputService();
         var signalService = new FakeAudioInputSignalDiagnosticsService();
-        var viewModel = CreateViewModel(service, signalService: signalService);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, signalService: signalService, localizer: localizer);
 
         await viewModel.StartProbeCommand.ExecuteAsync(null);
         signalService.SetSnapshot(new AudioInputSignalDiagnosticsSnapshot(
@@ -32,16 +33,17 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             FirstNonSilentSampleObservedAt: DateTimeOffset.Now.AddMilliseconds(-200),
             LastNonSilentSampleObservedAt: DateTimeOffset.Now.AddMilliseconds(-20),
             FailureMessage: null));
-        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(
+            viewModel.ProbeSignalObservationText.Contains("0.42", StringComparison.Ordinal)));
         service.RaisePartial("测试");
         service.RaiseFinal("测试语音");
         service.RaiseSessionEnded();
 
         Assert.False(viewModel.IsRunning);
-        Assert.Contains("final", viewModel.ProbeStatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(localizer["VoiceDiagnostics_SessionFinalReceived"], viewModel.ProbeStatusText);
         Assert.Equal("测试语音", viewModel.ProbeCapturedText);
-        Assert.DoesNotContain("暂无", viewModel.ProbeTimelineText, StringComparison.Ordinal);
-        Assert.Contains("非静音", viewModel.ProbeSignalObservationText);
+        Assert.DoesNotContain(localizer["VoiceDiagnostics_ProbeTimelinePending"], viewModel.ProbeTimelineText, StringComparison.Ordinal);
+        Assert.Contains("non-silent", viewModel.ProbeSignalObservationText, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("0.42", viewModel.ProbeSignalObservationText);
     }
 
@@ -54,7 +56,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             DelayStartAsync = true
         };
         var dispatcher = new TrackingUiDispatcher();
-        var viewModel = CreateViewModel(service, dispatcher);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, dispatcher, localizer: localizer);
         var startStatusRaisedOnUi = false;
         var listeningStatusRaisedOnUi = false;
 
@@ -65,12 +68,12 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
                 return;
             }
 
-            if (string.Equals(viewModel.ProbeStatusText, "正在启动独立诊断...", StringComparison.Ordinal))
+            if (string.Equals(viewModel.ProbeStatusText, localizer["VoiceDiagnostics_ProbeStarting"], StringComparison.Ordinal))
             {
                 startStatusRaisedOnUi = dispatcher.IsExecutingCallback;
             }
 
-            if (string.Equals(viewModel.ProbeStatusText, "诊断会话已 ready，正在监听语音。", StringComparison.Ordinal))
+            if (string.Equals(viewModel.ProbeStatusText, localizer["VoiceDiagnostics_ProbeListening"], StringComparison.Ordinal))
             {
                 listeningStatusRaisedOnUi = dispatcher.IsExecutingCallback;
             }
@@ -87,7 +90,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
     {
         var service = new FakeVoiceInputService();
         var dispatcher = new TrackingUiDispatcher();
-        var viewModel = CreateViewModel(service, dispatcher);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, dispatcher, localizer: localizer);
         var stoppingStatusRaisedOnUi = false;
 
         viewModel.PropertyChanged += (_, args) =>
@@ -97,7 +101,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
                 return;
             }
 
-            if (string.Equals(viewModel.ProbeStatusText, "正在停止独立诊断...", StringComparison.Ordinal))
+            if (string.Equals(viewModel.ProbeStatusText, localizer["VoiceDiagnostics_ProbeStopping"], StringComparison.Ordinal))
             {
                 stoppingStatusRaisedOnUi = dispatcher.IsExecutingCallback;
             }
@@ -114,7 +118,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
     {
         var service = new FakeVoiceInputService();
         var signalService = new FakeAudioInputSignalDiagnosticsService();
-        var viewModel = CreateViewModel(service, signalService: signalService);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, signalService: signalService, localizer: localizer);
 
         await viewModel.StartProbeCommand.ExecuteAsync(null);
         signalService.SetSnapshot(new AudioInputSignalDiagnosticsSnapshot(
@@ -126,13 +131,14 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             FirstNonSilentSampleObservedAt: null,
             LastNonSilentSampleObservedAt: null,
             FailureMessage: null));
-        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(
+            viewModel.ProbeSignalObservationText.Contains("0.03", StringComparison.Ordinal)));
         await viewModel.StopProbeCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.IsRunning);
-        Assert.Contains("没有收到任何识别结果", viewModel.ProbeStatusText);
-        Assert.Equal("暂无识别文本。", viewModel.ProbeCapturedText);
-        Assert.Contains("静音", viewModel.ProbeSignalObservationText);
+        Assert.Equal(localizer["VoiceDiagnostics_SessionReadyWithoutRecognition"], viewModel.ProbeStatusText);
+        Assert.Equal(localizer["VoiceDiagnostics_ProbeNoCapturedText"], viewModel.ProbeCapturedText);
+        Assert.Contains("no non-silent", viewModel.ProbeSignalObservationText, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("0.03", viewModel.ProbeSignalObservationText);
     }
 
@@ -200,25 +206,27 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         {
             IsListeningOverride = true
         };
-        var viewModel = CreateViewModel(service);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, localizer: localizer);
 
         await viewModel.StartProbeCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.IsRunning);
-        Assert.Contains("占用", viewModel.ProbeStatusText);
+        Assert.Equal(localizer["VoiceDiagnostics_ProbeBusy"], viewModel.ProbeStatusText);
     }
 
     [Fact]
     public async Task StartProbeAsync_WhenErrorOccurs_ShowsFailureState()
     {
         var service = new FakeVoiceInputService();
-        var viewModel = CreateViewModel(service);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, localizer: localizer);
 
         await viewModel.StartProbeCommand.ExecuteAsync(null);
         service.RaiseError("probe error");
 
         Assert.False(viewModel.IsRunning);
-        Assert.Contains("失败", viewModel.ProbeStatusText);
+        Assert.Equal(localizer["VoiceDiagnostics_SessionFailedWithMessage", "probe error"].Value, viewModel.ProbeStatusText);
         Assert.Contains("probe error", viewModel.ProbeStatusText);
     }
 
@@ -329,7 +337,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
         service.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(service.StartCount == 1));
 
         Assert.Equal(1, service.StartCount);
         Assert.False(viewModel.IsRunning);
@@ -340,12 +348,13 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         IUiDispatcher? dispatcher = null,
         FakeAudioInputSignalDiagnosticsService? signalService = null,
         IApplicationActivationSignalSource? activationSource = null,
-        Mock<ILogger<VoiceInputDiagnosticsProbeViewModel>>? logger = null)
+        Mock<ILogger<VoiceInputDiagnosticsProbeViewModel>>? logger = null,
+        TestCoreStringLocalizer? localizer = null)
         => new(
             service,
             signalService ?? new FakeAudioInputSignalDiagnosticsService(),
             dispatcher ?? new TrackingUiDispatcher(),
-            new TestCoreStringLocalizer(),
+            localizer ?? new TestCoreStringLocalizer(),
             logger?.Object ?? Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>(),
             activationSource);
 

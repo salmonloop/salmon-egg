@@ -170,7 +170,12 @@ public sealed class ListViewTranscriptItemsSource :
             return message;
         }
 
-        var projected = _source.CreateItem(index);
+        // Materialize through the virtualized collection indexer, not CreateItem.
+        // CreateItem projects without registering the source cache, so ListView would
+        // hold a different VM identity than streaming patches. That mismatch forces
+        // Replace → native Reset and rematerializes mixed templates on Skia, which
+        // can leave blank transcript rows under rich tool-call/markdown histories.
+        var projected = _source[index];
         _cache[index] = projected;
         return projected;
     }

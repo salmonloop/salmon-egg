@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -40,6 +41,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     private readonly ILogger<AgentProfileItemViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly Action<string, string>? _operationErrorReporter;
     private ConnectionTransitionKind _transitionKind;
     private bool _disposed;
 
@@ -102,7 +104,13 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     /// <summary>
     /// The transport-specific FontIcon glyph code extracted from the server configuration.
     /// </summary>
-    public string TransportGlyph => _profile.TransportGlyph;
+    public string TransportGlyph => AcpTransportGlyph.Resolve(_profile.Transport);
+
+    /// <summary>
+    /// True only when the setup wizard explicitly offered a connection test and the user skipped it.
+    /// Unknown profiles stay visually neutral so older and externally-created profiles are not mislabeled.
+    /// </summary>
+    public bool IsUnverified => _profile.Verification.IsUnverified;
 
     /// <summary>
     /// Short status string suitable for a badge or subtitle.
@@ -116,11 +124,6 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         : IsConnected
             ? _localizer["AgentProfile_StatusConnected"]
             : _localizer["AgentProfile_StatusDisconnected"];
-
-    /// <summary>
-    /// Localized text for the reconnect menu item in the "more" flyout.
-    /// </summary>
-    public string Acp_ProfileReconnectText => _localizer["Acp_ProfileReconnect.Text"];
 
     public IAsyncRelayCommand<bool> ApplyConnectionToggleRequestCommand { get; }
 
@@ -139,7 +142,8 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         ISettingsAcpConnectionCommands commands,
         ILogger<AgentProfileItemViewModel> logger,
         IUiDispatcher uiDispatcher,
-        IStringLocalizer<CoreStrings> localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        Action<string, string>? operationErrorReporter = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(registry);
@@ -154,6 +158,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         _logger = logger;
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _operationErrorReporter = operationErrorReporter;
 
         ProfileId = profile.Id;
         _name = profile.Name;
@@ -185,12 +190,12 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         Name = profile.Name;
         EndpointDescription = BuildEndpointDescription(profile);
         OnPropertyChanged(nameof(TransportGlyph));
+        OnPropertyChanged(nameof(IsUnverified));
     }
 
     internal void ReprojectLocalizedState()
     {
         OnPropertyChanged(nameof(StatusLabel));
-        OnPropertyChanged(nameof(Acp_ProfileReconnectText));
     }
 
     // ── Commands ─────────────────────────────────────────────────────────────
@@ -224,6 +229,11 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         ReconnectCommand.NotifyCanExecuteChanged();
     }
 
+    private void ReportOperationError(string resourceKey, string fallback)
+    {
+        _operationErrorReporter?.Invoke(resourceKey, fallback);
+    }
+
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
         BeginPendingTransition(ConnectionTransitionKind.Connecting);
@@ -239,6 +249,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_ConnectFailed",
+                "Failed to connect to the agent profile. Please try again later.");
         }
         finally
         {
@@ -271,6 +284,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to disconnect profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_DisconnectFailed",
+                "Failed to disconnect the agent profile. Please try again later.");
         }
         finally
         {
@@ -304,6 +320,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reconnect profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_ReconnectFailed",
+                "Failed to reconnect the agent profile. Please try again later.");
         }
         finally
         {

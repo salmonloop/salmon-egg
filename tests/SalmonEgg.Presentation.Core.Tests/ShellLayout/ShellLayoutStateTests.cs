@@ -15,5 +15,7 @@ public class ShellLayoutStateTests
         Assert.Null(state.UserNavOpenIntent);
         Assert.Equal(RightPanelMode.None, state.DesiredRightPanelMode);
         Assert.Equal(BottomPanelMode.None, state.DesiredBottomPanelMode);
+        Assert.False(state.HasRightPanelContent);
+        Assert.Equal(0, state.RightPanelContentAvailabilityVersion);
     }
 }

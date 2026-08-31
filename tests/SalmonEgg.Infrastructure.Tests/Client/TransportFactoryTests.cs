@@ -155,11 +155,11 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
-    public void CreateTransport_HttpSse_Should_Return_NetworkTransportAdapter()
+    public void CreateTransport_StreamableHttp_Should_Return_NetworkTransportAdapter()
     {
         var factory = CreateFactory();
 
-        var transport = factory.CreateTransport(TransportType.HttpSse, url: "https://example.com/events");
+        var transport = factory.CreateTransport(TransportType.StreamableHttp, url: "https://example.com/events");
 
         Assert.IsType<NetworkTransportAdapter>(transport);
     }
@@ -190,23 +190,43 @@ public sealed class TransportFactoryTests
     [Fact]
     public async Task CreateTransport_Stdio_WithQuotedScriptPath_CanConnect()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return;
-        }
-
         var factory = CreateFactory(supportsStdioTransport: true);
         var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
         Directory.CreateDirectory(tempDir);
-        var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
-        await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2", TestContext.Current.CancellationToken);
+
+        string command;
+        string[] arguments;
+        string scriptPath;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            scriptPath = Path.Combine(tempDir, "slow agent.ps1");
+            await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2", TestContext.Current.CancellationToken);
+            command = "powershell.exe";
+            arguments = ["-NoLogo", "-NoProfile", "-File", scriptPath];
+        }
+        else
+        {
+            scriptPath = Path.Combine(tempDir, "slow agent.sh");
+            await File.WriteAllTextAsync(
+                scriptPath,
+                "#!/bin/sh\nsleep 2\n",
+                TestContext.Current.CancellationToken);
+            File.SetUnixFileMode(
+                scriptPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            command = "/bin/sh";
+            arguments = [scriptPath];
+        }
 
         try
         {
             var transport = factory.CreateTransport(
                 TransportType.Stdio,
-                command: "powershell.exe",
-                arguments: ["-NoLogo", "-NoProfile", "-File", scriptPath]);
+                command: command,
+                arguments: arguments);
 
             var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
             Assert.True(
@@ -218,7 +238,7 @@ public sealed class TransportFactoryTests
         {
             try
             {
-                Directory.Delete(Path.GetDirectoryName(scriptPath)!, recursive: true);
+                Directory.Delete(tempDir, recursive: true);
             }
             catch
             {
@@ -232,8 +252,11 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory(supportsStdioTransport: true);
 
-        Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.Stdio, command: null, arguments: null));
+
+        Assert.Equal("command", ex.ParamName);
+        Assert.Contains("Stdio transport requires a command", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -250,8 +273,11 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory();
 
-        Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.WebSocket, url: "not-a-url"));
+
+        Assert.Equal("url", ex.ParamName);
+        Assert.Contains("Invalid WebSocket URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,12 +317,15 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
-    public void CreateTransport_HttpSse_Should_Throw_When_Url_Empty()
+    public void CreateTransport_StreamableHttp_Should_Throw_When_Url_Empty()
     {
         var factory = CreateFactory();
 
-        Assert.Throws<ArgumentException>(() =>
-            factory.CreateTransport(TransportType.HttpSse, url: " "));
+        var ex = Assert.Throws<ArgumentException>(() =>
+            factory.CreateTransport(TransportType.StreamableHttp, url: " "));
+
+        Assert.Equal("url", ex.ParamName);
+        Assert.Contains("Streamable HTTP transport requires a URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -304,8 +333,10 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory();
 
-        Assert.Throws<NotSupportedException>(() =>
+        var ex = Assert.Throws<NotSupportedException>(() =>
             factory.CreateTransport((TransportType)999));
+
+        Assert.Contains("Unsupported transport type", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

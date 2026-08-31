@@ -26,16 +26,15 @@
     KeyboardAcceleratorPlacementMode="Hidden">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <!-- BoolToVisibility/InverseBoolToVisibility 由 ChatStyles(App 级合并)全局提供,不在页面重复注册 -->
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter" />
         <converters:PlanStatusLabelConverter x:Key="PlanStatusLabelConverter" />
         <converters:PlanPriorityLabelConverter x:Key="PlanPriorityLabelConverter" />
         <converters:TaskOverviewChangeKindLabelConverter x:Key="TaskOverviewChangeKindLabelConverter" />
-        <converters:EnumToBooleanConverter x:Key="EnumToBoolConverter" />
+        <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
-        <converters:LayoutPaddingConverter x:Key="PaddingConverter" />
+        <converters:LayoutPaddingConverter x:Key="LayoutPaddingConverter" />
         <converters:GridLengthConverter x:Key="GridLengthConverter" />
 
         <x:Double x:Key="NavCompactPaneLength">72</x:Double>
@@ -119,14 +118,16 @@
                                         AutomationProperties.AutomationId="MainNav.AddProject.Local"
                                         Command="{x:Bind AddLocalProjectCommand}">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE838;" />
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          Glyph="&#xE838;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem x:Uid="NavAddProjectRemoteItem"
                                         AutomationProperties.AutomationId="MainNav.AddProject.Remote"
                                         Command="{x:Bind SelectRemoteProjectCommand}">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE968;" />
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          Glyph="&#xE968;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                     </MenuFlyout>
@@ -146,20 +147,29 @@
                 </NavigationViewItem.Icon>
 
                 <NavigationViewItem.Content>
-                    <Grid ColumnDefinitions="*">
+                    <!--
+                      Scope ContextFlyout to the project content leaf, not the hierarchical
+                      NavigationViewItem. Session children live under MenuItemsHost (sibling of
+                      Content), so they are not descendants of this grid. Putting ContextFlyout on
+                      the parent NVI is wrong on Uno 6.5.x Skia: ContextRequested does not stop
+                      bubbling after the child flyout opens (unoplatform/uno#23440), so session
+                      right-click also opens the project menu. Leaf-scoped flyout matches WinUI
+                      ownership and is correct on fixed Uno versions too.
+                    -->
+                    <Grid ColumnDefinitions="*"
+                          Background="Transparent">
+                        <Grid.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem x:Uid="ProjectNavNewSessionItem"
+                                                Command="{x:Bind CreateSessionCommand}" />
+                            </MenuFlyout>
+                        </Grid.ContextFlyout>
                         <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="1"
                                    VerticalAlignment="Center" />
                     </Grid>
                 </NavigationViewItem.Content>
-
-                <NavigationViewItem.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem x:Uid="ProjectNavNewSessionItem"
-                                        Command="{x:Bind CreateSessionCommand}" />
-                    </MenuFlyout>
-                </NavigationViewItem.ContextFlyout>
             </NavigationViewItem>
         </DataTemplate>
 
@@ -198,13 +208,12 @@
                                    Text="{x:Bind RelativeTimeText, Mode=OneWay}"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Opacity="0.55"
                                    Margin="8,0,0,0"/>
                     </Grid>
                 </NavigationViewItem.Content>
 
                 <NavigationViewItem.ContextFlyout>
-                    <MenuFlyout Closed="OnSessionNavFlyoutClosed">
+                    <MenuFlyout>
                         <MenuFlyoutItem x:Uid="SessionNavArchiveItem"
                                         AutomationProperties.AutomationId="MainNav.Session.Context.Archive"
                                         Click="OnSessionArchiveMenuItemClick"
@@ -313,6 +322,29 @@
     <Grid x:Name="LayoutRoot"
           XYFocusKeyboardNavigation="Enabled">
         <VisualStateManager.VisualStateGroups>
+            <!-- Keep auxiliary chrome compact on short windows and restore comfortable spacing
+                 when the viewport is tall enough. Mirrors Start/Discover MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="TaskOverviewHeightStates">
+                <VisualState x:Name="TaskOverviewHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="RightPanelHeader.MinHeight" Value="48" />
+                        <Setter Target="RightPanelHeader.Padding" Value="12,6,8,6" />
+                        <Setter Target="RightPanelContentStack.Padding" Value="12" />
+                        <Setter Target="RightPanelContentStack.Spacing" Value="12" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="TaskOverviewHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RightPanelHeader.MinHeight" Value="64" />
+                        <Setter Target="RightPanelHeader.Padding" Value="16,8,8,8" />
+                        <Setter Target="RightPanelContentStack.Padding" Value="16" />
+                        <Setter Target="RightPanelContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -330,7 +362,7 @@
             <Grid x:Name="AppTitleBarLayoutRoot">
                 <Grid x:Name="TitleBarDragRegion" Background="Transparent" />
                 <Grid x:Name="AppTitleBarContent"
-                      Padding="{x:Bind LayoutVM.TitleBarPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}">
+                      Padding="{x:Bind LayoutVM.TitleBarPadding, Mode=OneWay, Converter={StaticResource LayoutPaddingConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -397,6 +429,7 @@
                                     <FontIcon Grid.Column="0"
                                               Glyph="{x:Bind IconGlyph}"
                                               Margin="0,0,12,0"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="16"
                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                               Visibility="{x:Bind IconGlyph, Converter={StaticResource BoolToVisibilityConverter}}" />
@@ -408,7 +441,7 @@
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{x:Bind SecondaryText}"
                                                    FontSize="12"
-                                                   Opacity="0.7"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                    TextTrimming="CharacterEllipsis"
                                                    Visibility="{x:Bind SecondaryText, Converter={StaticResource BoolToVisibilityConverter}}" />
                                     </StackPanel>
@@ -449,20 +482,20 @@
                                        Content="Icon"
                                        Command="{x:Bind LayoutVM.ToggleBottomPanelCommand}"
                                        ContentTemplate="{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}"
-                                       IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}" />
+                                       IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dock}" />
                         <ToggleButton x:Name="TaskOverviewPanelButton"
                                       x:Uid="TaskOverviewPanelButton"
                                       AutomationProperties.AutomationId="TitleBar.TaskOverviewPanel"
                                       Tag="TaskOverview"
                                       Style="{StaticResource TitleBarToggleButtonStyle}"
                                       XYFocusDown="{x:Bind MainNavView, Mode=OneWay}"
-                                      Visibility="{x:Bind LayoutVM.ShowAuxiliaryTitleBarButtons, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                      Visibility="{x:Bind LayoutVM.CanToggleTaskOverviewPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                       IsEnabled="{x:Bind LayoutVM.CanToggleTaskOverviewPanel, Mode=OneWay}"
                                       ToolTipService.ToolTip="{x:Bind GetTaskOverviewPanelButtonToolTip(LayoutVM.CanToggleTaskOverviewPanel), Mode=OneWay}"
                                       Content="Icon"
                                       Command="{x:Bind LayoutVM.ToggleTaskOverviewPanelCommand}"
                                       ContentTemplate="{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}" />
+                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=TaskOverview}" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -486,7 +519,7 @@
                             IsSettingsVisible="False"
                             AlwaysShowHeader="False"
                             SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
-                            Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
+                            Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource LayoutPaddingConverter}}"
                             MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
                             FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
                             MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"
@@ -574,7 +607,10 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <Grid Grid.Row="0" MinHeight="64" Padding="16,8,8,8">
+                                <Grid x:Name="RightPanelHeader"
+                                      Grid.Row="0"
+                                      MinHeight="48"
+                                      Padding="12,6,8,6">
                                     <StackPanel VerticalAlignment="Center"
                                                 Spacing="2">
                                         <TextBlock x:Name="RightPanelTitle"
@@ -591,7 +627,9 @@
 
                                 <ScrollViewer Grid.Row="1"
                                               AutomationProperties.AutomationId="RightPanel.TaskOverviewRoot">
-                                    <StackPanel Padding="16" Spacing="16">
+                                    <StackPanel x:Name="RightPanelContentStack"
+                                                Padding="12"
+                                                Spacing="12">
                                         <StackPanel AutomationProperties.AutomationId="RightPanel.TaskOverview.CurrentPlan"
                                                     AutomationProperties.Name="{x:Bind GetTaskOverviewCurrentPlanAutomationName(ChatVM.TaskOverviewCurrentPlanContent, ChatVM.TaskOverviewCurrentPlanStatus, ChatVM.TaskOverviewCurrentPlanPriority), Mode=OneWay}"
                                                     Spacing="8"
@@ -663,13 +701,13 @@
                                                        Visibility="{x:Bind ChatVM.ShouldShowTaskOverviewMorePlanItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                                         </StackPanel>
 
-                                        <StackPanel Spacing="8">
+                                        <StackPanel Spacing="8"
+                                                    Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowChangesList, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <TextBlock x:Uid="TaskOverviewChangesSectionTitle"
                                                        Style="{ThemeResource BodyStrongTextBlockStyle}" />
                                             <ListView AutomationProperties.AutomationId="RightPanel.TaskOverview.ChangesList"
                                                       ItemsSource="{x:Bind ChatVM.TaskOverviewVisibleChanges, Mode=OneWay}"
-                                                      SelectionMode="None"
-                                                      Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowChangesList, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                      SelectionMode="None">
                                                 <ListView.ItemTemplate>
                                                     <DataTemplate x:DataType="taskOverview:TaskOverviewChangeViewModel">
                                                         <Grid Padding="0,8"
@@ -704,21 +742,6 @@
                                                        Visibility="{x:Bind ChatVM.ShouldShowTaskOverviewMoreChanges, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                                         </StackPanel>
 
-                                        <StackPanel Visibility="{x:Bind ChatVM.TaskOverviewState.ShouldShowEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    Margin="0,40">
-                                            <TextBlock x:Uid="TaskOverviewEmptyTitle"
-                                                       AutomationProperties.AutomationId="RightPanel.TaskOverview.EmptyTitle"
-                                                       FontSize="16"
-                                                       FontWeight="SemiBold"
-                                                       HorizontalAlignment="Center" />
-                                            <TextBlock x:Uid="TaskOverviewEmptySubtitle"
-                                                       Opacity="0.7"
-                                                       Margin="0,8,0,0"
-                                                       TextAlignment="Center"
-                                                       HorizontalAlignment="Center" />
-                                        </StackPanel>
                                     </StackPanel>
                                 </ScrollViewer>
 
@@ -774,6 +797,44 @@
                     <TranslateTransform x:Name="LeftNavResizerTransform" X="{x:Bind LayoutVM.LeftNavResizerLeft, Mode=OneWay}" />
                 </controls:ResizeGrip.RenderTransform>
             </controls:ResizeGrip>
+
+            <!-- 关闭遮罩（issue #126）：清理超过阈值才出现，结构照 ChatViewLoadingOverlay。
+                 文案由 ShellShutdownOverlayViewModel 按 CoreStrings 本地化，不占 x:Uid 的 Text 面。 -->
+            <ContentControl x:Name="ShellShutdownOverlay"
+                            x:Uid="ShellShutdownOverlay"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            IsTabStop="False"
+                            AutomationProperties.AutomationId="Shell.ShutdownOverlay"
+                            Visibility="{x:Bind ShutdownOverlayVM.IsOverlayVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                            Opacity="0.85"
+                            AutomationProperties.AutomationId="Shell.ShutdownOverlayMask" />
+
+                    <Grid>
+                        <Border VerticalAlignment="Bottom"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,0,48"
+                                Padding="16,8"
+                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="20">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <ProgressRing IsActive="True" Width="16" Height="16" />
+                                <TextBlock AutomationProperties.AutomationId="Shell.ShutdownOverlayStatus"
+                                           Text="{x:Bind ShutdownOverlayVM.StatusText, Mode=OneWay}"
+                                           FontSize="12"
+                                           FontWeight="Medium"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </ContentControl>
         </Grid>
     </Grid>
 </Page>

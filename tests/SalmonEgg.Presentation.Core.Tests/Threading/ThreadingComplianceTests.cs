@@ -40,6 +40,7 @@ public sealed class ThreadingComplianceTests
             Mock.Of<IDiscoverSessionsConnectionFacade>(),
             Mock.Of<INavigationProjectSelectionStore>(),
             shellNavigation.Object,
+            new SettingsSectionSelectionStore(),
             Mock.Of<ILogger<NavigationCoordinator>>());
 
         var invokeStopwatch = Stopwatch.StartNew();

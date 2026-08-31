@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.ViewModels;
 using Xunit;
 
@@ -14,7 +16,58 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class ConfigurationEditorViewModelTests
 {
     [Fact]
-    public void TransportOptions_Should_PresentStdioAsSubprocessTransport()
+    public void TransportOptions_Should_UseLocalizedTransportLabels()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            localizer,
+            logger.Object);
+
+        Assert.Equal(localizer["AcpConnection_TransportStdio"].Value, viewModel.TransportOptions[0].Name);
+        Assert.Equal(
+            new[]
+            {
+                localizer["AcpConnection_TransportStdio"].Value,
+                localizer["AcpConnection_TransportWebSocket"].Value,
+                localizer["AcpConnection_TransportStreamableHttp"].Value
+            },
+            viewModel.TransportOptions.Select(option => option.Name).ToArray());
+    }
+
+    [Fact]
+    public void ProxyModeOptions_Should_UseLocalizedProxyModeLabels()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            localizer,
+            logger.Object);
+
+        Assert.Equal(
+            new[]
+            {
+                localizer["AgentProfileEditor_ProxyModeSystem"].Value,
+                localizer["AgentProfileEditor_ProxyModeNone"].Value,
+                localizer["AgentProfileEditor_ProxyModeCustom"].Value
+            },
+            viewModel.ProxyModeOptions.Select(option => option.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenValidationFails_UsesEnglishErrorPrefix()
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
@@ -24,9 +77,19 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
-        Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+        viewModel.LoadBlankConfiguration();
+        viewModel.Name = string.Empty;
+        viewModel.Transport = TransportType.WebSocket;
+        viewModel.ServerUrl = "not-a-url";
+
+        await viewModel.SaveConfigurationAsync();
+
+        Assert.True(viewModel.HasError);
+        Assert.StartsWith("Validation failed:", viewModel.ErrorMessage, StringComparison.Ordinal);
+        configurationService.Verify(x => x.SaveConfigurationAsync(It.IsAny<ServerConfiguration>()), Times.Never);
     }
 
     [Fact]
@@ -40,6 +103,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
@@ -57,6 +121,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -77,6 +142,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadConfiguration(new ServerConfiguration
@@ -104,6 +170,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -123,6 +190,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadConfiguration(new ServerConfiguration
@@ -154,6 +222,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -174,6 +243,76 @@ public sealed class ConfigurationEditorViewModelTests
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WhenProfileIsMissing_LoadsBlankEditor()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(x => x.LoadConfigurationAsync("missing-profile"))
+            .ReturnsAsync((ServerConfiguration?)null);
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("missing-profile");
+
+        Assert.False(viewModel.HasError);
+        Assert.False(viewModel.HasProfileLoadError);
+        Assert.False(viewModel.IsEditing);
+        Assert.True(viewModel.CanSaveConfiguration);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WhenReadFails_PreservesRetryableNonSaveableErrorState()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(x => x.LoadConfigurationAsync("profile-1"))
+            .ThrowsAsync(new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "The configuration file could not be read."));
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("profile-1");
+
+        Assert.True(viewModel.HasError);
+        Assert.Contains("Failed to load configuration", viewModel.ErrorMessage, StringComparison.Ordinal);
+        Assert.True(viewModel.HasProfileLoadError);
+        Assert.True(viewModel.CanRetryProfileLoad);
+        Assert.False(viewModel.CanSaveConfiguration);
+
+        await viewModel.SaveConfigurationAsync();
+
+        configurationService.Verify(x => x.SaveConfigurationAsync(It.IsAny<ServerConfiguration>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RetryProfileLoadAsync_WhenRetrySucceeds_ClearsLoadErrorAndRestoresEditing()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .SetupSequence(x => x.LoadConfigurationAsync("profile-1"))
+            .ThrowsAsync(new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "The configuration file could not be read."))
+            .ReturnsAsync(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Recovered agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://example.com/acp/ws"
+            });
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("profile-1");
+        await viewModel.RetryProfileLoadCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.HasError);
+        Assert.False(viewModel.HasProfileLoadError);
+        Assert.False(viewModel.CanRetryProfileLoad);
+        Assert.True(viewModel.CanSaveConfiguration);
+        Assert.True(viewModel.IsEditing);
+        Assert.Equal("Recovered agent", viewModel.Name);
+    }
+
+    [Fact]
     public async Task SaveConfigurationAsync_WhenSecureStorageUnavailable_ShouldExposeActionableError()
     {
         var validator = new ServerConfigurationValidator();
@@ -189,6 +328,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -204,6 +344,14 @@ public sealed class ConfigurationEditorViewModelTests
         Assert.Contains("libsecret-tools", viewModel.ErrorMessage, StringComparison.Ordinal);
     }
 
+    private static ConfigurationEditorViewModel CreateViewModel(Mock<IConfigurationService> configurationService)
+        => new(
+            new ServerConfigurationValidator(),
+            configurationService.Object,
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<ConfigurationEditorViewModel>>());
+
     private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)
     {
         var capabilities = new Mock<IPlatformCapabilityService>();
@@ -215,4 +363,22 @@ public sealed class ConfigurationEditorViewModelTests
 
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport)
         => new TransportSupportPolicy(CreateCapabilities(supportsStdioTransport).Object);
+
+    [Fact]
+    public void LoadNewConfiguration_UsesLocalizedDefaultName()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "AgentProfileEditor_NewConfigurationName", "新配置");
+        var viewModel = new ConfigurationEditorViewModel(
+            new ServerConfigurationValidator(),
+            Mock.Of<IConfigurationService>(),
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            localizer,
+            Mock.Of<ILogger<ConfigurationEditorViewModel>>());
+
+        viewModel.LoadNewConfiguration();
+
+        Assert.Equal("新配置", viewModel.Name);
+        Assert.Equal("新配置", viewModel.Configuration.Name);
+    }
 }

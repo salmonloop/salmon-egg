@@ -25,10 +25,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly IUiDispatcher _uiDispatcher;
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _sessionSwitchGate = new(1, 1);
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly Dictionary<string, ConversationBinding> _conversationBindings = new(StringComparer.Ordinal);
     private readonly HashSet<string> _deletedConversationTombstones = new(StringComparer.Ordinal);
+    // Guards the debounce handle only. Scheduling runs on whichever thread mutated the workspace
+    // while a flush runs on the closing thread, so deciding whether a write is pending and claiming
+    // it has to be one step: sampling it separately lets a schedule land in between and be cancelled
+    // by a flush that already concluded there was nothing to write. Held for the handle swap only,
+    // never across the write itself.
+    private readonly object _saveScheduleGate = new();
     private CancellationTokenSource? _saveCts;
     private bool _disposed;
+    private bool _recoveryDocumentRestored;
     private bool _isConversationListLoading = true;
     private int _conversationListVersion;
     private string? _lastActiveConversationId;
@@ -65,6 +73,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         private set => SetProperty(ref _lastActiveConversationId, value);
     }
 
+    internal bool IsRecoveryDocumentRestored => _recoveryDocumentRestored;
+
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -81,7 +91,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to restore conversation workspace");
+            _logger.LogError(
+                ex,
+                "Failed to restore conversation workspace; persistence stays disabled to protect the stored history");
             await PostToContextAsync(() => IsConversationListLoading = false, cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -94,19 +106,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 continue;
             }
 
-            var restoredCwd = ResolveConversationRecordCwd(conversation);
-            var existingSession = _sessionManager.GetSession(conversation.ConversationId);
-            if (existingSession is not null)
+            // An already-tracked session carries the cwd it was established with, so there is nothing
+            // to reconcile for it here.
+            if (_sessionManager.GetSession(conversation.ConversationId) is not null)
             {
-                if (!string.IsNullOrWhiteSpace(restoredCwd)
-                    && string.IsNullOrWhiteSpace(existingSession.Cwd))
-                {
-                    _sessionManager.UpdateSession(
-                        conversation.ConversationId,
-                        session => session.Cwd = restoredCwd,
-                        updateActivity: false);
-                }
+                continue;
+            }
 
+            var restoredCwd = ResolveConversationRecordCwd(conversation);
+            if (string.IsNullOrWhiteSpace(restoredCwd))
+            {
+                _logger.LogDebug(
+                    "Persisted conversation has no working directory; not establishing a session. ConversationId={ConversationId}",
+                    conversation.ConversationId);
                 continue;
             }
 
@@ -169,22 +181,101 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     }
 
     public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-    {
-        RemoveConversation(conversationId);
-        return Task.FromResult(new ConversationMutationResult(true, false, null));
-    }
+        => RemoveConversationTransactionallyAsync(conversationId, cancellationToken);
 
     public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        => RemoveConversationTransactionallyAsync(conversationId, cancellationToken);
+
+    private async Task<ConversationMutationResult> RemoveConversationTransactionallyAsync(
+        string conversationId,
+        CancellationToken cancellationToken)
     {
-        RemoveConversation(conversationId);
-        return Task.FromResult(new ConversationMutationResult(true, false, null));
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return new ConversationMutationResult(true, false, null);
+        }
+
+        // Stage workspace-owned state only. Leave ISessionManager intact until the
+        // recovery document is persisted successfully so a failed save never needs
+        // to reconstruct a partial Session pre-image.
+        var staged = TryStageConversationRemoval(conversationId);
+        if (staged is null)
+        {
+            return new ConversationMutationResult(true, false, null);
+        }
+
+        try
+        {
+            await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            RestoreStagedConversationRemoval(staged);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RestoreStagedConversationRemoval(staged);
+            _logger.LogWarning(
+                ex,
+                "Conversation removal persistence failed; workspace rolled back. ConversationId={ConversationId}",
+                conversationId);
+            return new ConversationMutationResult(false, false, "ConversationRemovalPersistFailed");
+        }
+
+        _sessionManager.RemoveSession(conversationId);
+        return new ConversationMutationResult(true, false, null);
     }
 
-    public void ArchiveConversation(string conversationId)
-        => RemoveConversation(conversationId);
+    private StagedConversationRemoval? TryStageConversationRemoval(string conversationId)
+    {
+        StagedConversationRemoval? staged;
+        lock (_stateGate)
+        {
+            if (!_conversationBindings.TryGetValue(conversationId, out var binding))
+            {
+                return null;
+            }
 
-    public void DeleteConversation(string conversationId)
-        => RemoveConversation(conversationId);
+            var previousLastActiveConversationId = LastActiveConversationId;
+            var wasTombstoned = _deletedConversationTombstones.Contains(conversationId);
+
+            if (string.Equals(LastActiveConversationId, conversationId, StringComparison.Ordinal))
+            {
+                LastActiveConversationId = null;
+            }
+
+            _conversationBindings.Remove(conversationId);
+            _deletedConversationTombstones.Add(conversationId);
+
+            staged = new StagedConversationRemoval(binding, wasTombstoned, previousLastActiveConversationId);
+        }
+
+        NotifyConversationListChanged();
+        return staged;
+    }
+
+    private void RestoreStagedConversationRemoval(StagedConversationRemoval staged)
+    {
+        lock (_stateGate)
+        {
+            _conversationBindings[staged.Binding.ConversationId] = staged.Binding;
+            if (!staged.WasTombstoned)
+            {
+                _deletedConversationTombstones.Remove(staged.Binding.ConversationId);
+            }
+
+            LastActiveConversationId = staged.PreviousLastActiveConversationId;
+        }
+
+        NotifyConversationListChanged();
+    }
+
+    private sealed record StagedConversationRemoval(
+        ConversationBinding Binding,
+        bool WasTombstoned,
+        string? PreviousLastActiveConversationId);
 
     public Task<bool> TryPrepareConversationActivationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
@@ -263,9 +354,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
                 ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
                 CloneUsage(binding.Usage),
-                binding.SnapshotConnectionInstanceId,
-                binding.RestoreProjectionItemKey,
-                binding.RestoreProjectionEpoch);
+                binding.SnapshotConnectionInstanceId);
         }
     }
 
@@ -507,8 +596,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         binding.ShowPlanPanel = false;
         binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
         binding.SnapshotConnectionInstanceId = null;
-        binding.RestoreProjectionItemKey = null;
-        binding.RestoreProjectionEpoch = null;
     }
 
     private static bool CanApplySnapshotRuntimeContent(
@@ -557,8 +644,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
             ? snapshot.ConnectionInstanceId
             : null;
-        binding.RestoreProjectionItemKey = snapshot.RestoreProjectionItemKey;
-        binding.RestoreProjectionEpoch = snapshot.RestoreProjectionEpoch;
     }
 
     public async Task ApplySessionInfoUpdateAsync(
@@ -628,25 +713,38 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var establishedCwd = string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd.Trim();
         if (_sessionManager.GetSession(conversationId) == null)
         {
-            try
-            {
-                await _sessionManager.CreateSessionAsync(conversationId).ConfigureAwait(false);
-            }
-            catch (Exception ex)
+            // Session info is metadata: it may refresh title and timestamps, but it can only establish
+            // a session when it actually carries the working directory, because a session without one
+            // cannot be resolved to a project and would have to be corrected afterwards.
+            if (establishedCwd is null)
             {
                 _logger.LogDebug(
-                    ex,
-                    "Failed to create missing session for session info update (ConversationId={ConversationId})",
+                    "Session info update carries no working directory; not establishing a session. ConversationId={ConversationId}",
                     conversationId);
+            }
+            else
+            {
+                try
+                {
+                    await _sessionManager.CreateSessionAsync(conversationId, establishedCwd).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(
+                        ex,
+                        "Failed to create missing session for session info update (ConversationId={ConversationId})",
+                        conversationId);
+                }
             }
         }
 
+        var shouldPersistMetadata = false;
         await PostToContextAsync(() =>
         {
             var conversationListChanged = false;
-            var shouldSave = false;
             lock (_stateGate)
             {
                 if (!_conversationBindings.TryGetValue(conversationId, out var binding))
@@ -667,27 +765,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 }
 
                 var metadataChanged = false;
-                var mergedSessionInfo = ConversationSessionInfoSnapshots.Merge(binding.SessionInfo, sessionInfo);
-                var establishedCwd = ResolveEstablishedConversationCwd(binding)?.Trim();
-
-                if (!string.IsNullOrWhiteSpace(establishedCwd)
-                    && !string.Equals(mergedSessionInfo.Cwd?.Trim(), establishedCwd, StringComparison.Ordinal))
-                {
-                    // ACP session/list and session_info_update are metadata channels and must not
-                    // overwrite the cwd established by session/new or session/load.
-                    mergedSessionInfo = new ConversationSessionInfoSnapshot
-                    {
-                        Title = mergedSessionInfo.Title,
-                        HasTitle = mergedSessionInfo.HasTitle,
-                        Description = mergedSessionInfo.Description,
-                        Cwd = establishedCwd,
-                        UpdatedAtUtc = mergedSessionInfo.UpdatedAtUtc,
-                        HasUpdatedAt = mergedSessionInfo.HasUpdatedAt,
-                        Meta = mergedSessionInfo.Meta is null
-                            ? null
-                            : new Dictionary<string, object?>(mergedSessionInfo.Meta, StringComparer.Ordinal)
-                    };
-                }
+                var knownSessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
+                    binding.SessionInfo,
+                    ResolveEstablishedConversationCwd(binding));
+                var mergedSessionInfo = ConversationSessionInfoSnapshots.Merge(knownSessionInfo, sessionInfo);
 
                 if (!SessionInfoEquals(binding.SessionInfo, mergedSessionInfo))
                 {
@@ -704,18 +785,22 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         ? SessionNamePolicy.CreateDefault(conversationId)
                         : sanitized;
 
-                    if (_sessionManager.UpdateSession(conversationId, session => session.DisplayName = finalName, updateActivity: false))
+                    if (_sessionManager.GetSession(conversationId) is { } titledSession)
                     {
+                        titledSession.DisplayName = finalName;
                         metadataChanged = true;
                     }
                 }
 
                 var normalizedCwd = string.IsNullOrWhiteSpace(mergedSessionInfo?.Cwd) ? null : mergedSessionInfo.Cwd.Trim();
-                if (!string.IsNullOrWhiteSpace(normalizedCwd))
+                if (normalizedCwd is not null)
                 {
-                    var existingCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
-                    if (!string.Equals(existingCwd, normalizedCwd, StringComparison.Ordinal)
-                        && _sessionManager.UpdateSession(conversationId, session => session.Cwd = normalizedCwd, updateActivity: false))
+                    // Session info comes from the agent, which is authoritative for where the session
+                    // actually runs. Our persisted copy can be stale, so adopt the reported value: this
+                    // corrects our record rather than changing the session's working directory.
+                    // 比较与写入合并成一次原子操作:分开做的话,两次调用之间的并发写入会让
+                    // "是否真的改了"的判定失效。
+                    if (_sessionManager.GetSession(conversationId)?.AdoptAuthoritativeCwd(normalizedCwd) == true)
                     {
                         metadataChanged = true;
                     }
@@ -732,7 +817,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 if (metadataChanged)
                 {
                     conversationListChanged = true;
-                    shouldSave = true;
+                    shouldPersistMetadata = true;
                 }
             }
 
@@ -740,12 +825,20 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             {
                 NotifyConversationListChanged();
             }
-
-            if (shouldSave)
-            {
-                ScheduleSave();
-            }
         }, cancellationToken).ConfigureAwait(false);
+
+        if (shouldPersistMetadata)
+        {
+            // Authoritative session metadata (cwd/title/additionalDirectories) is recovery-critical for
+            // project affinity and catalog restore. Persist immediately instead of relying on delayed save.
+            await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public Task PersistRecoveryMetadataAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return PersistRecoveryMetadataCoreAsync(cancellationToken);
     }
 
     public Task RegisterConversationAsync(
@@ -778,10 +871,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
-        _saveCts?.Cancel();
-        _saveCts?.Dispose();
-        _saveCts = new CancellationTokenSource();
-        var token = _saveCts.Token;
+        CancellationToken token;
+        lock (_saveScheduleGate)
+        {
+            CancelScheduledSaveCore();
+            _saveCts = new CancellationTokenSource();
+            token = _saveCts.Token;
+        }
 
         _ = Task.Run(async () =>
         {
@@ -795,18 +891,40 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Scheduled workspace save failed");
+                _logger.LogWarning(ex, "Scheduled workspace save failed");
             }
         }, token);
     }
 
-    public Task SaveAsync(CancellationToken cancellationToken = default)
+    public async Task SaveAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _saveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await SaveCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
+    private Task SaveCoreAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         PersistedConversationState[] conversationStates;
         string[] deletedConversationIds;
         lock (_stateGate)
         {
+            if (!_recoveryDocumentRestored)
+            {
+                // The in-memory catalog is only authoritative after a successful restore.
+                // Persisting before that would overwrite the stored history with unhydrated state.
+                throw new InvalidOperationException(
+                    "Conversation workspace has not restored the persisted document; refusing to save.");
+            }
+
             deletedConversationIds = _deletedConversationTombstones
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)
@@ -826,6 +944,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         binding.CreatedAt,
                         binding.LastUpdatedAt,
                         binding.LastAccessedAt,
+                        // Resolve the working directory here, while the binding is still in hand and under
+                        // the state gate. Re-reading it downstream would only have the conversation id to
+                        // go on, and a remote-backed session is tracked under its remote id, so that read
+                        // would miss and persist no working directory at all.
+                        ResolveEstablishedConversationCwd(binding),
                         binding.RemoteSessionId,
                         binding.BoundProfileId,
                         binding.ProjectAffinityOverride?.ProjectId,
@@ -853,7 +976,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         foreach (var conversationState in conversationStates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var session = _sessionManager.GetSession(conversationState.ConversationId);
             var record = new ConversationRecord
             {
                 ConversationId = conversationState.ConversationId,
@@ -863,7 +985,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 LastAccessedAt = conversationState.LastAccessedAt == default
                     ? conversationState.LastUpdatedAt
                     : conversationState.LastAccessedAt,
-                Cwd = session?.Cwd,
+                Cwd = conversationState.Cwd,
                 RemoteSessionId = conversationState.RemoteSessionId,
                 BoundProfileId = conversationState.BoundProfileId,
                 ProjectAffinityOverrideProjectId = conversationState.ProjectAffinityOverrideProjectId,
@@ -894,10 +1016,62 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         _disposed = true;
+        CancelScheduledSave();
+        _sessionSwitchGate.Dispose();
+        _saveGate.Dispose();
+    }
+
+    public async Task FlushPendingSaveAsync(CancellationToken cancellationToken = default)
+    {
+        if (_disposed || _preferences.SaveLocalHistory == false)
+        {
+            return;
+        }
+
+        // Claim the scheduled write instead of waiting for its debounce to elapse. Sampling and
+        // cancelling under one lock keeps the claim honest: a schedule that lands mid-flush is either
+        // claimed by this flush or left with its timer intact, never cancelled by a flush that had
+        // already decided nothing was pending. Cancelling also stops the timer firing a second,
+        // redundant write behind this one.
+        bool hadPendingSave;
+        lock (_saveScheduleGate)
+        {
+            hadPendingSave = _saveCts is not null;
+            CancelScheduledSaveCore();
+        }
+
+        if (!hadPendingSave)
+        {
+            return;
+        }
+
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private void CancelScheduledSave()
+    {
+        lock (_saveScheduleGate)
+        {
+            CancelScheduledSaveCore();
+        }
+    }
+
+    private void CancelScheduledSaveCore()
+    {
         _saveCts?.Cancel();
         _saveCts?.Dispose();
         _saveCts = null;
-        _sessionSwitchGate.Dispose();
+    }
+
+    private Task PersistRecoveryMetadataCoreAsync(CancellationToken cancellationToken)
+    {
+        if (_preferences.SaveLocalHistory == false)
+        {
+            return Task.CompletedTask;
+        }
+
+        CancelScheduledSave();
+        return SaveAsync(cancellationToken);
     }
 
     private void ApplyRestoredDocument(ConversationDocument document)
@@ -983,35 +1157,32 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
                 var displayName = ResolveRestoredDisplayName(conversation);
 
-                _sessionManager.UpdateSession(
-                    conversation.ConversationId,
-                    session =>
-                    {
-                        session.DisplayName = displayName;
-                        session.CreatedAt = binding.CreatedAt;
-                        session.LastActivityAt = binding.LastAccessedAt > binding.LastUpdatedAt
+                if (_sessionManager.GetSession(conversation.ConversationId) is { } restoredSession)
+                {
+                    restoredSession.DisplayName = displayName;
+                    restoredSession.RestoreTimestamps(
+                        binding.CreatedAt,
+                        binding.LastAccessedAt > binding.LastUpdatedAt
                             ? binding.LastAccessedAt
-                            : binding.LastUpdatedAt;
-                        if (!string.IsNullOrWhiteSpace(restoredCwd))
-                        {
-                            session.Cwd = restoredCwd;
-                        }
-                    },
-                    updateActivity: false);
+                            : binding.LastUpdatedAt);
+                }
             }
 
             var lastActiveConversationId = document.LastActiveConversationId;
             if (!string.IsNullOrWhiteSpace(lastActiveConversationId) && _conversationBindings.ContainsKey(lastActiveConversationId))
             {
                 LastActiveConversationId = lastActiveConversationId;
-                return;
+            }
+            else
+            {
+                LastActiveConversationId = _conversationBindings.Values
+                    .OrderByDescending(binding => binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt)
+                    .ThenByDescending(binding => binding.LastUpdatedAt)
+                    .Select(binding => binding.ConversationId)
+                    .FirstOrDefault();
             }
 
-            LastActiveConversationId = _conversationBindings.Values
-                .OrderByDescending(binding => binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt)
-                .ThenByDescending(binding => binding.LastUpdatedAt)
-                .Select(binding => binding.ConversationId)
-                .FirstOrDefault();
+            _recoveryDocumentRestored = true;
         }
     }
 
@@ -1042,7 +1213,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         _sessionManager.RemoveSession(conversationId);
-        ScheduleSave();
         NotifyConversationListChanged();
     }
 
@@ -1164,8 +1334,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             ToolCallJson = source.ToolCallJson,
             ToolCallRawInputJson = source.ToolCallRawInputJson,
             ToolCallRawOutputJson = source.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(source.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(source.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallLocations),
             PlanEntry = source.PlanEntry is null ? null : ClonePlanEntry(source.PlanEntry),
             ModeId = source.ModeId
         };
@@ -1184,12 +1354,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     }
 
     private static ConversationPlanEntrySnapshot ClonePlanEntry(ConversationPlanEntrySnapshot source)
-        => new()
-        {
-            Content = source.Content,
-            Status = source.Status,
-            Priority = source.Priority
-        };
+        => ConversationPlanWire.CloneDomain(source);
 
     private static ConversationModeOptionSnapshot CloneModeOption(ConversationModeOptionSnapshot source)
         => new()
@@ -1248,8 +1413,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         if (!string.Equals(left.Title, right.Title, StringComparison.Ordinal)
             || left.HasTitle != right.HasTitle
-            || !string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             || !string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            || !AdditionalDirectorySequencesEqual(left.AdditionalDirectories, right.AdditionalDirectories)
             || left.UpdatedAtUtc != right.UpdatedAtUtc
             || left.HasUpdatedAt != right.HasUpdatedAt)
         {
@@ -1276,6 +1441,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         return true;
+    }
+
+    private static bool AdditionalDirectorySequencesEqual(
+        IReadOnlyList<string>? left,
+        IReadOnlyList<string>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
     private async Task PostToContextAsync(Action action, CancellationToken cancellationToken)
@@ -1320,8 +1497,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         {
             Title = sessionInfo.Title,
             HasTitle = sessionInfo.HasTitle,
-            Description = sessionInfo.Description,
             Cwd = normalizedCwd,
+            AdditionalDirectories = sessionInfo.AdditionalDirectories is null
+                ? null
+                : new List<string>(sessionInfo.AdditionalDirectories),
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = sessionInfo.Meta is null
@@ -1416,6 +1595,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         DateTime CreatedAt,
         DateTime LastUpdatedAt,
         DateTime LastAccessedAt,
+        string? Cwd,
         string? RemoteSessionId,
         string? BoundProfileId,
         string? ProjectAffinityOverrideProjectId,
@@ -1478,9 +1658,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         public string? SnapshotConnectionInstanceId { get; set; }
 
-        public string? RestoreProjectionItemKey { get; set; }
-
-        public long? RestoreProjectionEpoch { get; set; }
     }
 }
 
@@ -1504,9 +1681,7 @@ public sealed record ConversationWorkspaceSnapshot(
     IReadOnlyList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
     ConversationSessionInfoSnapshot? SessionInfo = null,
     ConversationUsageSnapshot? Usage = null,
-    string? ConnectionInstanceId = null,
-    string? RestoreProjectionItemKey = null,
-    long? RestoreProjectionEpoch = null);
+    string? ConnectionInstanceId = null);
 
 public sealed record ConversationRemoteBindingState(
     string ConversationId,

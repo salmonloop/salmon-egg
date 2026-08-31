@@ -9,7 +9,6 @@ internal readonly record struct ChatConversationSurfaceStateInput(
     bool IsConnecting,
     bool IsInitializing,
     bool IsHydrating,
-    bool IsLayoutLoading,
     bool IsSessionSwitching,
     string? SessionSwitchOverlayConversationId,
     string? SessionSwitchPreviewConversationId,

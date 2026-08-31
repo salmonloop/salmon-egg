@@ -25,8 +25,8 @@ Salmon Egg 是一款依托 ACP 协议打造的桌面端智能体客户端。
 
 ## 技术栈
 
-- Uno Platform 6.5+
-- .NET 10
+- Uno Platform 6.6+（仓库锁定 `Uno.Sdk` 6.6.29）
+- .NET 10（仓库锁定 SDK 10.0.302，允许 10.0.3xx patch 前滚）
 - WinUI 3（Windows）
 - Clean Architecture + MVVM
 
@@ -40,7 +40,9 @@ SalmonEgg/
 │   ├── SalmonEgg.Application/    # 应用层
 │   ├── SalmonEgg.Infrastructure/ # 基础设施层
 │   ├── SalmonEgg.Infrastructure.Desktop/
-│   └── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Acp/             # 独立 ACP 协议 SDK
+│   └── SalmonEgg.Cli/             # 配置管理 CLI
 ├── tests/
 └── docs/
 ```
@@ -51,9 +53,9 @@ SalmonEgg/
 
 ### 环境要求
 
-- .NET SDK 10.0
-- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）
-- Visual Studio 2022 17.12+ 或等效命令行工具链
+- .NET SDK **10.0.302** 或兼容的 **10.0.3xx** patch（见 `global.json`）
+- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）；Windows 建议 Visual Studio **18.8+**
+- 或等效命令行工具链（Linux/macOS 可构建 Desktop / WASM）
 
 ### 常用命令
 
@@ -71,10 +73,37 @@ dotnet test --solution SalmonEgg.sln
 build.bat msix
 ```
 
+### 配置管理 CLI
+
+仓库包含一个跨平台桌面 CLI，用于管理服务器配置与凭据。发布产物是 self-contained 单文件，用户无需预装 .NET。安装 GUI **不会**注册 `salmon-egg` 命令，全局命令只来自 CLI 安装包。
+
+| 平台 | 安装方式 | PATH |
+|---|---|---|
+| Linux x64 | `sudo dpkg -i salmon-egg-cli_<版本>_amd64.deb` | dpkg 安装到 `/usr/bin/salmon-egg`，卸载时移除 |
+| Windows x64 | 运行 `salmon-egg-cli-<版本>-win-x64.msi`（per-user） | MSI 追加安装目录到用户 PATH，卸载时移除 |
+| macOS Apple Silicon | `brew install --formula ./salmon-egg-cli.rb` | Homebrew 链接到其 `bin`，已在 PATH 上 |
+
+也提供 `.tar.gz` / `.zip` 压缩包供自行放入 PATH。`win-arm64`、`linux-arm64`、`osx-x64` 等不属于正式支持范围：可交叉编译，但没有真实机器验证。
+
+```bash
+salmon-egg --help
+salmon-egg config server list
+
+# 凭据写入默认 fail-closed：平台安全存储不可用时写入失败，而非静默降级为明文
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg set-credential <server-id> --token-stdin
+
+# 需要明文降级时必须显式声明
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credential <server-id> --token-stdin
+```
+
+凭据值只从 stdin 读取，不会进入进程参数、YAML 或 `has-credential` 输出。非凭据配置操作不受该策略影响。该策略针对 Linux Secret Service 与 macOS Keychain；Windows DPAPI 始终可用，该 flag 在 Windows 上无实际作用。完整命令示例见 [README.en.md](README.en.md#cli-configuration-management)，发布与安装细节见 [发布指南](docs/release-guide.md#cli-发布)。
+
 ## 文档
 
+- [文档导航](docs/README.md)
 - [构建指南](BUILD_GUIDE.md)
 - [编码规范](docs/coding-standards.md)
+- [发布指南](docs/release-guide.md)
 - [会话 / 导航 / 搜索硬约束](docs/hard-constraints-session-navigation-and-search.md)
 
 ## 说明

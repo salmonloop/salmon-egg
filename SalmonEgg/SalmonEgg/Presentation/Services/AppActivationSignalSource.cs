@@ -1,27 +1,26 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.UI.Xaml;
 using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Services;
 
-public sealed class AppActivationSignalSource : IApplicationActivationSignalSource
+public sealed class AppActivationSignalSource : IApplicationActivationSignalSource, IApplicationVisibilityState
 {
-    private readonly object _sync = new();
-    private readonly HashSet<Window> _attachedWindows = new();
+    private readonly ApplicationWindowActivityTracker<Window> _activityTracker = new();
 
     public event EventHandler? Activated;
+
+    public Window? ActiveWindow => _activityTracker.ActiveWindow;
+
+    public bool IsActive => _activityTracker.IsActive;
 
     public void Attach(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        lock (_sync)
+        if (!_activityTracker.Attach(window))
         {
-            if (!_attachedWindows.Add(window))
-            {
-                return;
-            }
+            return;
         }
 
         window.Activated += OnWindowActivated;
@@ -32,12 +31,9 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        lock (_sync)
+        if (!_activityTracker.Detach(window))
         {
-            if (!_attachedWindows.Remove(window))
-            {
-                return;
-            }
+            return;
         }
 
         window.Activated -= OnWindowActivated;
@@ -48,7 +44,20 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
     {
         if (string.Equals(e.WindowActivationState.ToString(), "Deactivated", StringComparison.Ordinal))
         {
+            if (sender is Window deactivatedWindow)
+            {
+                _activityTracker.Deactivate(deactivatedWindow);
+            }
+
             return;
+        }
+
+        if (sender is Window window)
+        {
+            if (!_activityTracker.Activate(window))
+            {
+                return;
+            }
         }
 
         Activated?.Invoke(this, EventArgs.Empty);

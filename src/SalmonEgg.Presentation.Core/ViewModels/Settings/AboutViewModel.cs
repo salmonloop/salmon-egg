@@ -16,8 +16,12 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public sealed partial class AboutViewModel : ObservableObject
 {
+    private static readonly Uri DiscordCommunityUri = new("https://discord.gg/wAfJFrYPnf");
+    private static readonly Uri GitHubRepositoryUri = new("https://github.com/salmonloop/salmon-egg");
+    private static readonly Uri KofiSupportUri = new("https://ko-fi.com/shangxin");
+
     private readonly IPlatformShellService _shell;
-    private readonly IAppSupportInfoService _supportInfo;
+    private readonly IAiContentReportLauncher _aiContentReportLauncher;
     private readonly IPlatformCapabilityService _capabilities;
     private readonly IStorageLocationService _storageLocations;
     private readonly IAppDataService _paths;
@@ -32,20 +36,20 @@ public sealed partial class AboutViewModel : ObservableObject
         ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "unknown";
 
-    public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
+    public string ProtocolVersion => AcpProtocolVersion.Default.ToString();
 
     public string DocsRootPath => _documents.DocsRootPath;
 
     public bool CanOpenExternalFiles => _capabilities.SupportsExternalFileOpen;
 
     public bool CanReportInappropriateAiContent
-        => !string.IsNullOrWhiteSpace(_supportInfo.ReportInappropriateAiContentEmail);
+        => _aiContentReportLauncher.CanReport;
 
     public IReadOnlyList<OpenSourceAcknowledgementViewModel> OpenSourceAcknowledgements => CreateOpenSourceAcknowledgements();
 
     public AboutViewModel(
         IPlatformShellService shell,
-        IAppSupportInfoService supportInfo,
+        IAiContentReportLauncher aiContentReportLauncher,
         IPlatformCapabilityService capabilities,
         IStorageLocationService storageLocations,
         IAppDataService paths,
@@ -55,7 +59,7 @@ public sealed partial class AboutViewModel : ObservableObject
         IOpenSourceAcknowledgementsProvider acknowledgementsProvider)
     {
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
-        _supportInfo = supportInfo ?? throw new ArgumentNullException(nameof(supportInfo));
+        _aiContentReportLauncher = aiContentReportLauncher ?? throw new ArgumentNullException(nameof(aiContentReportLauncher));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _storageLocations = storageLocations ?? throw new ArgumentNullException(nameof(storageLocations));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
@@ -83,6 +87,18 @@ public sealed partial class AboutViewModel : ObservableObject
                     ? _localizer["About_AcknowledgementSourceFallback"]
                     : item.SourceUrl.Trim()))
             .ToArray();
+
+    [RelayCommand]
+    private Task JoinDiscordCommunityAsync()
+        => OpenExternalUriAsync(DiscordCommunityUri, "About_DiscordOpenFailed");
+
+    [RelayCommand]
+    private Task OpenGitHubRepositoryAsync()
+        => OpenExternalUriAsync(GitHubRepositoryUri, "About_GitHubOpenFailed");
+
+    [RelayCommand]
+    private Task OpenKofiSupportAsync()
+        => OpenExternalUriAsync(KofiSupportUri, "About_KofiOpenFailed");
 
     [RelayCommand]
     private Task OpenAppDataFolderAsync()
@@ -119,10 +135,12 @@ public sealed partial class AboutViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanReportInappropriateAiContent))]
     private async Task ReportInappropriateAiContentAsync()
     {
-        var uri = BuildReportInappropriateAiContentUri();
-        if (uri == null || !await _shell.OpenUriAsync(uri).ConfigureAwait(true))
+        if (!await _aiContentReportLauncher.TryOpenReportAsync(
+                AppName,
+                AppVersion,
+                ProtocolVersion).ConfigureAwait(true))
         {
-            await NotifyExternalOpenUnsupportedAsync().ConfigureAwait(true);
+            await NotifyReportOpenFailedAsync().ConfigureAwait(true);
         }
     }
 
@@ -154,33 +172,6 @@ public sealed partial class AboutViewModel : ObservableObject
         }
     }
 
-    private Uri? BuildReportInappropriateAiContentUri()
-    {
-        var email = _supportInfo.ReportInappropriateAiContentEmail.Trim();
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            return null;
-        }
-
-        var subject = Uri.EscapeDataString(_localizer["About_ReportAiContentSubject"]);
-        var body = Uri.EscapeDataString(string.Join(
-            Environment.NewLine,
-            [
-                $"{_localizer["About_VersionInfoAppLabel"]}: {AppName}",
-                $"{_localizer["About_VersionInfoVersionLabel"]}: {AppVersion}",
-                $"{_localizer["About_VersionInfoProtocolLabel"]}: {ProtocolVersion}",
-                string.Empty,
-                _localizer["About_ReportAiContentBodyPrompt"]
-            ]));
-
-        return Uri.TryCreate(
-            $"mailto:{email}?subject={subject}&body={body}",
-            UriKind.Absolute,
-            out var uri)
-            ? uri
-            : null;
-    }
-
     private async Task OpenStorageLocationAsync(AppStorageLocation location)
     {
         if (!await _storageLocations.OpenAsync(location))
@@ -199,4 +190,15 @@ public sealed partial class AboutViewModel : ObservableObject
 
     private Task NotifyExternalOpenUnsupportedAsync()
         => _ui.ShowInfoAsync(_localizer["Platform_ExternalOpenUnsupported"]);
+
+    private Task NotifyReportOpenFailedAsync()
+        => _ui.ShowInfoAsync(_localizer["AiContentReport_OpenFailed"]);
+
+    private async Task OpenExternalUriAsync(Uri uri, string failureResourceKey)
+    {
+        if (!await _shell.OpenUriAsync(uri).ConfigureAwait(true))
+        {
+            await _ui.ShowInfoAsync(_localizer[failureResourceKey]).ConfigureAwait(true);
+        }
+    }
 }

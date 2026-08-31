@@ -143,7 +143,7 @@ public sealed class ChatMessageViewModelToolCallTests
     }
 
     [Fact]
-    public void ToolCallRawInput_ProjectsReadableParameterDetails()
+    public void ToolCallRawInput_SummaryShowsPrimaryTargetAndKeepsRawForTier2()
     {
         var vm = ChatMessageViewModel.CreateFromToolCall(
             id: "tool-6",
@@ -154,12 +154,38 @@ public sealed class ChatMessageViewModelToolCallTests
             status: ToolCallStatus.Completed,
             title: "Read configuration");
 
-        var visibleDetails = vm.ToolCallDetailItems.Select(item => item.DisplayText).ToArray();
+        // Tier 0: a single semantic summary (the action target), not flattened fields.
+        Assert.Contains("C:/repo/appsettings.json", vm.ToolCallSummary);
+        // Tier 1 artifacts only — no flattened raw input fields.
+        Assert.Empty(vm.ToolCallDetailItems);
+        // Tier 2: raw input retained verbatim for the "View raw" affordance.
+        Assert.Equal("{\"path\":\"C:/repo/appsettings.json\",\"query\":\"Logging\",\"arguments\":{\"line\":12}}", vm.ToolCallRawInputJson);
+    }
 
-        Assert.Contains("path: C:/repo/appsettings.json", visibleDetails);
-        Assert.Contains("query: Logging", visibleDetails);
-        Assert.Contains("arguments.line: 12", visibleDetails);
-        Assert.DoesNotContain(visibleDetails, text => text.Contains("ToolCallDisplayItem", StringComparison.Ordinal));
+    public static TheoryData<ToolCallKind, string, string> PrimaryTargetByKindCases() => new()
+    {
+        { ToolCallKind.Read, "{\"path\":\"src/app.cs\"}", "src/app.cs" },
+        { ToolCallKind.Search, "{\"query\":\"foo\"}", "foo" },
+        { ToolCallKind.Execute, "{\"command\":\"dotnet\",\"arguments\":\"test\"}", "dotnet test" },
+        { ToolCallKind.Fetch, "{\"url\":\"https://example.com\"}", "https://example.com" },
+    };
+
+    [Theory]
+    [MemberData(nameof(PrimaryTargetByKindCases))]
+    public void ToolCallSummary_PicksPrimaryTargetByKind(ToolCallKind kind, string rawInput, string expected)
+    {
+        var vm = ChatMessageViewModel.CreateFromToolCall("summary", "call", rawInput, null, kind, ToolCallStatus.InProgress, null);
+
+        Assert.Equal(expected, vm.ToolCallSummary);
+    }
+
+    [Fact]
+    public void ToolCallSummary_FallsBackToLocationWhenInputEmpty()
+    {
+        var vm = ChatMessageViewModel.CreateFromToolCall("summary", "call", null, null, ToolCallKind.Edit, ToolCallStatus.InProgress, "Edit file");
+        vm.ToolCallLocations = new[] { new ToolCallLocation("/repo/a.cs", 7) };
+
+        Assert.Equal("/repo/a.cs:7", vm.ToolCallSummary);
     }
 
     [Fact]

@@ -5,8 +5,8 @@
     <DefineConstants>$(DefineConstants);__WASM__</DefineConstants>
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <PlatformTarget></PlatformTarget>
-    <!-- Override Uno's net10 default (10.0.2) to the latest patched Windows compatibility stack. -->
-    <WindowsCompatibilityVersion>10.0.6</WindowsCompatibilityVersion>
+    <!-- Override Uno's net10 default to the latest patched Windows compatibility stack. -->
+    <WindowsCompatibilityVersion>10.0.10</WindowsCompatibilityVersion>
     <!-- Reduce hash-mismatch startup failures caused by stale browser/service-worker caches. -->
     <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
     <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
@@ -40,10 +40,14 @@
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="Microsoft.Identity.Client" />
     <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
+    <PackageReference Include="MinVer" />
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Uno.Extensions.Reactive" />
     <PackageReference Include="Uno.Fonts.Fluent" GeneratePathProperty="true" />
     <PackageReference Include="Uno.Fonts.OpenSans" GeneratePathProperty="true" />
+    <!-- OpenTelemetry packages -->
+    <PackageReference Include="OpenTelemetry.Exporter.Console" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Condition="'$(TargetFramework)' != 'net10.0-browserwasm'" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -56,6 +60,7 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js" />
+    <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-notifications.js" />
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>_framework/salmon-egg-wasm-storage.js</TargetPath>
@@ -63,6 +68,10 @@
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>_framework/salmon-egg-wasm-shell.js</TargetPath>
+    </Content>
+    <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-notifications.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>_framework/salmon-egg-wasm-notifications.js</TargetPath>
     </Content>
   </ItemGroup>
 
@@ -111,6 +120,12 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <!-- freedesktop notifications on Linux. Already a transitive Uno Skia X11 dependency; the version
+         is pinned centrally. macOS/Windows desktop hosts never reach the D-Bus code path. -->
+    <PackageReference Include="Tmds.DBus.Protocol" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <Content Include="$(PkgUno_Fonts_OpenSans)\lib\net7.0\Uno.Fonts.OpenSans\Fonts\*.ttf"
              Link="Uno.Fonts.OpenSans\Fonts\%(Filename)%(Extension)"
              TargetPath="Uno.Fonts.OpenSans/Fonts/%(Filename)%(Extension)"
@@ -134,6 +149,28 @@
     <PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" />
     <PackageReference Include="Uno.Extensions.Reactive.WinUI" />
     <PackageReference Include="Uno.WinUI.Lottie" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <!--
+      The WinUI 3 / MSIX target sits in a gap between two default-item owners: Uno's asset glob is
+      disabled when IsWinAppSdk is true (Uno.DefaultItems.targets), and WinAppSDK's own
+      `Assets/**/*.*` glob never activates because Uno leaves EnableDefaultAssets unset
+      (Uno.Common.WinAppSdk.targets). Without these items the shell logos declared in
+      Package.appxmanifest are absent from the package, so Windows falls back to the generic
+      placeholder icon in the taskbar, Start, and Alt+Tab. Declare them explicitly rather than
+      forcing EnableDefaultAssets, which would also re-glob assets already owned above.
+    -->
+    <Content Include="Assets\Icons\Windows\**\*.png"
+             Exclude="@(Content)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <!-- Multi-size ICO backing the native window icon via AppWindow.SetIcon. The tray icon loads
+         this at runtime via LoadImage, but the packaged copy here serves the shell registration. -->
+    <Content Include="Assets\Icons\Windows\icon.ico"
+             Exclude="@(Content)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -181,6 +218,8 @@
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
+    <!-- Android stays enabled for existing mobile builds, but can be excluded when a host also exposes an Android SDK (for example macOS iOS runners). -->
+    <EnableAndroidTarget Condition="'$(EnableAndroidTarget)' == ''">true</EnableAndroidTarget>
     <!-- iOS additionally requires a macOS/Xcode toolchain, so it has an explicit opt-in under the mobile target gate. -->
     <EnableIosTarget Condition="'$(EnableIosTarget)' == ''">false</EnableIosTarget>
     <!-- Windows dev environments need the WinUI target present during restore/design-time build so XAML-generated types resolve. -->
@@ -195,6 +234,7 @@
     <SalmonEggTargetFrameworks Condition="'$(MSBuildRuntimeType)' != 'Core' OR '$(EnableWinUIBuild)' == 'true'">net10.0-desktop;net10.0-browserwasm;net10.0-windows10.0.26100.0</SalmonEggTargetFrameworks>
     <SalmonEggAndroidTargetFrameworks Condition="
         '$(EnableMobileTargets)' == 'true'
+        AND '$(EnableAndroidTarget)' == 'true'
         AND (
           '$(AndroidSdkDirectory)' != ''
           OR '$(ANDROID_SDK_ROOT)' != ''
@@ -211,7 +251,6 @@
     <SalmonEggAllTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' != ''">$(SalmonEggTargetFrameworks);$(SalmonEggMobileTargetFrameworks)</SalmonEggAllTargetFrameworks>
 
     <TargetFrameworks>$(SalmonEggAllTargetFrameworks)</TargetFrameworks>
-    <AfterUnoSdkTargets>$(MSBuildProjectDirectory)\..\Uno.After.targets</AfterUnoSdkTargets>
 
     <OutputType>Exe</OutputType>
     <UnoSingleProject>true</UnoSingleProject>
@@ -224,15 +263,8 @@
     <ApplicationTitle>SalmonEgg</ApplicationTitle>
     <!-- App Identifier -->
     <ApplicationId>com.companyname.salmonegg</ApplicationId>
-    <!-- Keep package, assembly, and display versions derived from one source of truth. -->
-    <SalmonEggDisplayVersion>1.0.1</SalmonEggDisplayVersion>
-    <SalmonEggPackageVersion>$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
-    <!-- Versions -->
-    <Version>$(SalmonEggPackageVersion)</Version>
-    <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
-    <FileVersion>$(SalmonEggPackageVersion)</FileVersion>
-    <InformationalVersion>$(SalmonEggPackageVersion)</InformationalVersion>
-    <ApplicationDisplayVersion>$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>
+    <!-- Versions are derived from the git tag by MinVer (see the root Directory.Build.props derive
+         target); the Store-facing four-part MSIX form is SalmonEggDisplayVersion + ".0". -->
     <ApplicationVersion>1</ApplicationVersion>
     <!-- Package Publisher -->
     <ApplicationPublisher>SalmonEgg</ApplicationPublisher>
@@ -250,6 +282,11 @@
     <!-- Disable Uno design-time packages that bring in Uno.UI (not needed for this app runtime). -->
     <UnoDisableHotDesign>true</UnoDisableHotDesign>
     <UnoDisableMCPSupport>true</UnoDisableMCPSupport>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <!-- Android declares its supported device RIDs; do not append the build host RID to the restore graph. -->
+    <UseDefaultPublishRuntimeIdentifier>false</UseDefaultPublishRuntimeIdentifier>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
@@ -302,9 +339,20 @@
     <DisableImplicitUnoPackages>true</DisableImplicitUnoPackages>
   </PropertyGroup>
 
+  <!-- The generated manifest is consumed early: WindowsAppSDK's CreateWinRTRegistration merges it
+       with mt.exe BeforeTargets="AssignTargetPaths", and the version substitution needs MinVer's
+       output, which only exists once the MinVer target has run. So this target must not hang off
+       AfterTargets="MinVer" (that fires at BeforeCompile, after the mt.exe merge) — instead it runs
+       at the pre-resolve consumer point and pulls MinVer in explicitly. Depending on MinVer triggers
+       the AfterTargets="MinVer" derive target first, which pins the ordering against
+       SalmonEggDeriveReleaseIdentity; MinVer itself is cached via $(MinVerVersion), so the later
+       BeforeCompile hook is a no-op. The condition mirrors MinVer's own skip conditions: a design-time
+       or skipped MinVer would make the DependsOnTargets reference resolve to a missing target
+       (MSB4057), and versioned manifests are meaningless without a version anyway. -->
   <Target Name="GenerateVersionedApplicationManifests"
           BeforeTargets="_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild"
-          Condition="'$(SalmonEggGeneratedApplicationManifest)' != ''">
+          DependsOnTargets="MinVer"
+          Condition="'$(SalmonEggGeneratedApplicationManifest)' != '' AND '$(DesignTimeBuild)' != 'true' AND '$(MinVerSkip)' != 'true'">
     <PropertyGroup>
       <_SalmonEggPackageManifestTemplate Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>
       <_SalmonEggApplicationManifestTemplate>$(MSBuildProjectDirectory)\app.manifest</_SalmonEggApplicationManifestTemplate>

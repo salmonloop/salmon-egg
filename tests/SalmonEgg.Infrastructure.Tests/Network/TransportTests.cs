@@ -166,10 +166,168 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
+        public async Task WebSocketTransport_SendAsync_WhenSocketFailed_ShouldProjectErrorState()
+        {
+            // A send that fails because the socket is gone must surface as Error on the state stream:
+            // downstream projections derive IsConnected from it, and without the transition the ACP
+            // client leaves its in-flight requests hanging instead of faulting them.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Throws(new WebSocketException("socket closed"));
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            await Assert.ThrowsAsync<WebSocketException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Contains(TransportState.Error, states);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenClientDisposedConcurrently_ShouldSurfaceTheSendFailure()
+        {
+            // Teardown can dispose the client while a send is in flight, which makes reading its state
+            // throw. That read only confirms the connection is gone, so it must not replace the send
+            // failure the caller has to see, and the break must still reach the state stream.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            // The send fails, and by the time its fatality is judged the client has been disposed.
+            var disposed = false;
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Callback(() => disposed = true)
+                .Throws(new InvalidOperationException("send failed"));
+            client.SetupGet(x => x.IsRunning).Returns(() =>
+                disposed ? throw new ObjectDisposedException(nameof(IWebsocketClient)) : isRunning.Value);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Equal("send failed", exception.Message);
+            Assert.Contains(TransportState.Error, states);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenDisposedConcurrently_ShouldStillSurfaceTheSendFailure()
+        {
+            // Shutdown can dispose the transport while a send is in flight. The send's error path
+            // projects the break onto the state stream, so it must not be turned into an
+            // ObjectDisposedException from a completed subject — the caller has to see why the send
+            // failed, not a teardown artifact.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+
+            // The transport is disposed from inside the send, i.e. exactly while the error path is
+            // about to publish the break.
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Callback(() => transport.Dispose())
+                .Throws(new System.Net.WebSockets.WebSocketException("socket is gone"));
+
+            var exception = await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Equal("socket is gone", exception.Message);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenTransientFailureOnLiveSocket_ShouldKeepConnectedState()
+        {
+            // A send failure on a socket that is still running is transient. Projecting Error here
+            // would tear down a usable connection and cancel in-flight requests that could still
+            // complete, so the state stream must stay on Connected.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Throws(new InvalidOperationException("send buffer busy"));
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.DoesNotContain(TransportState.Error, states);
+        }
+
+        [Fact]
+        public async Task StreamableHttpTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -177,21 +335,21 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
+        public async Task StreamableHttpTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await transport.DisconnectAsync();
-            _mockLogger.Verify(x => x.Warning("HTTP SSE is not connected"), Times.Once);
+            _mockLogger.Verify(x => x.Warning("Streamable HTTP transport is not connected"), Times.Once);
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
+        public async Task StreamableHttpTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -199,10 +357,10 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
+        public async Task StreamableHttpTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -224,29 +382,26 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public void HttpSseTransport_Dispose_ShouldCleanupResources()
+        public void StreamableHttpTransport_Dispose_ShouldBeIdempotent()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new StreamableHttpTransport(_mockLogger.Object);
 
-            // Act
+            // Act & Assert: double dispose must not throw.
             transport.Dispose();
-
-            // Assert
-            // Verify that dispose methods were called
-            _mockLogger.Verify(x => x.Debug("HttpSseTransport disposed"), Times.Once);
+            transport.Dispose();
         }
 
         [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldHandleCancellation()
+        public async Task StreamableHttpTransport_ConnectAsync_ShouldHandleCancellation()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var cts = new CancellationTokenSource();
             cts.Cancel(); // Cancel immediately
 
             // Act & Assert
-            await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 transport.ConnectAsync("http://localhost:8080", cts.Token));
         }
 
@@ -313,13 +468,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport state changes
+        /// Tests Streamable HTTP transport state changes
         /// </summary>
         [Fact]
-        public void HttpSseTransport_StateChanges_ShouldEmitCorrectStates()
+        public void StreamableHttpTransport_StateChanges_ShouldEmitCorrectStates()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var stateChanges = new List<TransportState>();
             transport.StateChanges.Subscribe(state => stateChanges.Add(state));
 
@@ -343,13 +498,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport message reception
+        /// Tests Streamable HTTP transport message reception
         /// </summary>
         [Fact]
-        public void HttpSseTransport_Messages_ShouldEmitReceivedMessages()
+        public void StreamableHttpTransport_Messages_ShouldEmitReceivedMessages()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var receivedMessages = new List<string>();
             transport.Messages.Subscribe(message => receivedMessages.Add(message));
 

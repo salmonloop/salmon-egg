@@ -27,8 +27,31 @@
         </DataTemplate>
     </Page.Resources>
 
-    <Grid Padding="40,24"
+    <Grid x:Name="SettingsShellRoot"
+          Padding="24,12"
           XYFocusKeyboardNavigation="Enabled">
+        <VisualStateManager.VisualStateGroups>
+            <!-- Short windows: densify shell chrome so section nav + content share vertical
+                 budget. Comfortable restores prior marketing padding at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="SettingsShellHeightStates">
+                <VisualState x:Name="SettingsShellHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="SettingsShellRoot.Padding" Value="24,12" />
+                        <Setter Target="SettingsNavView.Margin" Value="0,0,0,8" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SettingsShellHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="SettingsShellRoot.Padding" Value="40,24" />
+                        <Setter Target="SettingsNavView.Margin" Value="0,0,0,16" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -36,7 +59,7 @@
 
         <NavigationView x:Name="SettingsNavView"
                         Grid.Row="0"
-                        Margin="0,0,0,16"
+                        Margin="0,0,0,8"
                         XYFocusKeyboardNavigation="Enabled"
                         AutomationProperties.AutomationId="SettingsNavView"
                         MenuItemsSource="{x:Bind ViewModel.Sections, Mode=OneWay}"

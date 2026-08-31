@@ -80,8 +80,12 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
         _inputSourceText = FormatInputSource(_snapshot.InputSource);
         _connectedGamepadsText = FormatCount(_snapshot.ConnectedGamepadCount);
         _connectedRawControllersText = FormatCount(_snapshot.ConnectedRawControllerCount);
-        _activeInputsText = FormatActiveInputs(_snapshot.ActiveIntents, _snapshot.ActiveContextIntents);
+        _activeInputsText = FormatActiveInputs(
+            _snapshot.ActiveIntents,
+            _snapshot.ActiveContextIntents,
+            _snapshot.ActiveShortcuts);
         _thumbstickText = FormatThumbstick(_snapshot.Reading);
+        _standardGamepadsText = FormatStandardGamepads(_snapshot.StandardGamepads);
         _rawControllersText = FormatRawControllers(_snapshot.RawControllers);
         if (_languageService is not null)
         {
@@ -109,6 +113,9 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
 
     [ObservableProperty]
     private string _thumbstickText;
+
+    [ObservableProperty]
+    private string _standardGamepadsText;
 
     [ObservableProperty]
     private string _rawControllersText;
@@ -261,8 +268,12 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
         ConnectedGamepadsText = FormatCount(snapshot.ConnectedGamepadCount);
         ConnectedRawControllersText = FormatCount(snapshot.ConnectedRawControllerCount);
         InputSourceText = FormatInputSource(snapshot.InputSource);
-        ActiveInputsText = FormatActiveInputs(snapshot.ActiveIntents, snapshot.ActiveContextIntents);
+        ActiveInputsText = FormatActiveInputs(
+            snapshot.ActiveIntents,
+            snapshot.ActiveContextIntents,
+            snapshot.ActiveShortcuts);
         ThumbstickText = FormatThumbstick(snapshot.Reading);
+        StandardGamepadsText = FormatStandardGamepads(snapshot.StandardGamepads);
         RawControllersText = FormatRawControllers(snapshot.RawControllers);
     }
 
@@ -283,15 +294,17 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
 
     private string FormatActiveInputs(
         IReadOnlyCollection<GamepadNavigationIntent> activeIntents,
-        IReadOnlyCollection<GamepadContextIntent> activeContextIntents)
+        IReadOnlyCollection<GamepadContextIntent> activeContextIntents,
+        IReadOnlyCollection<GamepadShortcutIntent> activeShortcuts)
     {
-        if (activeIntents.Count == 0 && activeContextIntents.Count == 0)
+        if (activeIntents.Count == 0 && activeContextIntents.Count == 0 && activeShortcuts.Count == 0)
         {
             return _localizer["GamepadDiagnostics_ActiveInputsNone"];
         }
 
         return string.Join(", ", activeIntents.Select(static intent => intent.ToString())
-            .Concat(activeContextIntents.Select(static intent => intent.ToString())));
+            .Concat(activeContextIntents.Select(static intent => intent.ToString()))
+            .Concat(activeShortcuts.Select(static intent => intent.ToString())));
     }
 
     private static string FormatCount(int count)
@@ -300,9 +313,45 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
     private static string FormatThumbstick(GamepadInputReading reading)
         => string.Format(
             CultureInfo.InvariantCulture,
-            "X {0:0.00}, Y {1:0.00}",
+            "X {0:0.00}, Y {1:0.00}; LT {2:0.00}, RT {3:0.00}",
             reading.ThumbstickX,
-            reading.ThumbstickY);
+            reading.ThumbstickY,
+            reading.LeftTrigger,
+            reading.RightTrigger);
+
+
+    private string FormatStandardGamepads(IReadOnlyList<StandardGamepadDiagnostics> gamepads)
+    {
+        if (gamepads.Count == 0)
+        {
+            return _localizer["GamepadDiagnostics_StandardGamepadsNone"];
+        }
+
+        var lines = new List<string>(gamepads.Count);
+        for (var i = 0; i < gamepads.Count; i++)
+        {
+            var gamepad = gamepads[i];
+            lines.Add(string.Format(
+                CultureInfo.InvariantCulture,
+                "#{0} {1}{2}; family {3}; layout {4}; labels {5}; pressed {6}",
+                i,
+                FormatStandardDisplayName(gamepad.DisplayName),
+                FormatOptionalHardwareIds(gamepad.HardwareVendorId, gamepad.HardwareProductId),
+                FormatControllerFamily(gamepad.DisplayName, gamepad.HardwareVendorId, gamepad.ButtonLabels),
+                FormatFaceButtonLayout(gamepad.FaceButtonLayout),
+                FormatStringList(gamepad.ButtonLabels),
+                FormatStringList(gamepad.PressedButtons))
+                + "; semantic "
+                + FormatActiveInputs(
+                    GamepadIntentProcessor.GetActiveIntents(gamepad.Reading),
+                    GamepadContextIntentProjector.GetActiveIntents(gamepad.Reading),
+                    GamepadShortcutIntentProjector.GetActiveShortcuts(gamepad.Reading))
+                + "; reading "
+                + FormatThumbstick(gamepad.Reading));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
 
     private string FormatRawControllers(IReadOnlyList<RawGameControllerDiagnostics> controllers)
     {
@@ -315,9 +364,12 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
         for (var i = 0; i < controllers.Count; i++)
         {
             var controller = controllers[i];
+            var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+                controller.DisplayName,
+                controller.HardwareVendorId);
             lines.Add(string.Format(
                 CultureInfo.InvariantCulture,
-                "#{0} {1} VID {2:X4} PID {3:X4} {4}; buttons {5}; switches {6}; axes {7}; pressed {8}; active switches {9}; axis values {10}",
+                "#{0} {1} VID {2:X4} PID {3:X4} {4}; family {5}; layout {6}; unlabeled-index-fallback {7}; buttons {8}; switches {9}; axes {10}; pressed {11}; active switches {12}; axis values {13}",
                 i,
                 string.IsNullOrWhiteSpace(controller.DisplayName) ? "RawGameController" : controller.DisplayName,
                 controller.HardwareVendorId,
@@ -325,16 +377,97 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
                 controller.IsWireless
                     ? _localizer["GamepadDiagnostics_ConnectionWireless"]
                     : _localizer["GamepadDiagnostics_ConnectionWired"],
+                FormatControllerFamily(controller.DisplayName, controller.HardwareVendorId, controller.PressedButtons),
+                FormatFaceButtonLayout(faceButtonLayout),
+                controller.UnlabeledIndexFallbackEnabled ? "on" : "off",
                 controller.ButtonCount,
                 controller.SwitchCount,
                 controller.AxisCount,
                 FormatStringList(controller.PressedButtons),
                 FormatStringList(controller.ActiveSwitches),
-                FormatAxisValues(controller.Axes)));
+                FormatAxisValues(controller.Axes))
+                + "; semantic "
+                + FormatActiveInputs(
+                    GamepadIntentProcessor.GetActiveIntents(controller.Reading),
+                    GamepadContextIntentProjector.GetActiveIntents(controller.Reading),
+                    GamepadShortcutIntentProjector.GetActiveShortcuts(controller.Reading))
+                + "; reading "
+                + FormatThumbstick(controller.Reading));
         }
 
         return string.Join(Environment.NewLine, lines);
     }
+
+    private static string FormatStandardDisplayName(string? displayName)
+        => string.IsNullOrWhiteSpace(displayName) ? "Gamepad" : displayName;
+
+    private static string FormatOptionalHardwareIds(ushort? vendorId, ushort? productId)
+    {
+        if (vendorId is null && productId is null)
+        {
+            return string.Empty;
+        }
+
+        var vendor = vendorId is ushort vid
+            ? vid.ToString("X4", CultureInfo.InvariantCulture)
+            : "----";
+        var product = productId is ushort pid
+            ? pid.ToString("X4", CultureInfo.InvariantCulture)
+            : "----";
+        return string.Format(CultureInfo.InvariantCulture, " VID {0} PID {1}", vendor, product);
+    }
+
+
+    // Invariant family tokens for multi-brand validation captures (not UI chrome).
+    // Prefer VID/name identity; when missing, infer from face-label tokens (Cross*/Letter*/Xbox*).
+    private static string FormatControllerFamily(
+        string? displayName,
+        ushort? hardwareVendorId,
+        IReadOnlyList<string>? labelEvidence = null)
+    {
+        var family = GamepadControllerIdentity.ResolveFamily(displayName, hardwareVendorId);
+        if (family == GamepadControllerFamily.Unknown && labelEvidence is { Count: > 0 })
+        {
+            family = GamepadControllerIdentity.ResolveFamilyFromLabels(ParseLabelEvidence(labelEvidence));
+        }
+
+        return GamepadControllerIdentity.FormatFamilyToken(family);
+    }
+
+    private static RawGameControllerButtonLabel[] ParseLabelEvidence(IReadOnlyList<string> labelEvidence)
+    {
+        var labels = new List<RawGameControllerButtonLabel>(labelEvidence.Count);
+        foreach (var entry in labelEvidence)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
+            // Diagnostics tokens look like "A:Cross", "B0:LetterB", or bare "Cross".
+            var token = entry;
+            var colon = entry.LastIndexOf(':');
+            if (colon >= 0 && colon + 1 < entry.Length)
+            {
+                token = entry[(colon + 1)..];
+            }
+
+            if (Enum.TryParse<RawGameControllerButtonLabel>(token, ignoreCase: true, out var label)
+                && label != RawGameControllerButtonLabel.None)
+            {
+                labels.Add(label);
+            }
+        }
+
+        return labels.ToArray();
+    }
+
+    private string FormatFaceButtonLayout(RawGameControllerFaceButtonLayout layout)
+        => layout switch
+        {
+            RawGameControllerFaceButtonLayout.Nintendo => _localizer["GamepadDiagnostics_FaceButtonLayoutNintendo"],
+            _ => _localizer["GamepadDiagnostics_FaceButtonLayoutStandard"]
+        };
 
     private string FormatStringList(IReadOnlyList<string> values)
         => values.Count == 0

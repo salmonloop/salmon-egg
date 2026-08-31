@@ -24,21 +24,21 @@ public sealed partial class RemoteProjectSelectionDialog : ContentDialog
 
         InitializeComponent();
 
-        Title = ResolveResourceString("RemoteProjectSelectionDialogTitle", "选择远程项目");
-        CloseButtonText = ResolveResourceString("UiInteractionCancelButtonText", "取消");
+        Title = ResolveResourceString("RemoteProjectSelectionDialogTitle", "Select remote project");
+        CloseButtonText = ResolveResourceString("UiInteractionCancelButtonText", "Cancel");
 
         if (ViewModel.HasProjects)
         {
             // Populated: primary confirms the current selection (gated on CanConfirm), the
             // secondary button routes to the authoritative remote-path settings.
-            PrimaryButtonText = ResolveResourceString("RemoteProjectSelectionAddButton", "添加");
-            SecondaryButtonText = ResolveResourceString("RemoteProjectSelectionManageButton", "管理远程项目…");
+            PrimaryButtonText = ResolveResourceString("RemoteProjectSelectionAddButton", "Add");
+            SecondaryButtonText = ResolveResourceString("RemoteProjectSelectionManageButton", "Manage remote projects…");
             IsPrimaryButtonEnabled = ViewModel.CanConfirm;
         }
         else
         {
             // Empty state: nothing to add, so the primary action takes the user to settings.
-            PrimaryButtonText = ResolveResourceString("RemoteProjectSelectionGoToSettingsButton", "前往设置");
+            PrimaryButtonText = ResolveResourceString("RemoteProjectSelectionGoToSettingsButton", "Go to settings");
             IsPrimaryButtonEnabled = true;
         }
 

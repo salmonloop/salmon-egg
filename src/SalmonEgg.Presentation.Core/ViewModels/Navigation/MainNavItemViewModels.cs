@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
@@ -79,7 +82,6 @@ public sealed partial class SettingsNavItemViewModel : MainNavItemViewModel
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
-    private bool _isActiveDescendant;
     private string _title = string.Empty;
     public string Title
     {
@@ -97,12 +99,6 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     {
         get => _isExpanded;
         set => SetProperty(ref _isExpanded, value);
-    }
-
-    public bool IsActiveDescendant
-    {
-        get => _isActiveDescendant;
-        set => SetProperty(ref _isActiveDescendant, value);
     }
 
     public ProjectNavItemViewModel(
@@ -123,6 +119,8 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 
 public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 {
+    private readonly IStringLocalizer<CoreStrings> _localizer;
+
     private readonly IUiInteractionService _ui;
     private readonly IPlatformShellService _shell;
     private readonly IChatSessionCatalog _chatSessionCatalog;
@@ -190,6 +188,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         IChatSessionCatalog chatSessionCatalog,
         INavigationPaneState navigationState,
         IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer,
         bool isPlaceholder = false)
         : this(
             sessionId,
@@ -202,6 +201,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             chatSessionCatalog,
             navigationState,
             uiDispatcher,
+            localizer,
             isPlaceholder)
     {
     }
@@ -217,6 +217,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         IChatSessionCatalog chatSessionCatalog,
         INavigationPaneState navigationState,
         IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer,
         bool isPlaceholder = false)
         : base(navigationState, uiDispatcher)
     {
@@ -228,6 +229,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         _ui = ui;
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _chatSessionCatalog = chatSessionCatalog ?? throw new ArgumentNullException(nameof(chatSessionCatalog));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         IsPlaceholder = isPlaceholder;
 
         ArchiveCommand = new AsyncRelayCommand(ArchiveAsync, CanArchive);
@@ -247,25 +249,71 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             return;
         }
 
-        _ = await _shell.CopyToClipboardAsync(RemoteSessionId!).ConfigureAwait(true);
+        try
+        {
+            var copied = await _shell.CopyToClipboardAsync(RemoteSessionId!).ConfigureAwait(true);
+            if (copied)
+            {
+                return;
+            }
+
+            await _ui.ShowInfoAsync(_localizer["About_ClipboardUnsupported"]).ConfigureAwait(true);
+        }
+        catch
+        {
+            await _ui.ShowInfoAsync(_localizer["Nav_CopySessionIdFailed"]).ConfigureAwait(true);
+        }
     }
 
     private async Task ArchiveAsync()
     {
         var confirmed = await _ui.ConfirmAsync(
-            title: "归档会话",
-            message: $"确定要归档会话 \"{Title}\" 吗？",
-            primaryButtonText: "归档",
-            closeButtonText: "取消").ConfigureAwait(true);
+            title: _localizer["Nav_ArchiveSessionTitle"],
+            message: string.Format(
+                CultureInfo.CurrentUICulture,
+                _localizer["Nav_ArchiveSessionMessage"],
+                Title),
+            primaryButtonText: _localizer["Nav_ArchiveSessionPrimary"],
+            closeButtonText: _localizer["Common_Cancel"]).ConfigureAwait(true);
 
         if (!confirmed)
         {
             return;
         }
 
-        _ = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
+        var result = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
+        if (!result.Succeeded)
+        {
+            await _ui.ShowInfoAsync(_localizer["Nav_ArchiveSessionFailed"]).ConfigureAwait(true);
+        }
+    }
+
+    private sealed class NullStringLocalizer : IStringLocalizer<CoreStrings>
+    {
+        public static readonly NullStringLocalizer Instance = new();
+
+        public LocalizedString this[string name]
+            => new(
+                name,
+                name switch
+                {
+                    "Nav_ArchiveSessionTitle" => "Archive session",
+                    "Nav_ArchiveSessionMessage" => "Archive session \"{0}\"?",
+                    "Nav_ArchiveSessionPrimary" => "Archive",
+                    "Nav_ArchiveSessionFailed" => "Failed to archive the session. Please try again later.",
+                    "Common_Cancel" => "Cancel",
+                    _ => name
+                });
+
+        public LocalizedString this[string name, params object[] arguments]
+            => new(name, string.Format(CultureInfo.InvariantCulture, this[name].Value, arguments));
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+
+        public IStringLocalizer WithCulture(CultureInfo culture) => this;
     }
 }
+
 
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 {

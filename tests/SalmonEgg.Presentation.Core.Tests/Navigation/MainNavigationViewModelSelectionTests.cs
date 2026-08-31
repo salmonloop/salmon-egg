@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Moq;
@@ -11,6 +12,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -20,6 +22,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
@@ -250,11 +253,9 @@ public sealed class MainNavigationViewModelSelectionTests
             SetSessionSelection(selectionStore, "session-1");
 
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
             var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.Equal("session-1", projectedSession.SessionId);
             var selectedSession = Assert.Single(project.Children.OfType<SessionNavItemViewModel>(), s => s.SessionId == "session-1");
-            Assert.True(selectedSession.IsLogicallySelected);
             Assert.Equal("session-1", selectedSession.SessionId);
         }
         finally
@@ -287,11 +288,9 @@ public sealed class MainNavigationViewModelSelectionTests
             SetSessionSelection(selectionStore, "session-1");
 
             var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            Assert.True(project.IsActiveDescendant);
 
             navState.SetPaneOpen(true);
 
-            Assert.True(project.IsActiveDescendant);
         }
         finally
         {
@@ -604,9 +603,68 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal("session-25", projected.SessionId);
             AssertProjectedSelectionIsMaterializedInMenuSource(navVm);
             Assert.Contains(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
-            Assert.True(project.IsActiveDescendant);
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-25", selection.SessionId);
+            var more = Assert.Single(project.Children.OfType<MoreSessionsNavItemViewModel>());
+            Assert.Equal(4, more.Count);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void ActiveSessionActivationPreview_MaterializesOverflowSessionBeforeSemanticCommit()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var preferences = CreatePreferencesWithProject();
+            var sessionIds = Enumerable.Range(1, 25)
+                .Select(index => $"session-{index:00}")
+                .ToArray();
+            var chatCatalog = CreateChatSessionCatalog(sessionIds);
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            var baseline = new DateTime(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc);
+            presenter.Refresh(sessionIds.Select((id, index) => new ConversationCatalogItem(
+                id,
+                $"Session {index + 1:00}",
+                @"C:\repo\demo",
+                baseline.AddMinutes(-index),
+                baseline.AddMinutes(-index),
+                baseline.AddMinutes(-index))));
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out _,
+                out var runtimeState,
+                presenter);
+
+            navVm.RebuildTree();
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), item => item.ProjectId == "project-1");
+            Assert.DoesNotContain(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
+
+            runtimeState.LatestActivationToken = 1;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-25",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.SelectingConversation);
+
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-25", projected.SessionId);
+            AssertProjectedSelectionIsMaterializedInMenuSource(navVm);
+            Assert.Contains(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             var more = Assert.Single(project.Children.OfType<MoreSessionsNavItemViewModel>());
             Assert.Equal(4, more.Count);
         }
@@ -873,6 +931,134 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RebuildTree_ReordersSessionWithSingleMove_SoNativeSelectionVisualIsNotStranded()
+    {
+        // The native NavigationView paints its selection (the gray mask + pill) on the realized
+        // container for SelectedItem. If a reorder is expressed as Remove+Add, NavigationView
+        // recycles a container onto a different data item and can strand the gray mask on the
+        // vacated slot — that is the "several sessions masked at once" regression. A single Move
+        // translates the existing container and carries its selection visual with it, so the
+        // relocated session MUST raise exactly one Move (and zero Remove/Add) on Children.
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-new", "session-old");
+
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            var oldUpdated = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc);
+            var newUpdated = new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc);
+
+            var snapshot = new[]
+            {
+                new ConversationCatalogItem(
+                    "session-old",
+                    "Old Session",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    oldUpdated,
+                    oldUpdated),
+                new ConversationCatalogItem(
+                    "session-new",
+                    "New Session",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
+                    newUpdated,
+                    newUpdated)
+            };
+            presenter.Refresh(snapshot);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                new Mock<IUiInteractionService>().Object,
+                new StubNavigationCoordinator(),
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                presenter,
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                Mock.Of<IStringLocalizer<CoreStrings>>());
+
+            navVm.RebuildTree();
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var orderedBefore = project.Children
+                .OfType<SessionNavItemViewModel>()
+                .Select(child => child.SessionId)
+                .ToArray();
+            Assert.Equal(new[] { "session-new", "session-old" }, orderedBefore);
+
+            var moveCount = 0;
+            var removeCount = 0;
+            var addCount = 0;
+            void OnChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+            {
+                switch (e.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Move:
+                        moveCount++;
+                        break;
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        removeCount++;
+                        break;
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                        addCount++;
+                        break;
+                }
+            }
+
+            project.Children.CollectionChanged += OnChanged;
+            try
+            {
+                // session-old now becomes the most recently updated -> it must move to the top.
+                // Ordering keys off Updated (the 5th arg), not access time, so bump Updated past
+                // newUpdated; see RebuildTree_KeepsLastUpdatedOrderingWhenOnlyAccessTimesChange.
+                var reorderedUpdated = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc);
+                var reorderedSnapshot = new[]
+                {
+                    new ConversationCatalogItem(
+                        "session-old",
+                        "Old Session",
+                        @"C:\repo\demo",
+                        new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        reorderedUpdated,
+                        reorderedUpdated),
+                    snapshot[1]
+                };
+                presenter.Refresh(reorderedSnapshot);
+                navVm.RebuildTree();
+            }
+            finally
+            {
+                project.Children.CollectionChanged -= OnChanged;
+            }
+
+            var orderedAfter = project.Children
+                .OfType<SessionNavItemViewModel>()
+                .Select(child => child.SessionId)
+                .ToArray();
+            Assert.Equal(new[] { "session-old", "session-new" }, orderedAfter);
+
+            Assert.Equal(1, moveCount);
+            Assert.Equal(0, removeCount);
+            Assert.Equal(0, addCount);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void RebuildTree_GroupsRemoteConversationByResolverOutput()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1009,6 +1195,69 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public async Task ShowAllSessionsForProjectAsync_WhenDialogThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowSessionsListDialogAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<IReadOnlyList<SessionNavItemViewModel>>(),
+                    It.IsAny<Action<string>>()))
+                .ThrowsAsync(new InvalidOperationException("dialog host unavailable"));
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(
+            [
+                new ConversationCatalogItem(
+                    "session-1",
+                    "Session 1",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc))
+            ]);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                new StubNavigationCoordinator(),
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                presenter,
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            await navVm.ShowAllSessionsForProjectAsync("project-1");
+
+            Assert.Equal(
+                ["Failed to open the sessions list. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void ApplySelectionProjection_DoesNotOverride_InjectedProjectorOutput()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1039,9 +1288,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 new Mock<IShellLayoutMetricsSink>().Object,
                 new StubNavigationSelectionProjector(new NavigationViewProjection(
                     ControlSelectedItem: sentinelItem,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
-                    SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal))),
+                    IsSettingsSelected: false)),
                 selectionStore,
                 runtimeState,
                 presenter,
@@ -1100,13 +1347,15 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
 
             runtimeState.ActiveSessionActivation = null;
@@ -1155,6 +1404,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "missing-session",
                 "project-1",
@@ -1163,6 +1413,138 @@ public sealed class MainNavigationViewModelSelectionTests
 
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SessionActivationPreview_IgnoresStaleActivationVersion()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out var selectionStore,
+                out var runtimeState);
+
+            navVm.RebuildTree();
+            selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 2;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.NavigatingToChatShell);
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SessionActivationPreview_IgnoresSessionActivation_WhenPendingShellContentIsNotChat()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out var selectionStore,
+                out var runtimeState);
+
+            navVm.RebuildTree();
+            selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 1;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.NavigatingToChatShell);
+
+            Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+
+            runtimeState.PendingShellContent = ShellNavigationContent.Start;
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SessionSelection_ForSessionNotInCatalog_ProjectsNothingRatherThanStart()
+    {
+        // Regression: a persisted/committed session selection whose session is not (yet)
+        // in the catalog — e.g. deferred conversation restore on cold start — must project
+        // to "nothing selected", NOT Start. Painting Start for the deferred session caused
+        // the native NavigationView to briefly highlight Start and then the session, leaving
+        // two items highlighted. Projecting null keeps exactly one (or zero) highlight.
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(CreateSnapshot(chatCatalog.GetKnownConversationIds()));
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out var selectionStore,
+                out _,
+                presenter);
+
+            navVm.RebuildTree();
+            SetSessionSelection(selectionStore, "missing-session");
+
+            Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Null(navVm.ProjectedControlSelectedItem);
         }
         finally
         {
@@ -1273,7 +1655,6 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(0, projectedNotifies);
             Assert.Same(projectedAtStart, navVm.ProjectedControlSelectedItem);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
 
             // Phase 2: stay in Compact, toggle pane open/close (overlay)
             navState.SetPaneOpen(true);
@@ -1290,7 +1671,6 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(0, projectedNotifies);
             Assert.Same(projectedAtStart, navVm.ProjectedControlSelectedItem);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
 
             // Final: the exact same object reference throughout
             var sessionVm = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
@@ -1383,6 +1763,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
             selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
@@ -1390,8 +1771,9 @@ public sealed class MainNavigationViewModelSelectionTests
                 SessionActivationPhase.SelectingConversation);
             navVm.RefreshSelectionProjection();
 
-            Assert.False(navVm.StartItem.IsLogicallySelected);
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
         {
@@ -1438,6 +1820,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 }
             };
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
@@ -1482,7 +1865,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
             selectionStore.SetSelection(NavigationSelectionState.StartSelection);
-            var projectedBefore = Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
 
             var projectedSelectionChanged = 0;
             navVm.PropertyChanged += (_, e) =>
@@ -1493,14 +1876,17 @@ public sealed class MainNavigationViewModelSelectionTests
                 }
             };
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal(0, projectedSelectionChanged);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
+            Assert.Equal(1, projectedSelectionChanged);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
         {
@@ -1695,6 +2081,11 @@ public sealed class MainNavigationViewModelSelectionTests
             var navState = new FakeNavigationPaneState();
             var preferences = CreatePreferencesWithProject();
             var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator
                 .Setup(coordinator => coordinator.ActivateStartAsync("project-1"))
@@ -1703,7 +2094,7 @@ public sealed class MainNavigationViewModelSelectionTests
             using var navVm = new MainNavigationViewModel(
                 chatCatalog,
                 CreateProjectPreferences(preferences),
-                new Mock<IUiInteractionService>().Object,
+                ui.Object,
                 navigationCoordinator.Object,
                 new Mock<ILogger<MainNavigationViewModel>>().Object,
                 navState,
@@ -1714,12 +2105,468 @@ public sealed class MainNavigationViewModelSelectionTests
                 CreatePresenter(chatCatalog),
                 new ProjectAffinityResolver(),
                 new ImmediateUiDispatcher(),
-                Mock.Of<IStringLocalizer<CoreStrings>>());
+                new TestCoreStringLocalizer());
 
             await navVm.PrepareStartForProjectAsync("project-1");
 
             Assert.Null(navVm.ConsumePendingProjectRootPath());
             navigationCoordinator.Verify(coordinator => coordinator.ActivateStartAsync("project-1"), Times.Once);
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task PrepareStartForProjectAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync("project-1"))
+                .ThrowsAsync(new InvalidOperationException("start shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            await navVm.PrepareStartForProjectAsync("project-1");
+
+            Assert.Null(navVm.ConsumePendingProjectRootPath());
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateDiscoverSessionsAsync())
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateDiscoverSessionsAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open Discover sessions. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateDiscoverSessionsAsync())
+                .ThrowsAsync(new InvalidOperationException("discover shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateDiscoverSessionsAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open Discover sessions. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateStartAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync(null))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateStartAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateStartAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync(null))
+                .ThrowsAsync(new InvalidOperationException("start shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateStartAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey);
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+                .ThrowsAsync(new InvalidOperationException("settings shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey);
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
+
+    [Fact]
+    public async Task ActivateSessionAsync_WhenCoordinatorFailsBeforeSelectionCommit_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSessionAsync("session-1", "project-1"))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSessionAsync("session-1", "project-1");
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open this session. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_WhenSelectionAlreadyCommitted_DoesNotDuplicateCalloutWithInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var selectionStore = new ShellSelectionStateStore();
+            selectionStore.SetSelection(new NavigationSelectionState.Session("session-1"));
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSessionAsync("session-1", "project-1"))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                selectionStore,
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSessionAsync("session-1", "project-1");
+
+            Assert.False(opened);
+            Assert.Empty(shownMessages);
         }
         finally
         {
@@ -1753,10 +2600,16 @@ public sealed class MainNavigationViewModelSelectionTests
                 .Setup(coordinator => coordinator.ActivateStartAsync("project-2"))
                 .ReturnsAsync(true);
 
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
             using var navVm = new MainNavigationViewModel(
                 chatCatalog,
                 CreateProjectPreferences(preferences),
-                new Mock<IUiInteractionService>().Object,
+                ui.Object,
                 navigationCoordinator.Object,
                 new Mock<ILogger<MainNavigationViewModel>>().Object,
                 navState,
@@ -1767,7 +2620,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 CreatePresenter(chatCatalog),
                 new ProjectAffinityResolver(),
                 new ImmediateUiDispatcher(),
-                Mock.Of<IStringLocalizer<CoreStrings>>());
+                new TestCoreStringLocalizer());
 
             var staleTask = navVm.PrepareStartForProjectAsync("project-1");
             var latestTask = navVm.PrepareStartForProjectAsync("project-2");
@@ -1777,6 +2630,7 @@ public sealed class MainNavigationViewModelSelectionTests
             await staleTask;
 
             Assert.Equal(@"C:\repo\second", navVm.ConsumePendingProjectRootPath());
+            Assert.Empty(shownMessages);
         }
         finally
         {
@@ -1903,6 +2757,360 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+    [Fact]
+    public async Task SelectRemoteProjectCommand_WhenManageRequestedAndSettingsActivationFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.ShowRemoteProjectSelectionAsync(It.IsAny<RemoteProjectSelectionViewModel>()))
+                .ReturnsAsync(RemoteProjectSelectionResult.Manage);
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var navigationCoordinator = new ControllableNavigationCoordinator
+            {
+                SettingsActivationResult = false,
+            };
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                navigationCoordinatorOverride: navigationCoordinator);
+
+            await navVm.SelectRemoteProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(SettingsSectionCatalog.AgentAcpKey, navigationCoordinator.LastSettingsKey);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task SelectRemoteProjectCommand_WhenManageRequestedAndSettingsActivationThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.ShowRemoteProjectSelectionAsync(It.IsAny<RemoteProjectSelectionViewModel>()))
+                .ReturnsAsync(RemoteProjectSelectionResult.Manage);
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var navigationCoordinator = new ControllableNavigationCoordinator
+            {
+                SettingsActivationException = new InvalidOperationException("settings shell unavailable"),
+            };
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                navigationCoordinatorOverride: navigationCoordinator);
+
+            await navVm.SelectRemoteProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(SettingsSectionCatalog.AgentAcpKey, navigationCoordinator.LastSettingsKey);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
+    [Fact]
+    public async Task AddLocalProjectCommand_WhenSelectionIsInvalid_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.PickFolderAsync())
+                .ReturnsAsync(@"C:\repo\invalid-empty");
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var addProjectCoordinator = new Mock<IAddProjectCoordinator>();
+            addProjectCoordinator
+                .Setup(coordinator => coordinator.AddProject(It.IsAny<ProjectSourceSelection>()))
+                .Returns(AddProjectOutcome.Invalid);
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                addProjectCoordinatorOverride: addProjectCoordinator.Object);
+
+            await navVm.AddLocalProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(
+                ["That project selection is not valid. Please choose another folder or remote directory."],
+                shownMessages);
+            addProjectCoordinator.Verify(
+                coordinator => coordinator.AddProject(It.IsAny<ProjectSourceSelection.LocalFolder>()),
+                Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    // --- Session order cadence ---
+    // Reordering a rendered row makes Uno's ItemsRepeater recycle its realized container (Move is
+    // decomposed into Remove+Add). The recycled container keeps NavigationView's selected flag and
+    // the deselect of the previous item no-ops once that container is gone, so the selection mask
+    // strands across rows. The pane therefore holds rendered rows while unsettled and converges to
+    // recency order once quiet.
+
+    [Fact]
+    public void SessionOrder_WhenSettled_AppliesRecencyOrder()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+
+            harness.PublishRecency("session-3", "session-1", "session-2");
+            harness.Rebuild();
+            Assert.Equal(["session-3", "session-1", "session-2"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileActivationInFlight_HoldsRenderedRowsInPlace()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.BeginActivation("session-1");
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileConversationListLoading_HoldsRenderedRowsInPlace()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.SetLoading(true);
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_AfterActivationSettles_ConvergesToRecencyOrder()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.BeginActivation("session-1");
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+
+            // The hold must not starve: a terminal activation lets the pending order apply.
+            harness.CompleteActivation();
+            harness.Rebuild();
+            Assert.Equal(["session-3", "session-2", "session-1"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileUnsettled_StillAdmitsNewSessions()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2"], harness.RenderedSessionIds());
+
+            harness.BeginActivation("session-1");
+            // A newly catalogued session tops recency; it must still appear, appended after the
+            // held rows rather than displacing them (an insert does not recycle its siblings).
+            harness.PublishRecency("session-3", "session-1", "session-2");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    private static void RunWithImmediateContext(Action body)
+    {
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new ImmediateSynchronizationContext());
+        try
+        {
+            body();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private static SessionOrderHarness CreateSessionOrderHarness(params string[] sessionIds)
+    {
+        var navState = new FakeNavigationPaneState();
+        navState.SetPaneOpen(true);
+        var presenter = new MutableConversationCatalogDisplayReadModel();
+        presenter.SetLoading(false);
+
+        var navVm = CreateNavigationViewModel(
+            CreateChatSessionCatalog(sessionIds),
+            Mock.Of<ISessionManager>(),
+            CreatePreferencesWithProject(),
+            navState,
+            out _,
+            out var runtimeState,
+            presenter);
+
+        return new SessionOrderHarness(navVm, presenter, runtimeState);
+    }
+
+    private sealed class SessionOrderHarness(
+        MainNavigationViewModel navVm,
+        MutableConversationCatalogDisplayReadModel presenter,
+        ShellNavigationRuntimeStateStore runtimeState) : IDisposable
+    {
+        private static readonly DateTime OrderBaseline = new(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc);
+        private long _activationVersion;
+
+        public void PublishRecency(params string[] sessionIdsMostRecentFirst)
+            => presenter.Refresh(sessionIdsMostRecentFirst.Select((id, index) => new ConversationCatalogItem(
+                id,
+                id,
+                @"C:\repo\demo",
+                OrderBaseline.AddMinutes(-index),
+                OrderBaseline.AddMinutes(-index),
+                OrderBaseline.AddMinutes(-index))));
+
+        public void SetLoading(bool value) => presenter.SetLoading(value);
+
+        public void BeginActivation(string sessionId)
+        {
+            _activationVersion++;
+            runtimeState.LatestActivationToken = _activationVersion;
+            runtimeState.ActiveSessionActivationVersion = _activationVersion;
+            runtimeState.IsSessionActivationInProgress = true;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                sessionId,
+                "project-1",
+                _activationVersion,
+                SessionActivationPhase.SelectingConversation);
+        }
+
+        public void CompleteActivation()
+        {
+            var activation = runtimeState.ActiveSessionActivation;
+            runtimeState.IsSessionActivationInProgress = false;
+            runtimeState.ActiveSessionActivationVersion = 0;
+            if (activation is not null)
+            {
+                runtimeState.ActiveSessionActivation = activation with
+                {
+                    Phase = SessionActivationPhase.Hydrated
+                };
+            }
+        }
+
+        public void Rebuild() => navVm.RebuildTree();
+
+        public string[] RenderedSessionIds()
+            => navVm.Items
+                .OfType<ProjectNavItemViewModel>()
+                .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+                .Where(session => !session.IsPlaceholder)
+                .Select(session => session.SessionId)
+                .ToArray();
+
+        public void Dispose() => navVm.Dispose();
+    }
+
     private static MainNavigationViewModel CreateNavigationViewModel(
         IConversationCatalog chatCatalog,
         ISessionManager sessionManager,
@@ -1929,11 +3137,13 @@ public sealed class MainNavigationViewModelSelectionTests
         IConversationCatalogDisplayReadModel? presenterOverride = null,
         IUiInteractionService? uiOverride = null,
         IStringLocalizer<CoreStrings>? localizerOverride = null,
-        IAppLanguageService? languageServiceOverride = null)
+        IAppLanguageService? languageServiceOverride = null,
+        INavigationCoordinator? navigationCoordinatorOverride = null,
+        IAddProjectCoordinator? addProjectCoordinatorOverride = null)
     {
         var ui = new Mock<IUiInteractionService>();
         ui.SetupGet(service => service.CanPickFolder).Returns(true);
-        var navigationCoordinator = new StubNavigationCoordinator();
+        var navigationCoordinator = navigationCoordinatorOverride ?? new StubNavigationCoordinator();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var presenter = presenterOverride ?? CreatePresenter(chatCatalog);
@@ -1955,8 +3165,9 @@ public sealed class MainNavigationViewModelSelectionTests
             presenter,
             new ProjectAffinityResolver(),
             uiDispatcher,
-            localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>(),
-            languageService: languageServiceOverride);
+            localizerOverride ?? new TestCoreStringLocalizer(),
+            languageService: languageServiceOverride,
+            addProjectCoordinator: addProjectCoordinatorOverride);
     }
 
     private static MutableConversationCatalogDisplayReadModel CreatePresenter(IConversationCatalog chatCatalog)
@@ -2254,8 +3465,11 @@ public sealed class MainNavigationViewModelSelectionTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         preferences.Projects.Add(new ProjectDefinition
         {
@@ -2267,48 +3481,47 @@ public sealed class MainNavigationViewModelSelectionTests
         return preferences;
     }
 
-    private sealed class FakeChatSessionCatalog : IConversationCatalog
+    private sealed class ControllableNavigationCoordinator : INavigationCoordinator
     {
-        private readonly List<string> _conversationIds;
+        public bool SettingsActivationResult { get; set; } = true;
 
-        public FakeChatSessionCatalog(params string[] conversationIds)
+        public Exception? SettingsActivationException { get; set; }
+
+        public string? LastSettingsKey { get; private set; }
+
+        public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
+
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
+
+        public Task<bool> ActivateSettingsAsync(string settingsKey)
         {
-            _conversationIds = new List<string>(conversationIds);
+            LastSettingsKey = settingsKey;
+            if (SettingsActivationException is not null)
+            {
+                throw SettingsActivationException;
+            }
+
+            return Task.FromResult(SettingsActivationResult);
         }
 
-        public bool IsConversationListLoading { get; set; }
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
-        public int ConversationListVersion { get; private set; }
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, null));
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public string[] GetKnownConversationIds() => _conversationIds.ToArray();
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public void RaiseConversationListChanged()
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
         {
-            ConversationListVersion++;
-            RaisePropertyChanged(nameof(ConversationListVersion));
         }
-
-        public void RaisePropertyChanged(string propertyName)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
     private sealed class StubNavigationCoordinator : INavigationCoordinator
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
@@ -2336,8 +3549,7 @@ public sealed class MainNavigationViewModelSelectionTests
             StartNavItemViewModel startItem,
             DiscoverSessionsNavItemViewModel discoverSessionsItem,
             SettingsNavItemViewModel settingsItem,
-            IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-            IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
+            IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex)
             => _projection;
     }
 }

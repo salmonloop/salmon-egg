@@ -26,8 +26,6 @@ public readonly record struct TranscriptVirtualizationRange(int FirstIndex, int 
                 : FirstIndex + Length - 1;
         }
     }
-
-    public bool Contains(int index) => index >= FirstIndex && index <= LastIndex;
 }
 
 public sealed class ChatTranscriptVirtualizedMessageCollection :
@@ -410,7 +408,8 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         ConversationMessageSnapshot newSnapshot)
         => ReferenceEquals(oldSnapshot, newSnapshot)
            || (string.Equals(oldSnapshot.Id, newSnapshot.Id, StringComparison.Ordinal)
-               && oldSnapshot.Timestamp == newSnapshot.Timestamp
+               // Instant equality owns time comparison; ambient DateTimeKind is not identity.
+               && ConversationMessageTimestamp.InstantEquals(oldSnapshot.Timestamp, newSnapshot.Timestamp)
                && oldSnapshot.IsOutgoing == newSnapshot.IsOutgoing
                && string.Equals(oldSnapshot.ContentType ?? string.Empty, newSnapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.Title ?? string.Empty, newSnapshot.Title ?? string.Empty, StringComparison.Ordinal)
@@ -419,14 +418,15 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                && string.Equals(oldSnapshot.ImageMimeType ?? string.Empty, newSnapshot.ImageMimeType ?? string.Empty, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.AudioData ?? string.Empty, newSnapshot.AudioData ?? string.Empty, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.AudioMimeType ?? string.Empty, newSnapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ProtocolMessageId, newSnapshot.ProtocolMessageId, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallId, newSnapshot.ToolCallId, StringComparison.Ordinal)
                && oldSnapshot.ToolCallKind == newSnapshot.ToolCallKind
                && oldSnapshot.ToolCallStatus == newSnapshot.ToolCallStatus
                && string.Equals(oldSnapshot.ToolCallJson, newSnapshot.ToolCallJson, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallRawInputJson, newSnapshot.ToolCallRawInputJson, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallRawOutputJson, newSnapshot.ToolCallRawOutputJson, StringComparison.Ordinal)
-               && ToolCallContentSnapshots.SequenceEquals(oldSnapshot.ToolCallContent, newSnapshot.ToolCallContent)
-               && ToolCallContentSnapshots.LocationsSequenceEquals(oldSnapshot.ToolCallLocations, newSnapshot.ToolCallLocations)
+               && ToolCallContentSnapshots.DomainPayloadEquals(oldSnapshot.ToolCallContent, newSnapshot.ToolCallContent)
+               && ToolCallContentSnapshots.DomainPayloadEquals(oldSnapshot.ToolCallLocations, newSnapshot.ToolCallLocations)
                && string.Equals(oldSnapshot.ModeId, newSnapshot.ModeId, StringComparison.Ordinal)
                && PlanEntrySnapshotEquals(oldSnapshot.PlanEntry, newSnapshot.PlanEntry));
 

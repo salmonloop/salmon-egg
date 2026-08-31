@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.Views.Navigation;
 using Windows.ApplicationModel.Resources;
 
@@ -14,10 +15,14 @@ public sealed class UiInteractionService : IUiInteractionService
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IFolderPickerService _folderPicker;
+    private readonly AppActivationSignalSource _activationSignalSource;
 
-    public UiInteractionService(IFolderPickerService folderPicker)
+    public UiInteractionService(
+        IFolderPickerService folderPicker,
+        AppActivationSignalSource activationSignalSource)
     {
         _folderPicker = folderPicker ?? throw new ArgumentNullException(nameof(folderPicker));
+        _activationSignalSource = activationSignalSource ?? throw new ArgumentNullException(nameof(activationSignalSource));
     }
 
     public bool CanPickFolder => _folderPicker.IsSupported;
@@ -32,11 +37,11 @@ public sealed class UiInteractionService : IUiInteractionService
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
-            Title = ResolveResourceString("UiInteractionInfoDialogTitle", "提示"),
+            Title = ResolveResourceString("UiInteractionInfoDialogTitle", "Notice"),
             Content = message ?? string.Empty,
-            CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+            CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "OK")
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         await dialog.ShowAsync();
     }
@@ -51,17 +56,17 @@ public sealed class UiInteractionService : IUiInteractionService
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = message ?? string.Empty,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
-                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "OK")
                 : primaryButtonText,
             CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
-                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                ? ResolveResourceString("UiInteractionCancelButtonText", "Cancel")
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary;
@@ -75,26 +80,29 @@ public sealed class UiInteractionService : IUiInteractionService
             return null;
         }
 
+        // Stretch with the dialog content host instead of a fixed MinWidth: a 320px
+        // floor overflows narrow windows (WASM/phone/split) while ContentDialog already
+        // owns chrome sizing via DefaultContentDialogStyle.
         var input = new TextBox
         {
             Text = initialText ?? string.Empty,
-            MinWidth = 320,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             TextWrapping = TextWrapping.NoWrap
         };
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = input,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
-                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "OK")
                 : primaryButtonText,
             CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
-                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                ? ResolveResourceString("UiInteractionCancelButtonText", "Cancel")
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         if (result != ContentDialogResult.Primary)
@@ -131,9 +139,9 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             // Supported native picker failures keep the user on the same explicit path input flow.
             return await PromptTextAsync(
-                title: ResolveResourceString("UiInteractionPickFolderTitle", "添加项目"),
-                primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
-                closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
+                title: ResolveResourceString("UiInteractionPickFolderTitle", "Add project"),
+                primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "OK"),
+                closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "Cancel"),
                 initialText: "").ConfigureAwait(true);
         }
 
@@ -147,16 +155,16 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             return;
         }
-        var dialog = new SessionsListDialog(string.IsNullOrWhiteSpace(title) ? string.Empty : title, sessions)
-        {
-            XamlRoot = xamlRoot
-        };
+        var dialog = new SessionsListDialog(string.IsNullOrWhiteSpace(title) ? string.Empty : title, sessions);
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         await dialog.ShowAsync();
 
         if (!string.IsNullOrWhiteSpace(dialog.PickedSessionId))
         {
-            try { onPickSession(dialog.PickedSessionId!); } catch { }
+            // Let pick-session failures surface to the caller so navigation owners can
+            // log/recover; the UI shell must not silently drop activation errors.
+            onPickSession(dialog.PickedSessionId!);
         }
     }
 
@@ -170,36 +178,40 @@ public sealed class UiInteractionService : IUiInteractionService
             return RemoteProjectSelectionResult.Cancel;
         }
 
-        var dialog = new RemoteProjectSelectionDialog(viewModel)
-        {
-            XamlRoot = xamlRoot
-        };
+        var dialog = new RemoteProjectSelectionDialog(viewModel);
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         dialog.ApplyResult(result);
         return dialog.Result;
     }
 
-    private static XamlRoot? GetXamlRoot()
+    private XamlRoot? GetXamlRoot()
     {
         try
         {
-            if (App.MainWindowInstance?.Content is Frame rootFrame)
-            {
-                if (rootFrame.Content is FrameworkElement shell)
-                {
-                    return shell.XamlRoot;
-                }
-
-                return rootFrame.XamlRoot;
-            }
-
-            return (App.MainWindowInstance?.Content as FrameworkElement)?.XamlRoot;
+            return ResolveWindowXamlRoot(_activationSignalSource.ActiveWindow)
+                ?? ResolveWindowXamlRoot(App.MainWindowInstance);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static XamlRoot? ResolveWindowXamlRoot(Window? window)
+    {
+        if (window?.Content is Frame rootFrame)
+        {
+            if (rootFrame.Content is FrameworkElement shell)
+            {
+                return shell.XamlRoot;
+            }
+
+            return rootFrame.XamlRoot;
+        }
+
+        return (window?.Content as FrameworkElement)?.XamlRoot;
     }
 
     private static string ResolveResourceString(string resourceKey, string fallback)

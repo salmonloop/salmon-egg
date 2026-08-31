@@ -1,4 +1,5 @@
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Domain.Models.Conversation;
 using System.Collections.Immutable;
 using Xunit;
@@ -82,6 +83,141 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenRemoteHydratingRuntime_WhenPromoteToWarm_ThenRuntimeBecomesWarm()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(ConversationRuntimePhase.RemoteHydrating)));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, reason: ConversationRuntimeReasons.SessionLoadCompleted)));
+
+        // Assert
+        var runtime = next.ResolveRuntimeState("conv-1");
+        Assert.Equal(ConversationRuntimePhase.Warm, runtime?.Phase);
+        Assert.Equal(ConversationRuntimeReasons.SessionLoadCompleted, runtime?.Reason);
+    }
+
+    [Fact]
+    public void GivenHydratingRuntimeOnDifferentConnection_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:同会话更新激活已在新连接身份上重建 RemoteHydrating(case study
+        // 「后台恢复完成的权威晋升」验证场景 3),旧身份的过时完成不得先戳 Warm。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.RemoteHydrating, connectionInstanceId: "conn-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-old")));
+
+        // Assert
+        Assert.Equal(ConversationRuntimePhase.RemoteHydrating, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
+    public void GivenHydratingRuntimeOnDifferentRemoteSession_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:同会话 rebind 后以新 remote session 身份重建 RemoteHydrating,
+        // 旧 remote session 的过时完成不得晋升。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.RemoteHydrating, remoteSessionId: "remote-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, remoteSessionId: "remote-old")));
+
+        // Assert
+        Assert.Equal(ConversationRuntimePhase.RemoteHydrating, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
+    }
+
+    [Theory]
+    [InlineData(ConversationRuntimePhase.Selecting)]
+    [InlineData(ConversationRuntimePhase.Selected)]
+    [InlineData(ConversationRuntimePhase.RemoteConnectionReady)]
+    [InlineData(ConversationRuntimePhase.Stale)]
+    [InlineData(ConversationRuntimePhase.Faulted)]
+    public void GivenRuntimeResetByNewerActivation_WhenStalePromoteToWarm_ThenPromotionIsRejected(
+        ConversationRuntimePhase currentPhase)
+    {
+        // Arrange:同会话更新激活已把 runtime 重置到更早/终态阶段(case study「后台恢复完成的权威晋升」唯一例外)。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(currentPhase)));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm)));
+
+        // Assert
+        Assert.Equal(currentPhase, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
+    public void GivenMissingRuntime_WhenPromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Act
+        var next = ChatReducer.Reduce(
+            ChatState.Empty,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm)));
+
+        // Assert
+        Assert.Null(next.ResolveRuntimeState("conv-1"));
+    }
+
+    [Fact]
+    public void GivenWarmRuntimeWithSameIdentity_WhenPromoteToWarm_ThenRestampIsApplied()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "old")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "new")));
+
+        // Assert
+        Assert.Equal("new", next.ResolveRuntimeState("conv-1")?.Reason);
+    }
+
+    [Fact]
+    public void GivenWarmRuntimeOnDifferentConnection_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:更新激活已在新连接上完成权威 Warm,过时完成不得改写其身份。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-old")));
+
+        // Assert
+        Assert.Equal("conn-newer", next.ResolveRuntimeState("conv-1")?.ConnectionInstanceId);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
     public void GivenState_WhenRuntimeMutationOccurs_ThenGenerationIncrements()
     {
         // Arrange
@@ -133,6 +269,35 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenEmptyProfileIntent_WhenProfileIntentIsInitialized_ThenPreferenceBecomesAuthoritative()
+    {
+        var initialState = ChatConnectionState.Empty with { Generation = 4 };
+
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new InitializeSelectedProfileIntentAction("profile-preferred"));
+
+        Assert.Equal("profile-preferred", next.SelectedProfileIntentId);
+        Assert.Equal(5, next.Generation);
+    }
+
+    [Fact]
+    public void GivenAuthoritativeProfileIntent_WhenProfileIntentInitializationRaces_ThenAuthoritativeIntentIsPreserved()
+    {
+        var initialState = ChatConnectionState.Empty with
+        {
+            SelectedProfileIntentId = "profile-authoritative",
+            Generation = 4
+        };
+
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new InitializeSelectedProfileIntentAction("profile-preferred"));
+
+        Assert.Same(initialState, next);
+    }
+
+    [Fact]
     public void GivenConnectionState_WhenConnectionInstanceIdChanges_ThenOnlyIdentityAndGenerationUpdate()
     {
         var initialState = ChatConnectionState.Empty with
@@ -157,6 +322,55 @@ public class ChatReducerTests
         Assert.Equal("hint", next.AuthenticationHintMessage);
         Assert.Equal("profile-1", next.ForegroundTransportProfileId);
         Assert.Equal(13, next.Generation);
+    }
+
+    [Fact]
+    public void Reduce_SetAuthenticationRequired_StoresPresentationIdentity()
+    {
+        // Arrange
+        var formatArgs = new object[] { "denied" };
+        var action = new SetConnectionAuthenticationStateAction(
+            IsRequired: true,
+            HintMessage: "认证失败：denied",
+            HintResourceKey: "ChatAuth_FailedWithDetail",
+            HintFallback: "Authentication failed: {0}",
+            HintFormatArgs: formatArgs);
+
+        // Act
+        var next = ChatConnectionReducer.Reduce(ChatConnectionState.Empty, action);
+
+        // Assert
+        Assert.True(next.IsAuthenticationRequired);
+        Assert.Equal("认证失败：denied", next.AuthenticationHintMessage);
+        Assert.Equal("ChatAuth_FailedWithDetail", next.AuthenticationHintResourceKey);
+        Assert.Equal("Authentication failed: {0}", next.AuthenticationHintFallback);
+        Assert.Same(formatArgs, next.AuthenticationHintFormatArgs);
+    }
+
+    [Fact]
+    public void Reduce_ClearAuthenticationRequired_ClearsPresentationIdentity()
+    {
+        // Arrange
+        var initialState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "认证失败：denied",
+            AuthenticationHintResourceKey = "ChatAuth_FailedWithDetail",
+            AuthenticationHintFallback = "Authentication failed: {0}",
+            AuthenticationHintFormatArgs = ["denied"]
+        };
+
+        // Act
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new SetConnectionAuthenticationStateAction(false, HintMessage: "ignored"));
+
+        // Assert
+        Assert.False(next.IsAuthenticationRequired);
+        Assert.Null(next.AuthenticationHintMessage);
+        Assert.Null(next.AuthenticationHintResourceKey);
+        Assert.Null(next.AuthenticationHintFallback);
+        Assert.Null(next.AuthenticationHintFormatArgs);
     }
 
     [Fact]
@@ -458,6 +672,66 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void UpsertTranscript_WhenMessageIdsAreEmpty_DoesNotCollapseDistinctMessages()
+    {
+        // Production defect: ConversationMessageSnapshot.Id defaults to string.Empty.
+        // Upsert matched by raw string.Equals(Id), so every empty-Id snapshot replaced the
+        // first empty-Id row and silently dropped distinct transcript content (corrupt
+        // persistence, partial projectors, or any path that forgot to assign Id).
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+        var first = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "text",
+            TextContent = "first empty-id message"
+        };
+        var second = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "tool_call",
+            Title = "Read file",
+            ToolCallId = "tool-1"
+        };
+
+        var afterFirst = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-1", first));
+        var afterSecond = ChatReducer.Reduce(afterFirst, new UpsertTranscriptMessageAction("conv-1", second));
+
+        var transcript = afterSecond.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        Assert.Equal(2, transcript!.Count);
+        Assert.Equal("first empty-id message", transcript[0].TextContent);
+        Assert.Equal("tool_call", transcript[1].ContentType);
+        Assert.Equal("tool-1", transcript[1].ToolCallId);
+    }
+
+    [Fact]
+    public void UpsertTranscript_WhenMessageIdIsStable_StillReplacesSameRow()
+    {
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+        var original = new ConversationMessageSnapshot
+        {
+            Id = "m-stable",
+            ContentType = "text",
+            TextContent = "before"
+        };
+        var replacement = new ConversationMessageSnapshot
+        {
+            Id = "m-stable",
+            ContentType = "text",
+            TextContent = "after"
+        };
+
+        var afterOriginal = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-1", original));
+        var afterReplace = ChatReducer.Reduce(afterOriginal, new UpsertTranscriptMessageAction("conv-1", replacement));
+
+        var transcript = afterReplace.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        var message = Assert.Single(transcript!);
+        Assert.Equal("m-stable", message.Id);
+        Assert.Equal("after", message.TextContent);
+    }
+
+    [Fact]
     public void GivenBackgroundConversationSessionState_WhenSelectingThatConversation_ThenSessionStateProjectsFromStoredSlice()
     {
         var initialState = ChatState.Empty with
@@ -641,7 +915,6 @@ public class ChatReducerTests
             "conv-1",
             SessionInfo: new ConversationSessionInfoSnapshot
             {
-                Description = "after",
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["shared"] = "after",
@@ -654,14 +927,13 @@ public class ChatReducerTests
         var sessionInfo = sessionState!.Value.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal("before", sessionInfo!.Title);
-        Assert.Equal("after", sessionInfo.Description);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
         Assert.Equal("after", sessionInfo.Meta["shared"]);
         Assert.Equal(2, sessionInfo.Meta["added"]);
     }
 
     [Fact]
-    public void MergeConversationSessionState_ReplacesTitleAndPreservesOtherStringFields_WhenIncomingTitleIsEmpty()
+    public void MergeConversationSessionState_ReplacesTitleAndPreservesCwd_WhenIncomingTitleIsEmpty()
     {
         var initialState = ChatState.Empty with
         {
@@ -677,7 +949,6 @@ public class ChatReducerTests
                     new ConversationSessionInfoSnapshot
                     {
                         Title = "before title",
-                        Description = "before description",
                         Cwd = @"C:\repo\before"
                     },
                     null))
@@ -688,7 +959,6 @@ public class ChatReducerTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)
             }));
@@ -698,7 +968,6 @@ public class ChatReducerTests
         var sessionInfo = sessionState!.Value.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal(string.Empty, sessionInfo!.Title);
-        Assert.Equal("before description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\before", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -720,7 +989,6 @@ public class ChatReducerTests
                     new ConversationSessionInfoSnapshot
                     {
                         Title = "before title",
-                        Description = "before description",
                         Cwd = @"C:\repo\before",
                         Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                         {
@@ -736,7 +1004,6 @@ public class ChatReducerTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = " ",
-                Description = "\t",
                 Cwd = " ",
                 UpdatedAtUtc = new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -751,7 +1018,6 @@ public class ChatReducerTests
         var sessionInfo = sessionState!.Value.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal(" ", sessionInfo!.Title);
-        Assert.Equal("before description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\before", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 4, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
@@ -776,7 +1042,6 @@ public class ChatReducerTests
                     new ConversationSessionInfoSnapshot
                     {
                         Title = "before",
-                        Description = "existing description",
                         Cwd = @"C:\repo\one",
                         UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
                     },
@@ -788,7 +1053,6 @@ public class ChatReducerTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
             }));
@@ -796,7 +1060,6 @@ public class ChatReducerTests
         var sessionInfo = next.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal(string.Empty, sessionInfo!.Title);
-        Assert.Equal("existing description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -1006,4 +1269,103 @@ public class ChatReducerTests
 
         Assert.Equal(ChatTurnPhase.Completed, newState.ActiveTurn!.Phase);
     }
+
+    [Fact]
+    public void AppendTextDelta_FirstChunk_DoesNotInventMessageTimestamp()
+    {
+        // ACP agent_message_chunk carries no per-message timestamp. A first chunk must not
+        // be stamped with a wall clock; null means "no authoritative time".
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", "Hello", ProtocolMessageId: "msg-agent-1"));
+
+        var transcript = newState.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        var message = Assert.Single(transcript!);
+        Assert.Equal("Hello", message.TextContent);
+        Assert.Equal("msg-agent-1", message.ProtocolMessageId);
+        Assert.False(message.IsOutgoing);
+        Assert.Null(message.Timestamp);
+    }
+
+    [Fact]
+    public void AppendTextDelta_SubsequentChunk_PreservesExistingNullTimestamp()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "m-1",
+                        ContentType = "text",
+                        TextContent = "Hello",
+                        ProtocolMessageId = "msg-agent-1",
+                        Timestamp = null
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false))
+        };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", " world", ProtocolMessageId: "msg-agent-1"));
+
+        var slice = newState.ResolveContentSlice("conv-1");
+        Assert.NotNull(slice);
+        var message = Assert.Single(slice!.Value.Transcript);
+        Assert.Equal("Hello world", message.TextContent);
+        Assert.Null(message.Timestamp);
+    }
+
+    [Fact]
+    public void AppendTextDelta_SubsequentChunk_DoesNotRefreshExistingTimestamp()
+    {
+        var originalTime = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "m-1",
+                        ContentType = "text",
+                        TextContent = "Hello",
+                        ProtocolMessageId = "msg-agent-1",
+                        Timestamp = originalTime
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false))
+        };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", " world", ProtocolMessageId: "msg-agent-1"));
+
+        var slice = newState.ResolveContentSlice("conv-1");
+        Assert.NotNull(slice);
+        var message = Assert.Single(slice!.Value.Transcript);
+        Assert.Equal("Hello world", message.TextContent);
+        Assert.Equal(originalTime, message.Timestamp);
+    }
+
+    private static ConversationRuntimeSlice CreateRuntime(
+        ConversationRuntimePhase phase,
+        string connectionInstanceId = "conn-1",
+        string remoteSessionId = "remote-1",
+        string? reason = null)
+        => new(
+            ConversationId: "conv-1",
+            Phase: phase,
+            ConnectionInstanceId: connectionInstanceId,
+            RemoteSessionId: remoteSessionId,
+            ProfileId: "profile-1",
+            Reason: reason,
+            UpdatedAtUtc: DateTime.UtcNow);
 }

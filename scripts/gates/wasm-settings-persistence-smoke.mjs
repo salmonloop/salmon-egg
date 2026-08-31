@@ -182,11 +182,13 @@ async function changeLanguage(page) {
     "GeneralSettings.Language",
     ["English"],
     { keyboardSelectVisibleItem: true, verifySelectionText: false });
+  // The authoritative shell selection is preserved across a language reload. The
+  // current Settings page is therefore the observable proof that x:Uid content was
+  // recreated in English; navigation is not expected to jump to Start.
   await waitForBodyText(
     page,
-    /Your AI co-pilot for ACP sessions/,
-    "English Start page after shell reload");
-  await waitForBodyText(page, /Recommend tasks/, "English cached Start suggestions after language change");
+    /Manage startup, window behavior, and UI language\.|Launch on startup/,
+    "English settings page after shell reload");
   await verifyLanguageSelection(page, "after edit");
 }
 
@@ -366,6 +368,17 @@ async function changeDataStorageSettings(page) {
     dataStorageCacheRetentionControl,
     "cache retention before edit");
   const updatedValue = selectAlternateCacheRetentionValue(initialValue);
+  await focusNumericControl(
+    page,
+    dataStorageCacheRetentionControl,
+    "cache retention focused contrast");
+  await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(
+    page,
+    "focused data storage cache retention",
+    {
+      requireFocused: true,
+      focusedControl: dataStorageCacheRetentionControl
+    });
   await setNumericControlValue(
     page,
     dataStorageCacheRetentionControl,
@@ -440,7 +453,11 @@ async function changeMcpSettings(page) {
     sections.mcp.target,
     sections.mcp.bodyPattern,
     sections.mcp.label);
-  await clickVisibleControl(page, { labels: ["新建", "New", "添加服务器", "Add server"], automationIds: ["Mcp.AddServer"] });
+  // Locator actionability waits for AddServerCommand to re-enable after the page's async load.
+  const addServer = page.locator('[aria-label="Mcp.AddServer"]:visible').first();
+  await addServer.click({ timeout: 30_000 });
+  const editorClose = page.locator('[aria-label="Mcp.Editor.Close"]:visible').first();
+  await editorClose.waitFor({ state: "visible", timeout: 10_000 });
   await waitForBodyText(page, /Launch command|启动命令/, "MCP server editor");
   await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, "MCP server editor");
   await typeIntoVisibleTextField(
@@ -448,8 +465,15 @@ async function changeMcpSettings(page) {
     { labels: ["mcp-filesystem", "Launch command", "启动命令", "Command", "命令"], automationIds: [] },
     "/usr/bin/node",
     "MCP server command");
+  // Uno WASM does not activate this bound command through locator.click(), so use the proven control helper.
   await scrollToVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
   await clickVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
+  const savedServerToggles = page.locator('[aria-label="Mcp.Server.Enabled"]:visible');
+  await savedServerToggles.first().waitFor({ state: "visible", timeout: 30_000 });
+  const savedServerToggleCount = await savedServerToggles.count();
+  if (savedServerToggleCount !== 1) {
+    throw new Error(`Expected one saved MCP server row, found ${savedServerToggleCount}.`);
+  }
   await waitForBodyText(page, /new-mcp-server/, "saved MCP server");
   await setToggleSwitchValue(page, controls.mcpServerEnabled, false, "MCP server enabled");
   await verifyMcpSettings(page, "after edit");
@@ -461,20 +485,140 @@ async function verifyMcpSettings(page, suffix = "") {
     sections.mcp.target,
     sections.mcp.bodyPattern,
     `${sections.mcp.label} ${suffix}`.trim());
+  // The section's body pattern matches static chrome (the "New" button), so navigation reports success
+  // while the page's async load is still in flight. That load clears the row collection before refilling
+  // it, so the server name is briefly absent from the body text. Wait for the row control itself, the way
+  // the save path above does, before asserting on text.
+  await waitForControlState(page, controls.mcpServerEnabled, `MCP server row control ${suffix}`.trim());
   await waitForBodyText(page, /new-mcp-server/, `MCP server row ${suffix}`.trim());
   await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
 }
 
-async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label) {
-  const projections = await page.evaluate(() => Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
-    .map(element => {
+async function focusNumericControl(page, controlOptions, label) {
+  // The cache retention row can straddle the fold once the page grows, and clicking a control whose
+  // center is off screen leaves focus behind. Scroll it fully into view before clicking.
+  if (!await scrollToVisibleControl(page, controlOptions)) {
+    throw new Error(`Could not scroll numeric control into view for ${label}. Options=${JSON.stringify(controlOptions)}`);
+  }
+
+  await clickVisibleControl(page, controlOptions);
+  await page.waitForFunction(options => {
+    const labels = options.labels ?? [];
+    const automationIds = options.automationIds ?? [];
+    const control = window.__salmoneggSmoke.findVisibleControl(options, labels, automationIds);
+    const textInput = control?.matches("input,textarea,[contenteditable='true']")
+      ? control
+      : control?.querySelector("input,textarea,[contenteditable='true']");
+    return Boolean(textInput && document.activeElement === textInput);
+  }, controlOptions, { timeout: 5_000 });
+
+  const focused = await page.evaluate(options => {
+    const labels = options.labels ?? [];
+    const automationIds = options.automationIds ?? [];
+    const control = window.__salmoneggSmoke.findVisibleControl(options, labels, automationIds);
+    const textInput = control?.matches("input,textarea,[contenteditable='true']")
+      ? control
+      : control?.querySelector("input,textarea,[contenteditable='true']");
+    return {
+      found: Boolean(textInput),
+      focused: Boolean(textInput && document.activeElement === textInput),
+      activeClassName: document.activeElement?.className?.toString?.() ?? ""
+    };
+  }, controlOptions);
+
+  if (!focused.found || !focused.focused) {
+    throw new Error(`Expected focused numeric control for ${label}. State=${JSON.stringify(focused)}`);
+  }
+}
+
+async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label, options = {}) {
+  const projections = await page.evaluate(focusedControl => {
+    const parseColor = value => {
+      const match = String(value ?? "").match(/rgba?\(([^)]+)\)/i);
+      if (!match) {
+        return null;
+      }
+
+      const parts = match[1].split(",").map(part => Number(part.trim()));
+      return {
+        r: parts[0] ?? 0,
+        g: parts[1] ?? 0,
+        b: parts[2] ?? 0,
+        a: parts.length >= 4 ? parts[3] : 1
+      };
+    };
+    const composite = (foreground, background) => {
+      const alpha = foreground.a + (background.a * (1 - foreground.a));
+      if (alpha <= 0) {
+        return { r: 0, g: 0, b: 0, a: 0 };
+      }
+
+      return {
+        r: ((foreground.r * foreground.a)
+          + (background.r * background.a * (1 - foreground.a))) / alpha,
+        g: ((foreground.g * foreground.a)
+          + (background.g * background.a * (1 - foreground.a))) / alpha,
+        b: ((foreground.b * foreground.a)
+          + (background.b * background.a * (1 - foreground.a))) / alpha,
+        a: alpha
+      };
+    };
+    const findEffectiveBackground = element => {
+      const layers = [];
+      let current = element;
+      while (current) {
+        const backgroundColor = getComputedStyle(current).backgroundColor;
+        const parsed = parseColor(backgroundColor);
+        if (parsed && parsed.a > 0) {
+          layers.push({
+            color: parsed,
+            source: current.className?.toString?.() || current.tagName
+          });
+        }
+
+        current = current.parentElement;
+      }
+
+      if (layers.length === 0) {
+        return null;
+      }
+
+      let effective = layers[layers.length - 1].color;
+      for (let index = layers.length - 2; index >= 0; index -= 1) {
+        effective = composite(layers[index].color, effective);
+      }
+
+      return effective.a >= 0.99
+        ? {
+            color: effective,
+            sources: layers.map(layer => layer.source)
+          }
+        : null;
+    };
+    const focusedHost = focusedControl
+      ? window.__salmoneggSmoke.findVisibleControl(
+          focusedControl,
+          focusedControl.labels ?? [],
+          focusedControl.automationIds ?? [])
+      : null;
+    const focusedInput = focusedHost?.matches("input,textarea,[contenteditable='true']")
+      ? focusedHost
+      : focusedHost?.querySelector("input,textarea,[contenteditable='true']");
+
+    return Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
+      .map(element => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       const type = element.getAttribute("type")?.toLowerCase() ?? "";
       const textBoxContainer = element.closest(".uno-textbox,.uno-passwordbox");
+      const background = findEffectiveBackground(element);
       return {
         color: style.color,
+        backgroundColor: background?.color ?? null,
+        backgroundSources: background?.sources ?? [],
         opacity: Number(style.opacity || "1"),
+        focused: document.activeElement === element,
+        focusedTarget: element === focusedInput,
         value: element.value ?? element.textContent ?? "",
         placeholder: element.getAttribute("placeholder") ?? "",
         aria: element.getAttribute("aria-label") ?? "",
@@ -501,31 +645,84 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
           && rect.left <= innerWidth
           && rect.top <= innerHeight
       };
-    })
-    .filter(projection => projection.visible));
+      })
+      .filter(projection => projection.visible);
+  }, options.focusedControl ?? null);
 
   if (projections.length === 0) {
     throw new Error(`No visible settings text inputs found for ${label}.`);
   }
 
+  if (options.requireFocused === true
+      && !projections.some(projection => projection.focused && projection.focusedTarget)) {
+    throw new Error(
+      `The target settings text input did not retain focus for ${label}. Projections=${JSON.stringify(projections)}`);
+  }
+
   const failures = projections
     .map(projection => ({
       ...projection,
-      parsedColor: parseCssColor(projection.color)
+      parsedColor: parseCssColor(projection.color),
+      parsedBackgroundColor: projection.backgroundColor
     }))
     .map(projection => ({
       ...projection,
-      luminance: relativeLuminance(projection.parsedColor)
+      contrastRatio: projection.parsedBackgroundColor
+        ? cssContrastRatio(
+            compositeCssColor(
+              {
+                ...projection.parsedColor,
+                a: projection.parsedColor.a * projection.opacity
+              },
+              projection.parsedBackgroundColor),
+            projection.parsedBackgroundColor)
+        : 0
     }))
     .filter(projection => projection.opacity <= 0.1
       || projection.parsedColor.a <= 0.1
-      || projection.luminance < 120);
+      || projection.parsedBackgroundColor === null
+      || projection.contrastRatio < 4.5);
 
   if (failures.length > 0) {
     throw new Error(
-      `Settings text input foreground did not resolve to a readable dark-theme color for ${label}. `
+      `Settings text input foreground did not meet readable contrast for ${label}. `
       + `Failures=${JSON.stringify(failures)} All=${JSON.stringify(projections)}`);
   }
+}
+
+function compositeCssColor(foreground, background) {
+  const alpha = foreground.a + (background.a * (1 - foreground.a));
+  if (alpha <= 0) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  return {
+    r: ((foreground.r * foreground.a)
+      + (background.r * background.a * (1 - foreground.a))) / alpha,
+    g: ((foreground.g * foreground.a)
+      + (background.g * background.a * (1 - foreground.a))) / alpha,
+    b: ((foreground.b * foreground.a)
+      + (background.b * background.a * (1 - foreground.a))) / alpha,
+    a: alpha
+  };
+}
+
+function cssContrastRatio(foreground, background) {
+  const channel = value => {
+    const normalized = value / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = color =>
+    (0.2126 * channel(color.r))
+    + (0.7152 * channel(color.g))
+    + (0.0722 * channel(color.b));
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 async function waitForLocalFileContains(page, path, requiredSnippets, label, timeoutMs = 15_000) {

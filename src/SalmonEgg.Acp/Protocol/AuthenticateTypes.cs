@@ -1,90 +1,72 @@
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Authenticate 方法的请求参数。
-    /// 用于向 Agent 发起认证请求。
+    /// Request parameters for the <c>authenticate</c> method.
+    /// Used to initiate an authentication request against the Agent.
     /// </summary>
-    public class AuthenticateParams
+    public sealed record AuthenticateParams : AcpProtocolObject
     {
         /// <summary>
-        /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id).
+        /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id in v1 or
+        /// initializeResponse.authMethods[].methodId in v2).
         /// </summary>
         [JsonPropertyName("methodId")]
-        public string MethodId { get; set; } = string.Empty;
-
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
-
-        /// <summary>
-        /// 创建新的 AuthenticateParams 实例。
-        /// </summary>
-        public AuthenticateParams()
-        {
-        }
+        public required string MethodId { get; init; }
 
         /// <summary>
         /// Create params for a specific method id.
         /// </summary>
         /// <param name="methodId">Authentication method id</param>
+        [JsonConstructor]
+        [SetsRequiredMembers]
         public AuthenticateParams(string methodId)
         {
-            MethodId = methodId;
+            MethodId = methodId ?? throw new System.ArgumentNullException(nameof(methodId));
         }
     }
 
     /// <summary>
-    /// Authenticate 方法的响应。
+    /// Response for the <c>authenticate</c> method.
     /// </summary>
-    public class AuthenticateResponse
+    public sealed record AuthenticateResponse : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
-    /// Logout 方法的请求参数。
+    /// Request parameters for the <c>logout</c> method.
     /// </summary>
-    public class LogoutParams
+    public sealed record LogoutParams : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
-    /// Logout 方法的响应。
+    /// Response for the <c>logout</c> method.
     /// </summary>
-    public class LogoutResponse
+    public sealed record LogoutResponse : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
-
-        public static readonly LogoutResponse Completed = new LogoutResponse();
+        public static readonly LogoutResponse Completed = new();
     }
 
     /// <summary>
-    /// 认证方法枚举。
+    /// Authentication methods.
     /// </summary>
     public enum AuthMethod
     {
         /// <summary>
-        /// Bearer Token 认证。
+        /// Bearer token authentication.
         /// </summary>
         Bearer,
 
         /// <summary>
-        /// API Key 认证。
+        /// API key authentication.
         /// </summary>
         ApiKey,
 
         /// <summary>
-        /// 其他认证方法。
+        /// Any other authentication method.
         /// </summary>
         Other
     }

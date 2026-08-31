@@ -9,7 +9,6 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
@@ -26,6 +25,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -35,6 +35,8 @@ using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
@@ -55,6 +57,56 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSettingsAsync_RecordsNormalizedIntentBeforeNavigationCompletes()
+    {
+        var navigationCompletion = new TaskCompletionSource<ShellNavigationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var selectionStore = new ShellSelectionStateStore();
+        var settingsSelectionStore = new SettingsSectionSelectionStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Setup(service => service.NavigateToSettings(SettingsSectionCatalog.DiagnosticsKey, It.IsAny<long>()))
+            .Returns(new ValueTask<ShellNavigationResult>(navigationCompletion.Task));
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object,
+            settingsSelectionStore: settingsSelectionStore);
+
+        var activation = coordinator.ActivateSettingsAsync(SettingsSectionCatalog.DiagnosticsKey);
+
+        Assert.False(activation.IsCompleted);
+        Assert.Equal(SettingsSectionCatalog.DiagnosticsKey, settingsSelectionStore.CurrentSectionKey);
+
+        navigationCompletion.SetResult(ShellNavigationResult.Success());
+        Assert.True(await activation);
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenKeyIsUnknown_UsesCanonicalGeneralSection()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var settingsSelectionStore = new SettingsSectionSelectionStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object,
+            settingsSelectionStore: settingsSelectionStore);
+
+        var activated = await coordinator.ActivateSettingsAsync("Unknown");
+
+        Assert.True(activated);
+        Assert.Equal(SettingsSectionCatalog.GeneralKey, settingsSelectionStore.CurrentSectionKey);
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Verify(service => service.NavigateToSettings(SettingsSectionCatalog.GeneralKey, It.IsAny<long>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_UpdatesNavAndNavigates_WhenSwitcherSucceeds()
     {
         var originalContext = SynchronizationContext.Current;
@@ -71,7 +123,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -84,6 +136,75 @@ public sealed class NavigationCoordinatorTests
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             shellNavigation.As<IActivationTokenShellNavigationService>()
                 .Verify(s => s.NavigateToChat(It.IsAny<long>()), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSessionAsync_WhenSwitcherAlreadyPublishedWhyItFailed_KeepsThatReasonInsteadOfTheGenericOne()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            // 复现真实时序:ChatViewModel 先把"为什么失败"写进快照,再向上返回 false。
+            // 导航层随后只知道"下游拒绝了",它那句占位原因不能盖掉已有的具体说明。
+            var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) =>
+            {
+                if (runtimeState.ActiveSessionActivation is { } inFlight)
+                {
+                    runtimeState.ActiveSessionActivation = inFlight with
+                    {
+                        Phase = SessionActivationPhase.Faulted,
+                        Reason = "MissingRemoteSessionCwd",
+                        FailureMessage = "Failed to load session: the agent did not report a working directory for it.",
+                        FailureResourceKey = "ChatOperation_LoadSessionMissingRemoteCwd"
+                    };
+                }
+
+                return Task.FromResult(false);
+            });
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object, runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            var activation = runtimeState.ActiveSessionActivation;
+            Assert.Equal(SessionActivationPhase.Faulted, activation?.Phase);
+            Assert.Equal("MissingRemoteSessionCwd", activation?.Reason);
+            Assert.Equal(
+                "Failed to load session: the agent did not report a working directory for it.",
+                activation?.FailureMessage);
+            Assert.Equal("ChatOperation_LoadSessionMissingRemoteCwd", activation?.FailureResourceKey);
+
+            // 终态语义仍须成立:意图已放弃,激活不再在飞。
+            Assert.Null(runtimeState.DesiredSessionId);
+            Assert.False(runtimeState.IsSessionActivationInProgress);
         }
         finally
         {
@@ -108,7 +229,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(false));
@@ -132,8 +253,10 @@ public sealed class NavigationCoordinatorTests
             Assert.Null(preferences.LastSelectedProjectId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", runtimeState.DesiredSessionId);
+            Assert.Null(runtimeState.DesiredSessionId);
             Assert.False(runtimeState.IsSessionActivationInProgress);
+            Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
+            Assert.Equal("ConversationSelectionFailed", runtimeState.ActiveSessionActivation?.Reason);
         }
         finally
         {
@@ -162,7 +285,7 @@ public sealed class NavigationCoordinatorTests
                 .Setup(s => s.NavigateToChat(It.IsAny<long>()))
                 .Throws(new InvalidOperationException("Navigation failed"));
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
@@ -182,8 +305,10 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal("project-existing", preferences.LastSelectedProjectId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", runtimeState.DesiredSessionId);
+            Assert.Null(runtimeState.DesiredSessionId);
             Assert.False(runtimeState.IsSessionActivationInProgress);
+            Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
+            Assert.Equal("InvalidOperationException", runtimeState.ActiveSessionActivation?.Reason);
         }
         finally
         {
@@ -228,6 +353,47 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenShellNavigationFails_ReturnsFalse()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Setup(s => s.NavigateToDiscoverSessions(It.IsAny<long>()))
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Failed("discover-nav-failed")));
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object);
+
+        var activated = await coordinator.ActivateDiscoverSessionsAsync();
+
+        Assert.False(activated);
+        Assert.IsNotType<NavigationSelectionState.DiscoverSessions>(selectionStore.CurrentSelection);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenShellNavigationSucceeds_ReturnsTrueAndSelectsDiscover()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object);
+
+        var activated = await coordinator.ActivateDiscoverSessionsAsync();
+
+        Assert.True(activated);
+        Assert.IsType<NavigationSelectionState.DiscoverSessions>(selectionStore.CurrentSelection);
+    }
+
+    [Fact]
     public async Task ActivateDiscoveredRemoteSessionAsync_WhenRecoveryCapabilityIsMissing_DoesNotImportOrSwitch()
     {
         var selectionStore = new ShellSelectionStateStore();
@@ -253,7 +419,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, result.ErrorMessage);
         Assert.Empty(switcher.ActivatedSessionIds);
         Assert.Empty(switcher.OpenRequests);
     }
@@ -289,7 +455,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, result.ErrorMessage);
         Assert.Empty(switcher.ActivatedSessionIds);
         Assert.Empty(switcher.OpenRequests);
     }
@@ -462,7 +628,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("加载会话并导入失败，请检查连接状态。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.SessionImportActivationFailedMessage, result.ErrorMessage);
         Assert.Equal(new[] { "local-1" }, switcher.ActivatedSessionIds);
         Assert.Equal(new[] { "local-1" }, switcher.DiscardedDiscoveredSessionIds);
         Assert.Equal(NavigationSelectionState.StartSelection, selectionStore.CurrentSelection);
@@ -478,16 +644,8 @@ public sealed class NavigationCoordinatorTests
         {
             var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager(
-                new Session("session-1", @"C:\repo\demo")
-                {
-                    DisplayName = "Session 1",
-                    LastActivityAt = DateTime.UtcNow.AddMinutes(-2)
-                },
-                new Session("session-2", @"C:\repo\demo")
-                {
-                    DisplayName = "Session 2",
-                    LastActivityAt = DateTime.UtcNow.AddMinutes(-1)
-                });
+                CreateSessionWithLastActivity("session-1", "Session 1", DateTime.UtcNow.AddMinutes(-2)),
+                CreateSessionWithLastActivity("session-2", "Session 2", DateTime.UtcNow.AddMinutes(-1)));
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
             var ui = new Mock<IUiInteractionService>();
@@ -500,7 +658,7 @@ public sealed class NavigationCoordinatorTests
                 .Callback<string, IReadOnlyList<SessionNavItemViewModel>, Action<string>>((_, _, onPickSession) => pickSession = onPickSession)
                 .Returns(Task.CompletedTask);
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -907,7 +1065,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var switchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -933,7 +1091,9 @@ public sealed class NavigationCoordinatorTests
             var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
             await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.True(runtimeState.IsSessionActivationInProgress);
             Assert.Equal("session-1", runtimeState.DesiredSessionId);
 
@@ -968,7 +1128,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = new TokenAwareShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -994,7 +1154,7 @@ public sealed class NavigationCoordinatorTests
             Assert.False(activationTask.IsCompleted);
             Assert.True(chat.ViewModel.IsOverlayVisible);
             Assert.True(chat.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Contains("切换", chat.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+            Assert.Contains("Switching chat", chat.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
             shellNavigation.CompleteFirst(ShellNavigationResult.Success());
 
@@ -1007,7 +1167,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public void SyncSelectionFromShellContent_Start_SelectsStart()
+    public async Task SyncSelectionFromShellContent_Start_SelectsStart()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1019,7 +1179,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1051,7 +1211,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1071,7 +1231,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public void SyncSelectionFromShellContent_Settings_SelectsSettings()
+    public async Task SyncSelectionFromShellContent_Settings_SelectsSettings()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1083,7 +1243,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1115,7 +1275,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1189,7 +1349,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await SetConnectedProfileAsync(chat, "profile-1", "conn-1");
@@ -1265,7 +1425,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1342,8 +1502,9 @@ public sealed class NavigationCoordinatorTests
                 new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 "session-2",
@@ -1366,7 +1527,12 @@ public sealed class NavigationCoordinatorTests
             chat.ViewModel.ReplaceChatService(chatService.Object);
 
             var selectionStore = new ShellSelectionStateStore();
-            var coordinator = CreateCoordinator(selectionStore, (IConversationSessionSwitcher)chat.ViewModel, preferences, shellNavigation.Object);
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             navVm.RebuildTree();
@@ -1377,8 +1543,11 @@ public sealed class NavigationCoordinatorTests
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
 
-            await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
-            Assert.False(string.IsNullOrWhiteSpace(chat.ViewModel.ErrorMessage));
+            // 等待断言的真实信号(失败投影完成),而非其代理(overlay 隐藏可能先于失败投影)。
+            await WaitForConditionAsync(() =>
+                chat.ViewModel.HasSessionActivationFailure && !chat.ViewModel.IsOverlayVisible);
+            Assert.True(chat.ViewModel.HasSessionActivationFailure);
+            Assert.False(string.IsNullOrWhiteSpace(chat.ViewModel.SessionActivationFailureMessage));
             selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
         }
@@ -1404,7 +1573,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1454,6 +1623,9 @@ public sealed class NavigationCoordinatorTests
             var firstActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
 
             await firstActivation;
+            // 重试前必须等首次失败完整投影(含恢复请求清理),否则重试可能复用未清理的
+            // 失败恢复请求而不发起第二次 session/load,导致下方 loadAttempts==2 永远不满足。
+            await WaitForConditionAsync(() => chat.ViewModel.HasSessionActivationFailure);
             await WaitForConditionAsync(() =>
                 !runtimeState.IsSessionActivationInProgress,
                 maxAttempts: 100,
@@ -1554,7 +1726,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1647,7 +1819,7 @@ public sealed class NavigationCoordinatorTests
                 });
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1773,7 +1945,8 @@ public sealed class NavigationCoordinatorTests
         IShellNavigationService shellNavigationService,
         IShellNavigationRuntimeState? runtimeState = null,
         ILogger<NavigationCoordinator>? logger = null,
-        IDiscoverSessionsConnectionFacade? discoverConnectionFacade = null)
+        IDiscoverSessionsConnectionFacade? discoverConnectionFacade = null,
+        ISettingsSectionSelectionStore? settingsSelectionStore = null)
     {
         return new NavigationCoordinator(
             selectionSink,
@@ -1782,6 +1955,7 @@ public sealed class NavigationCoordinatorTests
             discoverConnectionFacade ?? new FakeDiscoverSessionsConnectionFacade(),
             new NavigationProjectSelectionStoreAdapter(preferences),
             shellNavigationService,
+            settingsSelectionStore ?? new SettingsSectionSelectionStore(),
             logger);
     }
 
@@ -1795,6 +1969,20 @@ public sealed class NavigationCoordinatorTests
         sessionManager.Setup(s => s.GetAllSessions()).Returns(sessions);
 
         return sessionManager;
+    }
+
+    /// <summary>
+    /// 造一个"最后活动时间是过去某刻"的会话。时间戳只能经 <see cref="Session.RestoreTimestamps"/>
+    /// 写入（会话自己持锁，不再暴露可写属性），对象初始化器里做不到，故用本工厂。
+    /// </summary>
+    private static Session CreateSessionWithLastActivity(string sessionId, string displayName, DateTime lastActivityAt)
+    {
+        var session = new Session(sessionId, @"C:\repo\demo")
+        {
+            DisplayName = displayName
+        };
+        session.RestoreTimestamps(session.CreatedAt, lastActivityAt);
+        return session;
     }
 
     private static async Task SetConnectedProfileAsync(
@@ -1877,8 +2065,6 @@ public sealed class NavigationCoordinatorTests
             .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), CancellationToken.None));
 
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var serilog = new Mock<SerilogLogger>();
 
@@ -1972,7 +2158,7 @@ public sealed class NavigationCoordinatorTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -1980,13 +2166,13 @@ public sealed class NavigationCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
     }
 
-    private sealed class ChatViewModelHarness : IDisposable
+    private sealed class ChatViewModelHarness : IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
@@ -2022,11 +2208,11 @@ public sealed class NavigationCoordinatorTests
 
         public IChatConnectionStore ConnectionStore { get; }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             ViewModel.Dispose();
-            _connectionState.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _state.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await _connectionState.DisposeAsync();
+            await _state.DisposeAsync();
         }
     }
 
@@ -2075,9 +2261,9 @@ public sealed class NavigationCoordinatorTests
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
@@ -2100,10 +2286,15 @@ public sealed class NavigationCoordinatorTests
         public string? ConnectionErrorMessage => null;
         public IChatService? CurrentChatService { get; set; } = new FakeDiscoverChatService();
         public Task ConnectToProfileAsync(ServerConfiguration profile) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class FakeDiscoverChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId => null;
         public bool IsInitialized => true;
         public bool IsConnected => true;
@@ -2130,7 +2321,7 @@ public sealed class NavigationCoordinatorTests
         public Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params) => throw new NotSupportedException();
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params) => throw new NotSupportedException();
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params) => throw new NotSupportedException();
+        public Task CancelSessionAsync(SessionCancelParams @params) => throw new NotSupportedException();
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null) => throw new NotSupportedException();
         public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null) => throw new NotSupportedException();
@@ -2157,8 +2348,11 @@ public sealed class NavigationCoordinatorTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         preferences.Projects.Add(new ProjectDefinition
         {
@@ -2226,10 +2420,13 @@ public sealed class NavigationCoordinatorTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("聊天", StringComparison.Ordinal) || status.Contains("消息", StringComparison.Ordinal))
+        return (status.StartsWith("Connecting to assistant", StringComparison.Ordinal)
+                || status.StartsWith("Preparing chat environment", StringComparison.Ordinal)
+                || status.StartsWith("Loading chat history", StringComparison.Ordinal)
+                || status.StartsWith("Switching chat", StringComparison.Ordinal))
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class TokenAwareShellNavigationService : IShellNavigationService, IActivationTokenShellNavigationService

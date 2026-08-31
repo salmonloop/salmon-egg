@@ -17,16 +17,67 @@
         <converters:ResourceStringConverter x:Key="ResourceStringConverter"/>
     </local:SettingsPageBase.Resources>
 
+        <Grid>
+        <!-- Short windows: densify section stack spacing so settings remain scannable without
+             oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="GeneralHeightStates">
+                <VisualState x:Name="GeneralHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="GeneralContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="GeneralHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GeneralContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28">
+                <StackPanel x:Name="GeneralContentStack"
+                            Spacing="16">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="General_PageTitle"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
                         <TextBlock x:Uid="General_PageSummary"
                                    Style="{StaticResource SettingsPageSummaryTextStyle}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="General_NotificationsTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="General_SystemNotificationsTitle"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="General_SystemNotificationsUnsupported"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               Visibility="{x:Bind ViewModel.Preferences.IsSystemNotificationsSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              x:Uid="General_SystemNotificationsSwitch"
+                                              AutomationProperties.AutomationId="GeneralSettings.SystemNotifications"
+                                              IsOn="{x:Bind ViewModel.Preferences.SystemNotificationsEnabled, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.Preferences.IsSystemNotificationsSupported, Mode=OneWay}"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel Spacing="12">
@@ -130,4 +181,5 @@
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </local:SettingsPageBase>

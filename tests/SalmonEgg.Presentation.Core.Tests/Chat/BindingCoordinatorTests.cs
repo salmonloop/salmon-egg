@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -18,6 +18,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -33,6 +34,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -71,6 +73,7 @@ public sealed class BindingCoordinatorTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -87,8 +90,8 @@ public sealed class BindingCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "Plan",
-                    Status = PlanEntryStatus.Pending,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.Pending.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -138,8 +141,8 @@ public sealed class BindingCoordinatorTests
                     ImmutableList.Create(new ConversationPlanEntrySnapshot
                     {
                         Content = "Plan",
-                        Status = PlanEntryStatus.Pending,
-                        Priority = PlanEntryPriority.Medium
+                        Status = PlanEntryStatus.Pending.ToString(),
+                        Priority = PlanEntryPriority.Medium.ToString()
                     }),
                     true)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
@@ -171,8 +174,8 @@ public sealed class BindingCoordinatorTests
             PlanEntries = ImmutableList.Create(new ConversationPlanEntrySnapshot
             {
                 Content = "Plan",
-                Status = PlanEntryStatus.Pending,
-                Priority = PlanEntryPriority.Medium
+                Status = PlanEntryStatus.Pending.ToString(),
+                Priority = PlanEntryPriority.Medium.ToString()
             }),
             AvailableModes = ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "mode-1", ModeName = "Mode 1" }),
             SelectedModeId = "mode-1",
@@ -242,6 +245,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(
             new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
@@ -380,6 +384,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -475,8 +480,8 @@ public sealed class BindingCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "Plan",
-                    Status = PlanEntryStatus.Pending,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.Pending.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -510,8 +515,8 @@ public sealed class BindingCoordinatorTests
                     ImmutableList.Create(new ConversationPlanEntrySnapshot
                     {
                         Content = "Plan",
-                        Status = PlanEntryStatus.Pending,
-                        Priority = PlanEntryPriority.Medium
+                        Status = PlanEntryStatus.Pending.ToString(),
+                        Priority = PlanEntryPriority.Medium.ToString()
                     }),
                     true))
         };
@@ -569,7 +574,51 @@ public sealed class BindingCoordinatorTests
         return chatStore;
     }
 
-    private static ChatConversationWorkspace CreateWorkspace(
+
+    [Fact]
+    public async Task UpdateBinding_PersistsRemoteOwnershipBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+            workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "session-1",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+            var initialState = ChatState.Empty;
+            var state = State.Value(this, () => initialState);
+            var chatStore = CreateChatStore(state, initialState);
+            var coordinator = new BindingCoordinator(workspace, chatStore.Object);
+
+            var result = await coordinator.UpdateBindingAsync("session-1", "remote-1", "profile-1");
+            Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var record = Assert.Single(saved.Conversations);
+        Assert.Equal("remote-1", record.RemoteSessionId);
+        Assert.Equal("profile-1", record.BoundProfileId);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+        var binding = restoredWorkspace.GetRemoteBinding("session-1");
+        Assert.NotNull(binding);
+        Assert.Equal("remote-1", binding!.RemoteSessionId);
+        Assert.Equal("profile-1", binding.BoundProfileId);
+    }
+
+private static ChatConversationWorkspace CreateWorkspace(
         IConversationStore store,
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
@@ -608,13 +657,16 @@ public sealed class BindingCoordinatorTests
             var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
 
             return new AppPreferencesViewModel(
-                appSettingsService.Object,
-                startupService.Object,
-                languageService.Object,
-                capabilities.Object,
-                uiRuntime.Object,
-                prefsLogger.Object,
-                new ImmediateUiDispatcher());
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
+            prefsLogger.Object,
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         }
         finally
         {
@@ -631,11 +683,16 @@ public sealed class BindingCoordinatorTests
     {
         public ConversationDocument LoadResult { get; set; } = new();
 
+        public ConversationDocument? LastSavedDocument { get; private set; }
+
         public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(LoadResult);
 
         public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            LastSavedDocument = document;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeSessionManager : ISessionManager
@@ -647,7 +704,7 @@ public sealed class BindingCoordinatorTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd)
             {
@@ -659,23 +716,21 @@ public sealed class BindingCoordinatorTests
 
         public bool RemoveSession(string sessionId) => _sessions.Remove(sessionId);
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
+        public Task<bool> CancelSessionAsync(string sessionId)
+            => Task.FromResult(_sessions.ContainsKey(sessionId));
+
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
             {
-                return false;
+                session = new Session(sessionId, cwd)
+                {
+                    DisplayName = sessionId
+                };
+                _sessions[sessionId] = session;
             }
 
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.LastActivityAt = DateTime.UtcNow;
-            }
-
-            return true;
+            return session;
         }
-
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
-            => Task.FromResult(_sessions.ContainsKey(sessionId));
     }
 }

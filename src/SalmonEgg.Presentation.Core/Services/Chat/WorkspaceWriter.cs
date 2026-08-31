@@ -23,7 +23,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 {
     private const int DefaultThrottleMilliseconds = 500;
 
-    private readonly TranscriptProjectionRestoreTokenProjector _restoreTokenProjector = new();
     private readonly ChatConversationWorkspace _workspace;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly TimeSpan _throttleWindow;
@@ -223,6 +222,31 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             .Select(ClonePlanEntrySnapshot)
             .OfType<ConversationPlanEntrySnapshot>()
             .ToArray();
+
+        // Projected content can look non-empty while durable RuntimeProjection content is empty:
+        // thinking-only rows are filtered out, and ShowPlanPanel-only slices carry no transcript/plan.
+        // Never let those shells overwrite an authoritative RuntimeProjection transcript/plan; warm
+        // return materializes from that snapshot and would otherwise land blank.
+        if (canReuseExistingSnapshotRuntimeContent && existingSnapshot is not null)
+        {
+            var existingTranscript = existingSnapshot.Transcript ?? Array.Empty<ConversationMessageSnapshot>();
+            if (transcript.Length == 0 && existingTranscript.Count > 0)
+            {
+                transcript = existingTranscript
+                    .Where(static message => !IsThinkingPlaceholder(message))
+                    .Select(CloneMessageSnapshot)
+                    .ToArray();
+            }
+
+            var existingPlan = existingSnapshot.Plan ?? Array.Empty<ConversationPlanEntrySnapshot>();
+            if (planEntries.Length == 0 && existingPlan.Count > 0)
+            {
+                planEntries = existingPlan
+                    .Select(ClonePlanEntrySnapshot)
+                    .OfType<ConversationPlanEntrySnapshot>()
+                    .ToArray();
+            }
+        }
         var hasProjectedPrimarySessionState = false;
         if (sessionStateSlice is ConversationSessionStateSlice primarySessionState)
         {
@@ -343,10 +367,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             : canReuseExistingSnapshotRuntimeContent
                 ? existingSnapshot?.ConnectionInstanceId
                 : null;
-        var restoreProjection = _restoreTokenProjector.Project(
-            conversationId,
-            transcript,
-            firstVisibleIndex: transcript.Length - 1);
 
         return new ConversationWorkspaceSnapshot(
             conversationId,
@@ -362,9 +382,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             availableCommands,
             sessionInfo,
             usage,
-            snapshotConnectionInstanceId,
-            restoreProjection.Token?.ProjectionItemKey,
-            restoreProjection.Token?.ProjectionEpoch);
+            snapshotConnectionInstanceId);
     }
 
     private static bool HasSnapshotData(ConversationWorkspaceSnapshot snapshot)
@@ -616,7 +634,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
     private static bool MessageEquals(ConversationMessageSnapshot left, ConversationMessageSnapshot right)
     {
         return string.Equals(left.Id, right.Id, StringComparison.Ordinal)
-            && left.Timestamp == right.Timestamp
+            && ConversationMessageTimestamp.InstantEquals(left.Timestamp, right.Timestamp)
             && left.IsOutgoing == right.IsOutgoing
             && string.Equals(left.ContentType, right.ContentType, StringComparison.Ordinal)
             && string.Equals(left.Title, right.Title, StringComparison.Ordinal)
@@ -632,8 +650,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(left.ToolCallJson, right.ToolCallJson, StringComparison.Ordinal)
             && string.Equals(left.ToolCallRawInputJson, right.ToolCallRawInputJson, StringComparison.Ordinal)
             && string.Equals(left.ToolCallRawOutputJson, right.ToolCallRawOutputJson, StringComparison.Ordinal)
-            && ToolCallContentSnapshots.SequenceEquals(left.ToolCallContent, right.ToolCallContent)
-            && ToolCallContentSnapshots.LocationsSequenceEquals(left.ToolCallLocations, right.ToolCallLocations)
+            && ToolCallContentSnapshots.DomainPayloadEquals(left.ToolCallContent, right.ToolCallContent)
+            && ToolCallContentSnapshots.DomainPayloadEquals(left.ToolCallLocations, right.ToolCallLocations)
             && string.Equals(left.ModeId, right.ModeId, StringComparison.Ordinal)
             && PlanEntryEquals(left.PlanEntry, right.PlanEntry);
     }
@@ -646,8 +664,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         }
 
         return string.Equals(left.Content, right.Content, StringComparison.Ordinal)
-            && left.Status == right.Status
-            && left.Priority == right.Priority;
+            && string.Equals(left.Status, right.Status, StringComparison.Ordinal)
+            && string.Equals(left.Priority, right.Priority, StringComparison.Ordinal);
     }
 
     private static bool ModeOptionEquals(ConversationModeOptionSnapshot left, ConversationModeOptionSnapshot right)
@@ -684,11 +702,23 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 
         return string.Equals(left.Title, right.Title, StringComparison.Ordinal)
             && left.HasTitle == right.HasTitle
-            && string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             && string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            && AdditionalDirectorySequencesEqual(left.AdditionalDirectories, right.AdditionalDirectories)
             && left.UpdatedAtUtc == right.UpdatedAtUtc
             && left.HasUpdatedAt == right.HasUpdatedAt
             && MetadataEquals(left.Meta, right.Meta);
+    }
+
+    private static bool AdditionalDirectorySequencesEqual(
+        IReadOnlyList<string>? left,
+        IReadOnlyList<string>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
     private static bool UsageEquals(ConversationUsageSnapshot? left, ConversationUsageSnapshot? right)
@@ -791,9 +821,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             ToolCallJson = snapshot.ToolCallJson,
             ToolCallRawInputJson = snapshot.ToolCallRawInputJson,
             ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(snapshot.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations),
-            PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallLocations),
+            PlanEntry = snapshot.PlanEntry is null ? null : ConversationPlanWire.CloneDomain(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
 

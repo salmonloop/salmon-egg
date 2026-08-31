@@ -75,6 +75,6 @@ public sealed class OutgoingUserMessageProjectorTests
             ContentType = "text",
             TextContent = text,
             ProtocolMessageId = protocolMessageId,
-            ToolCallContent = new List<ToolCallContent>()
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>())
         };
 }

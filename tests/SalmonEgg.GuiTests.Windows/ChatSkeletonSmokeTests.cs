@@ -760,7 +760,8 @@ public sealed class ChatSkeletonSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
             sessionCount: 1,
             withContent: true,
-            messageCountPerSession: 4);
+            messageCountPerSession: 4,
+            withPlan: true);
         using var session = WindowsGuiAppSession.LaunchFresh();
         EnsureMainWindowWideForTitleBarCommands(session);
 
@@ -794,6 +795,10 @@ public sealed class ChatSkeletonSmokeTests
                 TimeSpan.FromSeconds(15)),
             $"Bottom panel reopened without terminal content. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
 
+        Assert.True(
+            session.WaitUntilOnscreen("TitleBar.TaskOverviewPanel", TimeSpan.FromSeconds(5)),
+            "Task overview entry did not appear for a conversation with plan content.");
+
         var beforeRightPanelOpen = CaptureAuxiliaryPanelLayout(session);
         ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
@@ -807,8 +812,14 @@ public sealed class ChatSkeletonSmokeTests
                 TimeSpan.FromSeconds(5)),
             $"Task overview panel title was blank after first open. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
-            "Task overview panel empty title did not render on first open.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.CurrentPlan", TimeSpan.FromSeconds(5)),
+            "Task overview did not render its current plan item.");
+        var taskOverviewRoot = session.FindByAutomationId("RightPanel.TaskOverviewRoot", TimeSpan.FromSeconds(5));
+        Assert.NotNull(
+            session.TryFindVisibleText(
+                "Review right sidebar behavior",
+                taskOverviewRoot,
+                TimeSpan.FromSeconds(5)));
         var withRightPanelOpen = WaitForRightPanelLayoutToApply(
             session,
             beforeRightPanelOpen,
@@ -827,18 +838,31 @@ public sealed class ChatSkeletonSmokeTests
 
         ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
-            "Task overview panel title did not become visible after reopen toggle.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.CurrentPlan", TimeSpan.FromSeconds(5)),
+            "Task overview panel reopened without its plan content.");
+    }
+
+    [Fact]
+    public void TaskOverviewPanel_WithoutPlanOrChanges_HidesEntry()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+            sessionCount: 1,
+            withContent: true,
+            messageCountPerSession: 4);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWideForTitleBarCommands(session);
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        _ = WaitForSessionHeader(
+            session,
+            "GUI Session 01",
+            "task-overview-empty-header",
+            appData);
+
         Assert.True(
-            WaitForAutomationNameContains(
-                session,
-                "RightPanel.Title",
-                "Task overview",
-                TimeSpan.FromSeconds(5)),
-            $"Task overview panel title was blank after reopen. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
-        Assert.True(
-            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
-            "Task overview panel reopened without empty-state content.");
+            WaitUntilOffscreenOrMissing(session, "TitleBar.TaskOverviewPanel", TimeSpan.FromSeconds(5)),
+            "Task overview entry was visible without plan or change content.");
     }
 
     [Fact]
@@ -1020,16 +1044,18 @@ public sealed class ChatSkeletonSmokeTests
                 localMessageCount: 4);
             using var session = WindowsGuiAppSession.LaunchFresh();
 
-            var remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
-            var localItem = session.FindByAutomationId("MainNav.Session.gui-local-conversation-01", TimeSpan.FromSeconds(15));
+            const string remoteId = "MainNav.Session.gui-remote-conversation-01";
+            const string localId = "MainNav.Session.gui-local-conversation-01";
+            session.FindByAutomationId(remoteId, TimeSpan.FromSeconds(15));
+            session.FindByAutomationId(localId, TimeSpan.FromSeconds(15));
 
-            session.ActivateElement(remoteItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-initial-remote");
 
             var sawInitialRemoteStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
             Assert.True(sawInitialRemoteStatus, "Initial remote selection did not expose ChatView.LoadingOverlayStatus.");
 
-            session.ActivateElement(remoteItem);
-            session.ActivateElement(localItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-second-remote");
+            ActivateNavItem(session, appData, localId, "repeated-remote-clicks-local-detour");
 
             var localHeader = WaitForSessionHeader(
                 session,
@@ -1038,8 +1064,8 @@ public sealed class ChatSkeletonSmokeTests
                 appData);
             Assert.Contains("GUI Local Session 01", localHeader.Name, StringComparison.Ordinal);
 
-            session.ActivateElement(remoteItem);
-            session.ActivateElement(remoteItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-final-remote-1");
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-final-remote-2");
 
             var sawFinalRemoteStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
             Assert.True(sawFinalRemoteStatus, "Final remote reselection did not expose ChatView.LoadingOverlayStatus.");
@@ -1080,6 +1106,85 @@ public sealed class ChatSkeletonSmokeTests
         {
             Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
         }
+    }
+
+    [Fact]
+    public void ProfileBoundMissingRemoteSessionFailure_WhenHealthyRemoteOwnsChat_DoesNotLeakIntoTranscript()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicProfileBoundMissingRemoteSessionData(
+            cachedMessageCount: 1,
+            replayMessageCount: 24);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1200, height: 650);
+
+        const string brokenId = "MainNav.Session.gui-profile-bound-missing-session-01";
+        const string healthyId = "MainNav.Session.gui-remote-conversation-01";
+        session.FindByAutomationId(brokenId, TimeSpan.FromSeconds(15));
+        session.FindByAutomationId(healthyId, TimeSpan.FromSeconds(15));
+
+        ActivateNavItem(session, appData, brokenId, "missing-binding-owner-a");
+
+        var failureCallout = FindElementOrThrowWithScreenshot(
+            session,
+            appData,
+            "ChatView.SessionActivationFailureCallout",
+            TimeSpan.FromSeconds(15),
+            "missing-binding-owner-a-callout");
+        var failureText = TryGetElementDisplayText(failureCallout);
+        Assert.Contains(
+            "no remote session binding is available for the profile-bound conversation",
+            failureText,
+            StringComparison.OrdinalIgnoreCase);
+
+        ActivateNavItem(session, appData, healthyId, "healthy-remote-owner-b");
+
+        var healthyHeader = WaitForSessionHeader(
+            session,
+            expectedTitle: "GUI Remote Session 01",
+            scenario: "healthy-remote-owner-b-header",
+            appData);
+        Assert.Contains("GUI Remote Session 01", TryGetElementDisplayText(healthyHeader), StringComparison.Ordinal);
+
+        var calloutHidden = session.WaitUntilHidden(
+            "ChatView.SessionActivationFailureCallout",
+            TimeSpan.FromSeconds(10));
+        Assert.True(calloutHidden, "Conversation A's activation failure callout remained visible after conversation B owned the chat projection.");
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(40));
+        if (!overlayHidden)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "healthy-remote-owner-b-overlay-stuck",
+                "Healthy conversation B stayed behind the loading overlay after conversation A failed activation.");
+        }
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var latestHealthyReplay = session.TryFindVisibleText(
+            "GUI Remote Session 01 replay 024",
+            messagesList,
+            TimeSpan.FromSeconds(8));
+        if (latestHealthyReplay is null)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "healthy-remote-owner-b-transcript",
+                $"Healthy conversation B's authoritative replay was not visible. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+        }
+
+        var failureTextInTranscript = session.TryFindVisibleText(
+            "Failed to load session: no remote session binding is available for the profile-bound conversation.",
+            messagesList,
+            TimeSpan.FromSeconds(1));
+        Assert.Null(failureTextInTranscript);
+
+        var staleCachedTranscript = session.TryFindVisibleText(
+            "GUI Missing Remote Binding cached transcript",
+            messagesList,
+            TimeSpan.FromSeconds(1));
+        Assert.Null(staleCachedTranscript);
     }
 
     [Fact]
@@ -3934,8 +4039,9 @@ public sealed class ChatSkeletonSmokeTests
         {
             try
             {
+                session.BringMainWindowToFront();
                 var element = session.FindByAutomationId(automationId, TimeSpan.FromSeconds(4));
-                session.ActivateElement(element);
+                session.ClickElement(element);
                 return;
             }
             catch (Exception ex) when (ex is TimeoutException or Win32Exception or COMException or InvalidOperationException)
@@ -4166,11 +4272,12 @@ public sealed class ChatSkeletonSmokeTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("会话", StringComparison.Ordinal)
-                || status.Contains("聊天", StringComparison.Ordinal)
-                || status.Contains("消息", StringComparison.Ordinal))
+        return (status.StartsWith("Connecting to assistant", StringComparison.Ordinal)
+                || status.StartsWith("Preparing chat environment", StringComparison.Ordinal)
+                || status.StartsWith("Loading chat history", StringComparison.Ordinal)
+                || status.StartsWith("Switching chat", StringComparison.Ordinal))
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 }

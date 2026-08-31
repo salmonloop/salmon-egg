@@ -316,6 +316,75 @@ public class UiConventionsTests
     }
 
     [Fact]
+    public void WinUiTarget_ShouldPackageWindowsIconAssetsAsContent()
+    {
+        var repoRoot = FindRepoRoot();
+        var projectFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "SalmonEgg.csproj");
+        var document = ReadXml(projectFile);
+
+        // The WinUI 3 target sits in a default-item gap: Uno's Assets glob is disabled when
+        // IsWinAppSdk is true, and WinAppSDK's own Assets glob never activates because Uno leaves
+        // EnableDefaultAssets unset. Without explicit Content items the logos referenced by
+        // Package.appxmanifest are missing from the MSIX and Windows falls back to the generic
+        // placeholder icon in the taskbar, Start, and Alt+Tab.
+        var winUiContent = document
+            .Descendants("ItemGroup")
+            .Where(group => (group.Attribute("Condition")?.Value ?? string.Empty)
+                .Contains("'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'", StringComparison.Ordinal))
+            .SelectMany(group => group.Elements("Content"))
+            .ToList();
+
+        var pngGlob = winUiContent
+            .SingleOrDefault(element => string.Equals(
+                element.Attribute("Include")?.Value?.Trim(),
+                @"Assets\Icons\Windows\**\*.png",
+                StringComparison.Ordinal));
+        var ico = winUiContent
+            .SingleOrDefault(element => string.Equals(
+                element.Attribute("Include")?.Value?.Trim(),
+                @"Assets\Icons\Windows\icon.ico",
+                StringComparison.Ordinal));
+
+        Assert.NotNull(pngGlob);
+        Assert.NotNull(ico);
+        Assert.Equal("PreserveNewest", pngGlob!.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", pngGlob.Attribute("CopyToPublishDirectory")?.Value);
+        Assert.Equal("PreserveNewest", ico!.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", ico.Attribute("CopyToPublishDirectory")?.Value);
+    }
+
+    [Fact]
+    public void WindowShellIdentity_DisplayNameShouldMatchPackageManifest()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest");
+        var manifestDisplayName = ReadXml(manifestFile)
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Properties", StringComparison.Ordinal))
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "DisplayName", StringComparison.Ordinal))
+            .Value
+            .Trim();
+
+        var identityFile = Path.Combine(
+            repoRoot, "SalmonEgg", "SalmonEgg", "Presentation", "Services", "WindowShellIdentity.cs");
+        var root = ReadCSharpSyntaxTree(identityFile);
+
+        // The WINDOWS branch only compiles on Windows CI; at least keep it syntactically valid
+        // from the cross-platform suite (ReadCSharpSyntaxTree parses with WINDOWS defined).
+        Assert.DoesNotContain(root.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var displayNameConst = root
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Single(declarator => string.Equals(declarator.Identifier.Text, "DisplayName", StringComparison.Ordinal));
+        var literal = Assert.IsType<LiteralExpressionSyntax>(displayNameConst.Initializer!.Value);
+
+        // The running window's taskbar label and the packaged app's Start entry must agree.
+        Assert.Equal(manifestDisplayName, literal.Token.ValueText);
+    }
+
+    [Fact]
     public void PackageManifest_ShouldDeclareInternetClientCapability()
     {
         var repoRoot = FindRepoRoot();
@@ -368,6 +437,7 @@ public class UiConventionsTests
     }
 
     [Theory]
+    [InlineData("src", "SalmonEgg.Acp", "SalmonEgg.Acp.csproj")]
     [InlineData("src", "SalmonEgg.Domain", "SalmonEgg.Domain.csproj")]
     [InlineData("src", "SalmonEgg.Application", "SalmonEgg.Application.csproj")]
     [InlineData("src", "SalmonEgg.Infrastructure", "SalmonEgg.Infrastructure.csproj")]
@@ -398,7 +468,7 @@ public class UiConventionsTests
     }
 
     [Fact]
-    public void AcpSdk_ShouldScopeSystemTextJsonPackageToNetstandard()
+    public void AcpSdk_ShouldShipAsZeroDependencyAotHardenedNet10Package()
     {
         var repoRoot = FindRepoRoot();
         var projectFile = Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "SalmonEgg.Acp.csproj");
@@ -406,29 +476,53 @@ public class UiConventionsTests
         var root = xml.Root;
         Assert.NotNull(root);
 
-        var targetFrameworks = root!
-            .Descendants("TargetFrameworks")
+        var targetFramework = root!
+            .Descendants("TargetFramework")
             .Select(node => node.Value.Trim())
             .SingleOrDefault();
-        Assert.Equal("netstandard2.1;net10.0", targetFrameworks);
+        Assert.Equal("net10.0", targetFramework);
+        Assert.Empty(root.Descendants("TargetFrameworks"));
 
-        var itemGroups = root
-            .Descendants("ItemGroup")
-            .Where(group => string.Equals(
-                group.Attribute("Condition")?.Value?.Trim(),
-                "'$(TargetFramework)' == 'netstandard2.1'",
-                StringComparison.Ordinal))
-            .ToList();
-        Assert.NotEmpty(itemGroups);
+        Assert.DoesNotContain(
+            root.Descendants("PackageReference"),
+            packageReference =>
+            {
+                var include = packageReference.Attribute("Include")?.Value?.Trim();
+                return string.Equals(include, "System.Text.Json", StringComparison.Ordinal)
+                    || (!string.IsNullOrWhiteSpace(include)
+                        && !string.Equals(packageReference.Attribute("PrivateAssets")?.Value?.Trim(), "All", StringComparison.OrdinalIgnoreCase));
+            });
 
-        var hasScopedSystemTextJsonReference = itemGroups.Any(group =>
-            group.Elements("PackageReference").Any(packageReference =>
-                string.Equals(
-                    packageReference.Attribute("Include")?.Value?.Trim(),
-                    "System.Text.Json",
-                    StringComparison.Ordinal)));
-
-        Assert.True(hasScopedSystemTextJsonReference);
+        Assert.Equal(
+            "true",
+            root.Descendants("IsAotCompatible").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            "true",
+            root.Descendants("TreatWarningsAsErrors").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            "MIT",
+            root.Descendants("PackageLicenseExpression").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.Ordinal);
+        // The version identity is derived from the acp-sdk-v* tag history by MinVer. A hardcoded
+        // <Version> would silently override it and desync the published package from the tag that
+        // released it, so the convention is: the tag namespace is pinned, the version is not.
+        Assert.Equal(
+            "acp-sdk-v",
+            root.Descendants("MinVerTagPrefix").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.Ordinal);
+        Assert.Empty(root.Descendants("Version"));
+        Assert.Empty(root.Descendants("VersionPrefix"));
+        Assert.Equal(
+            "true",
+            root.Descendants("GenerateDocumentationFile").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(repoRoot, "LICENSE")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "PublicSurface.Types.txt")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "Serialization", "AcpJsonContext.cs")));
+        var contextSource = File.ReadAllText(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "Serialization", "AcpJsonContext.cs"));
+        Assert.Contains("public partial class AcpJsonContext", contextSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -603,11 +697,6 @@ public class UiConventionsTests
                 failures.Add($"{file}: missing TaskOverviewPanelTitle.Text");
             }
 
-            if (!keys.Contains("TaskOverviewEmptyTitle.Text"))
-            {
-                failures.Add($"{file}: missing TaskOverviewEmptyTitle.Text");
-            }
-
             if (!keys.Contains("TaskOverviewSummaryFormat.Text"))
             {
                 failures.Add($"{file}: missing TaskOverviewSummaryFormat.Text");
@@ -684,10 +773,10 @@ public class UiConventionsTests
         Assert.Equal("{StaticResource TitleBarReturnToMainWindowIconTemplate}", GetAttributeValueByLocalName(miniReturnButton, "ContentTemplate"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(bottomButton, "Style"));
         Assert.Equal("{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(bottomButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
+        Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(taskOverviewButton, "Style"));
         Assert.Equal("{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(taskOverviewButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}", GetAttributeValueByLocalName(taskOverviewButton, "IsChecked"));
+        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=TaskOverview}", GetAttributeValueByLocalName(taskOverviewButton, "IsChecked"));
 
         var allAttributeValues = mainPage
             .Descendants()

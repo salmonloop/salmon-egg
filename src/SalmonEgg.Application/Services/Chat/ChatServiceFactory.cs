@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Serilog;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
+using SalmonEgg.Application.Observability;
+
 namespace SalmonEgg.Application.Services.Chat;
 
 /// <summary>
@@ -49,7 +53,7 @@ public class ChatServiceFactory
     /// <param name="transportType">传输类型</param>
     /// <param name="command">命令（仅用于 Stdio）</param>
     /// <param name="arguments">命令行参数（仅用于 Stdio）</param>
-    /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse）</param>
+    /// <param name="url">连接 URL（用于 WebSocket 和 StreamableHttp）</param>
     /// <returns>新创建的 <see cref="IChatService"/> 实例</returns>
     /// <exception cref="InvalidOperationException">当必要参数缺失时抛出</exception>
     public IChatService CreateChatService(
@@ -58,16 +62,48 @@ public class ChatServiceFactory
         IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
-        _logger?.Information("正在创建新的 ChatService 实例：TransportType={TransportType}", transportType);
+        using var activity = ApplicationActivitySources.ChatService.StartActivity(
+            "chat.service.create",
+            ActivityKind.Internal);
 
-        // 1. 创建传输层
-        var transport = _transportFactory.CreateTransport(transportType, command, arguments, url);
+        activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, transportType.ToString());
 
-        // 2. 创建 ACP 客户端
-        var acpClient = _acpClientFactory.CreateClient(transport);
+        try
+        {
+            _logger?.Information("Creating ChatService instance. TransportType={TransportType}", transportType);
 
-        // 3. 创建 Chat 服务
-        return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+            // 1. 创建传输层
+            var transport = _transportFactory.CreateTransport(transportType, command, arguments, url);
+
+            // 2. 创建 ACP 客户端
+            var acpClient = _acpClientFactory.CreateClient(transport);
+
+            // 3. 创建 Chat 服务
+            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            activity?.SetTag(ApplicationSemanticConventions.Chat.ServiceType, chatService.GetType().Name);
+
+            // 记录 Metrics
+            ApplicationMeters.ChatServiceCreated.Add(1, new KeyValuePair<string, object?>(
+                ApplicationSemanticConventions.Chat.TransportType, transportType.ToString()));
+
+            return chatService;
+        }
+        catch (Exception ex)
+        {
+            // SetErrorStatus 写 span 级 error.type（低基数分类）；
+            // RecordException 写 exception.* event（异常明细）。两者分工不同，都需要。
+            activity?.SetErrorStatus(ex);
+            activity?.RecordException(ex);
+
+            // 记录错误 Metrics。维度用类型全名，与 span 上的 error.type 取值保持一致。
+            ApplicationMeters.ChatServiceErrors.Add(1, new KeyValuePair<string, object?>(
+                OtelErrorAttributes.Type, ex.GetType().FullName));
+
+            _logger?.Error(ex, "Failed to create chat service for {TransportType}", transportType);
+            throw;
+        }
     }
 
     public IChatService CreateChatService(ServerConfiguration configuration)
@@ -76,10 +112,40 @@ public class ChatServiceFactory
         {
             throw new ArgumentNullException(nameof(configuration));
         }
-        _logger?.Information("正在根据配置创建新的 ChatService 实例：ProfileId={ProfileId}, TransportType={TransportType}", configuration.Id, configuration.Transport);
 
-        var transport = _transportFactory.CreateTransport(configuration);
-        var acpClient = _acpClientFactory.CreateClient(transport);
-        return _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+        using var activity = ApplicationActivitySources.ChatService.StartActivity(
+            "chat.service.create_from_configuration",
+            ActivityKind.Internal);
+
+        activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString());
+
+        try
+        {
+            _logger?.Information("Creating ChatService instance from configuration. TransportType={TransportType}",
+                configuration.Transport);
+
+            var transport = _transportFactory.CreateTransport(configuration);
+            var acpClient = _acpClientFactory.CreateClient(transport);
+            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+
+            activity?.SetStatus(ActivityStatusCode.Ok);
+
+            // 记录 Metrics
+            ApplicationMeters.ChatServiceCreated.Add(1,
+                new KeyValuePair<string, object?>(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString()));
+
+            return chatService;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetErrorStatus(ex);
+            activity?.RecordException(ex);
+
+            ApplicationMeters.ChatServiceErrors.Add(1,
+                new KeyValuePair<string, object?>(OtelErrorAttributes.Type, ex.GetType().FullName));
+
+            _logger?.Error(ex, "Failed to create chat service from configuration for {TransportType}", configuration.Transport);
+            throw;
+        }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -11,27 +12,32 @@ public readonly record struct AcpSessionNewCwdResolution(
 public static class AcpSessionNewCwdResolver
 {
     public const string MissingRemoteCwdMessage =
-        "Select a configured remote directory before creating a remote session.";
+        "Select a remote directory before creating a remote session.";
+
+    public const string InvalidRemoteCwdMessage =
+        "The remote working directory must be an absolute path.";
 
     public static AcpSessionNewCwdResolution Resolve(
         string? requestedCwd,
-        ServerConfiguration? profile,
-        IReadOnlyList<AgentRemoteDirectory>? remoteDirectories)
+        ServerConfiguration? profile)
     {
         var trimmedCwd = TrimOrNull(requestedCwd);
         if (profile?.Transport == TransportType.Stdio)
         {
-            if (!string.IsNullOrWhiteSpace(trimmedCwd))
-            {
-                return new AcpSessionNewCwdResolution(true, trimmedCwd, null);
-            }
-
-            return new AcpSessionNewCwdResolution(true, GetDefaultStdioUserProfileDirectory(), null);
+            return new AcpSessionNewCwdResolution(
+                true,
+                trimmedCwd ?? GetDefaultStdioUserProfileDirectory(),
+                null);
         }
 
-        if (string.IsNullOrWhiteSpace(trimmedCwd))
+        if (trimmedCwd is null)
         {
             return new AcpSessionNewCwdResolution(false, null, MissingRemoteCwdMessage);
+        }
+
+        if (!ProtocolPathRules.IsAbsolutePath(trimmedCwd))
+        {
+            return new AcpSessionNewCwdResolution(false, null, InvalidRemoteCwdMessage);
         }
 
         return new AcpSessionNewCwdResolution(true, trimmedCwd, null);

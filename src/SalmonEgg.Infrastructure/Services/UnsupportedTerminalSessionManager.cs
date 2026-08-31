@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Infrastructure.Services;
 

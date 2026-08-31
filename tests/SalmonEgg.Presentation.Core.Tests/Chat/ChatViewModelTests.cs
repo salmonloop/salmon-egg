@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Immutable;
@@ -15,12 +15,12 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ConversationPreview;
 using SalmonEgg.Acp.Mcp;
@@ -52,6 +52,8 @@ using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -75,7 +77,14 @@ public partial class ChatViewModelTests
         IAcpConnectionSessionRegistry? connectionSessionRegistry = null,
         ISlashCommandSource? localSlashCommandSource = null,
         IAcpMcpServerResolver? mcpServerResolver = null,
+        IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         IPlatformShellService? platformShell = null,
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null,
+        IChatStateProjector? chatStateProjector = null,
+        IUiInteractionService? uiInteractionService = null,
+        IAiContentReportLauncher? aiContentReportLauncher = null,
+        IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -98,8 +107,6 @@ public partial class ChatViewModelTests
                 It.IsAny<IReadOnlyList<string>?>(),
                 It.IsAny<string?>()))
             .Returns(transport.Object);
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var ownsSessionManager = sessionManager is null;
         sessionManager ??= new Mock<ISessionManager>();
@@ -115,22 +122,6 @@ public partial class ChatViewModelTests
                 });
             sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
                 .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-            sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-                .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-                {
-                    if (!sessions.TryGetValue(sessionId, out var session))
-                    {
-                        return false;
-                    }
-
-                    update(session);
-                    if (updateActivity)
-                    {
-                        session.UpdateActivity();
-                    }
-
-                    return true;
-                });
             sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
                 .Returns<string>(sessionId => sessions.Remove(sessionId));
         }
@@ -148,7 +139,8 @@ public partial class ChatViewModelTests
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
         var startupService = new Mock<IAppStartupService>();
         startupService.SetupGet(s => s.IsSupported).Returns(false);
-        var languageService = new Mock<IAppLanguageService>();
+        var languageServiceMock = new Mock<IAppLanguageService>();
+        languageService ??= languageServiceMock.Object;
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
@@ -160,11 +152,14 @@ public partial class ChatViewModelTests
         var preferences = new AppPreferencesViewModel(
             appSettingsService.Object,
             startupService.Object,
-            languageService.Object,
+            languageService,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -204,7 +199,7 @@ public partial class ChatViewModelTests
         try
         {
             SynchronizationContext.SetSynchronizationContext(syncContext ?? new SynchronizationContext());
-            var chatStateProjector = new ChatStateProjector();
+            chatStateProjector ??= new ChatStateProjector();
 
             var viewModel = new ChatViewModel(
                 chatStore,
@@ -231,10 +226,16 @@ public partial class ChatViewModelTests
                 voiceInputService: voiceInputService,
                 applicationActivationSignalSource: applicationActivationSignalSource,
                 localTerminalPanelCoordinator: localTerminalPanelCoordinator,
+                conversationActivationOrchestrator: conversationActivationOrchestrator,
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
                 localSlashCommandSource: localSlashCommandSource,
-                platformShell: platformShell);
+                platformShell: platformShell,
+                localizer: localizer,
+                languageService: languageService,
+                uiInteractionService: uiInteractionService,
+                aiContentReportLauncher: aiContentReportLauncher,
+                shellLayoutMetricsSink: shellLayoutMetricsSink);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -274,9 +275,9 @@ public partial class ChatViewModelTests
 
     private static MainNavigationViewModel CreateStartNavigationViewModel(
         ViewModelFixture fixture,
-        INavigationCoordinator? navigationCoordinator = null)
+        INavigationCoordinator? navigationCoordinator = null,
+        IUiInteractionService? ui = null)
     {
-        var ui = new Mock<IUiInteractionService>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
@@ -293,7 +294,7 @@ public partial class ChatViewModelTests
         return new MainNavigationViewModel(
             conversationCatalog,
             new NavigationProjectPreferencesAdapter(fixture.Preferences),
-            ui.Object,
+            ui ?? Mock.Of<IUiInteractionService>(),
             effectiveNavigationCoordinator,
             navLogger.Object,
             navState,
@@ -304,7 +305,7 @@ public partial class ChatViewModelTests
             catalogPresenter,
             new ProjectAffinityResolver(),
             new ImmediateUiDispatcher(),
-            Mock.Of<IStringLocalizer<CoreStrings>>());
+            new TestCoreStringLocalizer());
     }
 
     [Fact]
@@ -474,6 +475,214 @@ public partial class ChatViewModelTests
         chatService.Verify(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ChatModeSelection_WhenRemoteSetModeFails_SurfacesLocalizedConversationOperationFailure()
+    {
+        await using var fixture = CreateViewModel(localizer: new TestCoreStringLocalizer());
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
+            .ThrowsAsync(new InvalidOperationException("mode-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList.Create(
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "code",
+                            ModeName = "Code",
+                            Description = string.Empty
+                        },
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "ask",
+                            ModeName = "Ask",
+                            Description = string.Empty
+                        }),
+                    SelectedModeId: "code",
+                    ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    ShowConfigOptionsPanel: false,
+                    AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    SessionInfo: null,
+                    Usage: null))
+        });
+        SetCurrentSessionId(viewModel, "conv-1");
+        SetCurrentRemoteSessionId(viewModel, "remote-1");
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        var ask = viewModel.ChatModeSelectorItems.Single(item => item.SemanticValue == "ask");
+        viewModel.SelectChatModeDisplayCommand.Execute(ask);
+
+        await WaitForConditionAsync(() => Task.FromResult(viewModel.HasConversationOperationFailure));
+        Assert.Equal("Failed to switch mode: mode-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenConversationOperationFailureIsHeld_ReprojectsLocalizedMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatOperation_SwitchModeFailed",
+            "切换模式失败：{0}");
+        localizer.Set(
+            "en-US",
+            "ChatOperation_SwitchModeFailed",
+            "Failed to switch mode: {0}");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
+            .ThrowsAsync(new InvalidOperationException("mode-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList.Create(
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "code",
+                            ModeName = "Code",
+                            Description = string.Empty
+                        },
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "ask",
+                            ModeName = "Ask",
+                            Description = string.Empty
+                        }),
+                    SelectedModeId: "code",
+                    ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    ShowConfigOptionsPanel: false,
+                    AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    SessionInfo: null,
+                    Usage: null))
+        });
+        SetCurrentSessionId(viewModel, "conv-1");
+        SetCurrentRemoteSessionId(viewModel, "remote-1");
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        syncContext.RunAll();
+
+        var ask = viewModel.ChatModeSelectorItems.Single(item => item.SemanticValue == "ask");
+        viewModel.SelectChatModeDisplayCommand.Execute(ask);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(viewModel.HasConversationOperationFailure);
+        });
+        Assert.Equal("切换模式失败：mode-denied", viewModel.ConversationOperationFailureMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                viewModel.ConversationOperationFailureMessage,
+                "Failed to switch mode: mode-denied",
+                StringComparison.Ordinal));
+        });
+        Assert.Equal("Failed to switch mode: mode-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenAuthenticationHintIsHeld_ReprojectsLocalizedMessage()
+    {
+        // Arrange
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_FailedWithDetail", "认证失败：{0}");
+        localizer.Set("en-US", "ChatAuth_FailedWithDetail", "Authentication failed: {0}");
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object,
+            chatStateProjector: new ChatStateProjector(localizer));
+        await fixture.DispatchConnectionAsync(new SetConnectionAuthenticationStateAction(
+            IsRequired: true,
+            HintMessage: "认证失败：denied",
+            HintResourceKey: "ChatAuth_FailedWithDetail",
+            HintFallback: "Authentication failed: {0}",
+            HintFormatArgs: ["denied"]));
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        syncContext.RunAll();
+        Assert.Equal("认证失败：denied", fixture.ViewModel.AuthenticationHintMessage);
+
+        // Act
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        // Assert
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                fixture.ViewModel.AuthenticationHintMessage,
+                "Authentication failed: denied",
+                StringComparison.Ordinal));
+        });
+        Assert.Equal("Authentication failed: denied", fixture.ViewModel.AuthenticationHintMessage);
+    }
+
+    [Fact]
+    public async Task SelectChatModelDisplay_WhenRemoteSetConfigFails_SurfacesLocalizedConversationOperationFailure()
+    {
+        await using var fixture = CreateViewModel(localizer: new TestCoreStringLocalizer());
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionConfigOptionAsync(It.IsAny<SessionSetConfigOptionParams>()))
+            .ThrowsAsync(new InvalidOperationException("model-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("conv-1", "remote-1", "profile-1")));
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await fixture.DispatchAsync(new SetConversationSessionStateAction(
+            "conv-1",
+            ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: CreateModelConfigSnapshots("claude-sonnet").ToImmutableList(),
+            ShowConfigOptionsPanel: true));
+
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+
+        var opus = viewModel.ChatModelSelectorItems.Single(item => item.SemanticValue == "claude-opus");
+        viewModel.SelectChatModelDisplayCommand.Execute(opus);
+
+        await WaitForConditionAsync(() => Task.FromResult(viewModel.HasConversationOperationFailure));
+        Assert.Equal("Failed to switch model: model-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
     private static StartViewModel CreateStartViewModelForChatFixture(
         ViewModelFixture fixture,
         MainNavigationViewModel nav,
@@ -548,8 +757,10 @@ public partial class ChatViewModelTests
     {
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
         var sessionManager = new Mock<ISessionManager>();
-        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .Returns<string, string?>((sessionId, cwd) =>
+        // cwd 按契约就是非空的（会话没有工作目录这种状态不存在），这里如实照抄签名，
+        // 免得测试替身比被替身更宽松、把产品代码不可能收到的 null 喂进来。
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns<string, string>((sessionId, cwd) =>
             {
                 var session = new Session(sessionId, cwd);
                 sessions[sessionId] = session;
@@ -557,17 +768,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
         return sessionManager;
@@ -588,6 +788,60 @@ public partial class ChatViewModelTests
         await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
 
         conversationStore.Verify(s => s.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_WhenWorkspaceLoadFails_RetriesOnNextCall()
+    {
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore
+            .SetupSequence(store => store.LoadAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("restore failed"))
+            .ReturnsAsync(new ConversationDocument());
+        await using var fixture = CreateViewModel(conversationStore: conversationStore);
+
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        conversationStore.Verify(store => store.LoadAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task RestoreAsync_WhenPostLoadActivationFails_RetriesWithoutReloadingWorkspace()
+    {
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore
+            .Setup(store => store.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument
+            {
+                LastActiveConversationId = "conversation-1",
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "conversation-1",
+                        DisplayName = "Conversation 1"
+                    }
+                }
+            });
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .SetupSequence(coordinator => coordinator.ActivateSessionAsync(
+                "conversation-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationActivationResult(false, "conversation-1", "ActivationRejected"))
+            .ReturnsAsync(new ConversationActivationResult(true, "conversation-1", null));
+        await using var fixture = CreateViewModel(
+            conversationStore: conversationStore,
+            conversationActivationCoordinator: activationCoordinator.Object);
+
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        conversationStore.Verify(store => store.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
+        activationCoordinator.Verify(coordinator => coordinator.ActivateSessionAsync(
+            "conversation-1",
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -653,13 +907,15 @@ public partial class ChatViewModelTests
 
         using var shellLayout = CreateShellLayoutViewModel();
         await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
         var shellViewModel = new ChatShellViewModel(
             fixture.ViewModel,
             shellLayout,
-            navigationCoordinator.Object,
+            navigationViewModel,
             displayCatalog.Presenter,
-            resolver.Object,
-            fixture.Preferences,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
             Mock.Of<ILogger<ChatShellViewModel>>());
 
         var remoteItem = fixture.ViewModel.MiniWindowSessions.Single(item =>
@@ -669,6 +925,110 @@ public partial class ChatViewModelTests
         await activated.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         navigationCoordinator.Verify(x => x.ActivateSessionAsync("conv-remote", "project-remote"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ChatShellViewModel_SelectedMiniWindowSession_WhenActivationFails_ResyncsToCurrentSession()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-local" });
+
+        var catalog = new ConversationCatalogPresenter();
+        catalog.Refresh(
+        [
+            new ConversationCatalogItem(
+                "conv-local",
+                "Local Conversation",
+                @"C:\repo\local",
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)),
+            new ConversationCatalogItem(
+                "conv-remote",
+                "Remote Conversation",
+                @"C:\repo\remote",
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                RemoteSessionId: "remote-1",
+                BoundProfileId: "profile-1")
+        ]);
+
+        var resolver = new Mock<IProjectAffinityResolver>(MockBehavior.Strict);
+        resolver.Setup(x => x.Resolve(It.IsAny<ProjectAffinityRequest>()))
+            .Returns(new ProjectAffinityResolution(
+                "project-remote",
+                ProjectAffinitySource.DirectMatch,
+                "project-remote",
+                null,
+                @"C:\repo\remote",
+                @"C:\repo\remote",
+                false,
+                "matched"));
+
+        var completed = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+        var navigationCoordinator = new Mock<INavigationCoordinator>(MockBehavior.Strict);
+        navigationCoordinator.Setup(x => x.ActivateSessionAsync("conv-remote", "project-remote"))
+            .Returns(() =>
+            {
+                completed.TrySetResult(null);
+                return Task.FromResult(false);
+            });
+
+        using var shellLayout = CreateShellLayoutViewModel();
+        await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object, ui.Object);
+        var shellViewModel = new ChatShellViewModel(
+            fixture.ViewModel,
+            shellLayout,
+            navigationViewModel,
+            displayCatalog.Presenter,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
+            Mock.Of<ILogger<ChatShellViewModel>>());
+
+        Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
+
+        var remoteItem = shellViewModel.MiniWindowSessions.Single(item =>
+            string.Equals(item.ConversationId, "conv-remote", StringComparison.Ordinal));
+        shellViewModel.SelectedMiniWindowSession = remoteItem;
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        // Allow async void completion to resync selection.
+        for (var i = 0; i < 40
+             && string.Equals(shellViewModel.SelectedMiniWindowSession?.ConversationId, "conv-remote", StringComparison.Ordinal);
+             i++)
+        {
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
+        navigationCoordinator.Verify(x => x.ActivateSessionAsync("conv-remote", "project-remote"), Times.Once);
+        Assert.Equal(
+            ["Failed to open this session. Please try again later."],
+            shownMessages);
     }
 
     [Fact]
@@ -703,13 +1063,15 @@ public partial class ChatViewModelTests
 
         using var shellLayout = CreateShellLayoutViewModel();
         await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
         var shellViewModel = new ChatShellViewModel(
             fixture.ViewModel,
             shellLayout,
-            navigationCoordinator.Object,
+            navigationViewModel,
             displayCatalog.Presenter,
-            resolver.Object,
-            fixture.Preferences,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
             Mock.Of<ILogger<ChatShellViewModel>>());
 
         Assert.NotNull(shellViewModel.SelectedMiniWindowSession);
@@ -1231,7 +1593,7 @@ public partial class ChatViewModelTests
         voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.StartCount == 1));
 
         Assert.Equal(1, voiceInput.StartCount);
         Assert.False(fixture.ViewModel.IsVoiceInputListening);
@@ -1323,7 +1685,7 @@ public partial class ChatViewModelTests
         voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.StartCount == 1));
 
         Assert.Equal(1, voiceInput.StartCount);
         Assert.False(viewModel.IsVoiceInputListening);
@@ -1657,22 +2019,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -1769,22 +2115,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -1894,6 +2224,78 @@ public partial class ChatViewModelTests
         var remoteBinding = fixture.Workspace.GetRemoteBinding(state.HydratedConversationId!);
         Assert.Equal("remote-1", remoteBinding?.RemoteSessionId);
         Assert.Contains(state.HydratedConversationId!, fixture.Workspace.GetKnownConversationIds());
+    }
+
+    [Fact]
+    public async Task CreateNewSessionCommand_WhenRemoteCreateFails_OwnsFailureByStartingConversation()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ThrowsAsync(new InvalidOperationException("remote create failed"));
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
+
+        await fixture.ViewModel.CreateNewSessionCommand.ExecuteAsync(null);
+
+        Assert.Equal("conv-a", fixture.ViewModel.CurrentSessionId);
+        Assert.Contains(
+            "remote create failed",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateNewSessionCommand_WhenStartedWithoutConversation_PublishesOwnerlessFailure()
+    {
+        await using var fixture = CreateViewModel();
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ThrowsAsync(new InvalidOperationException("remote create failed"));
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
+
+        await fixture.ViewModel.CreateNewSessionCommand.ExecuteAsync(null);
+
+        Assert.Null(fixture.ViewModel.CurrentSessionId);
+        Assert.Contains(
+            "remote create failed",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateNewSessionCommand_WhenBindingFails_TransfersFailureOwnerToCreatedConversation()
+    {
+        string? createdConversationId = null;
+        var bindingCommands = new Mock<IConversationBindingCommands>();
+        bindingCommands
+            .Setup(x => x.UpdateBindingAsync(It.IsAny<string>(), "remote-1", "profile-1"))
+            .Callback<string, string?, string?>((conversationId, _, _) => createdConversationId = conversationId)
+            .Returns(new ValueTask<BindingUpdateResult>(BindingUpdateResult.Error("BindingStoreMismatch")));
+        await using var fixture = CreateViewModel(bindingCommands: bindingCommands.Object);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await SelectProfileForTestAsync(
+            fixture,
+            new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+        var chatService = CreateConnectedChatService();
+        chatService.Setup(s => s.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync(new SessionNewResponse("remote-1"));
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
+
+        await fixture.ViewModel.CreateNewSessionCommand.ExecuteAsync(null);
+
+        Assert.False(string.IsNullOrWhiteSpace(createdConversationId));
+        Assert.Equal(createdConversationId, fixture.ViewModel.CurrentSessionId);
+        Assert.Contains(
+            "BindingStoreMismatch",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2011,6 +2413,67 @@ public partial class ChatViewModelTests
             Assert.True(HasUnreadAttention(finalAttentionState, "conv-background"));
             Assert.False(HasUnreadAttention(finalAttentionState, "conv-foreground"));
         });
+    }
+
+    [Fact]
+    public async Task OnErrorOccurred_WhenTransportDiesWhileProjectionConnected_ReconcilesProjectionToDisconnected()
+    {
+        await using var fixture = CreateViewModel(
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(
+            chatService.Object,
+            TestContext.Current.CancellationToken);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        // Transport genuinely dies: the service now reports disconnected while the projection is Connected.
+        chatService.SetupGet(service => service.IsConnected).Returns(false);
+        chatService.Raise(
+            service => service.ErrorOccurred += null,
+            chatService.Object,
+            "Failed to send message: broken pipe");
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetConnectionStateAsync();
+            return state.Phase == ConnectionPhase.Disconnected;
+        });
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Disconnected, connectionState.Phase);
+    }
+
+    [Fact]
+    public async Task OnErrorOccurred_WhenServiceStillConnected_LeavesProjectionConnected()
+    {
+        await using var fixture = CreateViewModel(
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(
+            chatService.Object,
+            TestContext.Current.CancellationToken);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        // A transient error that did not tear the transport down must not flip the projection.
+        chatService.Raise(
+            service => service.ErrorOccurred += null,
+            chatService.Object,
+            "Transient hiccup");
+
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Connected, connectionState.Phase);
     }
 
     [Fact]
@@ -2271,8 +2734,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = null });
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var state = await fixture.GetStateAsync();
         Assert.Null(state.HydratedConversationId);
@@ -2637,6 +3099,7 @@ public partial class ChatViewModelTests
         var chatService = CreateConnectedChatService();
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
         WireViewModelCoordinatorIntoFacade(fixture.ViewModel);
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
@@ -2671,6 +3134,43 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task OpenDiscoveredRemoteSessionAsync_PersistsAuthoritativeCwdAndOrderedAdditionalDirectories()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
+        var sourceDirectories = new List<string>
+        {
+            @"C:\shared\first",
+            @"D:\shared\second"
+        };
+
+        var result = await switcher.OpenDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest(
+                " remote-session-1 ",
+                @"C:\remote\workspace",
+                "profile-1",
+                "Remote Session",
+                sourceDirectories),
+            TestContext.Current.CancellationToken);
+        sourceDirectories[0] = @"C:\shared\mutated";
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(result.LocalConversationId));
+        var conversationId = result.LocalConversationId!;
+        var snapshot = fixture.Workspace.GetConversationSnapshot(conversationId);
+        var binding = fixture.Workspace.GetRemoteBinding(conversationId);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(@"C:\remote\workspace", snapshot.SessionInfo?.Cwd);
+        Assert.Equal(
+            [@"C:\shared\first", @"D:\shared\second"],
+            snapshot.SessionInfo?.AdditionalDirectories);
+        Assert.Equal("remote-session-1", binding?.RemoteSessionId);
+        Assert.Equal("profile-1", binding?.BoundProfileId);
+    }
+
+    [Fact]
     public async Task ConnectionProjection_DrivesIsInitialized()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -2678,8 +3178,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(fixture.ViewModel.IsConnected);
         Assert.False(fixture.ViewModel.IsInitializing);
@@ -2939,7 +3438,8 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(profile);
 
         fixture.ViewModel.SelectedAcpProfile = profile;
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(async () =>
+            (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId == "profile-a");
 
         var connectionState = await fixture.GetConnectionStateAsync();
         Assert.Equal("profile-a", connectionState.SelectedProfileIntentId);
@@ -3053,6 +3553,127 @@ public partial class ChatViewModelTests
 
         await WaitForConditionAsync(() => Task.FromResult(
             fixture.ViewModel.AcpProfileList.Any(candidate => ReferenceEquals(candidate, profile))));
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenCalledConcurrently_LoadsProfileCatalogOnce()
+    {
+        var refreshStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRefreshCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .Returns(async () =>
+            {
+                refreshStarted.TrySetResult(null);
+                await allowRefreshCompletion.Task;
+                return new[] { profile };
+            });
+
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+
+        var firstEnsure = fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var secondEnsure = fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+
+        allowRefreshCompletion.SetResult(null);
+        await Task.WhenAll(firstEnsure, secondEnsure);
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+        Assert.Single(fixture.ViewModel.AcpProfileList);
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenCatalogIsEmpty_DoesNotReloadCompletedCatalog()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(Array.Empty<ServerConfiguration>());
+
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+        Assert.Empty(fixture.ViewModel.AcpProfileList);
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenProjectionFails_RetriesIncompleteCatalog()
+    {
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { profile });
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+        var failNextProjection = true;
+        fixture.Profiles.Profiles.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == NotifyCollectionChangedAction.Add && failNextProjection)
+            {
+                failNextProjection = false;
+                throw new InvalidOperationException("Profile projection failed.");
+            }
+        };
+
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Exactly(2));
+        Assert.Same(profile, Assert.Single(fixture.ViewModel.AcpProfileList));
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenStoreIntentExists_PreservesAuthoritativeProfileSelection()
+    {
+        var preferredProfile = new ServerConfiguration
+        {
+            Id = "profile-preferred",
+            Name = "Preferred Profile",
+            Transport = TransportType.Stdio
+        };
+        var authoritativeProfile = new ServerConfiguration
+        {
+            Id = "profile-authoritative",
+            Name = "Authoritative Profile",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { preferredProfile, authoritativeProfile });
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext, configurationService: configurationService);
+        fixture.Preferences.LastSelectedServerId = preferredProfile.Id;
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(authoritativeProfile.Id));
+
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.EnsureAcpProfilesLoadedAsync());
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected));
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ApplyCurrentStoreProjectionAsync());
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(authoritativeProfile.Id, connectionState.SelectedProfileIntentId);
+        Assert.Same(authoritativeProfile, fixture.ViewModel.SelectedAcpProfile);
     }
 
     [Fact]
@@ -3220,7 +3841,8 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(profile);
 
         fixture.ViewModel.SelectedAcpProfile = profile;
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(
+            (fixture.ViewModel.ConnectionErrorMessage ?? string.Empty).Contains("profile switch failed", StringComparison.Ordinal)));
 
         Assert.Contains("profile switch failed", fixture.ViewModel.ConnectionErrorMessage ?? string.Empty, StringComparison.Ordinal);
     }
@@ -3441,6 +4063,65 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task TryAutoConnectAsync_WhenProfileIntentChangesDuringResolution_RetriesLatestProfile()
+    {
+        var profileA = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var profileB = new ServerConfiguration
+        {
+            Id = "profile-b",
+            Name = "Profile B",
+            Transport = TransportType.Stdio
+        };
+        var profileAResolutionStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowProfileAResolution = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connectedProfileIds = new List<string>();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { profileA, profileB });
+        configurationService
+            .Setup(service => service.LoadConfigurationAsync(profileA.Id))
+            .Returns(async () =>
+            {
+                profileAResolutionStarted.TrySetResult(null);
+                await allowProfileAResolution.Task;
+                return profileA;
+            });
+        configurationService
+            .Setup(service => service.LoadConfigurationAsync(profileB.Id))
+            .ReturnsAsync(profileB);
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(command => command.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                (profile, _, _, _) => connectedProfileIds.Add(profile.Id))
+            .ReturnsAsync(new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse()));
+        await using var fixture = CreateViewModel(
+            acpConnectionCommands: commands.Object,
+            configurationService: configurationService);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(profileA.Id));
+
+        var staleAutoConnect = fixture.ViewModel.TryAutoConnectAsync(TestContext.Current.CancellationToken);
+        await profileAResolutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(profileB.Id));
+        allowProfileAResolution.SetResult(null);
+        await staleAutoConnect;
+        await fixture.ViewModel.TryAutoConnectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { profileB.Id }, connectedProfileIds);
+        Assert.Equal(profileB.Id, (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId);
+    }
+
+    [Fact]
     public async Task TryAutoConnectAsync_WhenInnerConnectFaults_AllowsLaterRetry()
     {
         // Regression: a faulted auto-connect attempt must release the in-flight claim. Otherwise the
@@ -3547,11 +4228,154 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("hello", fixture.ViewModel.MessageHistory[0].TextContent);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenConfirmed_OpensSharedEmailReportWithMessageExcerpt()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        launcher.Setup(service => service.TryOpenReportAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                "hello"))
+            .ReturnsAsync(true);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: new TestCoreStringLocalizer(),
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report",
+                ContentType = "text",
+                TextContent = "hello",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        var message = Assert.Single(fixture.ViewModel.MessageHistory);
+        Assert.True(message.ReportContentCommand.CanExecute(null));
+        await message.ReportContentCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ConfirmAsync(
+            "Report AI content",
+            It.IsAny<string>(),
+            "Open email",
+            "Cancel"), Times.Once);
+        launcher.Verify(service => service.TryOpenReportAsync(
+            "SalmonEgg",
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            "hello"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenDialogCancelled_DoesNotOpenEmailReport()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(false);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: new TestCoreStringLocalizer(),
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report-cancel",
+                ContentType = "text",
+                TextContent = "cancel me",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        var message = Assert.Single(fixture.ViewModel.MessageHistory);
+        await message.ReportContentCommand.ExecuteAsync(null);
+
+        launcher.Verify(service => service.TryOpenReportAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenEmailAppCannotOpen_ShowsReportSpecificFailure()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new TestCoreStringLocalizer();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        launcher.Setup(service => service.TryOpenReportAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .ReturnsAsync(false);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report-failed",
+                ContentType = "text",
+                TextContent = "failed report",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        await Assert.Single(fixture.ViewModel.MessageHistory).ReportContentCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["AiContentReport_OpenFailed"]), Times.Once);
     }
 
     [Fact]
@@ -3566,11 +4390,11 @@ public partial class ChatViewModelTests
             Id = "tool-1",
             ContentType = "tool_call",
             ToolCallId = "call-1",
-            ToolCallStatus = ToolCallStatus.InProgress,
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new ContentToolCallContent(new ImageContentBlock("image-data", "image/png"))
-            },
+            }),
             Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
         };
 
@@ -3580,8 +4404,7 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var projected = Assert.Single(fixture.ViewModel.MessageHistory);
         var structuredContent = Assert.Single(projected.ToolCallContent!);
@@ -3765,8 +4588,6 @@ public partial class ChatViewModelTests
 
         var syncContext = new QueueingSynchronizationContext();
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
@@ -3797,8 +4618,11 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -3869,8 +4693,6 @@ public partial class ChatViewModelTests
 
         var syncContext = new QueueingSynchronizationContext();
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
@@ -3901,8 +4723,11 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -3968,8 +4793,6 @@ public partial class ChatViewModelTests
             .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), default));
 
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var serilog = new Mock<SerilogLogger>();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -3983,22 +4806,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
@@ -4029,8 +4836,11 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4121,8 +4931,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.DispatchAsync(new SetDraftTextAction("from store"));
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.Equal("from store", viewModel.CurrentPrompt);
     }
@@ -4144,8 +4953,7 @@ public partial class ChatViewModelTests
 
         var staleState = await fixture.GetStateAsync();
         viewModel.CurrentPrompt = "new instruction";
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await fixture.UpdateStateAsync(_ => staleState with
         {
@@ -4198,13 +5006,13 @@ public partial class ChatViewModelTests
                             Id = "message-1",
                             Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
                             ContentType = "tool_call",
-                            ToolCallContent = new List<ToolCallContent>
+                            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                             {
                                 new DiffToolCallContent(
                                     diffPath,
                                     oldText: null,
                                     newText: "updated")
-                            }
+                            }),
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     ShowPlanPanel: false)),
@@ -4214,13 +5022,13 @@ public partial class ChatViewModelTests
                     Id = "message-1",
                     Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
                     ContentType = "tool_call",
-                    ToolCallContent = new List<ToolCallContent>
+                    ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                     {
                         new DiffToolCallContent(
                             diffPath,
                             oldText: null,
                             newText: "updated")
-                    }
+                    }),
                 })
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
@@ -4268,10 +5076,100 @@ public partial class ChatViewModelTests
         Assert.True(viewModel.HasPlanEntries);
         Assert.True(viewModel.ShouldShowPlanList);
         Assert.False(viewModel.ShouldShowPlanEmpty);
-        Assert.False(viewModel.TaskOverviewState.ShouldShowEmpty);
+        Assert.True(viewModel.TaskOverviewState.HasContent);
         Assert.True(viewModel.TaskOverviewState.ShouldShowPlanList);
         Assert.Equal(1, viewModel.TaskOverviewState.PendingPlanCount);
         Assert.Equal("Step 1", viewModel.TaskOverviewCurrentPlanContent);
+    }
+
+    [Fact]
+    public async Task TaskOverviewContentAvailability_FollowsPlanContentLifecycle()
+    {
+        var projectedAvailability = new List<bool>();
+        var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        metricsSink
+            .Setup(sink => sink.ReportRightPanelContentAvailability(It.IsAny<bool>(), It.IsAny<long>()))
+            .Callback<bool, long>((hasContent, _) => projectedAvailability.Add(hasContent))
+            .Returns(ValueTask.CompletedTask);
+        await using var fixture = CreateViewModel(shellLayoutMetricsSink: metricsSink.Object);
+        fixture.ViewModel.IsSessionActive = true;
+
+        Assert.Contains(false, projectedAvailability);
+
+        fixture.ViewModel.PlanEntries.Add(new PlanEntryViewModel
+        {
+            Content = "Step 1",
+            Priority = PlanEntryPriority.Medium,
+            Status = PlanEntryStatus.Pending
+        });
+        Assert.True(projectedAvailability[^1]);
+
+        fixture.ViewModel.PlanEntries.Clear();
+
+        Assert.False(projectedAvailability[^1]);
+    }
+
+    [Fact]
+    public async Task TaskOverviewContentAvailability_WhenShellHasNewLatestIntent_HidesStaleEntryUntilIntentClears()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        var projectedAvailability = new List<bool>();
+        var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        metricsSink
+            .Setup(sink => sink.ReportRightPanelContentAvailability(It.IsAny<bool>(), It.IsAny<long>()))
+            .Callback<bool, long>((hasContent, _) => projectedAvailability.Add(hasContent))
+            .Returns(ValueTask.CompletedTask);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            shellNavigationRuntimeState: runtimeState,
+            shellLayoutMetricsSink: metricsSink.Object);
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 8, 20, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "current conversation"
+                }
+            ],
+            PlanEntries = ImmutableList.Create(new ConversationPlanEntrySnapshot
+            {
+                Content = "Review the right sidebar",
+                Status = "in_progress",
+                Priority = "high"
+            })
+        });
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.ShouldShowActiveConversationRoot
+            && fixture.ViewModel.TaskOverviewState.HasContent
+            && projectedAvailability.Count > 0
+            && projectedAvailability[^1]));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-2",
+            null,
+            Version: 7,
+            SessionActivationPhase.NavigatingToChatShell);
+        runtimeState.DesiredSessionId = "conv-2";
+        runtimeState.IsSessionActivationInProgress = true;
+
+        Assert.False(projectedAvailability[^1]);
+
+        runtimeState.ActiveSessionActivation = null;
+        runtimeState.DesiredSessionId = null;
+        runtimeState.IsSessionActivationInProgress = false;
+
+        Assert.True(projectedAvailability[^1]);
     }
 
     private sealed class QueueingSynchronizationContext : SynchronizationContext, IUiDispatcher
@@ -5569,8 +6467,9 @@ public partial class ChatViewModelTests
 
     private static IReadOnlyList<ToolCallContent> GetStructuredToolCallContent(ConversationMessageSnapshot snapshot)
     {
-        Assert.NotNull(snapshot.ToolCallContent);
-        return snapshot.ToolCallContent!;
+        var content = ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent);
+        Assert.NotNull(content);
+        return content!;
     }
 
     private static bool HasUnreadAttention(ConversationAttentionState attentionState, string conversationId)
@@ -5588,6 +6487,10 @@ public partial class ChatViewModelTests
 
     private sealed class ReplayLoadChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId { get; private set; }
 
         public bool IsInitialized => true;
@@ -5691,7 +6594,7 @@ public partial class ChatViewModelTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
@@ -5719,6 +6622,10 @@ public partial class ChatViewModelTests
 
     private sealed class ContinuityTrackingChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         private readonly HashSet<string> _knownRemoteSessions = new(StringComparer.Ordinal);
         private int _nextRecoveredSessionId = 1;
         private event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceivedCore;
@@ -5856,7 +6763,7 @@ public partial class ChatViewModelTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
@@ -5949,9 +6856,8 @@ public partial class ChatViewModelTests
 
         public Task CancelPromptAsync(
             IAcpChatCoordinatorSink sink,
-            string? reason = null,
             CancellationToken cancellationToken = default)
-            => RequireInner().CancelPromptAsync(sink, reason, cancellationToken);
+            => RequireInner().CancelPromptAsync(sink, cancellationToken);
 
         public Task DisconnectAsync(
             IAcpChatCoordinatorSink sink,
@@ -5979,7 +6885,7 @@ public partial class ChatViewModelTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -5987,7 +6893,7 @@ public partial class ChatViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
@@ -6087,7 +6993,7 @@ public partial class ChatViewModelTests
             }
         };
 
-    private sealed class ViewModelFixture : IDisposable, IAsyncDisposable
+    private sealed class ViewModelFixture : IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
@@ -6255,10 +7161,6 @@ public partial class ChatViewModelTests
             GC.KeepAlive(_attentionStateOwner);
         }
 
-        public void Dispose()
-        {
-            DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
     }
 
     private sealed class GateSecondSelectionActivationCoordinator : IConversationActivationCoordinator
@@ -6410,7 +7312,7 @@ public partial class ChatViewModelTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class DisplayCatalogTestScope : IDisposable, IAsyncDisposable
+    private sealed class DisplayCatalogTestScope : IAsyncDisposable
     {
         private readonly IState<ConversationAttentionState> _attentionState;
 
@@ -6426,12 +7328,6 @@ public partial class ChatViewModelTests
         }
 
         public ConversationCatalogDisplayPresenter Presenter { get; }
-
-        public void Dispose()
-        {
-            Presenter.Dispose();
-            _attentionState.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
 
         public async ValueTask DisposeAsync()
         {
@@ -6799,6 +7695,65 @@ public partial class ChatViewModelTests
         Assert.True(fixture.ViewModel.IsTurnFailureVisible);
         Assert.True(string.IsNullOrWhiteSpace(fixture.ViewModel.ErrorMessage));
         Assert.False(fixture.ViewModel.ShowTransientNotification);
+    }
+
+    [Fact]
+    public async Task CopyTurnFailureCommand_WhenClipboardUnsupported_SurfacesLocalizedToast()
+    {
+        var shell = new RecordingPlatformShellService { CopyResult = false };
+        await using var fixture = CreateViewModel(platformShell: shell, localizer: new TestCoreStringLocalizer());
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        await fixture.ViewModel.CopyTurnFailureCommand.ExecuteAsync(null);
+
+        Assert.Equal("provider failed", shell.LastCopiedText);
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(fixture.ViewModel.ShowTransientNotification);
+        Assert.Equal(
+            "Clipboard copy is not supported on this platform.",
+            fixture.ViewModel.TransientNotificationMessage);
+    }
+
+    [Fact]
+    public async Task CopyTurnFailureCommand_WhenClipboardThrows_SurfacesLocalizedToast()
+    {
+        var shell = new RecordingPlatformShellService
+        {
+            CopyException = new InvalidOperationException("clipboard denied"),
+        };
+        await using var fixture = CreateViewModel(platformShell: shell, localizer: new TestCoreStringLocalizer());
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        await fixture.ViewModel.CopyTurnFailureCommand.ExecuteAsync(null);
+
+        Assert.Null(shell.LastCopiedText);
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(fixture.ViewModel.ShowTransientNotification);
+        Assert.Equal(
+            "Failed to copy the failure detail. Please try again later.",
+            fixture.ViewModel.TransientNotificationMessage);
     }
 
     [Fact]
@@ -7276,7 +8231,7 @@ public partial class ChatViewModelTests
             It.IsAny<IAcpChatCoordinatorSink>(),
             It.IsAny<Func<CancellationToken, Task<bool>>>(),
             It.IsAny<CancellationToken>()), Times.Never);
-        commands.Verify(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<string?>()), Times.Never);
+        commands.Verify(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -7308,7 +8263,7 @@ public partial class ChatViewModelTests
                     requestDispatched.SetResult();
                     return await promptResponse.Task;
                 });
-        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), "User cancelled"))
+        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -7367,7 +8322,7 @@ public partial class ChatViewModelTests
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
-        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), "User cancelled"))
+        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -7375,6 +8330,7 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object, TestContext.Current.CancellationToken));
 
         var turnStartedAt = new DateTime(2026, 3, 24, 3, 0, 0, DateTimeKind.Utc);
+        var observedToolTime = turnStartedAt.AddSeconds(5);
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -7386,33 +8342,44 @@ public partial class ChatViewModelTests
                     ImmutableList.Create(
                         new ConversationMessageSnapshot
                         {
-                            Id = "tool-old",
-                            Timestamp = turnStartedAt.AddMinutes(-1),
+                            // Historical/replayed tool calls carry no authoritative message time.
+                            Id = "tool-replayed",
+                            Timestamp = null,
                             ContentType = "tool_call",
-                            ToolCallId = "tool-old",
-                            ToolCallStatus = ToolCallStatus.InProgress,
-                            Title = "old"
+                            ToolCallId = "tool-replayed",
+                            ToolCallStatus = ToolCallStatus.Completed.ToString(),
+                            Title = "replayed"
                         },
                         new ConversationMessageSnapshot
                         {
+                            // Outstanding tool call with no message time (ACP carries none).
+                            Id = "tool-pending-null-time",
+                            Timestamp = null,
+                            ContentType = "tool_call",
+                            ToolCallId = "tool-pending-null-time",
+                            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
+                            Title = "pending-null-time"
+                        },
+                        new ConversationMessageSnapshot
+                        {
+                            // Outstanding tool call that happens to have a local observed time.
                             Id = "tool-current",
-                            Timestamp = turnStartedAt.AddSeconds(5),
+                            Timestamp = observedToolTime,
                             ContentType = "tool_call",
                             ToolCallId = "tool-current",
-                            ToolCallStatus = ToolCallStatus.InProgress,
+                            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                             Title = "current",
-                            ToolCallContent = new List<ToolCallContent>
+                            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                             {
                                 new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/tool-current"))
-                            }
+                            }),
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, turnStartedAt, turnStartedAt),
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await viewModel.CancelPromptCommand.ExecuteAsync(null);
 
@@ -7425,8 +8392,11 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             var cancelledCurrent = transcript.Any(message =>
                 string.Equals(message.Id, "tool-current", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
-            return state.ActiveTurn?.Phase == ChatTurnPhase.ToolRunning && cancelledCurrent;
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
+            var cancelledNullTime = transcript.Any(message =>
+                string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal)
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
+            return state.ActiveTurn?.Phase == ChatTurnPhase.ToolRunning && cancelledCurrent && cancelledNullTime;
         }, timeoutMilliseconds: 12000);
 
         var finalState = await fixture.GetStateAsync();
@@ -7434,15 +8404,26 @@ public partial class ChatViewModelTests
             ?? finalState.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.Equal(ChatTurnPhase.ToolRunning, finalState.ActiveTurn!.Phase);
-        Assert.Equal(ToolCallStatus.InProgress, finalTranscript.Single(message => string.Equals(message.Id, "tool-old", StringComparison.Ordinal)).ToolCallStatus);
+
+        // Already-terminal historical tool calls are not rewritten.
+        var replayed = finalTranscript.Single(message => string.Equals(message.Id, "tool-replayed", StringComparison.Ordinal));
+        Assert.Equal(ToolCallStatus.Completed.ToString(), replayed.ToolCallStatus);
+        Assert.Null(replayed.Timestamp);
+
+        // Pending tool calls are cancelled by status, not wall-clock cutoffs; times are preserved.
+        var cancelledNullTime = finalTranscript.Single(message => string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal));
+        Assert.Equal(ToolCallStatus.Cancelled.ToString(), cancelledNullTime.ToolCallStatus);
+        Assert.Null(cancelledNullTime.Timestamp);
+
         var cancelledCurrent = finalTranscript.Single(message => string.Equals(message.Id, "tool-current", StringComparison.Ordinal));
-        Assert.Equal(ToolCallStatus.Cancelled, cancelledCurrent.ToolCallStatus);
-        var structuredContent = Assert.Single(cancelledCurrent.ToolCallContent!);
+        Assert.Equal(ToolCallStatus.Cancelled.ToString(), cancelledCurrent.ToolCallStatus);
+        Assert.Equal(observedToolTime, cancelledCurrent.Timestamp);
+        var structuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(cancelledCurrent.ToolCallContent)!);
         var content = Assert.IsType<ContentToolCallContent>(structuredContent);
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
         Assert.Equal("https://example.com/tool-current", resourceLink.Uri);
 
-        commands.Verify(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), "User cancelled"), Times.Once);
+        commands.Verify(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -7450,7 +8431,7 @@ public partial class ChatViewModelTests
     {
         var syncContext = new QueueingSynchronizationContext();
         var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
-        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), "User cancelled"))
+        commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -7469,12 +8450,7 @@ public partial class ChatViewModelTests
         });
         syncContext.RunAll();
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-1",
-            SessionId = "remote-1",
-            Options = []
-        });
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-1", "remote-1", null, new List<PermissionOption>(), null!));
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -7495,7 +8471,7 @@ public partial class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var chatService = CreateConnectedChatService();
         chatService.Setup(service => service.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
-            .ReturnsAsync(new SessionCancelResponse(true));
+            .Returns(Task.CompletedTask);
         chatService.Setup(service => service.RespondToPermissionRequestAsync("permission-2", "cancelled", null))
             .ReturnsAsync(true);
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
@@ -7515,12 +8491,7 @@ public partial class ChatViewModelTests
                 && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-fresh", StringComparison.Ordinal);
         }, timeoutMilliseconds: 5000);
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-2",
-            SessionId = "remote-fresh",
-            Options = []
-        });
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-2", "remote-fresh", null, new List<PermissionOption>(), null!));
 
         await WaitForConditionAsync(() =>
         {
@@ -7571,18 +8542,16 @@ public partial class ChatViewModelTests
             }
             """).RootElement.Clone();
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-1",
-            SessionId = "remote-1",
-            ToolCall = toolCall,
-            Options =
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs(
+            "permission-1",
+            "remote-1",
+            toolCall,
             [
                 new PermissionOption("allow-once", "Allow once", "allow_once"),
                 new PermissionOption("allow-always", "Always allow", "allow_always"),
                 new PermissionOption("reject-once", "Reject", "reject_once")
-            ]
-        });
+            ],
+            null!));
 
         await WaitForConditionAsync(() =>
         {
@@ -7988,6 +8957,65 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SessionUpdateReceived_ProtocolSourcedMessages_DoNotInventMessageTimestamps()
+    {
+        // session/load replay and live session/update chunks are identical wire shapes and
+        // carry no per-message timestamp. The client must not stamp wall-clock "now" onto them.
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new UserMessageUpdate(new TextContentBlock("historical user"))
+            {
+                MessageId = "msg-user-1"
+            }));
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new AgentMessageUpdate(new TextContentBlock("historical agent"))
+            {
+                MessageId = "msg-agent-1"
+            }));
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate(
+                toolCallId: "tool-1",
+                kind: ToolCallKind.Read,
+                status: ToolCallStatus.Completed,
+                title: "read")));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var transcript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Count >= 3;
+        });
+
+        var finalTranscript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Equal(3, finalTranscript.Count);
+        Assert.All(finalTranscript, message => Assert.Null(message.Timestamp));
+
+        // UI projection must also hide time rather than rendering a fabricated clock.
+        var projected = new ChatMessageViewModel();
+        projected.ApplySnapshot(finalTranscript[0], projectionIndex: 0);
+        Assert.Null(projected.Timestamp);
+        Assert.False(projected.HasTimestamp);
+    }
+
+    [Fact]
     public async Task SessionUpdateReceived_AgentMessageUpdate_WithDifferentProtocolMessageIds_CreatesSeparateAssistantMessages()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -8063,7 +9091,7 @@ public partial class ChatViewModelTests
                 Timestamp = DateTime.UtcNow,
                 ContentType = "tool_call",
                 ToolCallId = "call-1",
-                ToolCallStatus = ToolCallStatus.InProgress,
+                ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "title"
             }),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
@@ -8088,7 +9116,7 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
         });
 
         var state = await fixture.GetStateAsync();
@@ -8099,7 +9127,7 @@ public partial class ChatViewModelTests
         Assert.Contains(
             transcript,
             message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -8123,7 +9151,7 @@ public partial class ChatViewModelTests
                 Timestamp = DateTime.UtcNow,
                 ContentType = "tool_call",
                 ToolCallId = "call-1",
-                ToolCallStatus = ToolCallStatus.InProgress,
+                ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "Read File"
             }),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
@@ -8149,7 +9177,7 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Failed);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Failed.ToString(), StringComparison.Ordinal));
         });
 
         var failedState = await fixture.GetStateAsync();
@@ -8212,8 +9240,8 @@ public partial class ChatViewModelTests
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
                 && string.Equals(message.Title, "Switch mode", StringComparison.Ordinal)
-                && message.ToolCallKind == ToolCallKind.SwitchMode
-                && message.ToolCallStatus == ToolCallStatus.Completed);
+                && string.Equals(message.ToolCallKind, ToolCallKind.SwitchMode.ToString(), StringComparison.Ordinal)
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Completed.ToString(), StringComparison.Ordinal));
         });
 
         var finalState = await fixture.GetStateAsync();
@@ -8221,8 +9249,8 @@ public partial class ChatViewModelTests
             finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
         Assert.Equal("Switch mode", toolCallMessage.Title);
-        Assert.Equal(ToolCallKind.SwitchMode, toolCallMessage.ToolCallKind);
-        Assert.Equal(ToolCallStatus.Completed, toolCallMessage.ToolCallStatus);
+        Assert.Equal(ToolCallKind.SwitchMode.ToString(), toolCallMessage.ToolCallKind);
+        Assert.Equal(ToolCallStatus.Completed.ToString(), toolCallMessage.ToolCallStatus);
         Assert.Equal("plan", JsonDocument.Parse(toolCallMessage.ToolCallJson!).RootElement.GetProperty("targetMode").GetString());
         Assert.True(JsonDocument.Parse(toolCallMessage.TextContent).RootElement.GetProperty("applied").GetBoolean());
     }
@@ -8242,22 +9270,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
@@ -8307,7 +9319,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_WithCwd_DoesNotOverrideEstablishedSessionSetup()
+    public async Task ProcessSessionUpdateAsync_SessionInfoUpdate_WithoutCwd_PreservesKnownCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -8321,22 +9333,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
@@ -8410,22 +9406,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
@@ -8441,7 +9421,6 @@ public partial class ChatViewModelTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = "Original title",
-                Description = "Original description",
                 Cwd = @"C:\repo\demo",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -8468,7 +9447,6 @@ public partial class ChatViewModelTests
                     new ConversationSessionInfoSnapshot
                     {
                         Title = "Original title",
-                        Description = "Original description",
                         Cwd = @"C:\repo\demo",
                         UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -8512,10 +9490,8 @@ public partial class ChatViewModelTests
             fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo);
 
         Assert.Equal(string.Empty, storeSessionInfo.Title);
-        Assert.Equal("Original description", storeSessionInfo.Description);
         Assert.Equal(@"C:\repo\demo", storeSessionInfo.Cwd);
         Assert.Equal(storeSessionInfo.Title, workspaceSessionInfo.Title);
-        Assert.Equal(storeSessionInfo.Description, workspaceSessionInfo.Description);
         Assert.Equal(storeSessionInfo.Cwd, workspaceSessionInfo.Cwd);
         Assert.Equal(storeSessionInfo.UpdatedAtUtc, workspaceSessionInfo.UpdatedAtUtc);
         Assert.Equal(storeSessionInfo.Meta!["existing"], workspaceSessionInfo.Meta!["existing"]);
@@ -8717,30 +9693,12 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
         await sessionManager.Object.CreateSessionAsync("conv-compact", @"C:\repo\compact");
-        sessionManager.Object.UpdateSession(
-            "conv-compact",
-            session => session.DisplayName = "This session title should stay complete while the mini window trims it",
-            updateActivity: false);
+        sessionManager.Object.GetSession("conv-compact")!.DisplayName =
+            "This session title should stay complete while the mini window trims it";
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -8809,31 +9767,12 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
         const string fullDisplayName = "12345678901234567890👨‍👩‍👧‍👦 trailing title words";
         await sessionManager.Object.CreateSessionAsync("conv-emoji", @"C:\repo\emoji");
-        sessionManager.Object.UpdateSession(
-            "conv-emoji",
-            session => session.DisplayName = fullDisplayName,
-            updateActivity: false);
+        sessionManager.Object.GetSession("conv-emoji")!.DisplayName = fullDisplayName;
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -8871,22 +9810,6 @@ public partial class ChatViewModelTests
             });
         sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.TryGetValue(sessionId, out var session) ? session : null);
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((sessionId, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(sessionId, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(sessionId => sessions.Remove(sessionId));
 
@@ -9031,22 +9954,21 @@ public partial class ChatViewModelTests
                     Size = 128,
                     Cost = new UsageCost
                     {
-                        Amount = 1.5m,
+                        Amount = 1.5,
                         Currency = "USD"
                     }
                 }));
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.WaitingForAgent, state.ActiveTurn!.Phase);
         var sessionState = Assert.NotNull(state.ResolveSessionStateSlice("conv-1"));
         Assert.NotNull(sessionState!.Usage);
-        Assert.Equal(7, sessionState.Usage!.Used);
-        Assert.Equal(128, sessionState.Usage.Size);
+        Assert.Equal(7UL, sessionState.Usage!.Used);
+        Assert.Equal(128UL, sessionState.Usage.Size);
         Assert.NotNull(sessionState.Usage.Cost);
-        Assert.Equal(1.5m, sessionState.Usage.Cost!.Amount);
+        Assert.Equal(1.5, sessionState.Usage.Cost!.Amount);
         Assert.Equal("USD", sessionState.Usage.Cost.Currency);
 
         var newLogInvocations = fixture.ViewModelLogger.Invocations.Skip(logInvocationCountBefore);
@@ -9075,22 +9997,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -9159,7 +10065,6 @@ public partial class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
         commands.Setup(x => x.CancelPromptAsync(
                 It.IsAny<IAcpChatCoordinatorSink>(),
-                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         commands.Setup(x => x.DisconnectAsync(
@@ -9245,7 +10150,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task HydrateActiveConversationAsync_WhenRecoveryCapabilityIsMissing_FailsWithoutProtocolRecoveryCall()
+    public async Task HydrateActiveConversationAsync_WhenOnlyV1ResumeIsAvailable_FailsWithoutProtocolRecoveryCall()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessionManager = CreateSessionManagerWithStore();
@@ -9255,11 +10160,16 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities)
-            .Returns(new AgentCapabilities(loadSession: false, sessionCapabilities: new SessionCapabilities()));
+            .Returns(new AgentCapabilities(
+                loadSession: false,
+                sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-            .Throws(new Xunit.Sdk.XunitException("session/load must not be called without recovery capability."));
+            .Throws(new Xunit.Sdk.XunitException("session/load must not be called when it is not advertised."));
         chatService.Setup(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
-            .Throws(new Xunit.Sdk.XunitException("session/resume must not be called without recovery capability."));
+            .Throws(new Xunit.Sdk.XunitException("stable v1 session/resume must not be used for cold history hydration."));
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await DispatchConnectedAsync(fixture, "profile-1");
@@ -9279,7 +10189,57 @@ public partial class ChatViewModelTests
         var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
 
         Assert.False(hydrated);
-        Assert.Contains("does not advertise remote session recovery capabilities", fixture.ViewModel.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(
+            "does not advertise session/load",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
+        chatService.Verify(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
+        chatService.Verify(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HydrateActiveConversationAsync_WhenNeitherAgentNorFallbackReportsCwd_PublishesFailureInsteadOfThrowing()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        // 刻意不把会话建进 SessionManager：Session 构造期强制非空 cwd，一旦建了，
+        // 本地 fallback 必然有值，就走不到"两个来源都没有 cwd"的分支。
+        var sessionManager = CreateSessionManagerWithStore();
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(loadSession: true, sessionCapabilities: new SessionCapabilities()));
+        // Agent 也不报 cwd，于是权威与 fallback 双双缺失。
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionListResponse());
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("session/load must not be called without a working directory."));
+        chatService.Setup(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("session/resume must not be called without a working directory."));
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await WaitForConditionAsync(async () =>
+            string.Equals((await fixture.GetStateAsync()).HydratedConversationId, "conv-1", StringComparison.Ordinal));
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+        await DispatchConnectedAsync(fixture, "profile-1");
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(hydrated);
+        Assert.Contains(
+            "did not report a working directory",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
         chatService.Verify(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
         chatService.Verify(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -9320,7 +10280,9 @@ public partial class ChatViewModelTests
         var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
 
         Assert.False(hydrated);
-        Assert.Equal("Failed to load session: ACP chat service is not connected and initialized.", fixture.ViewModel.ErrorMessage);
+        Assert.Equal(
+            "Failed to load session: ACP chat service is not connected and initialized.",
+            fixture.ViewModel.ConversationOperationFailureMessage);
         var state = await fixture.GetStateAsync();
         var runtime = state.ResolveRuntimeState("conv-1");
         Assert.NotNull(runtime);
@@ -9407,7 +10369,63 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task HydrateActiveConversationAsync_WhenRemoteMetadataRefreshIsSlow_DoesNotBlockSessionLoad()
+    public async Task ErrorOccurred_WhenSelectionChangesBeforeUiPublication_KeepsCapturedConversationOwner()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var chatService = CreateConnectedChatService();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+
+        chatService.Raise(
+            service => service.ErrorOccurred += null!,
+            chatService.Object,
+            "Transport failed for A");
+        SetCurrentSessionId(fixture.ViewModel, "conv-b");
+        syncContext.RunAll();
+
+        Assert.False(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Null(fixture.ViewModel.ConversationOperationFailureMessage);
+
+        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+
+        Assert.True(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Equal("Transport failed for A", fixture.ViewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task ErrorOccurred_WhenACompletesLate_DoesNotOverwriteCurrentConversationBFailure()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var chatService = CreateConnectedChatService();
+        await using var fixture = CreateViewModel(syncContext);
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+
+        SetCurrentSessionId(fixture.ViewModel, "conv-b");
+        chatService.Raise(
+            service => service.ErrorOccurred += null!,
+            chatService.Object,
+            "B failed");
+        syncContext.RunAll();
+        Assert.Equal("B failed", fixture.ViewModel.ConversationOperationFailureMessage);
+
+        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+        chatService.Raise(
+            service => service.ErrorOccurred += null!,
+            chatService.Object,
+            "A failed late");
+        SetCurrentSessionId(fixture.ViewModel, "conv-b");
+        syncContext.RunAll();
+
+        Assert.Equal("B failed", fixture.ViewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task HydrateActiveConversationAsync_WhenRemoteSessionListIsSlow_WaitsAndLoadsWithAuthoritativeCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -9420,22 +10438,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -9449,7 +10451,8 @@ public partial class ChatViewModelTests
             loadSession: true,
             sessionCapabilities: new SessionCapabilities
             {
-                List = new SessionListCapabilities()
+                List = new SessionListCapabilities(),
+                AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
             }));
         chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
             .Returns<SessionListParams, CancellationToken>(async (_, cancellationToken) =>
@@ -9463,6 +10466,11 @@ public partial class ChatViewModelTests
                         {
                             SessionId = "remote-1",
                             Cwd = @"C:\repo\fresh",
+                            AdditionalDirectories =
+                            [
+                                @"C:\shared\first",
+                                @"D:\shared\second"
+                            ],
                             Title = "Remote title",
                             UpdatedAt = "2026-03-28T12:34:56Z"
                         }
@@ -9474,6 +10482,7 @@ public partial class ChatViewModelTests
             .ReturnsAsync(SessionLoadResponse.Completed);
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await DispatchConnectedAsync(fixture, "profile-1");
 
@@ -9487,139 +10496,36 @@ public partial class ChatViewModelTests
         SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
 
         var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
-        var loadOrHydrationCompletion = await Task.WhenAny(
-            loadStarted.Task,
-            hydrationTask,
-            Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
-        Assert.True(
-            ReferenceEquals(loadStarted.Task, loadOrHydrationCompletion),
-            $"session/load did not start before hydration completed. HydrationStatus={hydrationTask.Status} Error={fixture.ViewModel.ErrorMessage ?? "<none>"}");
-        var capturedParams = await loadStarted.Task;
 
-        Assert.NotNull(capturedParams);
-        Assert.Equal(@"C:\repo\stale", capturedParams!.Cwd);
-
-        var hydrated = await hydrationTask;
-        Assert.True(
-            hydrated
-            || string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal),
-            fixture.ViewModel.ErrorMessage);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(loadStarted.Task.IsCompleted);
 
         releaseSessionList.TrySetResult(null);
+        var capturedParams = await loadStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TestContext.Current.CancellationToken);
 
-        await WaitForConditionAsync(async () =>
-        {
-            var storeState = await fixture.GetStateAsync();
-            var sessionInfo = storeState.ResolveSessionStateSlice("conv-1")?.SessionInfo;
-            return string.Equals(sessionInfo?.Title, "Remote title", StringComparison.Ordinal);
-        }, timeoutMilliseconds: 30000);
+        Assert.NotNull(capturedParams);
+        Assert.Equal(@"C:\repo\fresh", capturedParams!.Cwd);
+        Assert.Equal([@"C:\shared\first", @"D:\shared\second"], capturedParams.AdditionalDirectories);
 
-        Assert.Equal(@"C:\repo\stale", sessions["conv-1"].Cwd);
-        var finalState = await fixture.GetStateAsync();
-        var storeSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
-            finalState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
-        Assert.Equal("Remote title", storeSessionInfo.Title);
-        Assert.Equal(@"C:\repo\stale", storeSessionInfo.Cwd);
-    }
+        var projectedState = await fixture.GetStateAsync();
+        var projectedSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+            projectedState.ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
+        Assert.Equal("Remote title", projectedSessionInfo.Title);
+        Assert.Equal(@"C:\repo\fresh", projectedSessionInfo.Cwd);
+        Assert.Equal([@"C:\shared\first", @"D:\shared\second"], projectedSessionInfo.AdditionalDirectories);
+        Assert.Equal(@"C:\repo\fresh", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
+        Assert.Equal(
+            [@"C:\shared\first", @"D:\shared\second"],
+            fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.AdditionalDirectories);
+        Assert.Equal(@"C:\repo\fresh", sessions["conv-1"].Cwd);
 
-    [Fact]
-    public async Task HydrateActiveConversationAsync_WhenMetadataRefreshReturnsAfterServiceReplacement_DiscardsStaleSessionInfo()
-    {
-        var syncContext = new ImmediateSynchronizationContext();
-        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
-        var sessionManager = new Mock<ISessionManager>();
-        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
-            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
-        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .Returns<string, string?>((id, cwd) =>
-            {
-                var session = new Session(id, cwd);
-                sessions[id] = session;
-                return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
-        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
-            .Returns<string>(id => sessions.Remove(id));
-
-        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\stale");
-
-        var releaseOldSessionList = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var oldSessionListReturned = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var oldService = CreateConnectedChatService();
-        oldService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
-            loadSession: true,
-            sessionCapabilities: new SessionCapabilities
-            {
-                List = new SessionListCapabilities()
-            }));
-        oldService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(SessionLoadResponse.Completed);
-        oldService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
-            .Returns<SessionListParams, CancellationToken>(async (_, cancellationToken) =>
-            {
-                await releaseOldSessionList.Task.WaitAsync(cancellationToken);
-                oldSessionListReturned.TrySetResult(null);
-                return new SessionListResponse
-                {
-                    Sessions =
-                    [
-                        new AgentSessionInfo
-                        {
-                            SessionId = "remote-1",
-                            Cwd = @"C:\repo\old",
-                            Title = "Old service title",
-                            UpdatedAt = "2026-05-14T00:00:00Z"
-                        }
-                    ]
-                };
-            });
-
-        var replacementService = CreateConnectedChatService();
-        replacementService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
-
-        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldService.Object, TestContext.Current.CancellationToken));
-        await DispatchConnectedAsync(fixture, "profile-1");
-
-        await fixture.UpdateStateAsync(state => state with
-        {
-            HydratedConversationId = "conv-1",
-            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
-        });
-        SetCurrentSessionId(fixture.ViewModel, "conv-1");
-        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
-
-        Assert.True(await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken), fixture.ViewModel.ErrorMessage);
-
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object, TestContext.Current.CancellationToken));
-        await DispatchConnectedAsync(fixture, "profile-1");
-        releaseOldSessionList.TrySetResult(null);
-        await oldSessionListReturned.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-
-        var finalState = await fixture.GetStateAsync();
-        Assert.NotEqual(
-            "Old service title",
-            finalState.ResolveSessionStateSlice("conv-1")?.SessionInfo?.Title);
-        Assert.NotEqual(
-            "Old service title",
-            fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo?.Title);
+        var hydrated = await hydrationTask;
+        Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+        chatService.Verify(
+            service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -9630,9 +10536,16 @@ public partial class ChatViewModelTests
         await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\demo");
         ViewModelFixture? fixture = null;
         var chatService = CreateConnectedChatService();
+        SessionLoadParams? capturedLoadParams = null;
         chatService.SetupGet(service => service.AgentCapabilities)
-            .Returns(new AgentCapabilities(loadSession: true, sessionCapabilities: new SessionCapabilities()));
+            .Returns(new AgentCapabilities(
+                loadSession: true,
+                sessionCapabilities: new SessionCapabilities
+                {
+                    AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
+                }));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedLoadParams = value)
             .ReturnsAsync(SessionLoadResponse.Completed);
         chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
             .Throws(new Xunit.Sdk.XunitException("session/list must not be called without list capability."));
@@ -9657,6 +10570,18 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using var _ = fixture;
         await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\demo",
+                AdditionalDirectories = [@"C:\shared\persisted"]
+            }));
         fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
@@ -9676,11 +10601,89 @@ public partial class ChatViewModelTests
         var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
 
         Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+        Assert.NotNull(capturedLoadParams);
+        Assert.Equal([@"C:\shared\persisted"], capturedLoadParams!.AdditionalDirectories);
         chatService.Verify(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HydrateActiveConversationAsync_WhenSessionListCannotProvideMatch_UsesPersistedRecoveryContext(
+        bool listThrows)
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\persisted");
+        SessionLoadParams? capturedLoadParams = null;
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(
+                loadSession: true,
+                sessionCapabilities: new SessionCapabilities
+                {
+                    List = new SessionListCapabilities(),
+                    AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
+                }));
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .Returns<SessionListParams, CancellationToken>((_, _) => listThrows
+                ? Task.FromException<SessionListResponse>(new InvalidOperationException("session/list failed"))
+                : Task.FromResult(new SessionListResponse
+                {
+                    Sessions =
+                    [
+                        new AgentSessionInfo
+                        {
+                            SessionId = "remote-other",
+                            Cwd = @"C:\repo\other"
+                        }
+                    ]
+                }));
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedLoadParams = value)
+            .ReturnsAsync(SessionLoadResponse.Completed);
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\persisted",
+                AdditionalDirectories = [@"C:\shared\persisted", @"D:\shared\ordered"]
+            }));
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        SetCurrentSessionId(fixture.ViewModel, "conv-1");
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
+        Assert.NotNull(capturedLoadParams);
+        Assert.Equal(@"C:\repo\persisted", capturedLoadParams!.Cwd);
+        Assert.Equal(
+            [@"C:\shared\persisted", @"D:\shared\ordered"],
+            capturedLoadParams.AdditionalDirectories);
+        chatService.Verify(
+            service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     [Fact]
-    public async Task RestoreAndHydrateRemoteConversation_WhenSessionListReportsDifferentCwd_NavigationKeepsProjectGrouping()
+    public async Task RestoreAndHydrateRemoteConversation_WhenSessionListReportsDifferentCwd_UpdatesProjectGrouping()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -9693,22 +10696,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -9838,17 +10825,18 @@ public partial class ChatViewModelTests
 
         await WaitForConditionAsync(
             () => Task.FromResult(
-                string.Equals(fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo?.Cwd, @"C:\repo\stale", StringComparison.Ordinal)
-                && string.Equals(GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.SingleOrDefault()?.Cwd, @"C:\repo\stale", StringComparison.Ordinal)
-                && string.Equals(sessionManager.Object.GetSession("conv-1")?.Cwd, @"C:\repo\stale", StringComparison.Ordinal)),
+                string.Equals(fixture.Workspace.GetConversationSnapshot("conv-1")?.SessionInfo?.Cwd, @"C:\Users\shang\AppData\Local\SalmonEgg", StringComparison.Ordinal)
+                && string.Equals(GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.SingleOrDefault()?.Cwd, @"C:\Users\shang\AppData\Local\SalmonEgg", StringComparison.Ordinal)
+                && string.Equals(sessionManager.Object.GetSession("conv-1")?.Cwd, @"C:\Users\shang\AppData\Local\SalmonEgg", StringComparison.Ordinal)),
             timeoutMilliseconds: 4000);
-        Assert.Equal(@"C:\repo\stale", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
-        Assert.Equal(@"C:\repo\stale", GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().Cwd);
-        Assert.Equal("project-1", navVm.TryGetProjectIdForSession("conv-1"));
+        navVm.RebuildTree();
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().Cwd);
+        Assert.Equal(MainNavigationViewModel.UnclassifiedProjectId, navVm.TryGetProjectIdForSession("conv-1"));
     }
 
     [Fact]
-    public async Task HydrateActiveConversationAsync_WhenWorkspaceSnapshotCarriesEstablishedCwd_PreservesThatCwdAcrossSessionListRefresh()
+    public async Task HydrateActiveConversationAsync_WhenWorkspaceSnapshotCarriesStaleCwd_UsesRemoteSessionListCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -9861,22 +10849,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -9962,13 +10934,13 @@ public partial class ChatViewModelTests
         var hydrated = await hydrationTask;
         Assert.True(hydrated, fixture.ViewModel.ErrorMessage);
 
-        Assert.Equal(@"C:\repo\stale", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
-        Assert.Equal(@"C:\repo\stale", GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().Cwd);
-        Assert.Equal(@"C:\repo\stale", sessionManager.Object.GetSession("conv-1")!.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", GetConversationCatalogPresenter(fixture.ViewModel).Snapshot.Single().Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", sessionManager.Object.GetSession("conv-1")!.Cwd);
     }
 
     [Fact]
-    public async Task HydrateActiveConversationAsync_WhenOnlyRemoteSessionCarriesSetupCwd_PreservesThatCwdAcrossSessionListRefresh()
+    public async Task HydrateActiveConversationAsync_WhenRemoteSessionListReportsNewCwd_UsesRemoteCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -9982,33 +10954,19 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
         await sessionManager.Object.CreateSessionAsync("remote-1", @"C:\repo\stale");
 
         var chatService = CreateConnectedChatService();
+        SessionLoadParams? capturedLoadParams = null;
         chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(
             loadSession: true,
             sessionCapabilities: new SessionCapabilities
             {
-                List = new SessionListCapabilities()
+                List = new SessionListCapabilities(),
+                AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
             }));
         chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionListResponse
@@ -10025,6 +10983,7 @@ public partial class ChatViewModelTests
                 ]
             });
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionLoadParams, CancellationToken>((value, _) => capturedLoadParams = value)
             .ReturnsAsync(SessionLoadResponse.Completed);
 
         ViewModelFixture? fixture = null;
@@ -10083,7 +11042,6 @@ public partial class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
         commands.Setup(x => x.CancelPromptAsync(
                 It.IsAny<IAcpChatCoordinatorSink>(),
-                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         commands.Setup(x => x.DisconnectAsync(
@@ -10094,9 +11052,22 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
+            await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
             fixture.Workspace.UpdateRemoteBinding("conv-1", "remote-1", "profile-1");
+            fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "conv-1",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                SessionInfo: new ConversationSessionInfoSnapshot
+                {
+                    Cwd = @"C:\repo\stale",
+                    AdditionalDirectories = [@"C:\shared\stale"]
+                }));
 
             await fixture.UpdateStateAsync(state => state with
             {
@@ -10120,8 +11091,13 @@ public partial class ChatViewModelTests
 
             var storeSessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
                 (await fixture.GetStateAsync()).ResolveSessionStateSlice("conv-1")!.Value.SessionInfo);
-            Assert.Equal(@"C:\repo\stale", storeSessionInfo.Cwd);
-            Assert.Equal(@"C:\repo\stale", storeSessionInfo.Cwd);
+            Assert.NotNull(capturedLoadParams);
+            Assert.Null(capturedLoadParams!.AdditionalDirectories);
+            Assert.Equal(@"C:\repo\fresh", storeSessionInfo.Cwd);
+            Assert.NotNull(storeSessionInfo.AdditionalDirectories);
+            Assert.Empty(storeSessionInfo.AdditionalDirectories);
+            Assert.Equal(@"C:\repo\fresh", fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.Cwd);
+            Assert.Empty(fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo!.AdditionalDirectories!);
         }
     }
 
@@ -10139,22 +11115,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -10245,7 +11205,6 @@ public partial class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
         commands.Setup(x => x.CancelPromptAsync(
                 It.IsAny<IAcpChatCoordinatorSink>(),
-                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         commands.Setup(x => x.DisconnectAsync(
@@ -10257,6 +11216,7 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
+            await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             fixture.ViewModel.ReplaceChatService(chatService.Object);
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -10309,7 +11269,7 @@ public partial class ChatViewModelTests
                 fixture.Workspace.GetConversationSnapshot("conv-1")!.SessionInfo);
 
             Assert.Equal("   ", storeSessionInfo.Title);
-            Assert.Equal(@"C:\repo\stale", storeSessionInfo.Cwd);
+            Assert.Equal(@"C:\repo\fresh", storeSessionInfo.Cwd);
             Assert.Equal(storeSessionInfo.Title, workspaceSessionInfo.Title);
             Assert.Equal(storeSessionInfo.Cwd, workspaceSessionInfo.Cwd);
         }
@@ -10461,7 +11421,6 @@ public partial class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
         commands.Setup(x => x.CancelPromptAsync(
                 It.IsAny<IAcpChatCoordinatorSink>(),
-                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         commands.Setup(x => x.DisconnectAsync(
@@ -10488,7 +11447,7 @@ public partial class ChatViewModelTests
                         false,
                         ImmutableList.Create(new ConversationAvailableCommandSnapshot("plan", "Planning command", "goal")),
                         null,
-                        new ConversationUsageSnapshot(7, 128, new ConversationUsageCostSnapshot(1.5m, "USD"))))
+                        new ConversationUsageSnapshot(7, 128, new ConversationUsageCostSnapshot(1.5, "USD"))))
             });
             await DispatchConnectedAsync(fixture, "profile-1");
 
@@ -10498,10 +11457,10 @@ public partial class ChatViewModelTests
             var command = Assert.Single(sessionState.AvailableCommands);
             Assert.Equal("plan", command.Name);
             Assert.NotNull(sessionState.Usage);
-            Assert.Equal(7, sessionState.Usage!.Used);
-            Assert.Equal(128, sessionState.Usage.Size);
+            Assert.Equal(7UL, sessionState.Usage!.Used);
+            Assert.Equal(128UL, sessionState.Usage.Size);
             Assert.NotNull(sessionState.Usage.Cost);
-            Assert.Equal(1.5m, sessionState.Usage.Cost!.Amount);
+            Assert.Equal(1.5, sessionState.Usage.Cost!.Amount);
         }
     }
 
@@ -10519,22 +11478,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -10707,8 +11650,7 @@ public partial class ChatViewModelTests
                 new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await WaitForConditionAsync(() => Task.FromResult(
             fixture.ViewModel.IsOverlayVisible
@@ -10742,11 +11684,10 @@ public partial class ChatViewModelTests
                 })
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Contains("已加载 2 条消息", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("2 messages loaded", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -10823,7 +11764,6 @@ public partial class ChatViewModelTests
         var token = fixture.ViewModel.CreateViewportProjectionRestoreToken(message);
         Assert.NotNull(token);
         Assert.Equal("conv-a", token!.Value.ConversationId);
-        Assert.Equal(1, token.Value.ProjectionEpoch);
         Assert.Equal("msg:agent-0042", token.Value.ProjectionItemKey);
         Assert.Equal(message.ProjectionItemKey, token.Value.ProjectionItemKey);
     }
@@ -11017,6 +11957,102 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenLoadResponseAndCachedSnapshotExists_DoesNotDoubleWriteAgainstReplay()
+    {
+        // Regression: LoadResponse returns the foreground before buffered replay drains. The
+        // restore-if-empty fallback must NOT run inline against the still-empty mid-replay
+        // transcript — otherwise it wholesale-restores the cached snapshot and the subsequent
+        // replay append (same ProtocolMessageId) concatenates into corrupted duplicate text.
+        var syncContext = new QueueingSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.Preferences.IsLoaded);
+        });
+        fixture.Preferences.AcpHydrationCompletionMode = "LoadResponse";
+
+        fixture.Workspace.UpsertConversationSnapshot(
+            new ConversationWorkspaceSnapshot(
+                ConversationId: "conv-1",
+                Transcript:
+                [
+                    new ConversationMessageSnapshot
+                    {
+                        Id = "cached-1",
+                        IsOutgoing = false,
+                        ContentType = "text",
+                        TextContent = "replayed answer",
+                        ProtocolMessageId = "m1"
+                    }
+                ],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (_, _) =>
+            {
+                // Replay re-emits the same authoritative message carried by the cached snapshot.
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("replayed answer")) { MessageId = "m1" }));
+                return Task.FromResult(SessionLoadResponse.Completed);
+            }
+        };
+
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter, TestContext.Current.CancellationToken));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        syncContext.RunAll();
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
+        await syncContext.RunUntilCompletedAsync(hydrationTask);
+        Assert.True(await hydrationTask, fixture.ViewModel.ErrorMessage);
+
+        // Let the background replay drain + deferred reconciliation settle.
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return fixture.GetStateAsync().ContinueWith(task =>
+                (task.Result.ResolveContentSlice("conv-1")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
+                    .Any(message => string.Equals(message.TextContent, "replayed answer", StringComparison.Ordinal)));
+        });
+        syncContext.RunAll();
+
+        var finalTranscript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var replayedMessages = finalTranscript
+            .Where(message => (message.TextContent ?? string.Empty).Contains("replayed answer", StringComparison.Ordinal))
+            .ToList();
+        Assert.Single(replayedMessages);
+        Assert.Equal("replayed answer", replayedMessages[0].TextContent);
+        Assert.DoesNotContain(
+            finalTranscript,
+            message => string.Equals(message.TextContent, "replayed answerreplayed answer", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenReplayStartsWithPlanUpdate_ProjectsReplayFacts()
     {
         var syncContext = new QueueingSynchronizationContext();
@@ -11066,8 +12102,8 @@ public partial class ChatViewModelTests
         Assert.True(finalContent.HasValue);
         var planEntry = Assert.Single(finalContent.Value.PlanEntries);
         Assert.Equal("restored plan", planEntry.Content);
-        Assert.Equal(PlanEntryStatus.Pending, planEntry.Status);
-        Assert.Equal(PlanEntryPriority.Medium, planEntry.Priority);
+        Assert.Equal(PlanEntryStatus.Pending.ToString(), planEntry.Status);
+        Assert.Equal(PlanEntryPriority.Medium.ToString(), planEntry.Priority);
         Assert.Contains(
             finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             message => string.Equals(message.TextContent, "late replay after plan", StringComparison.Ordinal));
@@ -11250,8 +12286,7 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 2000);
 
         syncContext.RunAll();
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-1",
@@ -11263,8 +12298,7 @@ public partial class ChatViewModelTests
 
         allowLoadCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(hydrationTask);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(await hydrationTask);
         await WaitForConditionAsync(async () =>
@@ -11325,7 +12359,7 @@ public partial class ChatViewModelTests
             Assert.Equal(pendingBeforePrime, syncContext.PendingCount);
             Assert.True(fixture.ViewModel.IsOverlayVisible);
             Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+            Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
             var pendingBeforeClear = syncContext.PendingCount;
             fixture.ViewModel.ClearSessionSwitchPreview("conv-1");
@@ -11342,7 +12376,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivationFails_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivationFails_DoesNotLeaveOverlayVisible()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -11354,33 +12388,12 @@ public partial class ChatViewModelTests
 
         await fixture.ViewModel.SwitchConversationAsync("conv-1", TestContext.Current.CancellationToken);
 
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
         Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenInvokedOffUiThread_QueuesLayoutLoadingStateChangesOnUiDispatcher()
-    {
-        var syncContext = new QueueingSynchronizationContext();
-        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
-        activationCoordinator
-            .Setup(coordinator => coordinator.ActivateSessionAsync("conv-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ConversationActivationResult(false, "conv-1", "ActivationFailed"));
-
-        await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
-        syncContext.RunAll();
-
-        var switchTask = Task.Run(async () => await fixture.ViewModel.SwitchConversationAsync("conv-1"));
-
-        await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
-        await syncContext.RunUntilCompletedAsync(switchTask);
-
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
-    }
-
-    [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivatedConversationHasNoMessages_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivatedConversationHasNoMessages_ShowsActiveEmptyConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -11396,13 +12409,12 @@ public partial class ChatViewModelTests
 
         Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
         Assert.Empty(fixture.ViewModel.MessageHistory);
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
         Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivatedConversationHasProjectedMessagesAndNoPendingHydration_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivatedConversationHasProjectedMessages_ShowsTranscriptWithoutOverlay()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -11434,7 +12446,6 @@ public partial class ChatViewModelTests
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.False(fixture.ViewModel.IsHydrating);
         Assert.False(fixture.ViewModel.IsRemoteHydrationPending);
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
     }
 
@@ -11452,22 +12463,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -11555,22 +12550,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -11619,7 +12598,9 @@ public partial class ChatViewModelTests
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
                 store,
                 NullLogger<AcpConnectionCoordinator>.Instance,
-                new StaticMcpResolver([])),
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)),
             shellNavigationRuntimeState: runtimeState);
         var shellOverlay = new ShellSessionActivationOverlayViewModel(fixture.ViewModel, runtimeState);
         fixture.Profiles.Profiles.Add(profile);
@@ -11667,7 +12648,7 @@ public partial class ChatViewModelTests
         Assert.Equal(ChatViewModel.LoadingOverlayStage.Connecting, fixture.ViewModel.OverlayLoadingStage);
         Assert.True(shellOverlay.ShowsPresenter);
         Assert.True(shellOverlay.ShowsStatusPill);
-        Assert.Contains("连接", shellOverlay.StatusText, StringComparison.Ordinal);
+        Assert.Contains("Connecting to assistant", shellOverlay.StatusText, StringComparison.Ordinal);
 
         allowConnectCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(switchTask);
@@ -11687,22 +12668,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -11749,22 +12714,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -11830,23 +12779,6 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task Overlay_WhenOnlyLayoutSettlingIsActive_DoesNotSurfaceActivationPresenter()
-    {
-        var syncContext = new ImmediateSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
-
-        fixture.ViewModel.IsLayoutLoading = true;
-
-        Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
-        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.False(fixture.ViewModel.ShouldShowLoadingOverlayStatusPill);
-        Assert.False(fixture.ViewModel.ShouldShowLoadingOverlayPresenter);
-        Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
-    }
-
-    [Fact]
     public async Task Overlay_HydratingHistoryStatus_ReportsLoadedMessageCount()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -11881,7 +12813,7 @@ public partial class ChatViewModelTests
         });
 
         await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.OverlayStatusText.Contains("已加载 1 条消息", StringComparison.Ordinal)));
+            fixture.ViewModel.OverlayStatusText.Contains("1 messages loaded", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -11896,9 +12828,9 @@ public partial class ChatViewModelTests
         fixture.ViewModel.IsSessionSwitching = true;
 
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
         Assert.DoesNotContain("ACP", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("协议", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("protocol", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
 
         fixture.ViewModel.IsSessionSwitching = false;
         await fixture.UpdateStateAsync(state => state with { IsHydrating = true });
@@ -11906,7 +12838,7 @@ public partial class ChatViewModelTests
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
         Assert.DoesNotContain("ACP", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("协议", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("protocol", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -11937,7 +12869,100 @@ public partial class ChatViewModelTests
         Assert.True(fixture.ViewModel.HasVisibleTranscriptContent);
         Assert.True(fixture.ViewModel.IsOverlayVisible);
         Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CleanupAfterMutation_WhenRemovedConversationOwnsPendingShellActivation_RetiresOverlayAndActivationVersion()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            DesiredSessionId = "conv-2",
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivationVersion = 5,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "conv-2",
+                "project-2",
+                5,
+                SessionActivationPhase.RemoteHydrationPending)
+        };
+        using var orchestrator = new ConversationActivationOrchestrator(
+            NullLogger<ConversationActivationOrchestrator>.Instance);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            shellNavigationRuntimeState: runtimeState,
+            conversationActivationOrchestrator: orchestrator);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "active transcript"
+                }
+            ]
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.ShouldShowBlockingLoadingMask));
+        var activationVersion = orchestrator.CurrentActivationVersion;
+
+        ((IConversationPanelCleanup)fixture.ViewModel).CleanupAfterMutation(
+            "conv-2",
+            clearsActiveConversation: true);
+
+        Assert.Null(runtimeState.ActiveSessionActivation);
+        Assert.Null(runtimeState.DesiredSessionId);
+        Assert.False(runtimeState.IsSessionActivationInProgress);
+        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.True(orchestrator.CurrentActivationVersion > activationVersion);
+    }
+
+    [Fact]
+    public async Task CleanupAfterMutation_WhenRemovedConversationOwnsSessionSwitchPreview_NotifiesOverlayProjectionCleared()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        using var orchestrator = new ConversationActivationOrchestrator(
+            NullLogger<ConversationActivationOrchestrator>.Instance);
+        await using var fixture = CreateViewModel(syncContext, conversationActivationOrchestrator: orchestrator);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "active transcript"
+                }
+            ]
+        });
+        fixture.ViewModel.PrimeSessionSwitchPreview("conv-2");
+        Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        var changedProperties = new List<string?>();
+        fixture.ViewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        ((IConversationPanelCleanup)fixture.ViewModel).CleanupAfterMutation(
+            "conv-2",
+            clearsActiveConversation: false);
+
+        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.Contains(nameof(ChatViewModel.IsActivationOverlayVisible), changedProperties);
+        Assert.Contains(nameof(ChatViewModel.ShouldShowBlockingLoadingMask), changedProperties);
+        Assert.Contains(nameof(ChatViewModel.IsInputEnabled), changedProperties);
+        Assert.Equal(0, orchestrator.CurrentActivationVersion);
     }
 
     [Fact]
@@ -11972,7 +12997,7 @@ public partial class ChatViewModelTests
         Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
         Assert.True(fixture.ViewModel.IsActivationOverlayVisible);
         Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -12048,7 +13073,7 @@ public partial class ChatViewModelTests
         Assert.True(shellOverlay.IsOverlayVisible);
         Assert.True(shellOverlay.ShowsBlockingMask);
         Assert.True(shellOverlay.ShowsPresenter);
-        Assert.Contains("切换", shellOverlay.StatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", shellOverlay.StatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -12249,42 +13274,15 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task PresentedSessionHeaderDisplayName_WhenVisibleTranscriptOwnerIsNewerThanRestoreProjection_UsesVisibleTranscriptOwner()
+    public void FollowArchitecture_DoesNotKeepRestoreProjectionConversationField()
     {
-        var syncContext = new ImmediateSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
-
-        await fixture.UpdateStateAsync(state => state with
-        {
-            HydratedConversationId = "conv-remote",
-            Transcript =
-            [
-                new ConversationMessageSnapshot
-                {
-                    Id = "message-1",
-                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
-                    IsOutgoing = false,
-                    ContentType = "text",
-                    TextContent = "remote transcript"
-                }
-            ]
-        });
-
-        Assert.Equal(SessionNamePolicy.CreateDefault("conv-remote"), fixture.ViewModel.CurrentSessionDisplayName);
-
-        typeof(ChatViewModel)
-            .GetField("_currentRestoreProjectionConversationId", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(fixture.ViewModel, "conv-local");
-
-        typeof(ChatViewModel)
-            .GetMethod("RaiseTranscriptProjectionStateChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(fixture.ViewModel, []);
-
-        Assert.Equal(
-            SessionNamePolicy.CreateDefault("conv-remote"),
-            fixture.ViewModel.PresentedSessionHeaderDisplayName);
+        // ProjectionEpoch / restore-projection conversation fields were removed with the
+        // follow-controller cutover; session header presentation no longer depends on them.
+        var type = typeof(SalmonEgg.Presentation.ViewModels.Chat.ChatViewModel);
+        Assert.Null(type.GetField("_currentRestoreProjectionConversationId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+        Assert.Null(type.GetField("_currentRestoreProjectionEpoch", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
     }
+
 
     [Fact]
     public async Task PresentedSessionHeaderDisplayName_WhenCurrentSessionTranscriptReplacesSameCountMessages_RefreshesTitle()
@@ -12391,6 +13389,192 @@ public partial class ChatViewModelTests
         Assert.False(fixture.ViewModel.ShouldShowConversationInputSurface);
         Assert.Equal(SessionNamePolicy.CreateDefault("conv-1"), fixture.ViewModel.CurrentSessionDisplayName);
         Assert.Equal(string.Empty, fixture.ViewModel.PresentedSessionHeaderDisplayName);
+    }
+
+    [Fact]
+    public async Task SessionActivationFailure_IsVisibleOnlyForCurrentConversation()
+    {
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(shellNavigationRuntimeState: runtimeState);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "MissingRemoteSessionId",
+            "Failed to load session: no remote binding.");
+
+        Assert.True(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Equal(
+            "Failed to load session: no remote binding.",
+            fixture.ViewModel.SessionActivationFailureMessage);
+
+        runtimeState.ActiveSessionActivation = runtimeState.ActiveSessionActivation with
+        {
+            SessionId = "conv-b"
+        };
+
+        Assert.False(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Null(fixture.ViewModel.SessionActivationFailureMessage);
+    }
+
+    [Fact]
+    public async Task SessionActivationFailure_WhenOnlyReasonIsSet_ProjectsLocalizedFallback()
+    {
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(shellNavigationRuntimeState: runtimeState);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "ConversationSelectionFailed");
+
+        Assert.True(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Equal(
+            "Failed to open this session. Please try again.",
+            fixture.ViewModel.SessionActivationFailureMessage);
+
+        runtimeState.ActiveSessionActivation = runtimeState.ActiveSessionActivation with
+        {
+            Reason = "SupersededBeforeChatShell",
+            FailureMessage = null
+        };
+
+        Assert.False(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Null(fixture.ViewModel.SessionActivationFailureMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenSessionActivationFailureHasResourceKey_ReprojectsVisibleMessage()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatOperation_LoadSessionMissingActiveBinding",
+            "无法加载会话：当前会话没有可用的远程绑定。");
+        localizer.Set(
+            "en-US",
+            "ChatOperation_LoadSessionMissingActiveBinding",
+            "Failed to load session: no remote session binding is available for the active conversation.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(
+            shellNavigationRuntimeState: runtimeState,
+            localizer: localizer,
+            languageService: languageService.Object);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "MissingRemoteSessionId",
+            FailureMessage: "无法加载会话：当前会话没有可用的远程绑定。",
+            FailureResourceKey: "ChatOperation_LoadSessionMissingActiveBinding",
+            FailureFallback: "Failed to load session: no remote session binding is available for the active conversation.");
+
+        Assert.Equal(
+            "无法加载会话：当前会话没有可用的远程绑定。",
+            fixture.ViewModel.SessionActivationFailureMessage);
+
+        localizer.SetLanguageTag("en-US");
+        // Getter re-localizes from resource identity; LanguageChanged also notifies bindings.
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal(
+            "Failed to load session: no remote session binding is available for the active conversation.",
+            fixture.ViewModel.SessionActivationFailureMessage);
+    }
+
+    [Fact]
+    public async Task SessionActivationFailure_WhenSnapshotOrCurrentConversationChanges_RaisesDerivedNotifications()
+    {
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(shellNavigationRuntimeState: runtimeState);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        var raised = new List<string>();
+        fixture.ViewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is not null)
+            {
+                raised.Add(args.PropertyName);
+            }
+        };
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "Failure",
+            "Failure message");
+
+        Assert.Contains(nameof(ChatViewModel.SessionActivationFailureMessage), raised);
+        Assert.Contains(nameof(ChatViewModel.HasSessionActivationFailure), raised);
+
+        raised.Clear();
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-b" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-b"));
+
+        Assert.Contains(nameof(ChatViewModel.SessionActivationFailureMessage), raised);
+        Assert.Contains(nameof(ChatViewModel.HasSessionActivationFailure), raised);
+    }
+
+    [Fact]
+    public async Task HydrateActiveConversationFailure_IsVisibleOnlyForCapturedConversationOwner()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-a",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+        var raised = new List<string>();
+        fixture.ViewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is not null)
+            {
+                raised.Add(args.PropertyName);
+            }
+        };
+
+        Assert.False(await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken));
+        Assert.True(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Contains(
+            "no remote session binding",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(ChatViewModel.ConversationOperationFailureMessage), raised);
+        Assert.Contains(nameof(ChatViewModel.HasConversationOperationFailure), raised);
+
+        raised.Clear();
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-b" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-b"));
+
+        Assert.False(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Null(fixture.ViewModel.ConversationOperationFailureMessage);
+        Assert.Contains(nameof(ChatViewModel.ConversationOperationFailureMessage), raised);
+        Assert.Contains(nameof(ChatViewModel.HasConversationOperationFailure), raised);
     }
 
     [Fact]
@@ -12529,22 +13713,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -12642,19 +13810,16 @@ public partial class ChatViewModelTests
         });
 
         static bool IsHydrationLifecycleStatus(string status) =>
-            status.Contains("加载", StringComparison.Ordinal)
-            || status.Contains("打开", StringComparison.Ordinal)
-            || status.Contains("获取", StringComparison.Ordinal)
-            || status.Contains("同步", StringComparison.Ordinal)
-            || status.Contains("整理", StringComparison.Ordinal)
-            || status.Contains("完成", StringComparison.Ordinal);
+            status.Contains("Loading chat history", StringComparison.Ordinal)
+            || status.Contains("Connecting to assistant", StringComparison.Ordinal)
+            || status.Contains("Preparing chat environment", StringComparison.Ordinal);
 
         var hydrationStatusIndex = observedStatuses.FindIndex(IsHydrationLifecycleStatus);
         Assert.True(hydrationStatusIndex >= 0, $"Observed status sequence never entered hydration: [{string.Join(" | ", observedStatuses)}]");
 
         var regressedToPreparing = observedStatuses
             .Skip(hydrationStatusIndex + 1)
-            .Any(status => status.Contains("切换", StringComparison.Ordinal));
+            .Any(status => status.Contains("Switching chat", StringComparison.Ordinal));
         Assert.False(
             regressedToPreparing,
             $"Overlay status regressed to session-switch preparation after hydration started. Sequence=[{string.Join(" | ", observedStatuses)}]");
@@ -12674,22 +13839,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -12828,22 +13977,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -12986,22 +14119,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -13130,22 +14247,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -13293,22 +14394,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -13649,22 +14734,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -13766,22 +14835,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -13929,22 +14982,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -14057,22 +15094,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -14152,22 +15173,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -14276,22 +15281,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -14334,13 +15323,15 @@ public partial class ChatViewModelTests
 
             using var shellLayout = CreateShellLayoutViewModel();
             await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+            using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
             var shellViewModel = new ChatShellViewModel(
                 fixture.ViewModel,
                 shellLayout,
-                navigationCoordinator.Object,
+                navigationViewModel,
                 displayCatalog.Presenter,
-                resolver.Object,
-                fixture.Preferences,
+                new ConversationProjectAffinityResolver(
+                    resolver.Object,
+                    new NavigationProjectPreferencesAdapter(fixture.Preferences)),
                 Mock.Of<ILogger<ChatShellViewModel>>());
 
             fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
@@ -14415,22 +15406,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -14803,7 +15778,9 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
-        sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
+        // The recovery lease is keyed on the working directory, so adopting an authoritative
+        // correction is what makes the next hydration a replacement rather than a reuse.
+        sessionManager.Object.GetSession("conv-remote")!.AdoptAuthoritativeCwd(@"C:\repo\new");
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>
         {
@@ -14901,7 +15878,8 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
-        sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
+        // See above: the corrected cwd is what distinguishes the replacement request.
+        sessionManager.Object.GetSession("conv-remote")!.AdoptAuthoritativeCwd(@"C:\repo\new");
         using var secondHydrateCts = new CancellationTokenSource();
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(secondHydrateCts.Token);
         await WaitForConditionAsync(() =>
@@ -15006,7 +15984,8 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
-        sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
+        // See above: the corrected cwd is what distinguishes the replacement request.
+        sessionManager.Object.GetSession("conv-remote")!.AdoptAuthoritativeCwd(@"C:\repo\new");
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>
         {
@@ -15015,8 +15994,7 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 2000);
 
         var thirdHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
         Assert.False(replacementLoadStarted.Task.IsCompleted);
         Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
 
@@ -15499,7 +16477,7 @@ public partial class ChatViewModelTests
         var sessionManager = CreateSessionManagerWithStore();
 
         await sessionManager.Object.CreateSessionAsync("conv-local", @"C:\repo\local");
-        await sessionManager.Object.CreateSessionAsync("conv-remote", null);
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
 
         var sessionListStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowSessionListCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -15997,22 +16975,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -16163,22 +17125,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -16256,7 +17202,6 @@ public partial class ChatViewModelTests
             .Throws(new Xunit.Sdk.XunitException("Unexpected prompt dispatch path."));
         commands.Setup(x => x.CancelPromptAsync(
                 It.IsAny<IAcpChatCoordinatorSink>(),
-                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         commands.Setup(x => x.DisconnectAsync(
@@ -16356,22 +17301,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -16432,9 +17361,9 @@ public partial class ChatViewModelTests
 
         var switched = await fixture.ViewModel.SwitchConversationAsync("conv-2", TestContext.Current.CancellationToken);
 
-        Assert.True(
-            switched
-            || !string.IsNullOrWhiteSpace(fixture.ViewModel.ErrorMessage));
+        Assert.False(switched);
+        Assert.True(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.ConversationOperationFailureMessage));
     }
 
     [Fact]
@@ -16466,13 +17395,96 @@ public partial class ChatViewModelTests
         var switched = await fixture.ViewModel.SwitchConversationAsync("conv-broken", TestContext.Current.CancellationToken);
 
         Assert.False(switched);
-        Assert.Contains("no remote session binding", fixture.ViewModel.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Contains(
+            "no remote session binding",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.OrdinalIgnoreCase);
         var state = await fixture.GetStateAsync();
         var runtime = state.ResolveRuntimeState("conv-broken");
         Assert.NotNull(runtime);
         Assert.Equal(ConversationRuntimePhase.Faulted, runtime!.Value.Phase);
         Assert.Equal("MissingRemoteSessionId", runtime.Value.Reason);
         Assert.Empty(fixture.ViewModel.MessageHistory);
+    }
+
+    [Fact]
+    public async Task ProfileBoundMissingIdActivation_WhenConversationBProjects_DoesNotLeakFailureIntoBTranscript()
+    {
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-a", @"C:\repo\a");
+        await sessionManager.Object.CreateSessionAsync("conv-b", @"C:\repo\b");
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            DesiredSessionId = "conv-a",
+            ActiveSessionActivationVersion = 41,
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "conv-a",
+                "project-a",
+                41,
+                SessionActivationPhase.Selected)
+        };
+        await using var fixture = CreateViewModel(
+            sessionManager: sessionManager,
+            shellNavigationRuntimeState: runtimeState);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-a",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: DateTime.UtcNow,
+            LastUpdatedAt: DateTime.UtcNow));
+        fixture.Workspace.UpdateRemoteBinding("conv-a", remoteSessionId: null, boundProfileId: "profile-a");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-b",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "b-message",
+                    Timestamp = DateTime.UtcNow,
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "authoritative B transcript"
+                }
+            ],
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-a", new ConversationBindingSlice("conv-a", null, "profile-a"))
+        });
+
+        Assert.False(await fixture.ViewModel.SwitchConversationAsync("conv-a", TestContext.Current.CancellationToken));
+        Assert.True(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Contains(
+            "no remote session binding",
+            fixture.ViewModel.SessionActivationFailureMessage,
+            StringComparison.OrdinalIgnoreCase);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-b",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "b-message",
+                    Timestamp = DateTime.UtcNow,
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "authoritative B transcript"
+                }
+            ]
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-b"));
+
+        Assert.False(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Null(fixture.ViewModel.SessionActivationFailureMessage);
+        Assert.Contains(
+            fixture.ViewModel.MessageHistory,
+            message => string.Equals(message.TextContent, "authoritative B transcript", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -16489,22 +17501,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -16575,12 +17571,15 @@ public partial class ChatViewModelTests
         {
             var workspaceBinding = fixture.Workspace.GetRemoteBinding("conv-2");
             var state = await fixture.GetStateAsync();
-            return (fixture.ViewModel.ErrorMessage?.Contains("Resource not found", StringComparison.Ordinal) ?? false)
-                && fixture.ViewModel.MessageHistory.Count == 0
+            return fixture.ViewModel.MessageHistory.Count == 0
                 && workspaceBinding is { RemoteSessionId: "remote-2", BoundProfileId: "profile-1" }
                 && state.ResolveBinding("conv-2") == new ConversationBindingSlice("conv-2", "remote-2", "profile-1");
         });
-        Assert.Contains("Resource not found", fixture.ViewModel.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
+        Assert.True(fixture.ViewModel.HasConversationOperationFailure);
+        Assert.Contains(
+            "Resource not found",
+            fixture.ViewModel.ConversationOperationFailureMessage ?? string.Empty,
+            StringComparison.Ordinal);
         chatService.Verify(
             service => service.LoadSessionAsync(
                 It.Is<SessionLoadParams>(parameters => string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
@@ -16616,22 +17615,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -16756,8 +17739,7 @@ public partial class ChatViewModelTests
             service => service.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var finalState = await fixture.GetStateAsync();
         var finalSessionSlice = finalState.ResolveSessionStateSlice("conv-1");
@@ -17252,10 +18234,10 @@ public partial class ChatViewModelTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("聊天", StringComparison.Ordinal) || status.Contains("消息", StringComparison.Ordinal))
+        return status.StartsWith("Loading chat history", StringComparison.Ordinal)
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -17493,9 +18475,272 @@ public partial class ChatViewModelTests
         Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
     }
 
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithEmptyError_LocalizesLoadConfigFallback()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("无法加载会话配置。请检查连接后重试。", fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithInvalidRemoteCwd_LocalizesDisplayMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_InvalidRemoteCwd",
+            "远程工作目录必须是绝对路径。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: "relative/path",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.InvalidRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("远程工作目录必须是绝对路径。", fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.Equal(AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, draft.Error);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithMissingRemoteCwd_KeepsEnglishSentinel()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: string.Empty,
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        // Sentinel stays English so StartViewModel.IsExpectedRemoteDirectorySelectionState keeps working.
+        Assert.Equal(AcpSessionNewCwdResolver.MissingRemoteCwdMessage, fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenNewSessionDraftFaultIsHeld_ReprojectsLocalizedDraftError()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        localizer.Set(
+            "en-US",
+            "NewSessionDraft_LoadConfigFailed",
+            "Unable to load session configuration. Check the connection and try again.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("无法加载会话配置。请检查连接后重试。", fixture.ViewModel.NewSessionDraftErrorMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                fixture.ViewModel.NewSessionDraftErrorMessage,
+                "Unable to load session configuration. Check the connection and try again.",
+                StringComparison.Ordinal));
+        });
+
+        Assert.Equal(
+            "Unable to load session configuration. Check the connection and try again.",
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenNewSessionDraftMissingRemoteCwd_KeepsEnglishSentinel()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        localizer.Set(
+            "en-US",
+            "NewSessionDraft_LoadConfigFailed",
+            "Unable to load session configuration. Check the connection and try again.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: string.Empty,
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal(
+            AcpSessionNewCwdResolver.MissingRemoteCwdMessage,
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+        syncContext.RunAll();
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+
+        // Identity sentinel must remain English for Start remote-directory comparison.
+        Assert.Equal(
+            AcpSessionNewCwdResolver.MissingRemoteCwdMessage,
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
     private sealed class RecordingPlatformShellService : IPlatformShellService
     {
         public string? LastCopiedText { get; private set; }
+
+        public bool CopyResult { get; set; } = true;
+
+        public Exception? CopyException { get; set; }
 
         public Task<bool> OpenFolderAsync(string path) => Task.FromResult(false);
 
@@ -17505,8 +18750,13 @@ public partial class ChatViewModelTests
 
         public Task<bool> CopyToClipboardAsync(string text)
         {
+            if (CopyException is not null)
+            {
+                throw CopyException;
+            }
+
             LastCopiedText = text;
-            return Task.FromResult(true);
+            return Task.FromResult(CopyResult);
         }
 
         public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);

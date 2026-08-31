@@ -15,13 +15,89 @@
     Background="Transparent">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <DataTemplate x:Key="HeroSuggestionItemTemplate"
+                      x:DataType="local_vm:QuickSuggestionViewModel">
+            <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"
+                                            Loaded="OnHeroSuggestionCardLoaded" />
+        </DataTemplate>
+        <ItemsPanelTemplate x:Key="HeroSuggestionPanelVertical">
+            <StackPanel Orientation="Vertical" />
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="HeroSuggestionPanelHorizontal">
+            <StackPanel Orientation="Horizontal" />
+        </ItemsPanelTemplate>
     </Page.Resources>
 
     <Grid x:Name="StartRoot"
           RowDefinitions="*,Auto"
           Background="Transparent"
-          Padding="24,20,24,24">
+          Padding="16,4,16,8">
+
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="HeroSuggestionLayoutStates">
+                <!-- Narrow (default): cards stack vertically so they never overflow at any
+                     window width or nav-pane state. Wide: single centered row when the window
+                     is wide enough for three equal 216px tiles even with the pane expanded
+                     (3 * (216 tile + horizontal margin) + edges + ~300 open pane + padding).
+                     HeroSuggestionCard width VSM uses the same MinWindowWidth so stacked cards
+                     drop hard MinWidth and stretch/shrink with the host instead of overflowing. -->
+                <VisualState x:Name="Narrow">
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionsHost.ItemsPanel" Value="{StaticResource HeroSuggestionPanelVertical}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Wide">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1060" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionsHost.ItemsPanel" Value="{StaticResource HeroSuggestionPanelHorizontal}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="HeroHeightStates">
+                <!-- Compact (default): short-window vertical budget. Keep composer pinned and
+                     let HeroScrollViewer own overflow; densify title/spacing so title + three
+                     suggestion cards are usable before scrolling on short heights. Comfortable
+                     restores marketing-scale hero once MinWindowHeight=760.
+                     HeroLayer stays Top in both states: centering ScrollViewer content clips
+                     the top when the measured stack exceeds the viewport (native WinUI/Uno
+                     behavior). Tall windows get breathing room via margin, not Center. -->
+                <VisualState x:Name="HeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="StartRoot.Padding" Value="16,4,16,8" />
+                        <Setter Target="StartTitle.FontSize" Value="28" />
+                        <Setter Target="StartTitle.MaxLines" Value="2" />
+                        <Setter Target="StartSubtitle.FontSize" Value="13" />
+                        <Setter Target="StartSubtitle.MaxLines" Value="1" />
+                        <Setter Target="HeroLayer.Margin" Value="0,4,0,8" />
+                        <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
+                        <Setter Target="HeroChromeHost.Spacing" Value="4" />
+                        <Setter Target="HeroContentStack.Spacing" Value="10" />
+                        <Setter Target="ComposerHost.RowSpacing" Value="4" />
+                        <Setter Target="StartDraftErrorInfoBar.Margin" Value="12,0,12,0" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="HeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="StartRoot.Padding" Value="24,20,24,24" />
+                        <Setter Target="StartTitle.FontSize" Value="64" />
+                        <Setter Target="StartTitle.MaxLines" Value="0" />
+                        <Setter Target="StartSubtitle.FontSize" Value="18" />
+                        <Setter Target="StartSubtitle.MaxLines" Value="0" />
+                        <Setter Target="HeroLayer.Margin" Value="0,28,0,24" />
+                        <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
+                        <Setter Target="HeroChromeHost.Spacing" Value="12" />
+                        <Setter Target="HeroContentStack.Spacing" Value="28" />
+                        <Setter Target="ComposerHost.RowSpacing" Value="8" />
+                        <Setter Target="StartDraftErrorInfoBar.Margin" Value="24,0,24,0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
         <TextBlock HorizontalAlignment="Left"
                    VerticalAlignment="Top"
@@ -32,72 +108,74 @@
                    Text="{x:Bind ViewModel.StartDraftAutomationState, Mode=OneWay}"
                    AutomationProperties.AutomationId="StartView.Automation.DraftState" />
 
-        <Grid x:Name="HeroLayer"
-              Grid.Row="0"
-              Margin="0,28,0,24"
-              VerticalAlignment="Center"
-              RenderTransformOrigin="0.5,0.5">
-            <Grid.RenderTransform>
-                <TransformGroup>
-                    <ScaleTransform x:Name="HeroScaleTransform" ScaleX="1" ScaleY="1" />
-                    <TranslateTransform x:Name="HeroTranslateTransform" Y="0" />
-                </TransformGroup>
-            </Grid.RenderTransform>
-            <StackPanel MaxWidth="980"
-                        HorizontalAlignment="Center"
-                        Spacing="28">
-                <StackPanel x:Name="HeroChromeHost"
+        <!-- Composer stays pinned in Grid.Row=1; hero is the only scroll surface so short
+             windows never clip title/cards over the input. -->
+        <ScrollViewer x:Name="HeroScrollViewer"
+                      Grid.Row="0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      ZoomMode="Disabled">
+            <Grid x:Name="HeroLayer"
+                  Margin="0,4,0,8"
+                  VerticalAlignment="Top">
+                <StackPanel x:Name="HeroContentStack"
+                            MaxWidth="980"
                             HorizontalAlignment="Center"
-                            Spacing="12">
-                    <TextBlock x:Uid="Start_Title"
-                               FontSize="64"
-                               FontWeight="Bold"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center"
-                               AutomationProperties.AutomationId="StartView.Title">
-                        <TextBlock.Foreground>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                <GradientStop Color="{ThemeResource SystemAccentColor}" Offset="0" />
-                                <GradientStop Color="{ThemeResource SystemAccentColorLight2}" Offset="1" />
-                            </LinearGradientBrush>
-                        </TextBlock.Foreground>
-                    </TextBlock>
-                    <TextBlock x:Uid="Start_Subtitle"
-                               FontSize="18"
-                               FontWeight="Medium"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            Spacing="10">
+                    <StackPanel x:Name="HeroChromeHost"
+                                HorizontalAlignment="Center"
+                                Spacing="4">
+                        <TextBlock x:Name="StartTitle"
+                                   x:Uid="Start_Title"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="2"
+                                   AutomationProperties.AutomationId="StartView.Title"
+                                   AutomationProperties.Name="StartView.Title">
+                            <TextBlock.Foreground>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="{ThemeResource SystemAccentColor}" Offset="0" />
+                                    <GradientStop Color="{ThemeResource SystemAccentColorLight2}" Offset="1" />
+                                </LinearGradientBrush>
+                            </TextBlock.Foreground>
+                        </TextBlock>
+                        <TextBlock x:Name="StartSubtitle"
+                                   x:Uid="Start_Subtitle"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <ItemsControl x:Name="HeroSuggestionsHost"
+                                  AutomationProperties.AutomationId="StartView.Suggestions"
+                                  HorizontalAlignment="Center"
+                                  XYFocusKeyboardNavigation="Enabled"
+                                  ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
+                                  ItemTemplate="{StaticResource HeroSuggestionItemTemplate}"
+                                  ItemsPanel="{StaticResource HeroSuggestionPanelVertical}" />
                 </StackPanel>
-                <ItemsControl x:Name="HeroSuggestionsHost"
-                              AutomationProperties.AutomationId="StartView.Suggestions"
-                              HorizontalAlignment="Center"
-                              XYFocusKeyboardNavigation="Enabled"
-                              ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
-                            <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"
-                                                            Loaded="OnHeroSuggestionCardLoaded" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Grid>
+            </Grid>
+        </ScrollViewer>
 
-        <Grid Grid.Row="1"
-              RowSpacing="8">
+        <Grid x:Name="ComposerHost"
+              Grid.Row="1"
+              RowSpacing="4">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <InfoBar Grid.Row="0"
-                     Margin="24,0,24,0"
+            <InfoBar x:Name="StartDraftErrorInfoBar"
+                     Grid.Row="0"
+                     Margin="12,0,12,0"
                      Severity="Error"
                      IsOpen="{x:Bind ViewModel.HasStartSessionDraftError, Mode=OneWay}"
                      Message="{x:Bind ViewModel.StartSessionDraftErrorMessage, Mode=OneWay}" />

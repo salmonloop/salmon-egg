@@ -1,0 +1,6 @@
+xbox-360-wired|Xbox|A|B|X|Y
+xbox-series-xs|Xbox|A|B|X|Y
+dualsense|Sony|Cross|Circle|Square|Triangle
+dualsense-bt|Sony|Cross|Circle|Square|Triangle
+dualshock-4-v2|Sony|Cross|Circle|Square|Triangle
+switch-pro|Nintendo|B|A|Y|X

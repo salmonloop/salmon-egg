@@ -54,4 +54,19 @@ public sealed class GamepadInputPathTrackerTests
         Assert.Equal(GamepadInputPath.None, transition.Path);
         Assert.Equal(GamepadInputPath.None, tracker.CurrentPath);
     }
+
+    [Fact]
+    public void Apply_TransitionsFromGamepadToRaw_WhenActivePathFlips()
+    {
+        // Dual-enumeration hosts can flip authoritative path when standard goes idle
+        // and raw remains active (common DualSense/Switch raw-only face paths).
+        var tracker = new GamepadInputPathTracker();
+        _ = tracker.Apply(hasActiveReading: true, GamepadInputPath.Gamepad);
+
+        var transition = tracker.Apply(hasActiveReading: true, GamepadInputPath.RawGameController);
+
+        Assert.True(transition.Changed);
+        Assert.Equal(GamepadInputPath.RawGameController, transition.Path);
+        Assert.Equal(GamepadInputPath.RawGameController, tracker.CurrentPath);
+    }
 }

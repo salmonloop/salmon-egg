@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -13,18 +12,15 @@ namespace SalmonEgg.Presentation.Navigation;
 /// <summary>
 /// UI-only adapter that maps NavigationView UI events to semantic navigation intents.
 /// It must not own a secondary visual selection or pane state machine.
+/// Destination activation is owned by <see cref="MainNavigationViewModel"/>.
 /// </summary>
 public sealed class MainNavigationViewAdapter
 {
     private readonly MainNavigationViewModel _viewModel;
-    private readonly INavigationCoordinator _navigationCoordinator;
 
-    public MainNavigationViewAdapter(
-        MainNavigationViewModel viewModel,
-        INavigationCoordinator navigationCoordinator)
+    public MainNavigationViewAdapter(MainNavigationViewModel viewModel)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
     }
 
     public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
@@ -67,17 +63,17 @@ public sealed class MainNavigationViewAdapter
 
         if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateStartAsync());
+            return AwaitActivationHandledAsync(_viewModel.ActivateStartAsync());
         }
 
         if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateDiscoverSessionsAsync());
+            return AwaitActivationHandledAsync(_viewModel.ActivateDiscoverSessionsAsync());
         }
 
         if (string.Equals(tag, NavItemTag.Settings, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey));
+            return AwaitActivationHandledAsync(_viewModel.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey));
         }
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))
@@ -85,7 +81,7 @@ public sealed class MainNavigationViewAdapter
             var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
                 ?? _viewModel.TryGetProjectIdForSession(sessionId);
 
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId));
+            return AwaitActivationHandledAsync(_viewModel.ActivateSessionAsync(sessionId, sessionProjectId));
         }
 
         return null;
@@ -101,5 +97,4 @@ public sealed class MainNavigationViewAdapter
     {
         return await activationTask.ConfigureAwait(true);
     }
-
 }

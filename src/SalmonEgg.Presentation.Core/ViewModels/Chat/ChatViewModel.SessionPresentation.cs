@@ -17,6 +17,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using SalmonEgg.Presentation.Core.Diagnostics;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces.Storage;
@@ -53,11 +54,321 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private ProjectionRestoreReadyPublicationKey? _lastProjectionRestoreReadyKey;
-    private long _currentRestoreProjectionEpoch = -1;
-    private string? _currentRestoreProjectionConversationId;
+    private readonly ConversationOperationFailureState _conversationOperationFailureState = new();
 
-    public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
+    /// <summary>Raised after authoritative transcript projection is applied for the active session.</summary>
+    public event EventHandler? TranscriptContentChanged;
+
+    // Temporary alias until views subscribe only to TranscriptContentChanged.
+    public event EventHandler? ProjectionRestoreReady
+    {
+        add => TranscriptContentChanged += value;
+        remove => TranscriptContentChanged -= value;
+    }
+
+    public string? SessionActivationFailureMessage
+    {
+        get
+        {
+            var activation = _shellNavigationRuntimeState?.ActiveSessionActivation;
+            if (activation is not { Phase: SessionActivationPhase.Faulted }
+                || !string.Equals(activation.SessionId, CurrentSessionId, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            // Hydration failures publish FailureMessage (+ optional CoreStrings identity).
+            // Navigation-level faults often only set Reason. Prefer keyed reproject, then the
+            // held message, then a localized reason fallback.
+            if (!string.IsNullOrWhiteSpace(activation.FailureResourceKey))
+            {
+                return activation.FailureFormatArgs is { Length: > 0 }
+                    ? FormatLocalize(
+                        activation.FailureResourceKey,
+                        activation.FailureFallback ?? activation.FailureMessage ?? string.Empty,
+                        activation.FailureFormatArgs)
+                    : Localize(
+                        activation.FailureResourceKey,
+                        activation.FailureFallback ?? activation.FailureMessage ?? string.Empty);
+            }
+
+            if (!string.IsNullOrWhiteSpace(activation.FailureMessage))
+            {
+                return activation.FailureMessage;
+            }
+
+            return ResolveSessionActivationFailureReasonMessage(activation.Reason);
+        }
+    }
+
+    private string? ResolveSessionActivationFailureReasonMessage(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return Localize(
+                "SessionActivation_FailedGeneric",
+                "Failed to open this session. Please try again.");
+        }
+
+        // Superseded/canceled are expected races, not user-facing faults.
+        if (reason.StartsWith("Superseded", StringComparison.Ordinal)
+            || string.Equals(reason, "Canceled", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return reason switch
+        {
+            "ConversationSelectionFailed" => Localize(
+                "SessionActivation_ConversationSelectionFailed",
+                "Failed to open this session. Please try again."),
+            "ChatShellNavigationFailed" => Localize(
+                "SessionActivation_ChatShellNavigationFailed",
+                "Failed to open the chat view for this session. Please try again."),
+            _ => Localize(
+                "SessionActivation_FailedGeneric",
+                "Failed to open this session. Please try again.")
+        };
+    }
+
+    public bool HasSessionActivationFailure
+        => !string.IsNullOrWhiteSpace(SessionActivationFailureMessage);
+
+    public string? ConversationOperationFailureMessage
+    {
+        get
+        {
+            return _conversationOperationFailureState.ResolveVisibleMessage(CurrentSessionId);
+        }
+    }
+
+    public bool HasConversationOperationFailure
+        => !string.IsNullOrWhiteSpace(ConversationOperationFailureMessage);
+
+    private void NotifySessionActivationFailureProjectionChanged()
+    {
+        OnPropertyChanged(nameof(SessionActivationFailureMessage));
+        OnPropertyChanged(nameof(HasSessionActivationFailure));
+    }
+
+    private void PublishConversationOperationFailure(string? conversationId, string message)
+        => PublishConversationOperationFailureCore(conversationId, message, resourceKey: null, fallback: null, formatArgs: null);
+
+    private void PublishConversationOperationFailure(
+        string? conversationId,
+        string resourceKey,
+        string fallback,
+        params object[] formatArgs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallback);
+
+        var message = formatArgs is { Length: > 0 }
+            ? FormatLocalize(resourceKey, fallback, formatArgs)
+            : Localize(resourceKey, fallback);
+        PublishConversationOperationFailureCore(
+            conversationId,
+            message,
+            resourceKey.Trim(),
+            fallback,
+            formatArgs is { Length: > 0 } ? formatArgs : null);
+    }
+
+    private void PublishConversationOperationFailureCore(
+        string? conversationId,
+        string message,
+        string? resourceKey,
+        string? fallback,
+        object[]? formatArgs)
+    {
+        if (!_conversationOperationFailureState.Publish(
+                conversationId,
+                message,
+                CurrentSessionId,
+                resourceKey,
+                fallback,
+                formatArgs))
+        {
+            return;
+        }
+
+        NotifyConversationOperationFailureProjectionChanged();
+    }
+
+    private Task PublishConversationOperationFailureAsync(string? conversationId, string message)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            PublishConversationOperationFailure(conversationId, message);
+            return Task.CompletedTask;
+        }
+
+        return _uiDispatcher.EnqueueAsync(() => PublishConversationOperationFailure(conversationId, message));
+    }
+
+    private Task PublishConversationOperationFailureAsync(
+        string? conversationId,
+        string resourceKey,
+        string fallback,
+        params object[] formatArgs)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            PublishConversationOperationFailure(conversationId, resourceKey, fallback, formatArgs);
+            return Task.CompletedTask;
+        }
+
+        return _uiDispatcher.EnqueueAsync(
+            () => PublishConversationOperationFailure(conversationId, resourceKey, fallback, formatArgs));
+    }
+
+    private void ReprojectConversationOperationFailureMessage()
+    {
+        if (!_conversationOperationFailureState.TryGetHeldFailure(out var failure)
+            || string.IsNullOrWhiteSpace(failure.ResourceKey))
+        {
+            return;
+        }
+
+        var reprojected = failure.FormatArgs is { Length: > 0 }
+            ? FormatLocalize(
+                failure.ResourceKey,
+                failure.Fallback ?? failure.Message,
+                failure.FormatArgs)
+            : Localize(
+                failure.ResourceKey,
+                failure.Fallback ?? failure.Message);
+
+        if (string.Equals(failure.Message, reprojected, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!_conversationOperationFailureState.Publish(
+                failure.ConversationId,
+                reprojected,
+                CurrentSessionId,
+                failure.ResourceKey,
+                failure.Fallback,
+                failure.FormatArgs))
+        {
+            return;
+        }
+
+        NotifyConversationOperationFailureProjectionChanged();
+    }
+
+    private ConversationFailurePublicationContext CaptureFailurePublicationContext(
+        string conversationId,
+        long? activationVersion,
+        string? operationOwner)
+    {
+        var activeActivation = _shellNavigationRuntimeState?.ActiveSessionActivation;
+        long? expectedShellSnapshotVersion = activationVersion.HasValue
+            && activeActivation is not null
+            && activeActivation.Matches(conversationId)
+                ? activeActivation.Version
+                : null;
+        return new ConversationFailurePublicationContext(
+            conversationId,
+            activationVersion,
+            operationOwner,
+            expectedShellSnapshotVersion);
+    }
+
+    private Task PublishConversationFailureAsync(
+        ConversationFailurePublicationContext context,
+        string reason,
+        string message)
+    {
+        if (context.ExpectedShellSnapshotVersion.HasValue)
+        {
+            return _conversationActivationOutcomePublisher.TryPublishFailureAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                reason,
+                message);
+        }
+
+        return PublishConversationOperationFailureAsync(context.OperationOwner, message);
+    }
+
+    private Task PublishConversationFailureAsync(
+        ConversationFailurePublicationContext context,
+        string reason,
+        string resourceKey,
+        string fallback,
+        params object[] formatArgs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallback);
+
+        var message = formatArgs is { Length: > 0 }
+            ? FormatLocalize(resourceKey, fallback, formatArgs)
+            : Localize(resourceKey, fallback);
+
+        if (context.ExpectedShellSnapshotVersion.HasValue)
+        {
+            return _conversationActivationOutcomePublisher.TryPublishFailureAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                reason,
+                message,
+                failureResourceKey: resourceKey.Trim(),
+                failureFallback: fallback,
+                failureFormatArgs: formatArgs is { Length: > 0 } ? formatArgs : null);
+        }
+
+        return PublishConversationOperationFailureAsync(
+            context.OperationOwner,
+            resourceKey,
+            fallback,
+            formatArgs);
+    }
+
+    private Task PublishConversationActivationPhaseAsync(
+        ConversationFailurePublicationContext context,
+        SessionActivationPhase phase,
+        string? reason = null)
+    {
+        return context.ExpectedShellSnapshotVersion.HasValue
+            ? _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                phase,
+                reason)
+            : Task.CompletedTask;
+    }
+
+    private void ClearConversationOperationFailure(string? conversationId)
+    {
+        if (!_conversationOperationFailureState.Clear(conversationId))
+        {
+            return;
+        }
+
+        NotifyConversationOperationFailureProjectionChanged();
+    }
+
+    private void QueueClearConversationOperationFailure(string? conversationId)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            ClearConversationOperationFailure(conversationId);
+            return;
+        }
+
+        _uiDispatcher.Enqueue(() => ClearConversationOperationFailure(conversationId));
+    }
+
+    private void NotifyConversationOperationFailureProjectionChanged()
+    {
+        OnPropertyChanged(nameof(ConversationOperationFailureMessage));
+        OnPropertyChanged(nameof(HasConversationOperationFailure));
+    }
 
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
     {
@@ -216,6 +527,7 @@ public partial class ChatViewModel
             projection.HydratedConversationId,
             projection.Transcript,
             forceRefresh: true);
+        WriteTranscriptProjectionBootFact(projection.HydratedConversationId, projection.Transcript.Count);
     }
 
     private void ApplyPromptAndProfileProjection(ChatUiProjection projection, bool sessionChanged)
@@ -288,8 +600,7 @@ public partial class ChatViewModel
                 sessionChanged: false);
         }
 
-        UpdateRestoreProjectionMetadata(projection);
-        PublishProjectionRestoreReady(projection);
+        NotifyTranscriptContentChanged();
         ShowPlanPanel = projection.ShowPlanPanel;
         if (!sessionChanged)
         {
@@ -300,53 +611,38 @@ public partial class ChatViewModel
             projection.HydratedConversationId,
             projection.Transcript,
             forceRefresh: false);
+        WriteTranscriptProjectionBootFact(projection.HydratedConversationId, projection.Transcript.Count);
     }
 
-    private void PublishProjectionRestoreReady(ChatUiProjection projection)
-    {
-        if (string.IsNullOrWhiteSpace(projection.HydratedConversationId)
-            || !projection.RestoreProjection.IsReady
-            || projection.RestoreProjection.Token is not { } token)
-        {
-            _lastProjectionRestoreReadyKey = null;
-            return;
-        }
 
-        var publicationKey = new ProjectionRestoreReadyPublicationKey(
-            projection.HydratedConversationId,
-            projection.RestoreProjection.ProjectionEpoch,
-            token);
-        if (_lastProjectionRestoreReadyKey == publicationKey)
-        {
-            return;
-        }
-
-        _lastProjectionRestoreReadyKey = publicationKey;
-
-        ProjectionRestoreReady?.Invoke(
-            this,
-            new ProjectionRestoreReadyEventArgs(
-                projection.HydratedConversationId,
-                projection.RestoreProjection.ProjectionEpoch,
-                token));
-    }
 
     public TranscriptProjectionRestoreToken? CreateViewportProjectionRestoreToken(ChatMessageViewModel message)
     {
         ArgumentNullException.ThrowIfNull(message);
-
         if (string.IsNullOrWhiteSpace(CurrentSessionId)
-            || !string.Equals(CurrentSessionId, _currentRestoreProjectionConversationId, StringComparison.Ordinal)
-            || _currentRestoreProjectionEpoch < 0
-            || string.IsNullOrWhiteSpace(message.ProjectionItemKey))
+            || string.IsNullOrWhiteSpace(message.ProjectionItemKey)
+            || !TranscriptItemKey.IsRestorable(message.ProjectionItemKey))
         {
             return null;
         }
 
-        return new TranscriptProjectionRestoreToken(
-            CurrentSessionId,
-            _currentRestoreProjectionEpoch,
-            message.ProjectionItemKey);
+        return new TranscriptProjectionRestoreToken(CurrentSessionId, message.ProjectionItemKey);
+    }
+
+    private void NotifyTranscriptContentChanged()
+        => TranscriptContentChanged?.Invoke(this, EventArgs.Empty);
+
+    private void WriteTranscriptProjectionBootFact(string? conversationId, int transcriptCount)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || transcriptCount <= 0)
+        {
+            return;
+        }
+
+        // DEBUG-only Skia Desktop smoke fact: seed restore and live projection both land
+        // here after the authoritative transcript is applied to MessageHistory.
+        DebugBootLog.Write(
+            $"ChatTranscript: projected conversation={conversationId} count={transcriptCount} history={MessageHistory.Count}");
     }
 
     public async ValueTask<IReadOnlyList<ConversationMessageSnapshot>> GetCurrentSessionTranscriptSnapshotAsync(
@@ -368,15 +664,6 @@ public partial class ChatViewModel
                 : null)
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         return transcript.Select(CloneSnapshot).ToArray();
-    }
-
-    private void UpdateRestoreProjectionMetadata(ChatUiProjection projection)
-    {
-        _currentRestoreProjectionConversationId = projection.HydratedConversationId;
-        _currentRestoreProjectionEpoch = projection.RestoreProjection.IsReady
-            ? projection.RestoreProjection.ProjectionEpoch
-            : -1;
-        RefreshCurrentSessionDisplayName();
     }
 
     private void ApplyConversationStatusProjection(ChatUiProjection projection)
@@ -552,26 +839,87 @@ public partial class ChatViewModel
 
 }
 
-public sealed class ProjectionRestoreReadyEventArgs : EventArgs
+
+internal sealed record ConversationOperationFailure(
+    string? ConversationId,
+    string Message,
+    string? ResourceKey = null,
+    string? Fallback = null,
+    object[]? FormatArgs = null);
+
+internal readonly record struct ConversationFailurePublicationContext(
+    string ConversationId,
+    long? ActivationVersion,
+    string? OperationOwner,
+    long? ExpectedShellSnapshotVersion);
+
+internal sealed class ConversationOperationFailureState
 {
-    public ProjectionRestoreReadyEventArgs(
-        string conversationId,
-        long projectionEpoch,
-        TranscriptProjectionRestoreToken restoreToken)
+    private ConversationOperationFailure? _failure;
+
+    public bool Publish(
+        string? conversationId,
+        string message,
+        string? currentConversationId,
+        string? resourceKey = null,
+        string? fallback = null,
+        object[]? formatArgs = null)
     {
-        ConversationId = conversationId;
-        ProjectionEpoch = projectionEpoch;
-        RestoreToken = restoreToken;
+        var incomingOwnerMatchesCurrent = OwnerMatches(conversationId, currentConversationId);
+        if (!incomingOwnerMatchesCurrent
+            && _failure is { } existingFailure
+            && OwnerMatches(existingFailure.ConversationId, currentConversationId))
+        {
+            return false;
+        }
+
+        _failure = new ConversationOperationFailure(
+            conversationId,
+            message,
+            resourceKey,
+            fallback,
+            formatArgs);
+        return true;
     }
 
-    public string ConversationId { get; }
+    public bool TryGetHeldFailure(out ConversationOperationFailure failure)
+    {
+        if (_failure is { } held)
+        {
+            failure = held;
+            return true;
+        }
 
-    public long ProjectionEpoch { get; }
+        failure = default!;
+        return false;
+    }
 
-    public TranscriptProjectionRestoreToken RestoreToken { get; }
+    public bool Clear(string? conversationId)
+    {
+        if (_failure is not { } failure
+            || !string.Equals(failure.ConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _failure = null;
+        return true;
+    }
+
+    public string? ResolveVisibleMessage(string? currentConversationId)
+    {
+        if (_failure is not { } failure)
+        {
+            return null;
+        }
+
+        return OwnerMatches(failure.ConversationId, currentConversationId)
+            ? failure.Message
+            : null;
+    }
+
+    private static bool OwnerMatches(string? ownerConversationId, string? currentConversationId)
+        => string.IsNullOrWhiteSpace(ownerConversationId)
+            ? string.IsNullOrWhiteSpace(currentConversationId)
+            : string.Equals(ownerConversationId, currentConversationId, StringComparison.Ordinal);
 }
-
-internal readonly record struct ProjectionRestoreReadyPublicationKey(
-    string ConversationId,
-    long ProjectionEpoch,
-    TranscriptProjectionRestoreToken RestoreToken);

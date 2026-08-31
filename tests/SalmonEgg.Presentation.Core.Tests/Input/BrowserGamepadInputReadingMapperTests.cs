@@ -31,6 +31,70 @@ public sealed class BrowserGamepadInputReadingMapperTests
     }
 
     [Theory]
+    [InlineData(0, GamepadNavigationIntent.Activate)]
+    [InlineData(1, GamepadNavigationIntent.Back)]
+    public void GetInputReading_MapsStandardFaceButtonPositionsToNavigationIntent(
+        int buttonIndex,
+        GamepadNavigationIntent expected)
+    {
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
+            BrowserGamepadInputReadingMapper.StandardMapping,
+            CreateStandardButtons(pressed: [buttonIndex], values: new Dictionary<int, double>()),
+            []);
+
+        Assert.Equal([expected], GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_MapsStandardNorthFaceButtonToVoiceShortcut()
+    {
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
+            BrowserGamepadInputReadingMapper.StandardMapping,
+            CreateStandardButtons(pressed: [3], values: new Dictionary<int, double>()),
+            []);
+
+        Assert.True(reading.ShortcutVoiceToggle);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_LeavesStandardWestFaceButtonWithoutProjectedIntent()
+    {
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
+            BrowserGamepadInputReadingMapper.StandardMapping,
+            CreateStandardButtons(pressed: [2], values: new Dictionary<int, double>()),
+            []);
+
+        Assert.False(reading.ShortcutVoiceToggle);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+
+    [Theory]
+    [InlineData(6, GamepadContextIntent.PageUp)]
+    [InlineData(7, GamepadContextIntent.PageDown)]
+    public void GetInputReading_MapsStandardTriggersToPageContextIntents(
+        int buttonIndex,
+        GamepadContextIntent expected)
+    {
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
+            BrowserGamepadInputReadingMapper.StandardMapping,
+            CreateStandardButtons(pressed: [buttonIndex], values: new Dictionary<int, double>()),
+            []);
+
+        Assert.Equal([expected], GamepadContextIntentProjector.GetActiveIntents(reading));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("STANDARD")]

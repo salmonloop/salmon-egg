@@ -3,15 +3,51 @@ name: Platform Build Gates
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
   pull_request:
-    branches: [main]
+    branches: [develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
+
+  # The Apple and Android toolchains -- Xcode, the Android SDK, workload manifests, and the hosted runner
+  # images themselves -- move independently of this repository. Push/PR triggers only re-verify them when
+  # somebody happens to commit, so a break during a quiet period stays hidden and then gets attributed to
+  # whichever innocent commit next touches the tree. A scheduled run separates "our change broke it" from
+  # "the platform moved". A scheduled run always uses the default branch (main here, which trails
+  # develop by whatever has not been promoted yet) and ignores the paths filters above.
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
-  group: platform-build-gates-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Include the event name in the group. A scheduled canary runs against the default branch, so without
+  # this it would share a group with pushes to that branch and get cancelled by the next commit — the one
+  # run whose whole purpose is to complete on a quiet tree would be the one most likely to be killed.
+  group: platform-build-gates-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
-  DOTNET_VERSION: "10.0.x"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -25,12 +61,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
+          # and would stamp 0.0.0 into every manifest and binary.
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish Linux Desktop
         run: >-
@@ -43,16 +83,23 @@ jobs:
 
   macos-desktop:
     name: macOS Desktop
-    runs-on: macos-latest
+    # Pinned rather than macos-latest: GitHub rolls that alias to a new major image on its own schedule,
+    # which moves Xcode and the Apple toolchain underneath a commit that changed nothing. The iOS job
+    # already pins for exactly this reason; an unpinned macOS job just fails later and less obviously.
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
+          # and would stamp 0.0.0 into every manifest and binary.
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish macOS Desktop
         run: >-
@@ -63,57 +110,235 @@ jobs:
           --self-contained false
           --output publish/macos-desktop
 
+  windows-msix:
+    # The MSIX package is the shipping Windows artifact, but until now it was only ever built by the
+    # tag-triggered release workflow, which also requires signing secrets. That left manifest, asset-glob,
+    # and WinUI packaging regressions undetectable until a release. Signing is a release concern; the
+    # packaging chain is not, so this gate builds the package unsigned on every change and asserts the
+    # package actually carries what its manifest declares.
+    name: Windows MSIX Package
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
+          # and would stamp 0.0.0 into every manifest and binary.
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore WinUI app for isolated MSIX build
+        shell: pwsh
+        run: |
+          dotnet msbuild `
+            SalmonEgg/SalmonEgg/SalmonEgg.csproj `
+            /t:Restore `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:DisableCustomWinSdkXamlReferences=true `
+            /v:minimal
+
+      - name: Build net10.0 project references
+        shell: pwsh
+        run: |
+          dotnet build `
+            src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+          dotnet build `
+            src/SalmonEgg.Infrastructure.Desktop/SalmonEgg.Infrastructure.Desktop.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+
+      - name: Publish unsigned Windows MSIX
+        shell: pwsh
+        run: |
+          dotnet msbuild `
+            SalmonEgg/SalmonEgg/SalmonEgg.csproj `
+            /t:Publish `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:DisableCustomWinSdkXamlReferences=true `
+            /p:AppxPackageSigningEnabled=false `
+            /p:Restore=false `
+            /v:minimal
+
+      - name: Verify MSIX package contract
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path artifacts/msix -Recurse -Filter *.msix |
+            Select-Object -First 1
+          if ($null -eq $package) {
+            throw "MSIX publish produced no .msix under artifacts/msix."
+          }
+
+          Write-Host "Inspecting $($package.FullName)"
+          ./scripts/gates/run-msix-package-contract-gate.ps1 -Package $package.FullName
+
   android:
     name: Android
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
+          # and would stamp 0.0.0 into every manifest and binary.
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
+
+      - name: Verify Android .NET SDK
+        run: |
+          dotnet_version="$(dotnet --version)"
+          # The expected version is read from global.json so this check can never drift from
+          # the file that actually pins the SDK (the previous wildcard install did exactly that).
+          # global.json's rollForward: latestPatch legitimately resolves to a newer patch within
+          # the same feature band, so the gate is: same band, never an older patch than the pin.
+          expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
+          if [ "${dotnet_version%??}" != "${expected_version%??}" ] || [ "$((10#${dotnet_version##*.}))" -lt "$((10#${expected_version##*.}))" ]; then
+            echo "Expected .NET SDK ${expected_version} or a same-band patch roll-forward, got ${dotnet_version}." >&2
+            exit 1
+          fi
+          echo ".NET SDK ${dotnet_version}"
 
       - name: Install Android workload
         run: dotnet workload install android --skip-manifest-update --disable-parallel --no-http-cache
 
+      - name: Report Android workload
+        run: dotnet workload list
+
       - name: Install Android SDK platform
         shell: bash
         run: |
+          set +e
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          sdkmanager_status=${PIPESTATUS[1]}
+          set -e
+
+          if [ "${sdkmanager_status}" -ne 0 ]; then
+            exit "${sdkmanager_status}"
+          fi
+
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Android
-        run: >-
-          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj
-          --configuration ${{ env.CONFIGURATION }}
-          --framework net10.0-android36.0
-          -p:EnableMobileTargets=true
-          -p:AndroidSdkDirectory=$ANDROID_SDK_ROOT
+        shell: bash
+        run: |
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT"
+
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --configuration "${{ env.CONFIGURATION }}" \
+            --framework net10.0-android36.0 \
+            --no-restore \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT"
 
   ios:
     name: iOS Simulator
-    runs-on: macos-latest
+    # Pin the OS image because .NET for iOS 26.0 requires Xcode 26.0, while macos-latest can roll forward independently.
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
+          # and would stamp 0.0.0 into every manifest and binary.
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
+
+      - name: Select compatible Xcode
+        shell: bash
+        run: |
+          xcode_developer_dir="$(python3 - <<'PY'
+          import os
+
+          print(os.path.realpath("/Applications/Xcode_26.0.app/Contents/Developer"))
+          PY
+          )"
+          if [ ! -d "${xcode_developer_dir}" ]; then
+            echo "Resolved Xcode developer directory does not exist: ${xcode_developer_dir}" >&2
+            exit 1
+          fi
+
+          sudo xcode-select --switch "${xcode_developer_dir}"
+          xcodebuild -version
+          xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+          case "${xcode_version}" in
+            26.0*) ;;
+            *) echo "Expected Xcode 26.0.x, got ${xcode_version}." >&2; exit 1 ;;
+          esac
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk macosx --find actool
+
+      - name: Verify iOS .NET SDK
+        run: |
+          dotnet_version="$(dotnet --version)"
+          # The expected version is read from global.json so this check can never drift from
+          # the file that actually pins the SDK (the previous wildcard install did exactly that).
+          # global.json's rollForward: latestPatch legitimately resolves to a newer patch within
+          # the same feature band, so the gate is: same band, never an older patch than the pin.
+          expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
+          if [ "${dotnet_version%??}" != "${expected_version%??}" ] || [ "$((10#${dotnet_version##*.}))" -lt "$((10#${expected_version##*.}))" ]; then
+            echo "Expected .NET SDK ${expected_version} or a same-band patch roll-forward, got ${dotnet_version}." >&2
+            exit 1
+          fi
+          echo ".NET SDK ${dotnet_version}"
 
       - name: Install iOS workload
         run: dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
 
+      - name: Report iOS workload
+        run: |
+          dotnet workload list
+          xcodebuild -version
+
       - name: Build iOS Simulator
-        run: >-
-          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj
-          --configuration ${{ env.CONFIGURATION }}
-          --framework net10.0-ios
-          --runtime iossimulator-arm64
-          -p:EnableMobileTargets=true
-          -p:EnableIosTarget=true
+        shell: bash
+        run: |
+          # Keep the hosted simulator compile gate bounded. The documented interpreter avoids
+          # app-wide AOT, while TrimMode=copy is the supported no-trim mode for Apple platforms.
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --runtime iossimulator-arm64 \
+            -p:SalmonEggTargetFrameworks=net10.0-ios \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:UseInterpreter=true \
+            -p:TrimMode=copy
+
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --configuration "${{ env.CONFIGURATION }}" \
+            --framework net10.0-ios \
+            --runtime iossimulator-arm64 \
+            --no-restore \
+            -p:SalmonEggTargetFrameworks=net10.0-ios \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:UseInterpreter=true \
+            -p:TrimMode=copy

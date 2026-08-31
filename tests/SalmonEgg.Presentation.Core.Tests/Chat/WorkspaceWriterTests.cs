@@ -16,6 +16,7 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -148,8 +149,6 @@ public sealed class WorkspaceWriterTests
         var restored = workspace.GetConversationSnapshot("conv-a");
 
         Assert.NotNull(restored);
-        Assert.Equal("msg:agent-001", restored!.RestoreProjectionItemKey);
-        Assert.Equal(1, restored.RestoreProjectionEpoch);
     }
 
     [Fact]
@@ -364,7 +363,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 1,
                 64,
-                new ConversationUsageCostSnapshot(0.1m, "USD"))));
+                new ConversationUsageCostSnapshot(0.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -377,7 +376,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 9,
                 256,
-                new ConversationUsageCostSnapshot(2.5m, "USD")),
+                new ConversationUsageCostSnapshot(2.5, "USD")),
             RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
                 "session-1",
                 new ConversationRuntimeSlice(
@@ -399,8 +398,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("New title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\new", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
-        Assert.Equal(256, snapshot.Usage.Size);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
+        Assert.Equal(256UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -483,8 +482,8 @@ public sealed class WorkspaceWriterTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "persisted plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -512,7 +511,7 @@ public sealed class WorkspaceWriterTests
                     new ConversationUsageSnapshot(
                         9,
                         256,
-                        new ConversationUsageCostSnapshot(2.5m, "USD")))),
+                        new ConversationUsageCostSnapshot(2.5, "USD")))),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -529,7 +528,7 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
         Assert.Equal("store", snapshot.SessionInfo.Meta!["source"]);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
     [Fact]
@@ -606,7 +605,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 1,
                 64,
-                new ConversationUsageCostSnapshot(0.1m, "USD"))));
+                new ConversationUsageCostSnapshot(0.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -618,7 +617,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 7,
                 128,
-                new ConversationUsageCostSnapshot(0.9m, "USD")),
+                new ConversationUsageCostSnapshot(0.9, "USD")),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -628,8 +627,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Fresh title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\two", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(7, snapshot.Usage!.Used);
-        Assert.Equal(128, snapshot.Usage.Size);
+        Assert.Equal(7UL, snapshot.Usage!.Used);
+        Assert.Equal(128UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -749,7 +748,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 5,
                 128,
-                new ConversationUsageCostSnapshot(1.1m, "USD"))));
+                new ConversationUsageCostSnapshot(1.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-active",
@@ -774,8 +773,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Persisted title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\one", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(5, snapshot.Usage!.Used);
-        Assert.Equal(128, snapshot.Usage.Size);
+        Assert.Equal(5UL, snapshot.Usage!.Used);
+        Assert.Equal(128UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -832,7 +831,7 @@ public sealed class WorkspaceWriterTests
                     new ConversationUsageSnapshot(
                         9,
                         256,
-                        new ConversationUsageCostSnapshot(2.5m, "USD")))),
+                        new ConversationUsageCostSnapshot(2.5, "USD")))),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -847,7 +846,7 @@ public sealed class WorkspaceWriterTests
         var command = Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
         Assert.Equal("plan", command.Name);
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
     [Fact]
@@ -871,8 +870,8 @@ public sealed class WorkspaceWriterTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "persisted plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -908,7 +907,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 9,
                 256,
-                new ConversationUsageCostSnapshot(2.5m, "USD"))));
+                new ConversationUsageCostSnapshot(2.5, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-active",
@@ -936,7 +935,136 @@ public sealed class WorkspaceWriterTests
         Assert.NotNull(snapshot.SessionInfo);
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
+    }
+
+
+    [Fact]
+    public async Task FlushAsync_WarmConversationWithThinkingOnlyContent_DoesNotWipeExistingTranscript()
+    {
+        // Evidence: thinking placeholders make content look projected, but CreateSnapshot filters them out
+        // and would write an empty RuntimeProjection transcript over an existing authoritative transcript.
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        var realMessage = CreateTextMessage("m-1", "authoritative transcript");
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [realMessage],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot { Title = "Warm", Cwd = @"C:\repo" },
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        var thinkingOnly = new ConversationMessageSnapshot
+        {
+            Id = "think-1",
+            Timestamp = new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
+            IsOutgoing = false,
+            ContentType = "thinking",
+            TextContent = "..."
+        };
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(thinkingOnly),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false)),
+            ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot { Title = "Warm", Cwd = @"C:\repo" },
+                    null)),
+            RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Bindings: ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-1")),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Contains(snapshot!.Transcript, message => message.TextContent == "authoritative transcript");
+        Assert.DoesNotContain(
+            snapshot.Transcript,
+            message => string.Equals(message.ContentType, "thinking", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FlushAsync_WarmConversationWithShowPlanPanelOnly_DoesNotWipeExistingTranscript()
+    {
+        // Evidence: ShowPlanPanel-only content counts as projected content, so CreateSnapshot takes the empty
+        // slice transcript instead of reusing the existing RuntimeProjection transcript.
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        var realMessage = CreateTextMessage("m-1", "authoritative transcript");
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [realMessage],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    true)),
+            Bindings: ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-1")),
+            RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Contains(snapshot!.Transcript, message => message.TextContent == "authoritative transcript");
+        Assert.True(snapshot.ShowPlanPanel);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(
@@ -966,8 +1094,11 @@ public sealed class WorkspaceWriterTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
     }
 
     private static ConversationMessageSnapshot CreateTextMessage(string id, string text)
@@ -990,19 +1121,20 @@ public sealed class WorkspaceWriterTests
 
     private sealed class FakeSessionManager : ISessionManager
     {
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
             => Task.FromResult(new Session(sessionId, cwd));
 
         public Session? GetSession(string sessionId) => null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true) => false;
-
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(false);
 
         public System.Collections.Generic.IEnumerable<Session> GetAllSessions()
             => Array.Empty<Session>();
 
         public bool RemoveSession(string sessionId) => false;
+
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
+            => new(sessionId, cwd);
     }
 }

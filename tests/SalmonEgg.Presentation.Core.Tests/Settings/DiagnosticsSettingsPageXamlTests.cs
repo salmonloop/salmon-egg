@@ -62,7 +62,17 @@ public sealed class DiagnosticsSettingsPageXamlTests
     }
 
     [Fact]
-    public void DiagnosticsSettingsPage_CodeBehind_UnloadCleanupUsesGuardedAsyncHelper()
+    public void DiagnosticsSettingsPage_AgentLabel_DesignTimeTextUsesEnglishColon()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+
+        Assert.Contains("x:Uid=\"Diagnostics_AgentLabel\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"Agent:\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"Agent：\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+        public void DiagnosticsSettingsPage_CodeBehind_UnloadCleanupUsesGuardedAsyncHelper()
     {
         var codeBehind = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml.cs");
 

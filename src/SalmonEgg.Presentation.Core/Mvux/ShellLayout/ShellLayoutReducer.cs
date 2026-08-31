@@ -28,9 +28,22 @@ public static class ShellLayoutReducer
             ContentContextChanged { IsChatContext: true } c => state with
             {
                 IsChatContext = true,
-                ContentContextVersion = c.Version
+                ContentContextVersion = c.Version,
+                DesiredRightPanelMode = RightPanelMode.None
             },
-            ToggleRightPanelRequested when !state.IsChatContext => state,
+            RightPanelContentAvailabilityChanged c when c.Version < state.RightPanelContentAvailabilityVersion => state,
+            RightPanelContentAvailabilityChanged { HasContent: false } c => state with
+            {
+                HasRightPanelContent = false,
+                RightPanelContentAvailabilityVersion = c.Version,
+                DesiredRightPanelMode = RightPanelMode.None
+            },
+            RightPanelContentAvailabilityChanged { HasContent: true } c => state with
+            {
+                HasRightPanelContent = true,
+                RightPanelContentAvailabilityVersion = c.Version
+            },
+            ToggleRightPanelRequested when !state.IsChatContext || !state.HasRightPanelContent => state,
             ToggleRightPanelRequested t => state with
             {
                 DesiredRightPanelMode = state.DesiredRightPanelMode == t.TargetMode ? RightPanelMode.None : t.TargetMode,
@@ -50,6 +63,7 @@ public static class ShellLayoutReducer
                     : state.LastAuxiliaryPanelArea
             },
             RightPanelModeChanged when !state.IsChatContext => state,
+            RightPanelModeChanged { Mode: RightPanelMode.TaskOverview } when !state.HasRightPanelContent => state,
             RightPanelModeChanged r => state with
             {
                 DesiredRightPanelMode = r.Mode,
@@ -63,10 +77,15 @@ public static class ShellLayoutReducer
             },
             RightPanelResizeRequested r => state with
             {
-                RightPanelPreferredWidth = r.AbsoluteWidth,
+                RightPanelPreferredWidth = ShellLayoutPolicy.ClampRightPanelWidth(
+                    r.AbsoluteWidth,
+                    state.RightPanelPreferredWidth),
                 LastAuxiliaryPanelArea = state.DesiredRightPanelMode == RightPanelMode.None ? state.LastAuxiliaryPanelArea : AuxiliaryPanelArea.Right
             },
-            LeftNavResizeRequested l => state with { NavOpenPaneLength = l.OpenPaneLength },
+            LeftNavResizeRequested l => state with
+            {
+                NavOpenPaneLength = ShellLayoutPolicy.ClampNavPaneWidth(l.OpenPaneLength, state.NavOpenPaneLength)
+            },
             _ => state
         };
         var snapshot = ShellLayoutPolicy.Compute(next);

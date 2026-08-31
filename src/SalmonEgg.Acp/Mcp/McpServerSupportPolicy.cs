@@ -64,6 +64,11 @@ namespace SalmonEgg.Acp.Mcp
                 SseMcpServer sse when agentCapabilities?.SupportsSse == true => ValidateSse(sse),
                 SseMcpServer sse => McpServerSupportResult.Unsupported(
                     $"Agent does not advertise mcpCapabilities.sse for MCP server '{ResolveName(sse)}'."),
+                // V2 forward-compatible transport: the client applies no tightening and passes the
+                // payload through as-is, leaving acceptance or rejection to the Agent. This is the
+                // spec's "preserve the raw payload" rule applied directly; the client layer does not
+                // overstep by gating transports it does not recognise.
+                CustomMcpServer => McpServerSupportResult.Supported,
                 _ => McpServerSupportResult.Unsupported(
                     $"Unsupported MCP server type '{server.GetType().Name}'.")
             };
@@ -81,6 +86,7 @@ namespace SalmonEgg.Acp.Mcp
                 StdioMcpServer => McpServerTransport.Stdio,
                 HttpMcpServer => McpServerTransport.Http,
                 SseMcpServer => McpServerTransport.Sse,
+                CustomMcpServer => McpServerTransport.Custom,
                 _ => throw new ArgumentException("Unsupported MCP server type.", nameof(server))
             };
         }

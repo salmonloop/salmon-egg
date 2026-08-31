@@ -221,4 +221,53 @@ public class ShellLayoutReducerTests
 
         Assert.NotEqual(before.TitleBarInteractiveRegionToken, reduced.Snapshot.TitleBarInteractiveRegionToken);
     }
+
+    [Theory]
+    [InlineData(ShellLayoutPolicy.MinimumRightPanelWidth - 1, ShellLayoutPolicy.MinimumRightPanelWidth)]
+    [InlineData(360, 360)]
+    [InlineData(ShellLayoutPolicy.MaximumRightPanelWidth + 1, ShellLayoutPolicy.MaximumRightPanelWidth)]
+    public void Reduce_RightPanelResizeRequested_StoresCanonicalWidth(double requestedWidth, double expectedWidth)
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true
+        };
+
+        var reduced = ShellLayoutReducer.Reduce(state, new RightPanelResizeRequested(requestedWidth));
+
+        Assert.Equal(expectedWidth, reduced.State.RightPanelPreferredWidth);
+        Assert.Equal(expectedWidth, reduced.Snapshot.RightPanelOpenPaneLength);
+    }
+
+    [Theory]
+    [InlineData(ShellLayoutPolicy.MinimumNavPaneWidth - 1, ShellLayoutPolicy.MinimumNavPaneWidth)]
+    [InlineData(320, 320)]
+    [InlineData(ShellLayoutPolicy.MaximumNavPaneWidth + 1, ShellLayoutPolicy.MaximumNavPaneWidth)]
+    public void Reduce_LeftNavResizeRequested_StoresCanonicalWidth(double requestedWidth, double expectedWidth)
+    {
+        var state = ShellLayoutState.Default;
+
+        var reduced = ShellLayoutReducer.Reduce(state, new LeftNavResizeRequested(requestedWidth));
+
+        Assert.Equal(expectedWidth, reduced.State.NavOpenPaneLength);
+        Assert.Equal(expectedWidth, reduced.Snapshot.NavOpenPaneLength);
+    }
+
+    [Fact]
+    public void Reduce_ResizeRequestedWithNaN_PreservesCurrentWidths()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            RightPanelPreferredWidth = 400,
+            NavOpenPaneLength = 320
+        };
+
+        var rightPanelReduced = ShellLayoutReducer.Reduce(state, new RightPanelResizeRequested(double.NaN));
+        var leftNavReduced = ShellLayoutReducer.Reduce(state, new LeftNavResizeRequested(double.NaN));
+
+        Assert.Equal(state.RightPanelPreferredWidth, rightPanelReduced.State.RightPanelPreferredWidth);
+        Assert.Equal(state.NavOpenPaneLength, leftNavReduced.State.NavOpenPaneLength);
+    }
 }

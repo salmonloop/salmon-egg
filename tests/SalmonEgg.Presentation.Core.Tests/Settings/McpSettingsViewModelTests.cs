@@ -1,3 +1,5 @@
+using SalmonEgg.Presentation.Core.Resources;
+using Microsoft.Extensions.Localization;
 using System;
 using System.Linq;
 using System.Threading;
@@ -10,6 +12,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
@@ -24,10 +27,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]),
-                        enabled: false),
-                    new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")])
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]), false),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")]))
                 }
             }
         };
@@ -42,13 +43,13 @@ public sealed class McpSettingsViewModelTests
         Assert.False(viewModel.Servers[0].IsDetailsExpanded);
         Assert.Equal("C:\\mcp\\filesystem.exe", viewModel.Servers[0].Command);
         Assert.Equal("--root C:\\repo", viewModel.Servers[0].ArgumentsText);
-        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], viewModel.Servers[0].StatusMessage);
         Assert.Equal("search", viewModel.Servers[1].Name);
         Assert.Equal(McpServerTransport.Http, viewModel.Servers[1].Transport);
         Assert.False(viewModel.Servers[1].IsDetailsExpanded);
         Assert.Equal("https://example.com/mcp", viewModel.Servers[1].Url);
         Assert.Equal("Authorization: Bearer token", viewModel.Servers[1].HeadersText);
-        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[1].StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], viewModel.Servers[1].StatusMessage);
         Assert.False(viewModel.IsEditorOpen);
     }
 
@@ -85,8 +86,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp"),
-                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("docs", "https://docs.example.com/mcp"))
                 }
             }
         };
@@ -105,7 +106,7 @@ public sealed class McpSettingsViewModelTests
 
         Assert.NotNull(service.SavedSettings);
         Assert.Equal(2, service.SavedSettings!.Servers.Count);
-        var server = Assert.IsType<StdioMcpServer>(service.SavedSettings.Servers[0].Server);
+        var server = Assert.IsType<StdioMcpServer>(McpServerCatalogMapper.ToAcpServer(service.SavedSettings.Servers[0]));
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("C:\\mcp\\filesystem.exe", server.Command);
         Assert.Equal(["--root", "C:\\repo path"], server.Args);
@@ -114,7 +115,7 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("C:\\repo path", env.Value);
         Assert.Equal("docs", service.SavedSettings.Servers[1].Name);
         Assert.Equal("filesystem", row.PersistedName);
-        Assert.Equal("McpSettings_RowSaved", row.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], row.StatusMessage);
     }
 
     [Fact]
@@ -126,7 +127,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -149,8 +150,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("filesystem", "npx"),
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "npx")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -220,7 +221,7 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("-y @modelcontextprotocol/server-filesystem C:\\repo", viewModel.EditingServer.ArgumentsText);
         Assert.Equal("API_KEY=secret", viewModel.EditingServer.EnvironmentText);
         Assert.Empty(viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ClipboardFilled"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -257,7 +258,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("search", "old.exe")
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("search", "old.exe"))
                 }
             }
         };
@@ -295,7 +296,7 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("https://example.com/mcp", viewModel.EditingServer.Url);
         Assert.Equal("Authorization: Bearer token", viewModel.EditingServer.HeadersText);
         Assert.Empty(viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ClipboardFilled"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -321,7 +322,7 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("docs", viewModel.EditingServer!.Name);
         Assert.Equal(McpServerTransport.Sse, viewModel.EditingServer.Transport);
         Assert.Equal("https://example.com/sse", viewModel.EditingServer.Url);
-        Assert.Equal("McpSettings_ClipboardFilled", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ClipboardFilled"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -388,7 +389,7 @@ public sealed class McpSettingsViewModelTests
         await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.IsEditorOpen);
-        Assert.Equal("McpSettings_ImportFailed", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ImportFailed"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -402,7 +403,7 @@ public sealed class McpSettingsViewModelTests
 
         Assert.Empty(viewModel.Servers);
         Assert.Empty(viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ImportFailed", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ImportFailed"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -415,7 +416,7 @@ public sealed class McpSettingsViewModelTests
         await viewModel.FillEditorFromClipboardCommand.ExecuteAsync(null);
 
         Assert.Empty(viewModel.StatusMessage);
-        Assert.Equal("McpSettings_ClipboardEmpty", viewModel.ImportStatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_ClipboardEmpty"], viewModel.ImportStatusMessage);
     }
 
     [Fact]
@@ -431,8 +432,8 @@ public sealed class McpSettingsViewModelTests
         await row.SaveCommand.ExecuteAsync(null);
 
         Assert.Null(service.SavedSettings);
-        Assert.Equal("McpSettings_SaveValidationCommandRequired", viewModel.StatusMessage);
-        Assert.Equal("McpSettings_SaveValidationCommandRequired", row.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_SaveValidationCommandRequired"], viewModel.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_SaveValidationCommandRequired"], row.StatusMessage);
     }
 
     [Fact]
@@ -448,7 +449,7 @@ public sealed class McpSettingsViewModelTests
         Assert.Empty(viewModel.Servers);
         Assert.True(viewModel.IsEditorOpen);
         Assert.True(row.IsDetailsExpanded);
-        Assert.Equal("McpSettings_RowUnsaved", row.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowUnsaved"], row.StatusMessage);
     }
 
     [Fact]
@@ -489,7 +490,7 @@ public sealed class McpSettingsViewModelTests
         Assert.NotNull(service.SavedSettings);
         var entry = Assert.Single(service.SavedSettings!.Servers);
         Assert.False(entry.Enabled);
-        var server = Assert.IsType<StdioMcpServer>(entry.Server);
+        var server = Assert.IsType<StdioMcpServer>(McpServerCatalogMapper.ToAcpServer(entry));
         Assert.Equal("new-mcp-server", server.Name);
         Assert.Equal(string.Empty, server.Command);
         Assert.Single(viewModel.Servers);
@@ -512,8 +513,8 @@ public sealed class McpSettingsViewModelTests
         await row.SaveCommand.ExecuteAsync(null);
 
         Assert.Equal(savesBeforeBlankName, service.SaveCount);
-        Assert.Equal("McpSettings_SaveValidationNameRequired", row.StatusMessage);
-        Assert.Equal("McpSettings_SaveValidationNameRequired", viewModel.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_SaveValidationNameRequired"], row.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_SaveValidationNameRequired"], viewModel.StatusMessage);
     }
 
     [Fact]
@@ -525,9 +526,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new HttpMcpServer("search", "https://example.com/mcp"),
-                        enabled: false)
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"), false)
                 }
             }
         };
@@ -538,7 +537,7 @@ public sealed class McpSettingsViewModelTests
 
         Assert.NotNull(service.SavedSettings);
         Assert.True(Assert.Single(service.SavedSettings!.Servers).Enabled);
-        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], viewModel.Servers[0].StatusMessage);
     }
 
     [Fact]
@@ -550,9 +549,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new StdioMcpServer("draft", string.Empty),
-                        enabled: false)
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("draft", string.Empty), false)
                 }
             }
         };
@@ -563,7 +560,7 @@ public sealed class McpSettingsViewModelTests
         row.Enabled = true;
 
         Assert.False(row.Enabled);
-        Assert.Equal("McpSettings_SaveValidationCommandRequired", row.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_SaveValidationCommandRequired"], row.StatusMessage);
     }
 
     [Fact]
@@ -575,8 +572,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp"),
-                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("docs", "https://docs.example.com/mcp"))
                 }
             }
         };
@@ -586,9 +583,9 @@ public sealed class McpSettingsViewModelTests
         viewModel.Servers[0].EditCommand.Execute(null);
         viewModel.EditingServer!.Url = "https://new.example.com/mcp";
 
-        Assert.Equal("McpSettings_RowUnsaved", viewModel.EditingServer.StatusMessage);
-        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[0].StatusMessage);
-        Assert.Equal("McpSettings_RowSaved", viewModel.Servers[1].StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowUnsaved"], viewModel.EditingServer.StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], viewModel.Servers[0].StatusMessage);
+        Assert.Equal(new TestCoreStringLocalizer()["McpSettings_RowSaved"], viewModel.Servers[1].StatusMessage);
     }
 
     [Fact]
@@ -600,7 +597,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -628,7 +625,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -662,13 +659,27 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("MCP server saved.", viewModel.StatusMessage);
     }
 
+    [Fact]
+    public void AddServer_UsesLocalizedDefaultName()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "McpSettings_DefaultServerName", "新 MCP 服务器");
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), localizer: localizer);
+
+        viewModel.AddServerCommand.Execute(null);
+
+        Assert.NotNull(viewModel.EditingServer);
+        Assert.Equal("新 MCP 服务器", viewModel.EditingServer!.Name);
+    }
+
     private static McpSettingsViewModel CreateViewModel(
         IMcpSettingsService settingsService,
-        IPlatformShellService? platformShell = null)
+        IPlatformShellService? platformShell = null,
+        IStringLocalizer<CoreStrings>? localizer = null)
         => new(
             settingsService,
             platformShell ?? new FakePlatformShellService(),
-            new TestCoreStringLocalizer(),
+            localizer ?? new TestCoreStringLocalizer(),
             Mock.Of<ILogger<McpSettingsViewModel>>());
 
     private sealed class FakePlatformShellService : IPlatformShellService

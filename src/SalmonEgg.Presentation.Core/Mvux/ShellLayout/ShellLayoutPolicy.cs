@@ -4,8 +4,10 @@ namespace SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 
 public static class ShellLayoutPolicy
 {
-    private const double RightPanelMinWidth = 240;
-    private const double RightPanelMaxWidth = 520;
+    internal const double MinimumNavPaneWidth = 240;
+    internal const double MaximumNavPaneWidth = 480;
+    internal const double MinimumRightPanelWidth = 240;
+    internal const double MaximumRightPanelWidth = 520;
     private const double BottomPanelMinHeight = 160;
     private const double BottomPanelMaxHeight = 360;
     private const double MinimumChatRegionHeight = 220;
@@ -38,16 +40,20 @@ public static class ShellLayoutPolicy
         var minSearch = mode == NavigationPaneDisplayMode.Expanded ? 220 : 180;
         var maxSearch = mode == NavigationPaneDisplayMode.Expanded ? 360 : 300;
 
-        var maxRightPanelWidth = Math.Min(RightPanelMaxWidth, availableWidth);
+        var navOpenPaneLength = ClampNavPaneWidth(state.NavOpenPaneLength, MinimumNavPaneWidth);
+        var rightPanelPreferredWidth = ClampRightPanelWidth(state.RightPanelPreferredWidth, MinimumRightPanelWidth);
+        var maxRightPanelWidth = Math.Min(MaximumRightPanelWidth, availableWidth);
         var contentHeight = Math.Max(0, availableHeight - state.TitleBarInsetsHeight);
         var maxBottomPanelHeight = Math.Min(BottomPanelMaxHeight, Math.Max(0, contentHeight - MinimumChatRegionHeight));
         var canToggleRightPanels = state.IsChatContext
-            && maxRightPanelWidth >= RightPanelMinWidth
+            && state.HasRightPanelContent
+            && maxRightPanelWidth >= MinimumRightPanelWidth
             && mode != NavigationPaneDisplayMode.Minimal;
         var canToggleBottomPanel = state.IsChatContext
             && state.SupportsLocalTerminal
             && maxBottomPanelHeight >= BottomPanelMinHeight;
-        var showAuxiliaryTitleBarButtons = state.IsChatContext;
+        var showAuxiliaryTitleBarButtons = state.IsChatContext
+            && (canToggleRightPanels || canToggleBottomPanel);
         var hasSearchRegion = searchVisible;
         var hasAuxiliaryRegion = showAuxiliaryTitleBarButtons;
         var titleBarInteractiveRegionToken = (hasSearchRegion ? 1 : 0) | (hasAuxiliaryRegion ? 2 : 0);
@@ -102,7 +108,7 @@ public static class ShellLayoutPolicy
 
         var rightPaneCanRender = canToggleRightPanels;
         var rightPanelOpenPaneLength = rightPaneCanRender
-            ? Math.Clamp(state.RightPanelPreferredWidth, RightPanelMinWidth, maxRightPanelWidth)
+            ? Math.Clamp(rightPanelPreferredWidth, MinimumRightPanelWidth, maxRightPanelWidth)
             : 0;
         var rightPanelVisible = effectiveRightPanelMode != RightPanelMode.None;
         double rightPanelWidth = 0;
@@ -121,7 +127,7 @@ public static class ShellLayoutPolicy
         return new ShellLayoutSnapshot(
             mode,
             isOpen,
-            state.NavOpenPaneLength,
+            navOpenPaneLength,
             state.NavCompactPaneLength,
             searchVisible,
             minSearch,
@@ -138,11 +144,25 @@ public static class ShellLayoutPolicy
             bottomPanelHeight,
             effectiveBottomPanelMode,
             isOpen && mode == NavigationPaneDisplayMode.Expanded,
-            isOpen ? state.NavOpenPaneLength - 6 : state.NavCompactPaneLength - 6,
+            isOpen ? navOpenPaneLength - 6 : state.NavCompactPaneLength - 6,
             canToggleRightPanels,
             canToggleBottomPanel,
             showAuxiliaryTitleBarButtons,
             titleBarInteractiveRegionToken,
             state.SupportsLocalTerminal);
+    }
+
+    internal static double ClampNavPaneWidth(double requestedWidth, double currentWidth)
+        => ClampResizeWidth(requestedWidth, currentWidth, MinimumNavPaneWidth, MaximumNavPaneWidth);
+
+    internal static double ClampRightPanelWidth(double requestedWidth, double currentWidth)
+        => ClampResizeWidth(requestedWidth, currentWidth, MinimumRightPanelWidth, MaximumRightPanelWidth);
+
+    private static double ClampResizeWidth(double requestedWidth, double currentWidth, double minimumWidth, double maximumWidth)
+    {
+        var candidateWidth = double.IsNaN(requestedWidth) ? currentWidth : requestedWidth;
+        return double.IsNaN(candidateWidth)
+            ? minimumWidth
+            : Math.Clamp(candidateWidth, minimumWidth, maximumWidth);
     }
 }

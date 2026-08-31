@@ -11,11 +11,35 @@
     Background="Transparent"
     AllowDrop="False">
 
+        <Grid>
+        <!-- Short windows: densify section stack spacing so settings remain scannable without
+             oversized marketing gaps. Comfortable restores Spacing=24 at MinWindowHeight=760. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ShortcutsHeightStates">
+                <VisualState x:Name="ShortcutsHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="ShortcutsContentStack.Padding" Value="0,0,0,16" />
+                        <Setter Target="ShortcutsContentStack.Spacing" Value="14" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ShortcutsHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ShortcutsContentStack.Padding" Value="0,0,0,32" />
+                        <Setter Target="ShortcutsContentStack.Spacing" Value="24" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="24"
+                <StackPanel x:Name="ShortcutsContentStack"
+                            Spacing="14"
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="Shortcuts_PageTitle"
@@ -140,4 +164,5 @@
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

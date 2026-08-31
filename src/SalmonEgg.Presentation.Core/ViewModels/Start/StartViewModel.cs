@@ -15,6 +15,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
@@ -35,6 +36,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
+    private readonly IUiInteractionService? _ui;
     private readonly ILogger<StartViewModel> _logger;
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
@@ -56,6 +58,12 @@ public sealed partial class StartViewModel : ObservableObject
     private Task _composerUnloadCleanupObservationTask = Task.CompletedTask;
     private bool _isNewSessionDraftRefreshPending;
     private bool _isComposerLoaded;
+#if DEBUG
+    private int _startAgentProjectionDebugSequence;
+#endif
+
+    private string? _startLaunchFailureMessage;
+    private string? _startLaunchFailureResourceKey;
 
     public ChatViewModel Chat { get; }
 
@@ -92,6 +100,7 @@ public sealed partial class StartViewModel : ObservableObject
             }
 
             Chat.CurrentPrompt = next;
+            ClearStartLaunchFailure();
             RefreshStartPromptProjection(next);
         }
     }
@@ -181,7 +190,7 @@ public sealed partial class StartViewModel : ObservableObject
     public ComposerSelectorItemViewModel? SelectedStartProjectSelectorItem
         => StartProjectSelectorProjection.SelectedDisplayItem;
 
-    public IRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
+    public IAsyncRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
 
     public IRelayCommand<SessionModeViewModel?> SelectStartModeCommand { get; }
 
@@ -282,7 +291,8 @@ public sealed partial class StartViewModel : ObservableObject
         IChatLaunchWorkflow? chatLaunchWorkflow = null,
         IConversationCatalogReadModel? conversationCatalog = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? ui = null)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         ArgumentNullException.ThrowIfNull(sessionManager);
@@ -296,6 +306,7 @@ public sealed partial class StartViewModel : ObservableObject
         _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         _localizer = localizer;
         _languageService = languageService;
+        _ui = ui;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
             new ChatLaunchWorkflowChatFacadeAdapter(
@@ -305,7 +316,7 @@ public sealed partial class StartViewModel : ObservableObject
             navigationCoordinator);
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, CanStartSessionAndSend);
-        ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
+        ExecuteSuggestionCommand = new AsyncRelayCommand<QuickSuggestionViewModel>(ExecuteSuggestionAsync);
         SelectStartModeCommand = new RelayCommand<SessionModeViewModel?>(SelectStartMode);
         SelectStartModeDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModeDisplay);
         SelectStartModelDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModelDisplay);
@@ -338,6 +349,7 @@ public sealed partial class StartViewModel : ObservableObject
         Suggestions.Clear();
         InitializeSuggestions();
         RefreshStartProjectOptions();
+        ReprojectStartLaunchFailureMessage();
         RefreshStartSessionDraftErrorProjection();
         RefreshVoiceProjection();
     }
@@ -345,31 +357,56 @@ public sealed partial class StartViewModel : ObservableObject
     private void InitializeSuggestions()
     {
         Suggestions.Add(new QuickSuggestionViewModel(
-            "StartView.Suggestion.AnalyzeCodebase",
-            "\uE943",
-            Localize("StartSuggestion_AnalyzeCodebaseTitle", "分析代码库"),
-            Localize("StartSuggestion_AnalyzeCodebaseSubtitle", "深入理解项目架构与逻辑"),
-            Localize("StartSuggestion_AnalyzeCodebasePrompt", "请帮我分析一下当前代码库的架构和核心逻辑。"),
-            ExecuteSuggestionCommand));
+            "StartView.Suggestion.ReportGuidance",
+            "\uE7BA",
+            Localize(
+                "StartSuggestion_ReportGuidanceTitle",
+                "Report AI content"),
+            Localize(
+                "StartSuggestion_ReportGuidanceSubtitle",
+                "Right-click a message or use About"),
+            Localize("StartSuggestion_ReportGuidanceLabel", "Tip"),
+            prompt: string.Empty,
+            actionCommand: ExecuteSuggestionCommand,
+            isInformational: true));
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.RecommendTasks",
             "\uE762",
-            Localize("StartSuggestion_RecommendTasksTitle", "推荐开发任务"),
-            Localize("StartSuggestion_RecommendTasksSubtitle", "明确接下来该做什么"),
-            Localize("StartSuggestion_RecommendTasksPrompt", "根据当前进度，推荐几个接下来可以进行的开发任务或优化点。"),
+            Localize("StartSuggestion_RecommendTasksTitle", "Recommend tasks"),
+            Localize("StartSuggestion_RecommendTasksSubtitle", "Clarify what to work on next"),
+            Localize("StartSuggestion_QuickLaunchLabel", "Quick launch"),
+            Localize("StartSuggestion_RecommendTasksPrompt", "Based on current progress, recommend a few development tasks or improvements to tackle next."),
             ExecuteSuggestionCommand));
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.ResolveErrors",
             "\uEBE8",
-            Localize("StartSuggestion_ResolveErrorsTitle", "解决最近报错"),
-            Localize("StartSuggestion_ResolveErrorsSubtitle", "提交错误日志让我看看"),
-            Localize("StartSuggestion_ResolveErrorsPrompt", "我刚才遇到了一些报错，请帮我分析并解决它们。"),
+            Localize("StartSuggestion_ResolveErrorsTitle", "Resolve recent errors"),
+            Localize("StartSuggestion_ResolveErrorsSubtitle", "Share the error log for analysis"),
+            Localize("StartSuggestion_QuickLaunchLabel", "Quick launch"),
+            Localize("StartSuggestion_ResolveErrorsPrompt", "I ran into some errors. Analyze them and help fix them."),
             ExecuteSuggestionCommand));
     }
 
-    private void ExecuteSuggestion(QuickSuggestionViewModel? suggestion)
+    private async Task ExecuteSuggestionAsync(QuickSuggestionViewModel? suggestion)
     {
-        if (suggestion == null) return;
+        if (suggestion == null)
+        {
+            return;
+        }
+
+        if (suggestion.IsInformational)
+        {
+            if (_ui is not null)
+            {
+                await _ui.ShowInfoAsync(
+                    Localize(
+                        "StartSuggestion_ReportGuidanceDetail",
+                        "If AI-generated content looks wrong or inappropriate, right-click that message and choose Report, or open Settings > About and report it there. This tip card only explains the path and cannot send a report.")).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
         StartPrompt = suggestion.Prompt;
     }
 
@@ -418,19 +455,85 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void SelectStartAgentDisplay(ComposerSelectorItemViewModel? item)
     {
+#if DEBUG
+        _logger.LogDebug(
+            "Start agent selector command requested. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+            item?.Kind,
+            item?.Identity,
+            item?.SemanticValue,
+            item?.IsPlaceholder,
+            item?.IsSelectable,
+            StartAgentSelectorItems.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId);
+#endif
         if (!CanCommitSelectorItem(item, ComposerSelectorKind.Agent, StartAgentSelectorItems))
         {
+#if DEBUG
+            _logger.LogDebug(
+                "Start agent selector command rejected by current projection. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount}",
+                item?.Kind,
+                item?.Identity,
+                item?.SemanticValue,
+                item?.IsPlaceholder,
+                item?.IsSelectable,
+                StartAgentSelectorItems.Count);
+#endif
             return;
         }
 
         var agent = Chat.AcpProfileList.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, item!.SemanticValue, StringComparison.Ordinal));
-        if (agent is not null)
+        if (agent is null)
         {
-            Chat.SelectProfileForUserIntent(agent);
-            RefreshStartProjectOptions();
+#if DEBUG
+            _logger.LogDebug(
+                "Start agent selector command rejected because profile was not found. ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} AcpProfileCount={AcpProfileCount}",
+                item?.Identity,
+                item?.SemanticValue,
+                Chat.AcpProfileList.Count);
+#endif
+            return;
         }
+
+        if (IsCurrentExplicitStartAgentSelection(item!.SemanticValue))
+        {
+#if DEBUG
+            _logger.LogDebug(
+                "Start agent selector command skipped because profile is already the explicit selection. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+                item.SemanticValue,
+                Chat.SelectedAcpProfile?.Id,
+                Chat.SelectedProfileIntentId,
+                Chat.ConnectionInstanceId);
+#endif
+            return;
+        }
+
+#if DEBUG
+        _logger.LogDebug(
+            "Start agent selector profile selection applying. ProfileId={ProfileId} PreviousProfileId={PreviousProfileId} PreviousProfileIntentId={PreviousProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+            agent.Id,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId);
+#endif
+        Chat.SelectProfileForUserIntent(agent);
+        RefreshStartProjectOptions();
+#if DEBUG
+        _logger.LogDebug(
+            "Start agent selector profile selection applied. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ProjectOptionCount={ProjectOptionCount}",
+            agent.Id,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            StartProjectOptions.Count);
+#endif
     }
+
+    private bool IsCurrentExplicitStartAgentSelection(string? profileId)
+        => !string.IsNullOrWhiteSpace(profileId)
+            && string.Equals(Chat.SelectedAcpProfile?.Id, profileId, StringComparison.Ordinal)
+            && string.Equals(Chat.SelectedProfileIntentId, profileId, StringComparison.Ordinal);
 
     private void SelectStartProjectDisplay(ComposerSelectorItemViewModel? item)
     {
@@ -496,34 +599,118 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
+        ClearStartLaunchFailure();
         IsStarting = true;
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
-        var submitSucceeded = false;
+        var promptDispatched = false;
         try
         {
-            await _chatLaunchWorkflow
+            var completion = await _chatLaunchWorkflow
                 .StartSessionAndSendAsync(
                     new ChatLaunchRequest(
                         promptText,
                         NormalizeProjectSelectionValue(SelectedStartProjectId),
                         ResolveDefaultCwd()))
                 .ConfigureAwait(true);
-            submitSucceeded = true;
+            switch (completion)
+            {
+                case ChatLaunchCompletion.PromptDispatched:
+                    promptDispatched = true;
+                    break;
+
+                case ChatLaunchCompletion.Failed:
+                    SetStartLaunchFailure(
+                        "Start_SessionLaunchFailed",
+                        "Failed to start the session. Please try again.");
+                    break;
+
+                case ChatLaunchCompletion.Incomplete:
+                default:
+                    // Intentional pause (connection in progress / needs configuration).
+                    // Keep the draft so the user can continue without retyping.
+                    break;
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Start session failed");
+            SetStartLaunchFailure(
+                "Start_SessionLaunchFailed",
+                "Failed to start the session. Please try again.");
         }
         finally
         {
-            if (submitSucceeded)
+            if (promptDispatched)
             {
+                ClearStartLaunchFailure();
                 StartPrompt = string.Empty;
             }
 
             IsStarting = false;
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private void SetStartLaunchFailure(string resourceKey, string fallback)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+
+        _startLaunchFailureResourceKey = resourceKey.Trim();
+        var normalized = Localize(_startLaunchFailureResourceKey, fallback);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = string.IsNullOrWhiteSpace(fallback) ? null : fallback.Trim();
+        }
+        else
+        {
+            normalized = normalized.Trim();
+        }
+
+        if (string.Equals(_startLaunchFailureMessage, normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = normalized;
+        OnPropertyChanged(nameof(HasStartSessionDraftError));
+        OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
+    }
+
+    private void ClearStartLaunchFailure()
+    {
+        if (_startLaunchFailureMessage is null && _startLaunchFailureResourceKey is null)
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = null;
+        _startLaunchFailureResourceKey = null;
+        OnPropertyChanged(nameof(HasStartSessionDraftError));
+        OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
+    }
+
+    private void ReprojectStartLaunchFailureMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_startLaunchFailureResourceKey))
+        {
+            return;
+        }
+
+        var reprojected = Localize(
+            _startLaunchFailureResourceKey,
+            _startLaunchFailureMessage ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(reprojected))
+        {
+            return;
+        }
+
+        reprojected = reprojected.Trim();
+        if (string.Equals(_startLaunchFailureMessage, reprojected, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = reprojected;
     }
 
     private void RefreshStartPromptProjection(string value)
@@ -554,7 +741,7 @@ public sealed partial class StartViewModel : ObservableObject
             !hasAgentSlot || (Chat.SelectedAcpProfile is not null && Chat.IsConnected),
             ResolveAgentSelectorPlaceholderLabels()));
 
-        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+        var projection = _selectorProjectionPresenter.Present(new SelectorProjectionInput(
             ComposerSelectorKind.Agent,
             policy.RealItems,
             policy.SelectedSemanticValue,
@@ -562,6 +749,30 @@ public sealed partial class StartViewModel : ObservableObject
             policy.ReplaceSelectionWithPlaceholder,
             policy.DisableRealItems,
             policy.SelectorEnabled && IsInputEnabled));
+#if DEBUG
+        _logger.LogDebug(
+            "Start agent selector projection resolved. Sequence={Sequence} AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsConnecting={IsConnecting} IsInitializing={IsInitializing} IsConnected={IsConnected} HasConnectionError={HasConnectionError} HasAgentSlot={HasAgentSlot} PolicyRealItemCount={PolicyRealItemCount} DisplayItemCount={DisplayItemCount} SelectedKind={SelectedKind} SelectedIdentity={SelectedIdentity} SelectedSemanticValue={SelectedSemanticValue} SelectedIsPlaceholder={SelectedIsPlaceholder} IsEnabled={IsEnabled} IsSubmitBlocked={IsSubmitBlocked} PlaceholderKind={PlaceholderKind}",
+            ++_startAgentProjectionDebugSequence,
+            Chat.AcpProfileList.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId,
+            Chat.IsConnecting,
+            Chat.IsInitializing,
+            Chat.IsConnected,
+            Chat.HasConnectionError,
+            hasAgentSlot,
+            policy.RealItems.Count,
+            projection.DisplayItems.Count,
+            projection.SelectedDisplayItem?.Kind,
+            projection.SelectedDisplayItem?.Identity,
+            projection.SelectedDisplayItem?.SemanticValue,
+            projection.SelectedDisplayItem?.IsPlaceholder,
+            projection.IsEnabled,
+            projection.IsSubmitBlocked,
+            projection.PlaceholderKind);
+#endif
+        return projection;
     }
 
     private SelectorProjectionResult ResolveStartModeSelectorProjection()
@@ -675,12 +886,25 @@ public sealed partial class StartViewModel : ObservableObject
 
     private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
-            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
-            Error: Localize("Selector_Model_Error", "模型不可用"));
+            Unresolved: Localize("Selector_Model_Unresolved", "Model is not ready"),
+            Loading: Localize("Selector_Model_Loading", "Loading models..."),
+            Error: Localize("Selector_Model_Error", "Models unavailable"));
 
     private void RefreshAllSelectorProjections()
     {
+#if DEBUG
+        _logger.LogDebug(
+            "Refreshing start selector projections. AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsStarting={IsStarting} IsInputEnabled={IsInputEnabled} ModeOptionCount={ModeOptionCount} ModelOptionCount={ModelOptionCount} ProjectOptionCount={ProjectOptionCount}",
+            Chat.AcpProfileList.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId,
+            IsStarting,
+            IsInputEnabled,
+            StartModeOptions.Count,
+            StartModelOptions.Count,
+            StartProjectOptions.Count);
+#endif
         OnPropertyChanged(nameof(StartAgentSelectorProjection));
         OnPropertyChanged(nameof(StartModeSelectorProjection));
         OnPropertyChanged(nameof(StartModelSelectorProjection));
@@ -770,7 +994,7 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     private bool IsSelectedProfileRemote()
-        => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.HttpSse;
+        => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.StreamableHttp;
 
     private StartProjectOptionViewModel? ResolveSelectedProjectOption()
     {
@@ -837,7 +1061,7 @@ public sealed partial class StartViewModel : ObservableObject
         var isRemoteProfile = IsSelectedProfileRemote();
         var options = new List<StartProjectOptionViewModel>
         {
-            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "未归类"), isSelectable: !isRemoteProfile),
+            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "Unclassified"), isSelectable: !isRemoteProfile),
         };
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -928,14 +1152,19 @@ public sealed partial class StartViewModel : ObservableObject
     private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels(bool remoteSelectionRequired = false)
         => new(
             Unresolved: remoteSelectionRequired
-                ? Localize("Selector_Mode_RemoteSelectionRequired", "请先选择远程项目")
-                : Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
-            Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
-            Error: Localize("Selector_Mode_Error", "模式不可用"),
-            Default: Localize("Selector_Mode_Default", "默认模式"));
+                ? Localize("Selector_Mode_RemoteSelectionRequired", "Select a remote project first")
+                : Localize("Selector_Mode_Unresolved", "Mode is not ready"),
+            Loading: Localize("Selector_Mode_Loading", "Loading modes..."),
+            Error: Localize("Selector_Mode_Error", "Mode unavailable"),
+            Default: Localize("Selector_Mode_Default", "Default mode"));
 
     private string ResolveStartSessionDraftErrorMessage()
     {
+        if (!string.IsNullOrWhiteSpace(_startLaunchFailureMessage))
+        {
+            return _startLaunchFailureMessage!;
+        }
+
         if (IsExpectedRemoteDirectorySelectionState())
         {
             return string.Empty;
@@ -961,16 +1190,16 @@ public sealed partial class StartViewModel : ObservableObject
 
     private AgentSelectorPlaceholderLabels ResolveAgentSelectorPlaceholderLabels()
         => new(
-            Loading: Localize("Selector_Agent_Loading", "正在连接 Agent..."),
-            Error: Localize("Selector_Agent_Error", "Agent 不可用"),
-            Unresolved: Localize("Selector_Agent_Unresolved", "选择 Agent"),
-            Empty: Localize("Selector_Agent_Empty", "未选择 Agent"));
+            Loading: Localize("Selector_Agent_Loading", "Connecting agent..."),
+            Error: Localize("Selector_Agent_Error", "Agent unavailable"),
+            Unresolved: Localize("Selector_Agent_Unresolved", "Select an agent"),
+            Empty: Localize("Selector_Agent_Empty", "No agent selected"));
 
     private ProjectSelectorPlaceholderLabels ResolveProjectSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Project_Unresolved", "项目不可用"),
-            Fallback: Localize("Nav_Unclassified", "未归类"),
-            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远程项目"));
+            Unresolved: Localize("Selector_Project_Unresolved", "Project unavailable"),
+            Fallback: Localize("Nav_Unclassified", "Unclassified"),
+            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "Select a remote project"));
 
     private string Localize(string key, string fallback)
     {

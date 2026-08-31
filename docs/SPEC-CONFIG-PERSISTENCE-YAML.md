@@ -37,15 +37,12 @@ SalmonEgg/
     app.yaml
     servers/
       <id>.yaml
-  config-migrations/
-    migrations.log
   logs/
     ...
 ```
 
 - `app.yaml`：全局设置（UI 偏好、默认选项、最近使用的 server id 等）。
 - `servers/<id>.yaml`：每个 ServerConfiguration 一个文件，便于 diff/merge。
-- `config-migrations/migrations.log`：记录迁移过程（便于诊断）。
 
 ---
 
@@ -64,7 +61,7 @@ updated_at_utc: "2026-03-08T13:20:00Z"
 
 id: "agent-local"
 name: "Local Agent"
-transport: "websocket"   # websocket | stdio | http_sse（全部使用 snake_case）
+transport: "websocket"   # websocket | stdio | streamable_http（全部使用 snake_case;旧值 http_sse 兼容读取,写出一律 canonical）
 server_url: "ws://127.0.0.1:8080"
 
 connection_timeout_seconds: 120
@@ -154,11 +151,24 @@ authentication:
 - 客户端必须支持读取 `schema_version <= 当前版本`
 - 高版本：必须拒绝写回（防止降级破坏），但允许只读并提示用户升级
 
-### 6.2 迁移机制
-提供 `IConfigMigration`：
-- `FromVersion` / `ToVersion`
-- `Task MigrateAsync(...)`
+### 6.2 附加式升级与写入防护（无迁移机制）
 
-启动时检测版本并按序迁移，记录到 `config-migrations/migrations.log`。
+版本演进采用**附加式（additive-only）契约**：每次升 `schema_version` 只新增字段或枚举值，
+不重命名、不删除、不改语义。旧版本写入的文件天然是当前版本的合法子集，因此**不需要迁移
+机制**——`IConfigMigration` 曾在早期设计中规划但从未实现，现已放弃；仓库中不保留迁移目录
+或迁移日志。
+
+真正的保护在**写入路径**而非读取路径：
+
+- **读取**宽松：`schema_version <= 0` 视为"不是我们的文件"予以忽略（返回默认值/空），
+  `schema_version > 当前版本` 的文件**仍可读**（附加式契约保证未知字段被忽略、枚举未知值
+  回退默认），`ConfigurationDiagnosticsService` 会对其报告 `SchemaTooNew` 诊断提示用户升级。
+- **写入**严格：发现磁盘上文件的 `schema_version > 当前版本` 时直接拒绝写回
+  （`SchemaVersionTooNew`），防止旧版本构建覆盖新版本文件而丢字段。这是云同步场景的关键
+  防线——两台版本不同的机器可能拉到对方写的更高版本文件，写入防护确保旧版本不会静默降级它。
+
+不保留迁移机制的理由：无历史遗留的破坏性 schema 变更，且旧版本 APP 几乎无存量用户，
+"装新版 → 回滚旧版"场景不构成需要支持的前向兼容路径。若未来确需破坏性变更，再以此节
+为锚点重新引入显式迁移。
 
 ---

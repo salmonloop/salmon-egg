@@ -62,7 +62,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// Orchestrates the lifecycle of conversations, ACP agent connectivity, and UI state projection.
 /// Follows the MVVM pattern where the View is driven strictly by this ViewModel and its projected state.
 /// </summary>
-public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection
+public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection, IChatRuntimeInitialization, IChatRuntimePersistence
 {
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
     private const int TaskOverviewPlanPreviewLimit = 4;
@@ -147,6 +147,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IConversationMutationPipeline _conversationMutationPipeline;
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IAcpMcpServerResolver _mcpServerResolver;
+    private readonly IAcpRemoteSessionRecoveryContextResolver _remoteSessionRecoveryContextResolver;
     private readonly IConversationAttentionStore? _conversationAttentionStore;
     private readonly SerialAsyncWorkQueue _sessionUpdateWorkQueue;
     private readonly SerialAsyncWorkQueue _previewSnapshotWorkQueue;
@@ -167,8 +168,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ConversationHydrationContext _hydrationContext;
     private readonly IVoiceInputService _voiceInputService;
     private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
+    private readonly IShellLayoutMetricsSink? _shellLayoutMetricsSink;
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private readonly ConversationActivationOutcomePublisher _conversationActivationOutcomePublisher;
+    private long _taskOverviewContentAvailabilityVersion;
     private readonly object _autoConnectSync = new();
     private bool _disposed;
     private bool _autoConnectAttempted;
@@ -201,7 +204,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _foregroundTransportProfileIdFromStore;
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
-    private Task? _restoreTask;
+    private Task<bool>? _restoreTask;
+    private bool _restoreCompleted;
     private readonly SemaphoreSlim _remoteConversationActivationGate = new(1, 1);
     private long _localTerminalActivationVersion;
 
@@ -638,14 +642,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             IsConnecting,
             IsInitializing,
             IsHydrating,
-            IsLayoutLoading,
             IsSessionSwitching,
             _sessionSwitchOverlayConversationId,
             _sessionSwitchPreviewConversationId,
             _connectionLifecycleOverlayConversationId,
             _historyOverlayConversationId,
             PendingShellActivationConversationId,
-            ResolveHydrationLoadedMessageCount()));
+            ResolveHydrationLoadedMessageCount()),
+            _localizer);
 
     private ChatConversationSurfaceProjection ResolveConversationSurfaceProjection()
         => _conversationSurfaceProjectionCoordinator.Project(new ChatConversationSurfaceStateInput(
@@ -657,7 +661,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             IsConnecting,
             IsInitializing,
             IsHydrating,
-            IsLayoutLoading,
             IsSessionSwitching,
             _sessionSwitchOverlayConversationId,
             _sessionSwitchPreviewConversationId,
@@ -801,10 +804,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ConversationHydrationPhase.FinalizingProjection => HydrationOverlayPhase.FinalizingProjection,
                 _ => HydrationOverlayPhase.None
             });
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
-    private bool _isLayoutLoading;
 
     [ObservableProperty]
     private bool _isTurnStatusVisible;
@@ -1322,6 +1321,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
+    private readonly IUiInteractionService? _uiInteractionService;
+    private readonly IAiContentReportLauncher? _aiContentReportLauncher;
 
     public ChatViewModel(
         IChatStore chatStore,
@@ -1339,6 +1340,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IConversationPreviewStore previewStore,
         ILogger<ChatViewModel> logger,
         IAcpMcpServerResolver mcpServerResolver,
+        IAcpRemoteSessionRecoveryContextResolver? remoteSessionRecoveryContextResolver = null,
         IConversationAttentionStore? conversationAttentionStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
         IConversationActivationCoordinator? conversationActivationCoordinator = null,
@@ -1359,13 +1361,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IConversationMutationPipeline? conversationMutationPipeline = null,
         IPlatformShellService? platformShell = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? uiInteractionService = null,
+        IAiContentReportLauncher? aiContentReportLauncher = null,
+        IShellLayoutMetricsSink? shellLayoutMetricsSink = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
         _localizer = localizer;
         _languageService = languageService;
+        _uiInteractionService = uiInteractionService;
+        _aiContentReportLauncher = aiContentReportLauncher;
+        _shellLayoutMetricsSink = shellLayoutMetricsSink;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
@@ -1382,7 +1390,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 chatStore,
                 chatConnectionStore,
                 NullLogger<ConversationActivationCoordinator>.Instance,
-                _conversationMutationPipeline);
+                _conversationMutationPipeline,
+                shellNavigationRuntimeState);
         _conversationActivationOrchestrator = conversationActivationOrchestrator
             ?? new ConversationActivationOrchestrator(NullLogger<ConversationActivationOrchestrator>.Instance);
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
@@ -1394,12 +1403,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _outgoingUserMessageProjector = new OutgoingUserMessageProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
+        _remoteSessionRecoveryContextResolver = remoteSessionRecoveryContextResolver
+            ?? new AcpRemoteSessionRecoveryContextResolver(
+                NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance);
         _conversationAttentionStore = conversationAttentionStore;
         _authoritativeConnectionResolver = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry);
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();
         _previewSnapshotWorkQueue = new SerialAsyncWorkQueue();
-        _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver());
-        _conversationSurfaceProjectionCoordinator = new ChatConversationSurfaceProjectionCoordinator();
+        _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver(), localizer);
+        _conversationSurfaceProjectionCoordinator = new ChatConversationSurfaceProjectionCoordinator(_localizer);
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
@@ -1414,7 +1426,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         NewSessionDraftModeOptions = new ReadOnlyObservableCollection<SessionModeViewModel>(_newSessionDraftModeOptions);
         NewSessionDraftModelOptions = new ReadOnlyObservableCollection<OptionValueViewModel>(_newSessionDraftModelOptions);
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
-        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
+        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator, _localizer);
         _authenticationCoordinator = new ChatAuthenticationCoordinator();
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _localSlashCommandSource = localSlashCommandSource ?? StaticSlashCommandSource.Empty;
@@ -1459,10 +1471,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _conversationActivationOutcomePublisher = new ConversationActivationOutcomePublisher(
             _shellNavigationRuntimeState,
             _uiDispatcher,
-            Logger,
             () => IsChatShellVisibleForRemoteUi,
-            _conversationActivationOrchestrator.IsLatestActivationVersion,
-            SetError);
+            _conversationActivationOrchestrator.IsLatestActivationVersion);
         _localTerminalPanelCoordinator = localTerminalPanelCoordinator;
         ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
         ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
@@ -1492,6 +1502,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _shellNavigationRuntimeState.PropertyChanged += OnShellNavigationRuntimeStatePropertyChanged;
         }
         _planEntriesProjectionCoordinator.Observe(PlanEntries, RaisePlanEntryDerivedPropertyNotifications);
+        _ = PublishTaskOverviewContentAvailabilityAsync();
 
         IsConversationListLoading = _conversationWorkspace.IsConversationListLoading;
         ConversationListVersion = _conversationWorkspace.ConversationListVersion;
@@ -1517,6 +1528,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void OnShellNavigationRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))
+        {
+            NotifySessionActivationFailureProjectionChanged();
+        }
+
         if (e.PropertyName == nameof(IShellNavigationRuntimeState.CurrentShellContent)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.PendingShellContent)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.DesiredSessionId)
@@ -1632,7 +1648,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             // Mini window failure is usually due to missing MSIX context or Skia runtime issues.
             Logger.LogError(ex, "Failed to open mini window");
-            ShowTransientNotificationToast("Failed to open mini window. Please ensure you are running as an MSIX package.");
+            ShowTransientNotificationToast(Localize(
+                "ChatMiniWindow_OpenFailed",
+                "Failed to open mini window. Please ensure you are running as an MSIX package."));
         }
     }
 
@@ -1646,7 +1664,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to return to main window");
-            ShowTransientNotificationToast("Failed to return to main window.");
+            ShowTransientNotificationToast(Localize(
+                "ChatMiniWindow_ReturnFailed",
+                "Failed to return to main window."));
         }
     }
 
@@ -1672,7 +1692,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             NotifyComposerProjectionChanged();
             RaiseOverlayStateChanged();
+            PendingAskUserRequest?.ReprojectLocalizedState();
+            ReprojectConversationOperationFailureMessage();
+            // SessionActivationFailureMessage re-localizes from snapshot resource identity on get.
+            NotifySessionActivationFailureProjectionChanged();
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+
+            // New-session draft lives on the connection store and is not part of the chat-store
+            // projection. Re-apply it so held draft fault messages re-run NormalizeNewSessionDraftError
+            // against the current language (except English identity sentinels).
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1719,6 +1749,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         if (e.PropertyName == nameof(AcpProfilesViewModel.SelectedProfile))
         {
+            if (_acpProfiles.IsCatalogProjectionInProgress)
+            {
+                return;
+            }
+
             if (_suppressProfileSyncFromStore)
             {
                 return;
@@ -1893,8 +1928,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     partial void OnIsSessionSwitchingChanged(bool value) => RaiseOverlayStateChanged();
 
-    partial void OnIsLayoutLoadingChanged(bool value) => RaiseOverlayStateChanged();
-
     partial void OnPlanEntriesChanged(ObservableCollection<PlanEntryViewModel> value)
     {
         _planEntriesProjectionCoordinator.Observe(value, RaisePlanEntryDerivedPropertyNotifications);
@@ -1907,12 +1940,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(TaskOverviewVisibleChanges));
         OnPropertyChanged(nameof(TaskOverviewHiddenChangeCount));
         OnPropertyChanged(nameof(ShouldShowTaskOverviewMoreChanges));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
     }
 
     private void OnCurrentSessionIdChanged(string? value)
     {
         RefreshCurrentSessionDisplayName();
         NotifyComposerProjectionChanged();
+        NotifySessionActivationFailureProjectionChanged();
+        NotifyConversationOperationFailureProjectionChanged();
 
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -1943,58 +1979,30 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task SelectAndHydrateConversationAsync(string? conversationId)
+    private async Task<bool> SelectAndHydrateConversationAsync(string? conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             await _chatStore.Dispatch(new SelectConversationAction(null));
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-            return;
+            return true;
         }
 
-        var keepLayoutLoading = false;
-        await SetLayoutLoadingAsync(true).ConfigureAwait(false);
-        try
+        var activationResult = await _conversationActivationCoordinator
+            .ActivateSessionAsync(conversationId)
+            .ConfigureAwait(false);
+        if (!activationResult.Succeeded)
         {
-            var activationResult = await _conversationActivationCoordinator
-                .ActivateSessionAsync(conversationId)
-                .ConfigureAwait(false);
-            if (!activationResult.Succeeded)
-            {
-                return;
-            }
-
-            if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-
-            // Re-evaluate if we should keep loading after projection applied.
-            // Layout loading is only a bridge until the active conversation is fully
-            // projected. Once hydration/pending replay has ended, visible transcript
-            // content should not keep the layout overlay alive on its own.
-            keepLayoutLoading = IsSessionActive && (IsHydrating || IsRemoteHydrationPending);
+            return false;
         }
-        finally
+
+        if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
         {
-            if (!keepLayoutLoading)
-            {
-                await SetLayoutLoadingAsync(false).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private Task SetLayoutLoadingAsync(bool value)
-    {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            IsLayoutLoading = value;
-            return Task.CompletedTask;
+            return false;
         }
 
-        return PostToUiAsync(() => IsLayoutLoading = value);
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        return true;
     }
 
     private Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)
@@ -2198,31 +2206,67 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public Task RestoreConversationsAsync()
         => RestoreAsync();
 
-    private Task EnsureConversationWorkspaceRestoredAsync(CancellationToken cancellationToken = default)
+    Task<bool> IChatRuntimeInitialization.RestoreConversationsAsync()
+        => EnsureConversationWorkspaceRestoredAsync();
+
+    Task IChatRuntimePersistence.FlushPendingStateAsync(CancellationToken cancellationToken)
+        => _conversationWorkspace.FlushPendingSaveAsync(cancellationToken);
+
+    private Task<bool> EnsureConversationWorkspaceRestoredAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         lock (_restoreSync)
         {
-            _restoreTask ??= RestoreConversationsCoreAsync();
+            if (_restoreCompleted)
+            {
+                return Task.FromResult(true);
+            }
+
+            if (_restoreTask is null || _restoreTask.IsCompleted)
+            {
+                _restoreTask = RestoreConversationsCoreAsync();
+            }
+
             return _restoreTask;
         }
     }
 
-    private async Task RestoreConversationsCoreAsync()
+    private async Task<bool> RestoreConversationsCoreAsync()
     {
         try
         {
-            await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
+            if (!_conversationWorkspace.IsRecoveryDocumentRestored)
+            {
+                await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
+            }
+
+            if (!_conversationWorkspace.IsRecoveryDocumentRestored)
+            {
+                return false;
+            }
+
             await RestoreConversationBindingsFromWorkspaceAsync().ConfigureAwait(false);
             var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
             await BootstrapSelectedProfileFromWorkspaceAsync(restoredConversationId).ConfigureAwait(false);
-            await SelectAndHydrateConversationAsync(restoredConversationId).ConfigureAwait(false);
+            var activeConversationRestored = await SelectAndHydrateConversationAsync(restoredConversationId).ConfigureAwait(false);
             await TryAutoConnectAsync().ConfigureAwait(false);
+            if (!activeConversationRestored)
+            {
+                return false;
+            }
+
+            lock (_restoreSync)
+            {
+                _restoreCompleted = true;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
             Logger.LogDebug(ex, "Conversation workspace restore failed");
+            return false;
         }
     }
 
@@ -2332,42 +2376,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
         NotifyComposerProjectionChanged();
-    }
-
-    private static ConversationMessageSnapshot ToSnapshot(ChatMessageViewModel vm)
-    {
-        return new ConversationMessageSnapshot
-        {
-            Id = vm.Id,
-            Timestamp = vm.Timestamp.ToUniversalTime(),
-            IsOutgoing = vm.IsOutgoing,
-            ContentType = vm.ContentType ?? string.Empty,
-            Title = vm.Title ?? string.Empty,
-            TextContent = vm.TextContent ?? string.Empty,
-            ImageData = vm.ImageData ?? string.Empty,
-            ImageMimeType = vm.ImageMimeType ?? string.Empty,
-            AudioData = vm.AudioData ?? string.Empty,
-            AudioMimeType = vm.AudioMimeType ?? string.Empty,
-            ProtocolMessageId = null,
-            ToolCallId = vm.ToolCallId,
-            ToolCallKind = vm.ToolCallKind,
-            ToolCallStatus = vm.ToolCallStatus,
-            ToolCallJson = vm.ToolCallJson,
-            ToolCallRawInputJson = vm.ToolCallRawInputJson,
-            ToolCallRawOutputJson = vm.ToolCallRawOutputJson,
-            ToolCallContent = CloneToolCallContentList(vm.ToolCallContent),
-            ToolCallLocations = CloneToolCallLocationList(vm.ToolCallLocations),
-            PlanEntry = vm.PlanEntry != null
-                ? new ConversationPlanEntrySnapshot
-                {
-                    Content = vm.PlanEntry.Content,
-                    Status = vm.PlanEntry.Status,
-                    Priority = vm.PlanEntry.Priority
-                }
-                : null,
-            ModeId = vm.ModeId
-        };
     }
 
     private ChatMessageViewModel CreateProjectedMessageFromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
@@ -2393,6 +2403,35 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         ConfigureMessageCommands(message);
         ApplyPendingInlinePermissionProjection(message);
+        ProjectMediaPlaceholderBody(message);
+    }
+
+    private void ProjectMediaPlaceholderBody(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        // Image/audio directional rows only render DisplayBodyText until dedicated media
+        // templates ship. Always reproject the placeholder at the UI boundary so language
+        // reloads and older empty-TextContent snapshots inherit CoreStrings.
+        if (string.Equals(message.ContentType, "image", StringComparison.Ordinal))
+        {
+            var projected = ResolveMediaPlaceholder("image", message.ImageMimeType);
+            if (!string.Equals(message.TextContent, projected, StringComparison.Ordinal))
+            {
+                message.TextContent = projected;
+            }
+
+            return;
+        }
+
+        if (string.Equals(message.ContentType, "audio", StringComparison.Ordinal))
+        {
+            var projected = ResolveMediaPlaceholder("audio", message.AudioMimeType);
+            if (!string.Equals(message.TextContent, projected, StringComparison.Ordinal))
+            {
+                message.TextContent = projected;
+            }
+        }
     }
 
     private void ConfigureMessageCommands(ChatMessageViewModel message)
@@ -2401,8 +2440,72 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         message.ConfigureShellActions(
             _platformShell.CopyToClipboardAsync,
-            _platformShell.OpenUriAsync);
+            _platformShell.OpenUriAsync,
+            _aiContentReportLauncher?.CanReport == true && _uiInteractionService is not null
+                ? ReportAiContentAsync
+                : null);
     }
+
+    private async Task ReportAiContentAsync(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (_aiContentReportLauncher is null || _uiInteractionService is null)
+        {
+            return;
+        }
+
+        var title = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmTitle",
+            "Report AI content");
+        var body = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmMessage",
+            "This opens your email app with a report draft that includes the selected AI content. Continue?");
+        var primary = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmPrimary",
+            "Open email");
+        var close = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmClose",
+            "Cancel");
+
+        var confirmed = await _uiInteractionService.ConfirmAsync(title, body, primary, close).ConfigureAwait(true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var opened = await _aiContentReportLauncher.TryOpenReportAsync(
+            appName: "SalmonEgg",
+            appVersion: ResolveAppVersion(),
+            protocolVersion: AcpProtocolVersion.Default.ToString(),
+            contentExcerpt: message.DisplayBodyText).ConfigureAwait(true);
+
+        if (!opened)
+        {
+            await _uiInteractionService.ShowInfoAsync(
+                ResolveLocalizerText(
+                    "AiContentReport_OpenFailed",
+                    "Could not open the email app. Check that an email app is configured, then try again.")).ConfigureAwait(true);
+        }
+    }
+
+    private string ResolveLocalizerText(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private static string ResolveAppVersion()
+        => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+            ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+            ?? "unknown";
 
     private void ApplyPendingInlinePermissionProjection(ChatMessageViewModel message)
     {
@@ -2435,23 +2538,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private static bool MatchesSnapshot(ChatMessageViewModel viewModel, ConversationMessageSnapshot snapshot)
     {
         return string.Equals(viewModel.Id, snapshot.Id, StringComparison.Ordinal)
-            && viewModel.Timestamp == snapshot.Timestamp.ToLocalTime()
+            && ConversationMessageTimestamp.InstantEquals(
+                    viewModel.Timestamp,
+                    ConversationMessageTimestamp.ToDisplayLocal(snapshot.Timestamp))
             && viewModel.IsOutgoing == snapshot.IsOutgoing
             && string.Equals(viewModel.ContentType ?? string.Empty, snapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.Title ?? string.Empty, snapshot.Title ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.TextContent ?? string.Empty, snapshot.TextContent ?? string.Empty, StringComparison.Ordinal)
+            && string.Equals(viewModel.ProtocolMessageId, snapshot.ProtocolMessageId, StringComparison.Ordinal)
             && string.Equals(viewModel.ImageData ?? string.Empty, snapshot.ImageData ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.ImageMimeType ?? string.Empty, snapshot.ImageMimeType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.AudioData ?? string.Empty, snapshot.AudioData ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.AudioMimeType ?? string.Empty, snapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallId, snapshot.ToolCallId, StringComparison.Ordinal)
-            && viewModel.ToolCallKind == snapshot.ToolCallKind
-            && viewModel.ToolCallStatus == snapshot.ToolCallStatus
+            && viewModel.ToolCallKind == ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind)
+            && viewModel.ToolCallStatus == ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus)
             && string.Equals(viewModel.ToolCallJson, snapshot.ToolCallJson, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallRawInputJson, snapshot.ToolCallRawInputJson, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallRawOutputJson, snapshot.ToolCallRawOutputJson, StringComparison.Ordinal)
-            && ToolCallContentSnapshots.SequenceEquals(viewModel.ToolCallContent, snapshot.ToolCallContent)
-            && ToolCallContentSnapshots.LocationsSequenceEquals(viewModel.ToolCallLocations, snapshot.ToolCallLocations)
+            && ToolCallContentSnapshots.SequenceEquals(viewModel.ToolCallContent, ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent))
+            && ToolCallContentSnapshots.LocationsSequenceEquals(viewModel.ToolCallLocations, ToolCallContentSnapshots.FromDomainLocations(snapshot.ToolCallLocations))
             && string.Equals(viewModel.ModeId, snapshot.ModeId, StringComparison.Ordinal)
             && PlanEntryMatches(viewModel.PlanEntry, snapshot.PlanEntry);
     }
@@ -2469,8 +2575,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         return string.Equals(viewModel.Content ?? string.Empty, snapshot.Content ?? string.Empty, StringComparison.Ordinal)
-            && viewModel.Status == snapshot.Status
-            && viewModel.Priority == snapshot.Priority;
+            && viewModel.Status == ConversationPlanWire.ParseStatus(snapshot.Status)
+            && viewModel.Priority == ConversationPlanWire.ParsePriority(snapshot.Priority);
     }
 
     private static ConversationMessageSnapshot CloneSnapshot(ConversationMessageSnapshot snapshot)
@@ -2494,8 +2600,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             ToolCallJson = snapshot.ToolCallJson,
             ToolCallRawInputJson = snapshot.ToolCallRawInputJson,
             ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson,
-            ToolCallContent = CloneToolCallContentList(snapshot.ToolCallContent),
-            ToolCallLocations = CloneToolCallLocationList(snapshot.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallLocations),
             PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
@@ -2508,12 +2614,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return null;
         }
 
-        return new ConversationPlanEntrySnapshot
-        {
-            Content = snapshot.Content,
-            Status = snapshot.Status,
-            Priority = snapshot.Priority
-        };
+        return ConversationPlanWire.CloneDomain(snapshot);
     }
 
     private static bool IsThinkingPlaceholder(ConversationMessageSnapshot message)
@@ -2709,29 +2810,64 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public async Task EnsureAcpProfilesLoadedAsync()
     {
-        if (_acpProfiles.Profiles.Count > 0)
-        {
-            return;
-        }
+        await EnsureAcpProfilesLoadedCoreAsync().ConfigureAwait(false);
+    }
 
+    async Task<bool> IChatRuntimeInitialization.InitializeAcpProfilesAsync()
+        => await EnsureAcpProfilesLoadedCoreAsync().ConfigureAwait(false);
+
+    private async Task<bool> EnsureAcpProfilesLoadedCoreAsync()
+    {
         try
         {
-            await _acpProfiles.RefreshAsync().ConfigureAwait(false);
-            _suppressAcpProfileConnect = true;
-            _suppressStoreProfileProjection = true;
-            try
+            if (!await _acpProfiles.EnsureProfilesLoadedAsync().ConfigureAwait(false))
             {
-                SelectedAcpProfile = _acpProfiles.SelectedProfile;
+                return false;
             }
-            finally
+
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            await PostToUiAsync(() =>
             {
-                _suppressStoreProfileProjection = false;
-                _suppressAcpProfileConnect = false;
-            }
+                _suppressAcpProfileConnect = true;
+                _suppressStoreProfileProjection = true;
+                try
+                {
+                    if (_hasPendingSelectedProfileIntent)
+                    {
+                        return;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId))
+                    {
+                        ApplySelectedProfileFromStore(connectionState.SelectedProfileIntentId);
+                        return;
+                    }
+
+                    if (_acpProfiles.SelectedProfile is { } defaultProfile)
+                    {
+                        ApplyDefaultSelectedProfileProjection(defaultProfile);
+                        return;
+                    }
+
+                    _isSelectedAcpProfileDefaultProjection = true;
+                    ApplyResolvedProfileSelection(
+                        selectedProfile: null,
+                        suppressStoreProjection: true,
+                        suppressProfileSyncFromStore: false);
+                }
+                finally
+                {
+                    _suppressStoreProfileProjection = false;
+                    _suppressAcpProfileConnect = false;
+                }
+            }).ConfigureAwait(false);
+
+            return true;
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to ensure ACP profiles are loaded.");
+            return false;
         }
     }
 
@@ -2804,10 +2940,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         var profileId = connectionState.SelectedProfileIntentId;
         if (string.IsNullOrWhiteSpace(profileId))
         {
-            profileId = _preferences.LastSelectedServerId;
-            if (!string.IsNullOrWhiteSpace(profileId))
+            var preferredProfileId = _preferences.LastSelectedServerId;
+            if (!string.IsNullOrWhiteSpace(preferredProfileId))
             {
-                await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profileId)).ConfigureAwait(false);
+                await _chatConnectionStore
+                    .Dispatch(new InitializeSelectedProfileIntentAction(preferredProfileId))
+                    .ConfigureAwait(false);
+                connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+                profileId = connectionState.SelectedProfileIntentId;
             }
         }
 
@@ -2848,26 +2988,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 return;
             }
 
-            _suppressAcpProfileConnect = true;
-            _suppressStoreProfileProjection = true;
-            try
+            var latestConnectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (!string.Equals(
+                latestConnectionState.SelectedProfileIntentId,
+                profileId,
+                StringComparison.Ordinal))
             {
-                await PostToUiAsync(() =>
-                {
-                    var selectedProfile = ResolveLoadedProfileSelection(config);
-                    SelectedAcpProfile = selectedProfile;
-                    _acpProfiles.SelectedProfile = selectedProfile;
-                }).ConfigureAwait(false);
-            }
-            finally
-            {
-                _suppressStoreProfileProjection = false;
-                _suppressAcpProfileConnect = false;
+                return;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await ConnectToAcpProfileCoreAsync(config, cancellationToken);
-            attemptCommitted = true;
+            attemptCommitted = await ConnectToAcpProfileCoreAsync(
+                    config,
+                    cancellationToken,
+                    updateSelectedProfileIntent: false)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -2913,20 +3048,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private Task ConnectToAcpProfileAsync(ServerConfiguration? profile)
         => ConnectToAcpProfileCoreAsync(profile, CancellationToken.None);
 
-    private async Task ConnectToAcpProfileCoreAsync(ServerConfiguration? profile, CancellationToken cancellationToken)
+    private async Task<bool> ConnectToAcpProfileCoreAsync(
+        ServerConfiguration? profile,
+        CancellationToken cancellationToken,
+        bool updateSelectedProfileIntent = true)
     {
         if (profile == null)
         {
-            return;
+            return false;
         }
 
         var ambientConnectionRequest = BeginAmbientConnectionRequest(cancellationToken);
         try
         {
-            await ConnectToAcpProfileCoreAsync(
+            return await ConnectToAcpProfileCoreAsync(
                     profile,
                     AcpConnectionContext.None,
-                    ambientConnectionRequest.Token)
+                    ambientConnectionRequest.Token,
+                    updateSelectedProfileIntent)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ambientConnectionRequest.IsCancellationRequested)
@@ -2946,20 +3085,36 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
     }
 
-    private async Task ConnectToAcpProfileCoreAsync(
+    private async Task<bool> ConnectToAcpProfileCoreAsync(
         ServerConfiguration? profile,
         AcpConnectionContext connectionContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool updateSelectedProfileIntent = true)
     {
         if (profile == null)
         {
-            return;
+            return false;
         }
 
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
+            if (updateSelectedProfileIntent)
+            {
+                await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+                if (!string.Equals(
+                    connectionState.SelectedProfileIntentId,
+                    profile.Id,
+                    StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             var scopedSink = CreateScopedAcpCoordinatorSink(connectionContext);
             await PostToUiAsync(() =>
@@ -2995,7 +3150,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsCurrentConnectionContext(connectionContext))
             {
-                return;
+                return false;
             }
 
             await PostToUiAsync(() =>
@@ -3011,6 +3166,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ShowTransportConfigPanel = false;
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
+            return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -3070,13 +3226,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _authenticationCoordinator.ClearAuthenticationRequirement(_acpConnectionCoordinator);
             _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
 
-            if (string.IsNullOrWhiteSpace(CurrentSessionId))
-            {
-                var sessionId = Guid.NewGuid().ToString("N");
-                await _sessionManager.CreateSessionAsync(sessionId, GetActiveSessionCwdOrDefault()).ConfigureAwait(false);
-                await ActivateConversationAsync(sessionId).ConfigureAwait(false);
-            }
-
+            // Applying a transport configuration does not start a conversation. It used to open one
+            // here, but the cwd it passed was read from the current conversation while this branch only
+            // runs when there is none, so it could only ever create a session with no working
+            // directory: a session that cannot be resolved to a project and has to be corrected later.
+            // Starting a conversation is its own explicit action, and that path collects a cwd.
             ShowTransportConfigPanel = false;
         }
         catch (OperationCanceledException)
@@ -3317,6 +3471,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         public string? GetSessionCwdOrDefault(string conversationId) => _owner.GetSessionCwdOrDefault(conversationId);
 
+        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CanMutate()
+                ? _owner.GetSessionRecoveryFallbackAsync(conversationId, cancellationToken)
+                : ValueTask.FromResult(default(AcpRemoteSessionRecoveryFallback));
+        }
+
+        public Task ApplyConversationRemoteSessionInfoAsync(
+            string conversationId,
+            AgentSessionInfo sessionInfo,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CanMutate()
+                ? _owner.ApplyConversationRemoteSessionInfoAsync(conversationId, sessionInfo, cancellationToken)
+                : Task.CompletedTask;
+        }
+
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -3394,7 +3569,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public Task SetConnectedAsync(string? profileId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetConnectionInstanceIdAsync(string? connectionInstanceId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetAuthenticationRequiredAsync(
+            string? hintMessage,
+            string? hintResourceKey = null,
+            string? hintFallback = null,
+            object[]? hintFormatArgs = null,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -3471,7 +3651,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try { _remoteConnectionRecoveryCts?.Dispose(); } catch { }
         try { _disposeCts.Dispose(); } catch { }
         try { _conversationActivationOrchestrator.Dispose(); } catch { }
-        try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
+        try
+        {
+            var terminalDisposal = _localTerminalPanelCoordinator?.DisposeAsync().AsTask();
+            _ = terminalDisposal?.ContinueWith(
+                static (task, state) => ((ILogger)state!).LogDebug(
+                    task.Exception,
+                    "Local terminal panel coordinator async disposal faulted during ChatViewModel dispose."),
+                Logger,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
+        catch
+        {
+        }
         try { _remoteConversationActivationGate.Dispose(); } catch { }
         try { _newSessionDraftGate.Dispose(); } catch { }
 
@@ -3500,6 +3694,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ShouldShowTaskOverviewVisiblePlanList));
         OnPropertyChanged(nameof(TaskOverviewHiddenPlanCount));
         OnPropertyChanged(nameof(ShouldShowTaskOverviewMorePlanItems));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
+    }
+
+    private async Task PublishTaskOverviewContentAvailabilityAsync()
+    {
+        if (_shellLayoutMetricsSink is null)
+        {
+            return;
+        }
+
+        var version = Interlocked.Increment(ref _taskOverviewContentAvailabilityVersion);
+        var hasAvailableContent = TaskOverviewState.HasContent && ShouldShowActiveConversationRoot;
+        try
+        {
+            await _shellLayoutMetricsSink.ReportRightPanelContentAvailability(hasAvailableContent, version);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Task overview content availability projection failed.");
+        }
     }
 
     private void RefreshTaskOverviewChanges(

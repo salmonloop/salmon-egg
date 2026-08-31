@@ -1,3 +1,6 @@
+using SalmonEgg.Presentation.Core.Resources;
+using Microsoft.Extensions.Localization;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -16,22 +19,26 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class ShortcutsSettingsViewModelTests
 {
     [Fact]
-    public async Task Constructor_SeedsOnlySupportedEditableActions()
+    public async Task Activate_SeedsOnlySupportedEditableActions()
     {
         var preferences = await CreatePreferencesAsync(new AppSettings());
 
-        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer);
+        viewModel.Activate();
 
         Assert.Collection(
             viewModel.Shortcuts,
             first =>
             {
                 Assert.Equal("new_session", first.ActionId);
+                Assert.Equal(localizer["ShortcutAction_NewSession"], first.Name);
                 Assert.Equal("Ctrl+N", first.DefaultGesture);
             },
             second =>
             {
                 Assert.Equal("search", second.ActionId);
+                Assert.Equal(localizer["ShortcutAction_Search"], second.Name);
                 Assert.Equal("Ctrl+K", second.DefaultGesture);
             });
         Assert.DoesNotContain(viewModel.Shortcuts, shortcut => shortcut.ActionId == "toggle_right_pane");
@@ -39,7 +46,7 @@ public sealed class ShortcutsSettingsViewModelTests
     }
 
     [Fact]
-    public async Task Constructor_AppliesSavedOverridesForSupportedActionsOnly()
+    public async Task Activate_AppliesSavedOverridesForSupportedActionsOnly()
     {
         var preferences = await CreatePreferencesAsync(new AppSettings
         {
@@ -51,6 +58,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Alt+K", searchShortcut.Gesture);
@@ -64,6 +72,7 @@ public sealed class ShortcutsSettingsViewModelTests
         var preferences = await CreatePreferencesAsync(new AppSettings());
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Shortcuts.Record.search", searchShortcut.RecorderAutomationId);
@@ -81,6 +90,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         viewModel.RestoreDefaultsCommand.Execute(null);
 
@@ -102,11 +112,93 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         viewModel.Preferences.KeyboardShortcutsEnabled = false;
 
         Assert.False(preferences.KeyboardShortcutsEnabled);
         Assert.Equal("Alt+K", preferences.GetKeyBinding("search"));
+    }
+
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsActionDisplayNames()
+    {
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var languageService = new RecordingAppLanguageService();
+        var localizer = new MutableCoreStringLocalizer(new Dictionary<string, string>
+        {
+            ["ShortcutAction_NewSession"] = "New session",
+            ["ShortcutAction_Search"] = "Search",
+            ["Shortcuts_InvalidGestureMessage"] = "Invalid gesture",
+            ["Shortcuts_ConflictMessage"] = "Conflict: {0}",
+            ["Shortcuts_ConflictSeparator"] = ", "
+        });
+
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer, languageService);
+        viewModel.Activate();
+
+        Assert.Equal("New session", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+        Assert.Equal("Search", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);
+
+        localizer.Set("ShortcutAction_NewSession", "新建会话");
+        localizer.Set("ShortcutAction_Search", "搜索");
+        languageService.RaiseLanguageChanged();
+
+        Assert.Equal("新建会话", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+        Assert.Equal("搜索", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);
+    }
+
+    [Fact]
+    public async Task Activate_CalledTwice_DoesNotDuplicateSeededActions()
+    {
+        // VM 是 singleton，页面反复 Loaded 会反复 Activate；幂等门控须保证不重复 seed。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+
+        viewModel.Activate();
+        var seededCount = viewModel.Shortcuts.Count;
+        viewModel.Activate();
+
+        Assert.Equal(seededCount, viewModel.Shortcuts.Count);
+    }
+
+    [Fact]
+    public async Task Deactivate_ThenLanguageChanged_DoesNotReprojectNames()
+    {
+        // Deactivate 必须对称解绑 LanguageChanged；解绑后语言事件不得再改投影，避免 singleton 泄漏订阅。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var languageService = new RecordingAppLanguageService();
+        var localizer = new MutableCoreStringLocalizer(new Dictionary<string, string>
+        {
+            ["ShortcutAction_NewSession"] = "New session",
+            ["ShortcutAction_Search"] = "Search"
+        });
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer, languageService);
+        viewModel.Activate();
+
+        viewModel.Deactivate();
+        localizer.Set("ShortcutAction_NewSession", "新建会话");
+        languageService.RaiseLanguageChanged();
+
+        Assert.Equal("New session", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+    }
+
+    [Fact]
+    public async Task Reactivate_ReprojectsLatestSavedOverrides()
+    {
+        // Deactivate 后再 Activate（页面重进）必须从 preferences 重新投影最新覆盖值，
+        // 不得停留在上次激活时的旧快照。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
+        viewModel.Deactivate();
+
+        preferences.SetKeyBinding("search", "Alt+K");
+        viewModel.Activate();
+
+        var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
+        Assert.Equal("Alt+K", searchShortcut.Gesture);
     }
 
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(AppSettings settings)
@@ -128,10 +220,58 @@ public sealed class ShortcutsSettingsViewModelTests
             Mock.Of<IAppLanguageService>(),
             capabilities.Object,
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await preferences.InitializeAsync();
         return preferences;
+    }
+
+    private sealed class RecordingAppLanguageService : IAppLanguageService
+    {
+        public bool IsSupported => true;
+        public string CurrentLanguageTag => "en";
+        public event EventHandler? LanguageChanged;
+
+        public Task ApplyLanguageOverrideAsync(string languageTag) => Task.CompletedTask;
+
+        public void RaiseLanguageChanged() => LanguageChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private sealed class MutableCoreStringLocalizer : IStringLocalizer<CoreStrings>
+    {
+        private readonly Dictionary<string, string> _values;
+
+        public MutableCoreStringLocalizer(Dictionary<string, string> values)
+        {
+            _values = values;
+        }
+
+        public void Set(string key, string value) => _values[key] = value;
+
+        public LocalizedString this[string name]
+            => _values.TryGetValue(name, out var value)
+                ? new LocalizedString(name, value, resourceNotFound: false)
+                : new LocalizedString(name, name, resourceNotFound: true);
+
+        public LocalizedString this[string name, params object[] arguments]
+        {
+            get
+            {
+                var localized = this[name];
+                if (localized.ResourceNotFound)
+                {
+                    return localized;
+                }
+
+                return new LocalizedString(name, string.Format(localized.Value, arguments), resourceNotFound: false);
+            }
+        }
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
+            => _values.Select(pair => new LocalizedString(pair.Key, pair.Value, resourceNotFound: false));
     }
 }

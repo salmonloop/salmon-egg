@@ -24,6 +24,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
     private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
+    private bool _hasAttemptedProfileLoad;
+    private bool _hasCompletedProfileLoad;
     private bool _disposed;
 
     // ── Dependencies for per-profile item ViewModels ─────────────────────────
@@ -60,6 +62,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         set => SetSelectedProfileId(value?.ProfileId);
     }
 
+    internal bool IsCatalogProjectionInProgress { get; private set; }
+
     [ObservableProperty]
     private bool _isLoading;
 
@@ -68,6 +72,14 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _savedCurrentConnectionNoticeMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isOperationErrorOpen;
+
+    [ObservableProperty]
+    private string _operationErrorMessage = string.Empty;
+
+    private string? _operationErrorResourceKey;
 
     /// <summary>
     /// One <see cref="AgentProfileItemViewModel"/> per profile, each carrying its own
@@ -126,11 +138,11 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     public async Task RefreshIfEmptyAsync()
     {
-        if (Profiles.Count == 0)
-        {
-            await RefreshAsync().ConfigureAwait(false);
-        }
+        await EnsureProfilesLoadedAsync().ConfigureAwait(false);
     }
+
+    internal Task<bool> EnsureProfilesLoadedAsync()
+        => RefreshWithGateAsync(skipIfLoaded: true);
 
     private Task MarshalToUiAsync(Action action)
     {
@@ -167,8 +179,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             return;
         }
 
-        SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-            ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+        SavedCurrentConnectionNoticeMessage = Localize(
+            CurrentConnectionSavedNoticeMessageKey,
+            CurrentConnectionSavedNoticeMessageFallback);
         IsSavedCurrentConnectionNoticeOpen = true;
     }
 
@@ -178,48 +191,115 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         SavedCurrentConnectionNoticeMessage = string.Empty;
     }
 
+    public void DismissOperationError()
+    {
+        IsOperationErrorOpen = false;
+        OperationErrorMessage = string.Empty;
+        _operationErrorResourceKey = null;
+    }
+
+    private Task ShowOperationErrorAsync(string resourceKey, string fallback)
+    {
+        return MarshalToUiAsync(() =>
+        {
+            _operationErrorResourceKey = resourceKey;
+            OperationErrorMessage = Localize(resourceKey, fallback);
+            IsOperationErrorOpen = true;
+        });
+    }
+
+    public void ReportOperationError(string resourceKey, string fallback)
+    {
+        // Shared Error InfoBar entry point for profile/connection failures that do not own
+        // their own dialog chrome (item commands and legacy settings connection helpers).
+        _ = ShowOperationErrorAsync(resourceKey, fallback);
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
     public async Task RefreshAsync()
     {
+        await RefreshWithGateAsync(skipIfLoaded: false).ConfigureAwait(false);
+    }
+
+    private async Task<bool> RefreshWithGateAsync(bool skipIfLoaded)
+    {
         await _refreshSemaphore.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            await SetIsLoadingAsync(true).ConfigureAwait(false);
-
-            var configs = await _configurationService.ListConfigurationsAsync().ConfigureAwait(false);
-            var ordered = configs.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-
-            await MarshalToUiAsync(() =>
+            if (skipIfLoaded
+                && (_hasCompletedProfileLoad
+                    || (!_hasAttemptedProfileLoad && await HasProjectedProfilesAsync().ConfigureAwait(false))))
             {
-                var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
+                _hasCompletedProfileLoad = true;
+                return true;
+            }
 
-                RebuildProfileItems(ordered);
+            _hasAttemptedProfileLoad = true;
+            _hasCompletedProfileLoad = false;
+            try
+            {
+                await SetIsLoadingAsync(true).ConfigureAwait(false);
 
-                Profiles.Clear();
-                foreach (var cfg in ordered)
+                var configs = await _configurationService.ListConfigurationsAsync().ConfigureAwait(false);
+                var ordered = configs.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+                await MarshalToUiAsync(() =>
                 {
-                    Profiles.Add(cfg);
-                }
+                    IsCatalogProjectionInProgress = true;
+                    try
+                    {
+                        DismissOperationError();
+                        var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
 
-                var nextSelectedProfileId = ResolveAvailableProfileId(preferredSelectedProfileId);
-                if (!SetSelectedProfileId(nextSelectedProfileId))
-                {
-                    NotifySelectedProfileProjectionChanged();
-                }
-            }).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to refresh server profiles");
+                        RebuildProfileItems(ordered);
+
+                        Profiles.Clear();
+                        foreach (var cfg in ordered)
+                        {
+                            Profiles.Add(cfg);
+                        }
+
+                        var nextSelectedProfileId = ResolveAvailableProfileId(preferredSelectedProfileId);
+                        if (!SetSelectedProfileId(nextSelectedProfileId))
+                        {
+                            NotifySelectedProfileProjectionChanged();
+                        }
+                    }
+                    finally
+                    {
+                        IsCatalogProjectionInProgress = false;
+                    }
+                }).ConfigureAwait(false);
+                _hasCompletedProfileLoad = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to refresh server profiles");
+                await ShowOperationErrorAsync(
+                    "AcpProfiles_RefreshFailed",
+                    "Failed to refresh agent profiles. Please try again later.").ConfigureAwait(false);
+                return false;
+            }
+            finally
+            {
+                await SetIsLoadingAsync(false).ConfigureAwait(false);
+            }
         }
         finally
         {
-            await SetIsLoadingAsync(false).ConfigureAwait(false);
             _refreshSemaphore.Release();
         }
+    }
+
+    private async Task<bool> HasProjectedProfilesAsync()
+    {
+        var hasProfiles = false;
+        await MarshalToUiAsync(() => hasProfiles = Profiles.Count > 0).ConfigureAwait(false);
+        return hasProfiles;
     }
 
     [RelayCommand]
@@ -255,6 +335,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete server profile {ProfileId}", profile.Id);
+            await ShowOperationErrorAsync(
+                "AcpProfiles_DeleteFailed",
+                "Failed to delete the agent profile. Please try again later.").ConfigureAwait(false);
         }
     }
 
@@ -274,6 +357,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save server profile {ProfileId}", profile.Id);
+            await ShowOperationErrorAsync(
+                "AcpProfiles_SaveFailed",
+                "Failed to save the agent profile. Please try again later.").ConfigureAwait(false);
         }
     }
 
@@ -355,7 +441,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             _connectionCommands,
             _loggerFactory.CreateLogger<AgentProfileItemViewModel>(),
             _dispatcher,
-            _localizer);
+            _localizer,
+            ReportOperationError);
     }
 
     private Task SelectByIdAsync(string? id)
@@ -430,6 +517,25 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SelectedProfileItem));
     }
 
+    private const string CurrentConnectionSavedNoticeMessageKey =
+        "AgentProfileEditor_CurrentConnectionSavedNoticeMessage";
+
+    private const string CurrentConnectionSavedNoticeMessageFallback =
+        "Settings saved. The current connection still uses the old configuration until reconnect.";
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
     private void OnLanguageChanged(object? sender, EventArgs e)
         => _ = MarshalToUiAsync(ReprojectLocalizedState);
 
@@ -437,8 +543,14 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     {
         if (IsSavedCurrentConnectionNoticeOpen)
         {
-            SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-                ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+            SavedCurrentConnectionNoticeMessage = Localize(
+                CurrentConnectionSavedNoticeMessageKey,
+                CurrentConnectionSavedNoticeMessageFallback);
+        }
+
+        if (IsOperationErrorOpen && !string.IsNullOrWhiteSpace(_operationErrorResourceKey))
+        {
+            OperationErrorMessage = Localize(_operationErrorResourceKey, OperationErrorMessage);
         }
 
         foreach (var item in ProfileItems)

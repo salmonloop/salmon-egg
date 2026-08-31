@@ -83,7 +83,8 @@ servers:
         var yaml = @"schema_version: 1
 theme: Dark
 is_animation_enabled: false
-launch_on_startup: true";
+launch_on_startup: true
+system_notifications_enabled: true";
         var deserializer = YamlSerialization.CreateDeserializer();
 
         var result = deserializer.Deserialize<AppSettingsYamlV1>(yaml);
@@ -92,5 +93,6 @@ launch_on_startup: true";
         Assert.Equal("Dark", result.Theme);
         Assert.False(result.IsAnimationEnabled);
         Assert.True(result.LaunchOnStartup);
+        Assert.True(result.SystemNotificationsEnabled);
     }
 }

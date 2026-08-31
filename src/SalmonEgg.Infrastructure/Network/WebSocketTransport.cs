@@ -21,7 +21,10 @@ namespace SalmonEgg.Infrastructure.Network
         private readonly ILogger _logger;
         private readonly ProxyConfig _proxyConfiguration;
         private readonly Func<Uri, ProxyConfig, IWebsocketClient> _clientFactory;
-        private IWebsocketClient? _client;
+        // Replaced on connect and cleared on teardown, both of which can run while a send is in
+        // flight. Volatile so a send sees the current handle, and every path that uses it more than
+        // once captures it into a local first so it cannot be swapped mid-decision.
+        private volatile IWebsocketClient? _client;
         private IDisposable? _clientSubscriptions;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
@@ -73,7 +76,8 @@ namespace SalmonEgg.Infrastructure.Network
                 throw new ArgumentException("URL cannot be null or empty", nameof(url));
             }
 
-            if (_client != null && _client.IsRunning)
+            var existingClient = _client;
+            if (existingClient != null && existingClient.IsRunning)
             {
                 _logger.Warning("WebSocket is already connected to {Url}", url);
                 return;
@@ -82,7 +86,7 @@ namespace SalmonEgg.Infrastructure.Network
             try
             {
                 var stopwatch = Stopwatch.StartNew();
-                _stateSubject.OnNext(TransportState.Connecting);
+                PublishState(TransportState.Connecting);
                 _logger.Information(
                     "Connecting to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
                     url,
@@ -146,7 +150,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 if (!connectionStateProjectedByEvent)
                 {
-                    _stateSubject.OnNext(TransportState.Connected);
+                    PublishState(TransportState.Connected);
                 }
 
                 _logger.Information("Successfully connected to WebSocket server at {Url}", url);
@@ -154,7 +158,7 @@ namespace SalmonEgg.Infrastructure.Network
             catch (Exception ex)
             {
                 DisposeClient();
-                _stateSubject.OnNext(TransportState.Error);
+                PublishState(TransportState.Error);
                 _logger.Error(
                     ex,
                     "Failed to connect to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
@@ -168,7 +172,8 @@ namespace SalmonEgg.Infrastructure.Network
         /// <inheritdoc />
         public async Task DisconnectAsync()
         {
-            if (_client == null || !_client.IsRunning)
+            var client = _client;
+            if (client == null || !client.IsRunning)
             {
                 _logger.Warning("WebSocket is not connected");
                 return;
@@ -176,17 +181,17 @@ namespace SalmonEgg.Infrastructure.Network
 
             try
             {
-                _stateSubject.OnNext(TransportState.Disconnecting);
+                PublishState(TransportState.Disconnecting);
                 _logger.Information("Disconnecting from WebSocket server");
 
-                await _client.Stop(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "Client disconnecting");
+                await client.Stop(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "Client disconnecting");
 
-                _stateSubject.OnNext(TransportState.Disconnected);
+                PublishState(TransportState.Disconnected);
                 _logger.Information("Successfully disconnected from WebSocket server");
             }
             catch (Exception ex)
             {
-                _stateSubject.OnNext(TransportState.Error);
+                PublishState(TransportState.Error);
                 _logger.Error(ex, "Error while disconnecting from WebSocket server");
                 throw;
             }
@@ -200,7 +205,11 @@ namespace SalmonEgg.Infrastructure.Network
                 throw new ArgumentException("Message cannot be null or empty", nameof(message));
             }
 
-            if (_client == null || !_client.IsRunning)
+            // One capture for the whole send: teardown can null the field at any point, and re-reading
+            // it would let the guard, the send and the fatality decision disagree about which client
+            // they are talking about.
+            var client = _client;
+            if (client == null || !client.IsRunning)
             {
                 throw new InvalidOperationException("WebSocket is not connected. Call ConnectAsync first.");
             }
@@ -208,13 +217,48 @@ namespace SalmonEgg.Infrastructure.Network
             try
             {
                 _logger.Debug("Sending message: {Message}", message);
-                _client.Send(message);
+                client.Send(message);
                 await Task.CompletedTask; // Make method async-compatible
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to send message: {Message}", message);
+                // A fatal send failure (the connection is actually gone) must be reflected in the
+                // transport state so downstream IsConnected projections flip and in-flight requests
+                // are faulted rather than hanging until timeout. A transient failure leaves the
+                // connection intact. Mirrors StreamableHttpTransport.MarkTransportErrored.
+                if (IsFatalSendFailure(ex, client))
+                {
+                    PublishState(TransportState.Error);
+                }
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// A send fault is fatal only when the underlying connection is gone: a WebSocketException
+        /// from the closed socket, or the client no longer running. Other failures (transient
+        /// library-internal contention, a still-running client) leave the connection usable.
+        /// </summary>
+        /// <remarks>
+        /// Takes the client the send actually used. A concurrent teardown can dispose it, which makes
+        /// reading its state throw; that only confirms the connection is gone, and the throw must not
+        /// escape here because it would replace the send failure the caller needs to see.
+        /// </remarks>
+        private static bool IsFatalSendFailure(Exception ex, IWebsocketClient client)
+        {
+            if (ex is System.Net.WebSockets.WebSocketException)
+            {
+                return true;
+            }
+
+            try
+            {
+                return !client.IsRunning;
+            }
+            catch (ObjectDisposedException)
+            {
+                return true;
             }
         }
 
@@ -239,13 +283,13 @@ namespace SalmonEgg.Infrastructure.Network
                         }
 
                         _logger.Debug("Received message: {Message}", text);
-                        _messagesSubject.OnNext(text);
+                        PublishMessage(text);
                     }
                 }),
                 client.ReconnectionHappened.Subscribe(info =>
                 {
                     _logger.Information("WebSocket reconnection happened: {Type}", info.Type);
-                    _stateSubject.OnNext(TransportState.Connected);
+                    PublishState(TransportState.Connected);
                 }),
                 client.DisconnectionHappened.Subscribe(info =>
                 {
@@ -258,11 +302,11 @@ namespace SalmonEgg.Infrastructure.Network
 
                     if (info.Type != DisconnectionType.Exit)
                     {
-                        _stateSubject.OnNext(TransportState.Error);
+                        PublishState(TransportState.Error);
                     }
                     else
                     {
-                        _stateSubject.OnNext(TransportState.Disconnected);
+                        PublishState(TransportState.Disconnected);
                     }
                 }));
         }
@@ -287,16 +331,18 @@ namespace SalmonEgg.Infrastructure.Network
                 return;
             }
 
+            // 先立标志再拆流，与 StreamableHttpTransport.Dispose 一致。反过来的话，标志尚未立起
+            // 而流已经完成，这中间另一个线程的发送/断开会通过守卫、发到已完成的流上。本文件的
+            // 测试盯不到这个跨线程窗口（它在同一线程内 Dispose），窗口本身仍然真实存在。
+            _disposed = true;
+
             if (disposing)
             {
                 try
                 {
-                    // Disconnect if still connected
-                    if (_client != null && _client.IsRunning)
-                    {
-                        _ = DisconnectAsync();
-                    }
-
+                    // Dispose 是同步契约:直接释放客户端(Websocket.Client 的 Dispose 会关闭底层连接),
+                    // 不再 fire-and-forget 优雅断开与资源释放竞态;需要 NormalClosure 优雅关闭的
+                    // 调用方应先 await DisconnectAsync()。
                     DisposeClient();
 
                     // Complete the subjects
@@ -313,8 +359,34 @@ namespace SalmonEgg.Infrastructure.Network
                     _logger.Error(ex, "Error during WebSocketTransport disposal");
                 }
             }
+        }
 
-            _disposed = true;
+        /// <summary>
+        /// 发布一次状态。流一旦拆掉就不再发——此时已无订阅者，硬发只会让
+        /// <see cref="ObjectDisposedException"/> 顶替调用方真正要看的失败原因。
+        /// 规则集中在这里，而不是散在每个发射点上。
+        /// </summary>
+        private void PublishState(TransportState state)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _stateSubject.OnNext(state);
+        }
+
+        /// <summary>
+        /// 转发一条收到的消息。与 <see cref="PublishState"/> 同理：流已拆则丢弃。
+        /// </summary>
+        private void PublishMessage(string message)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _messagesSubject.OnNext(message);
         }
 
         private void DisposeClient()

@@ -11,6 +11,8 @@ public sealed record NavPaneOpenIntentRequested(bool IsOpen, string Source) : Sh
 
 public sealed record ContentContextChanged(bool IsChatContext, long Version) : ShellLayoutAction;
 
+public sealed record RightPanelContentAvailabilityChanged(bool HasContent, long Version) : ShellLayoutAction;
+
 public sealed record ToggleRightPanelRequested(RightPanelMode TargetMode) : ShellLayoutAction;
 
 public sealed record ToggleBottomPanelRequested : ShellLayoutAction;

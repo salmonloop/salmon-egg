@@ -98,22 +98,29 @@ public sealed class ConfigProjectionReloadCoordinator : IDisposable
     private bool IsLatestReload(long version) => version == Volatile.Read(ref _reloadVersion);
 
     private bool IsUnderConfigRoot(string path)
+        => IsPathWithinRoot(_appData.ConfigRootPath, path);
+
+    internal static bool IsPathWithinRoot(string rootPath, string path)
     {
-        if (string.IsNullOrWhiteSpace(path))
+        if (string.IsNullOrWhiteSpace(rootPath) || string.IsNullOrWhiteSpace(path))
         {
             return false;
         }
 
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        var root = Path.GetFullPath(_appData.ConfigRootPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var target = Path.GetFullPath(path)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return string.Equals(target, root, comparison) ||
-               target.StartsWith(root + Path.DirectorySeparatorChar, comparison) ||
-               target.StartsWith(root + Path.AltDirectorySeparatorChar, comparison);
+        try
+        {
+            var relativePath = Path.GetRelativePath(
+                Path.GetFullPath(rootPath),
+                Path.GetFullPath(path));
+            return string.Equals(relativePath, ".", StringComparison.Ordinal)
+                   || (!Path.IsPathRooted(relativePath)
+                       && !string.Equals(relativePath, "..", StringComparison.Ordinal)
+                       && !relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                       && !relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 }

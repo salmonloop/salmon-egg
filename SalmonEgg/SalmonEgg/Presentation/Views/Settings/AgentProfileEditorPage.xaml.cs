@@ -2,7 +2,6 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
@@ -29,17 +28,15 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         private set => SetValue(PageTitleProperty, value);
     }
 
-    private readonly IConfigurationService _configurationService;
     private readonly AcpProfilesViewModel _profiles;
 
     public AgentProfileEditorPage()
     {
         ViewModel = App.ServiceProvider.GetRequiredService<ConfigurationEditorViewModel>();
-        _configurationService = App.ServiceProvider.GetRequiredService<IConfigurationService>();
         _profiles = App.ServiceProvider.GetRequiredService<AcpProfilesViewModel>();
 
         InitializeComponent();
-        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
         UpdateBreadcrumb();
     }
 
@@ -54,29 +51,20 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         {
             // Returning to this page should not keep any old input.
             ViewModel.LoadBlankConfiguration();
-            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
             UpdateBreadcrumb();
             return;
         }
 
         if (e.Parameter is AgentProfileEditorArgs args && args.IsEditing && !string.IsNullOrWhiteSpace(args.ProfileId))
         {
-            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "编辑");
-            var config = await _configurationService.LoadConfigurationAsync(args.ProfileId);
-            if (config != null)
-            {
-                ViewModel.LoadConfiguration(config);
-            }
-            else
-            {
-                ViewModel.LoadBlankConfiguration();
-            }
-
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "Edit");
+            await ViewModel.LoadConfigurationAsync(args.ProfileId);
             UpdateBreadcrumb();
             return;
         }
 
-        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
         ViewModel.LoadBlankConfiguration();
         UpdateBreadcrumb();
     }

@@ -47,7 +47,7 @@ try {
     await ensureAcpProfilesReady(page);
     await clickProfileConnectionToggle(page, profileName);
     const initializeRequest = await waitForInitializeWithDiagnostics(acpServer, page, profileName);
-    expectNoAdvertisedFileSystemCapability(initializeRequest);
+    expectStableV1CapabilityBoundary(initializeRequest);
 
     await navigateToSettingsSection(
       page,
@@ -93,10 +93,28 @@ try {
   await acpServer.close();
 }
 
-function expectNoAdvertisedFileSystemCapability(initializeRequest) {
-  const clientCapabilities = initializeRequest?.params?.clientCapabilities;
+function expectStableV1CapabilityBoundary(initializeRequest) {
+  const params = initializeRequest?.params;
+  if (!params || typeof params !== "object") {
+    throw new Error(`Initialize request did not include params: ${JSON.stringify(initializeRequest)}`);
+  }
+
+  if (params.protocolVersion !== 1) {
+    throw new Error(`Production initialize must negotiate stable ACP protocolVersion 1: ${JSON.stringify(initializeRequest)}`);
+  }
+
+  if (!params.clientInfo || typeof params.clientInfo !== "object") {
+    throw new Error(`ACP v1 initialize did not include clientInfo: ${JSON.stringify(initializeRequest)}`);
+  }
+
+  const clientCapabilities = params.clientCapabilities;
   if (!clientCapabilities || typeof clientCapabilities !== "object") {
-    throw new Error(`Initialize request did not include clientCapabilities: ${JSON.stringify(initializeRequest)}`);
+    throw new Error(`ACP v1 initialize did not include clientCapabilities: ${JSON.stringify(initializeRequest)}`);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(params, "info")
+      || Object.prototype.hasOwnProperty.call(params, "capabilities")) {
+    throw new Error(`Production ACP v1 initialize must not include ACP v2 info/capabilities fields: ${JSON.stringify(initializeRequest)}`);
   }
 
   if (Object.prototype.hasOwnProperty.call(clientCapabilities, "fs")) {

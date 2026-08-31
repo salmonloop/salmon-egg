@@ -2,5 +2,29 @@
   <PropertyGroup>
     <!-- Suppress SDK preview banner to keep build output clean -->
     <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+
+    <!-- MinVer 6.0.0 treats an empty MinVerTagPrefix as "ignore every tag", so the v* namespace
+         must be declared here. The ACP SDK project overrides it with acp-sdk-v for its own line. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
+
+  <!-- Shared release identity for the GUI and the CLI. The single source of truth is the git tag:
+       MinVer derives the version from the latest tag reachable from the commit being built, so a
+       release is created by pushing a tag and never by editing a file. Projects that do not
+       reference MinVer never run the MinVer target, and an AfterTargets hook on a target that does
+       not exist is silently inert, so this derive target is harmless everywhere else.
+       SalmonEggPackageVersion is the four-part MSIX form (Major.Minor.Build.Revision): the Store
+       requires four parts, so the revision digit is fixed at 0. Windows Installer (MSI) only
+       accepts the first three parts, and its consumers read SalmonEggDisplayVersion instead. -->
+  <Target Name="SalmonEggDeriveReleaseIdentity" AfterTargets="MinVer">
+    <PropertyGroup>
+      <SalmonEggDisplayVersion Condition="'$(SalmonEggDisplayVersion)' == ''">$(MinVerMajor).$(MinVerMinor).$(MinVerPatch)</SalmonEggDisplayVersion>
+      <SalmonEggPackageVersion Condition="'$(SalmonEggPackageVersion)' == ''">$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
+      <!-- Unconditional on purpose: MinVer itself sets AssemblyVersion to Major.0.0.0, so a
+           Condition="'$(AssemblyVersion)' == ''" would never fire. About/diagnostics/telemetry read
+           GetName().Version, which must report the shipped version, not MinVer's binding-safe major. -->
+      <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
+      <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>
+    </PropertyGroup>
+  </Target>
 </Project>

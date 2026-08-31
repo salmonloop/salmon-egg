@@ -60,19 +60,74 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewsCodeBehind_SessionDrivenAutoScrollUsesAttachedOnlyHelper()
+    public void ChatViewsCodeBehind_DelegateHostReadyActivationToCoreController()
     {
         var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
 
-        Assert.Contains("TryIssueTranscriptScrollRequestIfAttached();", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("TryIssueTranscriptScrollRequestIfAttached();", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n                {\n                    TryIssueTranscriptScrollRequest();\n                }\n                TryIssueTranscriptScrollRequest();", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                TryIssueTranscriptScrollRequest();\n            }\n            TryIssueTranscriptScrollRequest();", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("ApplyCurrentViewportStateIfAttached();", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("ApplyCurrentViewportStateIfAttached();", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n                {\n                    ApplyCurrentViewportState();\n                }\n                ApplyCurrentViewportState();", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                ApplyCurrentViewportState();\n            }\n            ApplyCurrentViewportState();", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryResumeAfterOverlay(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryResumeAfterOverlay(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryActivateAfterLoad(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryActivateAfterLoad(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.OnConversationChanged(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.OnConversationChanged(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreViewportForWarmResume", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreViewportForWarmResume", miniChatViewCodeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewsCodeBehind_LoadActivationRequiresNativeHostWithoutDispatcherGuess()
+    {
+        var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var chatActivation = ExtractSection(
+            chatViewCodeBehind,
+            "private void TryActivateViewportAfterLoad()",
+            "private void UpdateTranscriptViewportAutomationState()");
+        var miniActivation = ExtractSection(
+            miniChatViewCodeBehind,
+            "private void TryActivateViewportAfterLoad()",
+            "private void OnMessagesListPointerPressed");
+
+        foreach (var activation in new[] { chatActivation, miniActivation })
+        {
+            Assert.Contains("_transcriptViewportHost is null", activation, StringComparison.Ordinal);
+            Assert.Contains("_viewportController.TryActivateAfterLoad(", activation, StringComparison.Ordinal);
+            Assert.DoesNotContain("DispatcherQueue", activation, StringComparison.Ordinal);
+            Assert.DoesNotContain("_viewportController.OnConversationChanged(", activation, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ChatViewsCodeBehind_DoesNotRetainLegacyViewportShimSurface()
+    {
+        foreach (var path in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
+        })
+        {
+            var code = LoadText(path);
+
+            Assert.DoesNotContain("OnMessagesAppended(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("MarkProjectionRestoreQueued()", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("MarkDetachedViewportInteractionStarted()", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("StopProgrammaticScroll", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowDetached", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowAttached", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("IsViewReady:", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("IsViewportReady:", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("HasLastItemContainerGenerated(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_restoreDetachedViewportAfterOverlay", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_restoreDetachedViewportConversationId", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_wasOverlayVisible", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_resumeViewportCoordinatorAfterOverlayPending", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("SuspendForOverlay(", code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -115,10 +170,16 @@ public sealed class ChatViewXamlTests
     {
         var xaml = LoadChatViewXaml();
 
-        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Visibility=\"{x:Bind ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock AutomationProperties.AutomationId=\"ChatView.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border AutomationProperties.AutomationId=\"ChatView.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock AutomationProperties.AutomationId=\"ChatView.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border AutomationProperties.AutomationId=\"ChatView.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.HasError", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -126,9 +187,16 @@ public sealed class ChatViewXamlTests
     {
         var xaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
 
-        Assert.Contains("AutomationProperties.AutomationId=\"MiniChat.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock AutomationProperties.AutomationId=\"MiniChat.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border AutomationProperties.AutomationId=\"MiniChat.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock AutomationProperties.AutomationId=\"MiniChat.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border AutomationProperties.AutomationId=\"MiniChat.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.HasError", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -167,6 +235,54 @@ public sealed class ChatViewXamlTests
         Assert.DoesNotContain("ApplyNarrowSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyMediumSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyWideSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
+    public void ChatViewSessionHeader_DensifiesPaddingOnShortWindowHeights()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("x:Name=\"SessionHeaderHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderChrome\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionHeaderChrome.Padding\" Value=\"12,6\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionHeaderChrome.Padding\" Value=\"16,8\"", xaml, StringComparison.Ordinal);
+        // Compact is the short-height default in markup; comfortable restores prior chrome.
+        Assert.Contains("Padding=\"12,6\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        // Height VSM lives on ActiveConversationRoot so it can target the chrome Border.
+        Assert.True(
+            xaml.IndexOf("x:Name=\"ActiveConversationRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("SessionHeaderHeightStates", StringComparison.Ordinal));
+    }
+
+
+    [Fact]
+    public void ChatViewTranscript_DensifiesListPaddingOnShortWindowHeights()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("x:Name=\"TranscriptHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TranscriptHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TranscriptHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MessagesList.Padding\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MessagesList.Padding\" Value=\"20\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnStatusStrip.Margin\" Value=\"12,0,12,4\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionActivationFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ConversationOperationFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AskUserHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnStatusStrip.Margin\" Value=\"24,0,24,8\"", xaml, StringComparison.Ordinal);
+        // Compact short-height default in markup; comfortable restores prior transcript inset.
+        Assert.Contains("Padding=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"ActiveConversationRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("TranscriptHeightStates", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -226,22 +342,20 @@ public sealed class ChatViewXamlTests
         Assert.Contains("ViewChanged", hostCode, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ChatTranscriptViewport_ViewCodeUsesSharedControllerInsteadOfOwningOrchestrator()
+        [Fact]
+    public void ChatTranscriptViewport_ViewCodeUsesFollowControllerWithoutOwningOrchestrator()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
         var controllerCode = LoadText(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
 
-        Assert.Contains("TranscriptViewportController", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("TranscriptViewportController", miniChatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("TranscriptViewportOrchestrator", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("TranscriptViewportOrchestrator", miniChatViewCode, StringComparison.Ordinal);
-        Assert.Contains("TranscriptViewportOrchestrator", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Microsoft.UI.Xaml", controllerCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScrollViewer", controllerCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ListView", controllerCode, StringComparison.Ordinal);
     }
+
 
     [Fact]
     [Trait("Suite", "Smoke")]
@@ -305,6 +419,20 @@ public sealed class ChatViewXamlTests
         Assert.Contains("private int _nativeObservedCount;", itemsSourceCode, StringComparison.Ordinal);
         Assert.Contains("PublishNativeReset();", itemsSourceCode, StringComparison.Ordinal);
         Assert.Contains("if (_source.Count <= _nativeObservedCount)", itemsSourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatTranscriptItemsSource_DoesNotMaterializeViaSecondProjectionOwner()
+    {
+        // Architecture lock (AGENTS.md §5.6): CreateItem is not an authoritative owner.
+        // Reintroducing _source.CreateItem(...) in the ListView adapter forks VM identity
+        // from ChatTranscriptVirtualizedMessageCollection, which forces Replace→native Reset
+        // storms and blank mixed-template rows on Skia. Behavioral contracts live in
+        // TranscriptMaterializationIdentityTests; this only forbids the second owner path.
+        var itemsSourceCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptItemsSource.cs");
+
+        Assert.DoesNotContain("_source.CreateItem(", itemsSourceCode, StringComparison.Ordinal);
+        Assert.Contains("_source[index]", itemsSourceCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -590,8 +718,40 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("terminal.parser.registerCsiHandler", script, StringComparison.Ordinal);
         Assert.Contains("windowsPty", script, StringComparison.Ordinal);
+        Assert.Contains("const normalizedMode = nextMode === 'pseudoConsole' ? 'pseudoConsole' : 'pipe';", script, StringComparison.Ordinal);
+        Assert.Contains("terminal.options.convertEol = transportMode !== 'pseudoConsole';", script, StringComparison.Ordinal);
         Assert.DoesNotContain("replaceAll('\\u001b[?9001h'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("replaceAll('\\u001b[?9001l'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("transportMode = 'pseudoConsole';\n    applyTransportOptions();", script, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
+    public void ChatViewLoaded_DoesNotOwnProfileInitialization()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var methodStart = code.IndexOf("private void OnLoaded", StringComparison.Ordinal);
+        Assert.True(methodStart >= 0);
+        var methodEnd = code.IndexOf("private void OnUnloaded", methodStart, StringComparison.Ordinal);
+        Assert.True(methodEnd > methodStart);
+        var method = code.Substring(methodStart, methodEnd - methodStart);
+
+        Assert.DoesNotContain("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationStartupWorkflow", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatViewLoaded_DoesNotOwnConversationRestore()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var methodStart = code.IndexOf("private void OnLoaded", StringComparison.Ordinal);
+        Assert.True(methodStart >= 0);
+        var methodEnd = code.IndexOf("private void OnUnloaded", methodStart, StringComparison.Ordinal);
+        Assert.True(methodEnd > methodStart);
+        var method = code.Substring(methodStart, methodEnd - methodStart);
+
+        Assert.DoesNotContain("RestoreConversationsAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationStartupWorkflow", code, StringComparison.Ordinal);
     }
 
     private static string LoadChatViewXaml()

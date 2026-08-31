@@ -7,42 +7,43 @@ using SalmonEgg.Acp.Mcp;
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Session/New 方法的请求参数。
-    /// 用于创建新的会话。
+    /// Request parameters for the Session/New method.
+    /// Used to create a new session.
     /// </summary>
-    public class SessionNewParams
+    public sealed record SessionNewParams : AcpProtocolObject
     {
         /// <summary>
-        /// 会话的工作目录（必填）。
+        /// The working directory for the session (required).
         /// </summary>
         [JsonPropertyName("cwd")]
-        public string Cwd { get; set; } = string.Empty;
+        public string Cwd { get; init; } = string.Empty;
 
         /// <summary>
-        /// MCP 服务器配置列表（必填，根据协议要求为数组）。
+        /// List of MCP server configurations (required; the protocol requires this value to be an array).
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; set; } = new List<McpServer>();
+        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
 
         /// <summary>
-        /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
+        /// Additional working directories. When non-empty, the Agent is required to declare
+        /// sessionCapabilities.additionalDirectories.
         /// </summary>
         [JsonPropertyName("additionalDirectories")]
-        public List<string>? AdditionalDirectories { get; set; }
+        public List<string>? AdditionalDirectories { get; init; }
 
         /// <summary>
-        /// 创建新的 SessionNewParams 实例。
+        /// Creates a new SessionNewParams instance.
         /// </summary>
         public SessionNewParams()
         {
         }
 
         /// <summary>
-        /// 创建新的 SessionNewParams 实例。
+        /// Creates a new SessionNewParams instance.
         /// </summary>
-        /// <param name="cwd">工作目录</param>
-        /// <param name="mcpServers">MCP 服务器配置</param>
-        /// <param name="additionalDirectories">附加工作目录</param>
+        /// <param name="cwd">The working directory</param>
+        /// <param name="mcpServers">MCP server configurations</param>
+        /// <param name="additionalDirectories">Additional working directories</param>
         public SessionNewParams(
             string cwd,
             List<McpServer>? mcpServers = null,
@@ -55,45 +56,45 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Session/New 方法的响应。
-    /// Agent 对创建会话请求的响应。
+    /// Response for the Session/New method.
+    /// The Agent's response to a session creation request.
     /// </summary>
-    public class SessionNewResponse
+    public sealed record SessionNewResponse : AcpProtocolObject
     {
         /// <summary>
-        /// 新创建的会话 ID。
+        /// The ID of the newly created session.
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
+        /// Session mode state (optional; the ACP standard shape is a SessionModeState object).
         /// </summary>
         [JsonPropertyName("modes")]
         [JsonConverter(typeof(SessionModesStateJsonConverter))]
-        public SessionModesState? Modes { get; set; }
+        public SessionModesState? Modes { get; init; }
 
 
         /// <summary>
-        /// 可用的配置选项列表（可选）。
+        /// List of available configuration options (optional).
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; init; }
 
 
         /// <summary>
-        /// 创建新的 SessionNewResponse 实例。
+        /// Creates a new SessionNewResponse instance.
         /// </summary>
         public SessionNewResponse()
         {
         }
 
         /// <summary>
-        /// 创建新的 SessionNewResponse 实例。
+        /// Creates a new SessionNewResponse instance.
         /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="modes">可用模式列表</param>
-        /// <param name="configOptions">配置选项</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="modes">The list of available modes</param>
+        /// <param name="configOptions">Configuration options</param>
         public SessionNewResponse(string sessionId, SessionModesState? modes = null, List<ConfigOption>? configOptions = null)
         {
             SessionId = sessionId;
@@ -103,37 +104,37 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话模式状态（用于 Session/New 响应）。
+    /// Session mode state (used in the Session/New response).
     /// https://agentclientprotocol.com/protocol/session-modes
     /// </summary>
-    public class SessionModesState
+    public sealed record SessionModesState : AcpProtocolObject
     {
         /// <summary>
-        /// 当前模式 ID。
+        /// The current mode ID.
         /// </summary>
         [JsonPropertyName("currentModeId")]
-        public string CurrentModeId { get; set; } = string.Empty;
+        public string CurrentModeId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 可用模式列表。
+        /// The list of available modes.
         /// </summary>
         [JsonPropertyName("availableModes")]
-        public List<SessionMode> AvailableModes { get; set; } = new();
+        public List<SessionMode> AvailableModes { get; init; } = new();
     }
 
-    public class SessionMode
+    public sealed record SessionMode : AcpProtocolObject
     {
         [JsonPropertyName("id")]
-        public string Id { get; set; } = string.Empty;
+        public string Id { get; init; } = string.Empty;
 
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
         [JsonPropertyName("description")]
-        public string? Description { get; set; }
+        public string? Description { get; init; }
     }
 
-    public sealed class SessionModesStateJsonConverter : JsonConverter<SessionModesState?>
+    internal sealed class SessionModesStateJsonConverter : JsonConverter<SessionModesState?>
     {
         public override SessionModesState? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -176,12 +177,15 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             writer.WriteEndArray();
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
         private static SessionModesState ReadModesObject(ref Utf8JsonReader reader)
         {
-            var state = new SessionModesState();
+            string? currentModeId = null;
+            List<SessionMode>? availableModes = null;
+            Dictionary<string, object?>? meta = null;
             var hasCurrentModeId = false;
             var hasAvailableModes = false;
 
@@ -199,7 +203,12 @@ namespace SalmonEgg.Acp.Protocol
                         throw new JsonException("Session modes state is missing required availableModes.");
                     }
 
-                    return state;
+                    return new SessionModesState
+                    {
+                        CurrentModeId = currentModeId ?? string.Empty,
+                        AvailableModes = availableModes ?? new List<SessionMode>(),
+                        Meta = meta
+                    };
                 }
 
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -221,7 +230,7 @@ namespace SalmonEgg.Acp.Protocol
                             throw new JsonException("Session modes currentModeId must be a string.");
                         }
 
-                        state.CurrentModeId = reader.GetString() ?? string.Empty;
+                        currentModeId = reader.GetString() ?? string.Empty;
                         hasCurrentModeId = true;
                         break;
                     case "availableModes":
@@ -230,8 +239,11 @@ namespace SalmonEgg.Acp.Protocol
                             throw new JsonException("Session modes availableModes must be an array.");
                         }
 
-                        state.AvailableModes = ReadModesArray(ref reader);
+                        availableModes = ReadModesArray(ref reader);
                         hasAvailableModes = true;
+                        break;
+                    case "_meta":
+                        meta = ReadMetaObject(ref reader);
                         break;
                     default:
                         reader.Skip();
@@ -266,7 +278,10 @@ namespace SalmonEgg.Acp.Protocol
 
         private static SessionMode ReadModeObject(ref Utf8JsonReader reader)
         {
-            var mode = new SessionMode();
+            string? id = null;
+            string? name = null;
+            string? description = null;
+            Dictionary<string, object?>? meta = null;
             var hasId = false;
             var hasName = false;
 
@@ -284,7 +299,13 @@ namespace SalmonEgg.Acp.Protocol
                         throw new JsonException("Session mode is missing required name.");
                     }
 
-                    return mode;
+                    return new SessionMode
+                    {
+                        Id = id ?? string.Empty,
+                        Name = name ?? string.Empty,
+                        Description = description,
+                        Meta = meta
+                    };
                 }
 
                 if (reader.TokenType != JsonTokenType.PropertyName)
@@ -306,7 +327,7 @@ namespace SalmonEgg.Acp.Protocol
                             throw new JsonException("Session mode id must be a string.");
                         }
 
-                        mode.Id = reader.GetString() ?? string.Empty;
+                        id = reader.GetString() ?? string.Empty;
                         hasId = true;
                         break;
                     case "name":
@@ -315,7 +336,7 @@ namespace SalmonEgg.Acp.Protocol
                             throw new JsonException("Session mode name must be a string.");
                         }
 
-                        mode.Name = reader.GetString() ?? string.Empty;
+                        name = reader.GetString() ?? string.Empty;
                         hasName = true;
                         break;
                     case "description":
@@ -324,7 +345,10 @@ namespace SalmonEgg.Acp.Protocol
                             throw new JsonException("Session mode description must be a string or null.");
                         }
 
-                        mode.Description = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
+                        description = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
+                        break;
+                    case "_meta":
+                        meta = ReadMetaObject(ref reader);
                         break;
                     default:
                         reader.Skip();
@@ -350,8 +374,12 @@ namespace SalmonEgg.Acp.Protocol
                 writer.WriteNull("description");
             }
 
+            AcpMetaJson.Write(writer, mode.Meta);
             writer.WriteEndObject();
         }
+
+        private static Dictionary<string, object?>? ReadMetaObject(ref Utf8JsonReader reader)
+            => AcpMetaJson.ReadValue(ref reader);
 
         private static bool ShouldWriteNull(JsonSerializerOptions options)
         {

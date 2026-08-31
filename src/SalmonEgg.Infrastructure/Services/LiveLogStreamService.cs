@@ -155,12 +155,20 @@ public sealed class LiveLogStreamService : ILiveLogStreamService
 
             var builder = new StringBuilder();
             var buffer = new byte[4096];
+            // Decode across chunk boundaries with a stateful Decoder so multi-byte
+            // code points split across reads are reassembled instead of being
+            // corrupted into replacement characters. Any trailing partial sequence
+            // at end-of-stream is flushed as-is (UTF-8 REPLACEMENT char), matching
+            // the prior behavior for a truncated final byte.
+            var decoder = Utf8.GetDecoder();
             int bytesRead;
 
             while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
                         .ConfigureAwait(false)) > 0)
             {
-                builder.Append(Utf8.GetString(buffer, 0, bytesRead));
+                var chars = new char[Utf8.GetCharCount(buffer, 0, bytesRead)];
+                var charCount = decoder.GetChars(buffer, 0, bytesRead, chars, 0);
+                builder.Append(chars, 0, charCount);
             }
 
             return (builder.ToString(), stream.Position);
@@ -192,6 +200,11 @@ public sealed class LiveLogStreamService : ILiveLogStreamService
 
             var maxBytesToRead = Math.Min(stream.Length, maxCharacters * 4L);
             var startOffset = Math.Max(0, stream.Length - maxBytesToRead);
+            // Align the tail start to a UTF-8 leading byte so a multi-byte code
+            // point is not split at the read boundary. A UTF-8 continuation byte
+            // has the 10xxxxxx bit pattern; walk forward past any such bytes
+            // that belong to a code point started before the offset.
+            startOffset = AlignToUtf8LeadingByte(stream, startOffset);
             stream.Seek(startOffset, SeekOrigin.Begin);
 
             var buffer = new byte[maxBytesToRead];
@@ -216,4 +229,35 @@ public sealed class LiveLogStreamService : ILiveLogStreamService
             return string.Empty;
         }
     }
+
+    private static long AlignToUtf8LeadingByte(FileStream stream, long offset)
+    {
+        if (offset <= 0)
+        {
+            return 0;
+        }
+
+        // Skip up to 3 continuation bytes (10xxxxxx) so the read begins on a
+        // leading byte of a UTF-8 code point. 3 is the max trailing-byte count
+        // for a 4-byte UTF-8 sequence. ReadByte() returns -1 at end-of-stream.
+        var probe = offset;
+        var maxSkip = Math.Min(3L, stream.Length - offset);
+        while (maxSkip > 0)
+        {
+            stream.Seek(probe, SeekOrigin.Begin);
+            var first = stream.ReadByte();
+            if (first < 0 || !IsUtf8ContinuationByte(first))
+            {
+                break;
+            }
+
+            probe++;
+            maxSkip--;
+        }
+
+        return probe;
+    }
+
+    private static bool IsUtf8ContinuationByte(int value)
+        => (value & 0xC0) == 0x80;
 }

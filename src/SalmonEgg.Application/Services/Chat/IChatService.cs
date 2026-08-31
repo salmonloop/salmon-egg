@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -14,9 +13,11 @@ namespace SalmonEgg.Application.Services.Chat
 {
     /// <summary>
     /// Chat 服务接口
-    /// 提供与 ACP 协议相关的聊天功能，包括会话管理、消息发送、权限处理等
+    /// 提供与 ACP 协议相关的聊天功能，包括会话管理、消息发送、权限处理等。
+    /// 实现持有 ACP 事件订阅,释放契约是接口的一部分:装饰器必须转发 Dispose,
+    /// 否则 delayed-load 等包装路径会永久泄漏事件订阅。
     /// </summary>
-    public interface IChatService
+    public interface IChatService : IDisposable
     {
         /// <summary>
         /// 当前会话 ID
@@ -151,7 +152,7 @@ namespace SalmonEgg.Application.Services.Chat
         /// <summary>
         /// 取消会话
         /// </summary>
-        Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params);
+        Task CancelSessionAsync(SessionCancelParams @params);
 
         /// <summary>
         /// 执行认证（当 Agent 在 initialize 响应中返回 authMethods 时）。

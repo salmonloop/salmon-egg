@@ -291,7 +291,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         Assert.True(
             WaitUntil(
-                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase"),
+                () => session.IsFocusWithinAutomationId("StartView.Suggestion.ReportGuidance"),
                 TimeSpan.FromSeconds(3)),
             $"Keyboard Up did not return from the start prompt box to the first hero suggestion."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
@@ -650,6 +650,34 @@ public sealed class ShellFocusedActivationSmokeTests
                 failurePrefix: "Virtual gamepad Y moved focus away from the main chat input after stopping voice input.",
                 bootLog: appData.ReadBootLogTail());
         }
+    }
+
+    [Fact]
+    public void ChatInputArea_InputBox_VirtualGamepadX_DoesNotTriggerVoiceOrMoveFocus()
+    {
+        GuiTestGate.RequireEnabled();
+
+        const string promptText = "west face button should not change composer state";
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        using var gamepad = session.CreateConfiguredGamepadInput();
+
+        var inputBox = OpenChatSessionAndFocusInputBox(session, appData);
+        session.EnterText("InputBox", promptText);
+
+        gamepad.PressWestFaceButton();
+
+        AssertFocusRemainsOnInputBox(
+            session,
+            automationId: "InputBox",
+            timeout: TimeSpan.FromSeconds(2),
+            failurePrefix: "Virtual gamepad X moved focus away from the main chat input.",
+            bootLog: appData.ReadBootLogTail());
+        Assert.Equal(promptText, session.TryGetValue(inputBox));
+        Assert.False(
+            session.WaitUntilOnscreen("VoiceInputStopButton", TimeSpan.FromMilliseconds(500)),
+            $"Virtual gamepad X started voice input even though west face button has no app semantic action."
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     [Fact]

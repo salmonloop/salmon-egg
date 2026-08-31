@@ -4,7 +4,9 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap5 rescap">
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  IgnorableNamespaces="uap uap5 rescap com desktop">
 
   <Identity Name="SalmonEgg.SalmonEgg"
             Publisher="CN=0B694F0E-510C-433A-A6F7-1484D6A39E19"
@@ -55,6 +57,28 @@
                             Enabled="false"
                             DisplayName="Salmon Egg"/>
         </uap5:Extension>
+
+        <!--
+          Required for a tapped app notification to activate the app. Without both extensions the
+          notification is shown but clicking it does nothing when the app is not already running:
+          Windows launches notification activation through COM. The two GUIDs must stay identical.
+          See https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-quickstart
+        -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="7B2F1C94-3D5A-4E18-9A6C-1F0E5D3B8A27" />
+        </desktop:Extension>
+
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <!-- The argument marker is what lets the Windows App SDK recognize the payload as an
+                 AppNotification activation. -->
+            <com:ExeServer Executable="SalmonEgg.exe"
+                           DisplayName="Salmon Egg"
+                           Arguments="----AppNotificationActivated:">
+              <com:Class Id="7B2F1C94-3D5A-4E18-9A6C-1F0E5D3B8A27" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
       </Extensions>
     </Application>
   </Applications>

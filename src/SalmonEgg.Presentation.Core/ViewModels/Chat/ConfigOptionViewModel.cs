@@ -115,25 +115,25 @@ public partial class ConfigOptionViewModel : ObservableObject
     {
         get
         {
-            if (Value == null) return "未设置";
+            if (Value == null) return "Not set";
 
             return Value switch
             {
                 string s => s,
-                bool b => b ? "是" : "否",
+                bool b => b ? "Yes" : "No",
                 int i => i.ToString(),
                 double d => d.ToString("F2"),
                 JsonElement je => je.ValueKind switch
                 {
                     JsonValueKind.String => je.GetString() ?? "",
                     JsonValueKind.Number => je.GetDouble().ToString("F2"),
-                    JsonValueKind.True => "是",
-                    JsonValueKind.False => "否",
-                    JsonValueKind.Array => "[数组]",
-                    JsonValueKind.Object => "{对象}",
-                    _ => Value?.ToString() ?? "未设置"
+                    JsonValueKind.True => "Yes",
+                    JsonValueKind.False => "No",
+                    JsonValueKind.Array => "[Array]",
+                    JsonValueKind.Object => "{Object}",
+                    _ => Value?.ToString() ?? "Not set"
                 },
-                _ => Value?.ToString() ?? "未设置"
+                _ => Value?.ToString() ?? "Not set"
             };
         }
     }

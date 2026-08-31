@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Moq;
 using Serilog;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
@@ -19,6 +18,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Application.Tests.Services.Chat;
 
@@ -56,6 +56,9 @@ public sealed class ChatServiceSessionTests
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
+        // An update is only recorded against a session we established, so stand one up first.
+        sessionManager.GetOrCreateTrackingSlot("s1", Environment.CurrentDirectory);
+
         var update = new AgentMessageUpdate(new TextContentBlock("hello"));
         acpClient.Raise(
             c => c.SessionUpdateReceived += null,
@@ -63,9 +66,9 @@ public sealed class ChatServiceSessionTests
 
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
-        Assert.Single(session!.History);
-        Assert.IsType<TextContentBlock>(session.History[0].Content);
-        Assert.Equal("hello", ((TextContentBlock)session.History[0].Content!).Text);
+        Assert.Single(session!.SnapshotHistory());
+        Assert.Equal("text", session.SnapshotHistory()[0].ContentType);
+        Assert.Equal("hello", session.SnapshotHistory()[0].TextContent);
 
         sut.Dispose();
     }
@@ -88,6 +91,7 @@ public sealed class ChatServiceSessionTests
             new SessionUpdateEventArgs(
                 "current",
                 new PlanUpdate([new PlanEntry("current plan")])));
+        sessionManager.GetOrCreateTrackingSlot("background", Environment.CurrentDirectory);
         acpClient.Raise(
             c => c.SessionUpdateReceived += null,
             new SessionUpdateEventArgs(
@@ -95,8 +99,8 @@ public sealed class ChatServiceSessionTests
                 new PlanUpdate([new PlanEntry("background plan")])));
 
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
-        var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.History);
-        Assert.Equal("background plan", Assert.Single(backgroundEntry.Entries!).Content);
+        var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.SnapshotHistory());
+        Assert.Equal("background plan", Assert.Single(backgroundEntry.PlanEntries!).Content);
 
         sut.Dispose();
     }
@@ -134,16 +138,17 @@ public sealed class ChatServiceSessionTests
 
         // Seed cached history for the target session.
         await sessionManager.CreateSessionAsync("s2", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession("s2", s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateMessage(new TextContentBlock("cached"))));
+        sessionManager.GetSession("s2")!.AppendHistory(
+            SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached"));
 
-        var before = sessionManager.GetSession("s2")!.History.Count;
+        var before = sessionManager.GetSession("s2")!.SnapshotHistory().Count;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.LoadSessionAsync(new SessionLoadParams("s2", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("s1", sut.CurrentSessionId);
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
-        Assert.Equal(before, sessionManager.GetSession("s2")!.History.Count);
+        Assert.Equal(before, sessionManager.GetSession("s2")!.SnapshotHistory().Count);
 
         sut.Dispose();
     }
@@ -204,17 +209,15 @@ public sealed class ChatServiceSessionTests
             .ThrowsAsync(new InvalidOperationException("load failed"));
 
         await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession(
-            "remote-1",
-            session =>
-            {
-                session.Mode.CurrentModeId = "code";
-                session.Mode.AvailableModes =
-                [
-                    new SalmonEgg.Domain.Models.Session.SessionMode("code", "Code"),
-                    new SalmonEgg.Domain.Models.Session.SessionMode("plan", "Plan")
-                ];
-            });
+        sessionManager.GetSession("remote-1")!.SetMode(new SalmonEgg.Domain.Models.Session.SessionModeState
+        {
+            CurrentModeId = "code",
+            AvailableModes =
+            [
+                new SalmonEgg.Domain.Models.Session.SessionMode("code", "Code"),
+                new SalmonEgg.Domain.Models.Session.SessionMode("plan", "Plan")
+            ]
+        });
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
@@ -225,7 +228,7 @@ public sealed class ChatServiceSessionTests
             c => c.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
 
-        var mode = sessionManager.GetSession("remote-1")!.Mode;
+        var mode = sessionManager.GetSession("remote-1")!.SnapshotMode();
         Assert.Equal("plan", mode.CurrentModeId);
         Assert.Equal(2, mode.AvailableModes.Count);
 
@@ -298,7 +301,7 @@ public sealed class ChatServiceSessionTests
         Assert.NotNull(session);
         Assert.Equal(Environment.CurrentDirectory, session!.Cwd);
         Assert.Equal(SessionState.Active, session.State);
-        Assert.Empty(session.History);
+        Assert.Empty(session.SnapshotHistory());
 
         sut.Dispose();
     }
@@ -311,9 +314,8 @@ public sealed class ChatServiceSessionTests
         var sessionManager = new SessionManager();
 
         await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession(
-            "remote-1",
-            s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateMessage(new TextContentBlock("cached"))));
+        sessionManager.GetSession("remote-1")!.AppendHistory(
+            SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached"));
 
         acpClient.SetupGet(c => c.IsInitialized).Returns(true);
         acpClient.SetupGet(c => c.IsConnected).Returns(true);
@@ -329,8 +331,9 @@ public sealed class ChatServiceSessionTests
 
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
-        Assert.Single(session!.History);
-        Assert.Equal("cached", ((TextContentBlock)session.History[0].Content!).Text);
+        Assert.Single(session!.SnapshotHistory());
+        Assert.Equal("text", session.SnapshotHistory()[0].ContentType);
+        Assert.Equal("cached", session.SnapshotHistory()[0].TextContent);
 
         sut.Dispose();
     }
@@ -490,14 +493,13 @@ public sealed class ChatServiceSessionTests
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("s1", new CurrentModeUpdate
             {
-                ModeId = "code",
-                Title = "Code mode"
+                ModeId = "code"
             }));
 
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
-        Assert.Equal("code", session!.History.Single().ModeId);
+        Assert.Equal("code", session!.SnapshotHistory().Single().ModeId);
 
         sut.Dispose();
     }
@@ -525,12 +527,13 @@ public sealed class ChatServiceSessionTests
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        sessionManager.GetOrCreateTrackingSlot("background", Environment.CurrentDirectory);
         acpClient.Raise(
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("background", new CurrentModeUpdate("plan")));
 
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
-        var backgroundMode = sessionManager.GetSession("background")!.Mode;
+        var backgroundMode = sessionManager.GetSession("background")!.SnapshotMode();
         Assert.Equal("plan", backgroundMode.CurrentModeId);
         Assert.Empty(backgroundMode.AvailableModes);
 
@@ -577,7 +580,7 @@ public sealed class ChatServiceSessionTests
         Assert.Equal("Code", sut.CurrentMode?.CurrentMode?.Name);
         Assert.NotNull(modes);
         Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
-        Assert.Equal("code", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+        Assert.Equal("code", sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
 
         sut.Dispose();
     }
@@ -617,8 +620,8 @@ public sealed class ChatServiceSessionTests
         Assert.Equal("Plan", sut.CurrentMode?.CurrentMode?.Name);
         Assert.NotNull(modes);
         Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
-        Assert.Equal("plan", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
-        Assert.Equal(2, sessionManager.GetSession("s1")!.Mode.AvailableModes.Count);
+        Assert.Equal("plan", sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
+        Assert.Equal(2, sessionManager.GetSession("s1")!.SnapshotMode().AvailableModes.Count);
 
         sut.Dispose();
     }
@@ -654,8 +657,8 @@ public sealed class ChatServiceSessionTests
 
         Assert.Null(sut.CurrentMode);
         Assert.Null(modes);
-        Assert.Empty(sessionManager.GetSession("s1")!.Mode.AvailableModes);
-        Assert.Equal(string.Empty, sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+        Assert.Empty(sessionManager.GetSession("s1")!.SnapshotMode().AvailableModes);
+        Assert.Equal(string.Empty, sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
 
         sut.Dispose();
     }
@@ -690,6 +693,157 @@ public sealed class ChatServiceSessionTests
         Assert.Equal(StopReason.EndTurn, promptResponse.StopReason);
         Assert.NotNull(sessionManager.GetSession("remote-1"));
         Assert.Same(transport, acpClient.CreatedForTransport);
+    }
+
+    [Fact]
+    public async Task LoadSessionAsync_WhenSupersededByNewerLoad_FailedRollbackDoesNotClobberNewerCurrentSession()
+    {
+        // latest-intent 门控:旧 Load 在途被新 Load supersede(新请求已写入 _currentSessionId),
+        // 旧 Load 随后失败回滚时不得把当前指针写回旧值——否则 CurrentSessionId 指向错误会话。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+
+        var oldLoadReached = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowOldLoadToFail = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "old"), It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+            {
+                oldLoadReached.TrySetResult(null);
+                await allowOldLoadToFail.Task.ConfigureAwait(false);
+                throw new InvalidOperationException("old load failed");
+            });
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "new"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionLoadResponse());
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        // 旧 Load 启动并挂在协议往返里。
+        var oldLoad = sut.LoadSessionAsync(new SessionLoadParams("old", Environment.CurrentDirectory), CancellationToken.None);
+        await oldLoadReached.Task;
+
+        // 新 Load 接管,写入自己的 _currentSessionId。
+        await sut.LoadSessionAsync(new SessionLoadParams("new", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
+        Assert.Equal("new", sut.CurrentSessionId);
+
+        // 放行旧 Load 失败:回滚必须被 latest-intent 门控挡住,当前指针仍是 "new"。
+        allowOldLoadToFail.TrySetResult(null);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => oldLoad);
+
+        Assert.Equal("new", sut.CurrentSessionId);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SessionHistory_ReturnsSnapshot_NotLiveList()
+    {
+        // SessionHistory 必须返回快照:取用后 pump 继续追加不得影响已返回的列表,
+        // 也不得让 UI 枚举撞上并发修改。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "s1" });
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("s1", new AgentMessageUpdate(new TextContentBlock("first"))));
+
+        var snapshot = sut.SessionHistory;
+        var snapshotCount = snapshot.Count;
+
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("s1", new AgentMessageUpdate(new TextContentBlock("second"))));
+
+        // 先前拿到的快照不随后续追加变化。
+        Assert.Equal(snapshotCount, snapshot.Count);
+        // 新取一次能看到追加后的条目。
+        Assert.Equal(snapshotCount + 1, sut.SessionHistory.Count);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SessionManager_GetOrCreateTrackingSlot_IsAtomicUnderConcurrency()
+    {
+        // GetOrCreateTrackingSlot 原子:并发对同一 id 调用只建一个实例、都拿到同一引用、不抛。
+        var sessionManager = new SessionManager();
+        const string sessionId = "concurrent";
+
+        var start = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(async () =>
+            {
+                await start.Task.ConfigureAwait(false);
+                return sessionManager.GetOrCreateTrackingSlot(sessionId, Environment.CurrentDirectory);
+            }))
+            .ToArray();
+
+        start.TrySetResult(null);
+        var results = await Task.WhenAll(tasks);
+
+        var first = results[0];
+        Assert.All(results, session => Assert.Same(first, session));
+        Assert.Same(first, sessionManager.GetSession(sessionId));
+    }
+
+    [Fact]
+    public void Dispose_CascadesToOwnedAcpClient()
+    {
+        // 本服务独占其 ACP 客户端(进而独占传输/进程/套接字/CTS),Dispose 必须沿所有权链下传,
+        // 否则每连接的资源全部泄漏。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        sut.Dispose();
+
+        acpClient.Verify(c => c.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public void Dispose_WhenAcpClientDisposeThrows_DoesNotEscape()
+    {
+        // 清理路径的释放失败必须 best-effort 化:抛出会顶替真正的业务异常并挂死调用栈。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        acpClient.Setup(c => c.Dispose()).Throws(new InvalidOperationException("client dispose failed"));
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        var exception = Record.Exception(() => sut.Dispose());
+
+        Assert.Null(exception);
+        errorLogger.Verify(
+            l => l.LogError(It.Is<ErrorLogEntry>(e => e.ErrorCode == "CHAT_SERVICE_CLIENT_DISPOSE_FAILED")),
+            Times.Once);
+    }
+
+    [Fact]
+    public void Dispose_IsIdempotent()
+    {
+        // 重复 Dispose 只下传一次释放,避免二次释放底层资源。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        sut.Dispose();
+        sut.Dispose();
+
+        acpClient.Verify(c => c.Dispose(), Times.Once);
     }
 
     private sealed class StubAcpClientFactory(ScriptedAcpClient client) : IAcpClientFactory
@@ -762,8 +916,8 @@ public sealed class ChatServiceSessionTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new SessionSetConfigOptionResponse());
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SessionCancelResponse());
+        public Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new AuthenticateResponse());
@@ -791,20 +945,19 @@ public sealed class ChatServiceSessionTests
             _ = ErrorOccurred;
             return Task.FromResult(true);
         }
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class ScriptedTransport : ITransport
     {
-        private readonly MessageParser _parser = new();
-        private int _nextResponseId = 1;
-
         public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
 
         public event EventHandler<TransportErrorEventArgs>? ErrorOccurred;
 
         public bool IsConnected => true;
-
-        public List<string> SentMessages { get; } = [];
 
         public Task<bool> ConnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
@@ -812,37 +965,16 @@ public sealed class ChatServiceSessionTests
 
         public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
         {
+            // Factory wiring test only needs a live Domain transport identity.
+            // Protocol responses are supplied by StubAcpClientFactory/ScriptedAcpClient, not this transport.
+            _ = MessageReceived;
             _ = ErrorOccurred;
-            SentMessages.Add(message);
-
-            var parsed = _parser.ParseMessage(message);
-            if (parsed is JsonRpcRequest request)
-            {
-                var response = request.Method switch
-                {
-                    "initialize" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(
-                            new InitializeResponse(
-                                1,
-                                new AgentInfo("TestAgent", "1.0.0"),
-                                new AgentCapabilities(loadSession: true)),
-                            _parser.Options)),
-                    "session/load" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(new SessionLoadResponse(), _parser.Options)),
-                    "session/prompt" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), _parser.Options)),
-                    _ => new JsonRpcResponse(
-                        request.Id ?? _nextResponseId++,
-                        JsonSerializer.SerializeToElement(new { }, _parser.Options))
-                };
-
-                MessageReceived?.Invoke(this, new MessageReceivedEventArgs(_parser.SerializeMessage(response)));
-            }
-
+            _ = message;
             return Task.FromResult(true);
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

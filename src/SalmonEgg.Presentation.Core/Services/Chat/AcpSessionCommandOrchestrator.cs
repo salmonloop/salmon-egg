@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Mcp;
@@ -52,7 +54,6 @@ public interface IAcpSessionCommandOrchestrator
 
     Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -60,14 +61,17 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 {
     private readonly IAcpMcpServerResolver _mcpServerResolver;
     private readonly ILogger<AcpSessionCommandOrchestrator> _logger;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
 
     public AcpSessionCommandOrchestrator(
         ILogger<AcpSessionCommandOrchestrator> logger,
-        IAcpMcpServerResolver mcpServerResolver)
+        IAcpMcpServerResolver mcpServerResolver,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
+        _localizer = localizer;
     }
 
     public async Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(
@@ -83,7 +87,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var chatService = RequireReadyChatService(sink);
         if (!sink.IsSessionActive || string.IsNullOrWhiteSpace(sink.CurrentSessionId))
         {
-            throw new InvalidOperationException("No active local conversation is available for ACP session creation.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatSession_NoActiveLocalConversation",
+                    "No active local conversation is available for ACP session creation."));
         }
 
         var conversationId = sink.CurrentSessionId!;
@@ -101,7 +108,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var activeSessionCwd = ResolveActiveSessionCwdOrProtocolError(sink);
         var sessionParams = new SessionNewParams(
             activeSessionCwd,
-            McpServerJsonConverter.CloneServers(
+            McpServerSnapshots.CloneServers(
                 await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                     .ConfigureAwait(false)));
 
@@ -116,13 +123,13 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.",
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage(),
                     ex);
             }
 
             sessionParams = new SessionNewParams(
                 activeSessionCwd,
-                McpServerJsonConverter.CloneServers(
+                McpServerSnapshots.CloneServers(
                     await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                         .ConfigureAwait(false)));
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
@@ -138,8 +145,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
     {
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             sink.GetActiveSessionCwdOrDefault()?.Trim(),
-            sink.ResolveProfile(sink.SelectedProfileId),
-            sink.GetAgentRemoteDirectories());
+            sink.ResolveProfile(sink.SelectedProfileId));
         var cwd = cwdResolution.Cwd?.Trim();
         if (string.IsNullOrWhiteSpace(cwd))
         {
@@ -193,7 +199,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.");
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage());
             }
         }
 
@@ -269,7 +275,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.",
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage(),
                     ex);
             }
 
@@ -308,7 +314,6 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
     public async Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -322,10 +327,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
         cancellationToken.ThrowIfCancellationRequested();
         await chatService.CancelSessionAsync(
-            new SessionCancelParams(currentBinding.RemoteSessionId!, reason)).ConfigureAwait(false);
+            new SessionCancelParams(currentBinding.RemoteSessionId!)).ConfigureAwait(false);
     }
 
-    private static async Task UpdateBindingForConversationAsync(
+    private async Task UpdateBindingForConversationAsync(
         IAcpChatCoordinatorSink sink,
         string conversationId,
         string remoteSessionId,
@@ -338,7 +343,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            throw new InvalidOperationException("Cannot update remote binding without an active local conversation.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatBinding_NoActiveLocalConversation",
+                    "Cannot update remote binding without an active local conversation."));
         }
 
         var result = await sink.ConversationBindingCommands
@@ -351,18 +359,71 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         if (result.Status is not BindingUpdateStatus.Success)
         {
             throw new InvalidOperationException(
-                $"Failed to update conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
+                FormatLocalize(
+                    "ChatBinding_UpdateFailedWithStatus",
+                    "Failed to update conversation binding ({0}): {1}",
+                    result.Status,
+                    ResolveBindingErrorDetail(result.ErrorMessage)));
         }
     }
 
-    private static IChatService RequireReadyChatService(IAcpChatCoordinatorSink sink)
+    private IChatService RequireReadyChatService(IAcpChatCoordinatorSink sink)
     {
         if (sink.CurrentChatService is not { IsConnected: true, IsInitialized: true } chatService)
         {
-            throw new InvalidOperationException("ACP chat service is not connected and initialized.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatService_NotConnectedInitialized",
+                    "ACP chat service is not connected and initialized."));
         }
 
         return chatService;
     }
 
+
+
+    private string ResolveBindingErrorDetail(string? errorMessage)
+        => string.IsNullOrWhiteSpace(errorMessage)
+            ? Localize("ChatBinding_UnknownError", "UnknownError")
+            : errorMessage.Trim();
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private string FormatLocalize(string key, string fallback, params object[] arguments)
+    {
+        if (_localizer is null)
+        {
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = _localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments)
+            : localized.Value;
+    }
+
+    private string ResolveAuthenticationRequiredMessage()
+    {
+        const string fallback = "The agent requires authentication before it can respond.";
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer["ChatAuth_Required"];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
 }

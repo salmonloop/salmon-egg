@@ -1,0 +1,261 @@
+using System;
+using System.Collections.Generic;
+
+namespace SalmonEgg.Infrastructure.Observability;
+
+/// <summary>
+/// Immutable, effective OpenTelemetry configuration. OTLP transport settings are resolved per
+/// signal so the OpenTelemetry generic and signal-specific environment variables retain their
+/// documented precedence and endpoint semantics.
+/// </summary>
+public sealed class TelemetrySettings
+{
+    private static readonly string ProcessInstanceId = Guid.NewGuid().ToString("D");
+
+    public bool Enabled { get; init; }
+
+    public string? OtlpEndpoint { get; init; }
+
+    public OtlpProtocol Protocol { get; init; } = OtlpProtocol.HttpProtobuf;
+
+    public string? OtlpHeaders { get; init; }
+
+    public OtlpSignalSettings Traces { get; init; } = OtlpSignalSettings.Inactive;
+
+    public OtlpSignalSettings Metrics { get; init; } = OtlpSignalSettings.Inactive;
+
+    public OtlpSignalSettings Logs { get; init; } = OtlpSignalSettings.Inactive;
+
+    public string ServiceName { get; init; } = TelemetryDefaults.ServiceName;
+
+    public string? ServiceVersion { get; init; }
+
+    public Dictionary<string, string> ResourceAttributes { get; init; } = new();
+
+    public SamplingSettings Sampling { get; init; } = new();
+
+    public OtlpSignalSettings GetSignalSettings(OtlpSignal signal)
+    {
+        var configured = signal switch
+        {
+            OtlpSignal.Traces => Traces,
+            OtlpSignal.Metrics => Metrics,
+            OtlpSignal.Logs => Logs,
+            _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, null)
+        };
+
+        // Preserve compatibility for callers constructing the legacy flat settings object. The
+        // resolver path uses per-signal settings produced by Build, so this fallback is test/host
+        // adapter behavior only.
+        return configured.IsConfigured || (OtlpEndpoint is null && OtlpHeaders is null)
+            ? configured
+            : OtlpSignalSettings.Create(OtlpEndpoint, OtlpHeaders, Protocol, false);
+    }
+
+    public bool IsEquivalentTo(TelemetrySettings? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        if (!Enabled || !other.Enabled)
+        {
+            return Enabled == other.Enabled;
+        }
+
+        var leftSignalsConfigured = Traces.IsConfigured || Metrics.IsConfigured || Logs.IsConfigured;
+        var rightSignalsConfigured = other.Traces.IsConfigured || other.Metrics.IsConfigured || other.Logs.IsConfigured;
+        if (!leftSignalsConfigured && !rightSignalsConfigured)
+        {
+            return string.Equals(OtlpEndpoint, other.OtlpEndpoint, StringComparison.Ordinal)
+                && Protocol == other.Protocol
+                && string.Equals(OtlpHeaders, other.OtlpHeaders, StringComparison.Ordinal)
+                && string.Equals(ServiceName, other.ServiceName, StringComparison.Ordinal)
+                && string.Equals(ServiceVersion, other.ServiceVersion, StringComparison.Ordinal)
+                && Sampling.IsEquivalentTo(other.Sampling)
+                && AttributesEqual(ResourceAttributes, other.ResourceAttributes);
+        }
+
+        return Traces.IsEquivalentTo(other.Traces)
+            && Metrics.IsEquivalentTo(other.Metrics)
+            && Logs.IsEquivalentTo(other.Logs)
+            && string.Equals(ServiceName, other.ServiceName, StringComparison.Ordinal)
+            && string.Equals(ServiceVersion, other.ServiceVersion, StringComparison.Ordinal)
+            && Sampling.IsEquivalentTo(other.Sampling)
+            && AttributesEqual(ResourceAttributes, other.ResourceAttributes);
+    }
+
+    private static bool AttributesEqual(Dictionary<string, string> left, Dictionary<string, string> right)
+    {
+        if (left.Count != right.Count) return false;
+        foreach (var pair in left)
+        {
+            if (!right.TryGetValue(pair.Key, out var value) || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static TelemetrySettings CreateInactiveBootstrap() => new()
+    {
+        Enabled = false,
+        ServiceName = TelemetryDefaults.ServiceName
+    };
+
+    /// <summary>
+    /// Resolves user intent and OTLP environment variables. A user supplied endpoint is a product
+    /// override for all signals; otherwise OTLP's per-signal variables override generic values.
+    /// When no endpoint is configured the built-in gateway (<see cref="TelemetryDefaults.DefaultOtlpEndpoint"/>)
+    /// is used so telemetry can flow without per-deployment setup; the gateway injects upstream auth.
+    /// </summary>
+    /// <param name="installationId">
+    /// <c>app.installation.id</c>：本次安装的稳定标识，使后端能区分设备数。为 null 时不写该
+    /// 属性——写入空串会在后端形成一个无意义的维度取值。由调用方异步取得后传入，本方法保持
+    /// 同步且只读环境变量。
+    /// </param>
+    public static TelemetrySettings Build(
+        Domain.Models.AppSettings? userSettings,
+        SamplingSettings platformSamplingDefaults,
+        string? serviceVersion = null,
+        string? installationId = null)
+    {
+        ArgumentNullException.ThrowIfNull(platformSamplingDefaults);
+
+        var userDisabled = userSettings?.TelemetrySharingEnabled == false;
+        var sdkDisabled = IsTrue(Environment.GetEnvironmentVariable("OTEL_SDK_DISABLED"));
+        var userEndpoint = NormalizeOptional(userSettings?.TelemetryCustomEndpoint);
+        var userHeaders = NormalizeOptional(userSettings?.TelemetryAuthHeader);
+
+        var genericEndpoint = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
+        var genericHeaders = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS"));
+        var genericProtocol = ParseProtocol(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL"));
+
+        // The built-in gateway applies only when no endpoint was supplied for any signal: neither
+        // a user override, a generic env var, nor a single signal-specific env var. This keeps the
+        // default from silently mixing with per-signal deployment endpoints.
+        var useFallbackGateway = userEndpoint is null
+            && genericEndpoint is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") is null;
+
+        var traces = ResolveSignal(OtlpSignal.Traces, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
+        var metrics = ResolveSignal(OtlpSignal.Metrics, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
+        var logs = ResolveSignal(OtlpSignal.Logs, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
+        var enabled = !userDisabled && !sdkDisabled && traces.IsConfigured && metrics.IsConfigured && logs.IsConfigured;
+
+        var resourceAttributes = new Dictionary<string, string>
+        {
+            [SemanticConventions.Resource.DeploymentEnvironmentName] =
+                NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT")) ?? TelemetryDefaults.DefaultEnvironment,
+            [SemanticConventions.Resource.ServiceInstanceId] = ProcessInstanceId
+        };
+
+        // 取不到时省略而非写空串：空串会在后端形成一个无意义的维度取值，且无法与「这台设备
+        // 还没生成标识」区分开。
+        var normalizedInstallationId = NormalizeOptional(installationId);
+        if (normalizedInstallationId is not null)
+        {
+            resourceAttributes[SemanticConventions.Resource.AppInstallationId] = normalizedInstallationId;
+        }
+
+        return new TelemetrySettings
+        {
+            Enabled = enabled,
+            OtlpEndpoint = traces.Endpoint,
+            Protocol = traces.Protocol,
+            OtlpHeaders = traces.Headers,
+            Traces = traces,
+            Metrics = metrics,
+            Logs = logs,
+            ServiceName = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")) ?? TelemetryDefaults.ServiceName,
+            ServiceVersion = serviceVersion,
+            ResourceAttributes = resourceAttributes,
+            Sampling = platformSamplingDefaults
+        };
+    }
+
+    private static OtlpSignalSettings ResolveSignal(
+        OtlpSignal signal,
+        string? userEndpoint,
+        string? userHeaders,
+        string? genericEndpoint,
+        string? genericHeaders,
+        OtlpProtocol genericProtocol,
+        bool useFallbackGateway)
+    {
+        if (userEndpoint is not null)
+        {
+            return OtlpSignalSettings.Create(userEndpoint, userHeaders, OtlpProtocol.HttpProtobuf, isSignalSpecificEndpoint: false);
+        }
+
+        var suffix = signal switch
+        {
+            OtlpSignal.Traces => "TRACES",
+            OtlpSignal.Metrics => "METRICS",
+            OtlpSignal.Logs => "LOGS",
+            _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, null)
+        };
+        var endpoint = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_ENDPOINT"));
+        var signalHeaders = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_HEADERS"));
+        // A signal-specific deployment header is the most explicit value. The secure user header
+        // must still apply when deployment supplies only the endpoint, before generic env headers.
+        var headers = signalHeaders ?? userHeaders ?? genericHeaders;
+        var protocol = ParseProtocol(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_PROTOCOL"), genericProtocol);
+        // The built-in gateway is an all-or-nothing fallback: only when deployment supplied no
+        // endpoint for any signal. Mixing per-signal env endpoints with the default gateway would
+        // split one pipeline across two destinations silently.
+        var fallbackEndpoint = useFallbackGateway ? TelemetryDefaults.DefaultOtlpEndpoint : null;
+        return OtlpSignalSettings.Create(endpoint ?? genericEndpoint ?? fallbackEndpoint, headers, protocol, endpoint is not null);
+    }
+
+    private static OtlpProtocol ParseProtocol(string? value, OtlpProtocol fallback = OtlpProtocol.HttpProtobuf)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => fallback,
+            "grpc" => OtlpProtocol.Grpc,
+            "http/protobuf" => OtlpProtocol.HttpProtobuf,
+            _ => fallback
+        };
+
+    private static bool IsTrue(string? value) => string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
+    private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+public sealed class OtlpSignalSettings
+{
+    public static OtlpSignalSettings Inactive { get; } = new();
+
+    public string? Endpoint { get; init; }
+
+    public string? Headers { get; init; }
+
+    public OtlpProtocol Protocol { get; init; } = OtlpProtocol.HttpProtobuf;
+
+    /// <summary>True when OTLP's signal-specific endpoint variable supplied the final endpoint.</summary>
+    public bool IsSignalSpecificEndpoint { get; init; }
+
+    public bool IsConfigured => Endpoint is not null;
+
+    internal static OtlpSignalSettings Create(string? endpoint, string? headers, OtlpProtocol protocol, bool isSignalSpecificEndpoint)
+        => new()
+        {
+            Endpoint = endpoint,
+            Headers = headers,
+            Protocol = protocol,
+            IsSignalSpecificEndpoint = isSignalSpecificEndpoint
+        };
+
+    internal bool IsEquivalentTo(OtlpSignalSettings other)
+        => string.Equals(Endpoint, other.Endpoint, StringComparison.Ordinal)
+            && string.Equals(Headers, other.Headers, StringComparison.Ordinal)
+            && Protocol == other.Protocol
+            && IsSignalSpecificEndpoint == other.IsSignalSpecificEndpoint;
+}
+
+public enum OtlpProtocol
+{
+    Grpc,
+    HttpProtobuf
+}

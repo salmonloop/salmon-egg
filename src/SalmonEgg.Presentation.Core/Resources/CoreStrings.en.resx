@@ -30,8 +30,26 @@
   <data name="Nav_LoadingSessions" xml:space="preserve">
     <value>Loading...</value>
   </data>
+  <data name="Nav_ShowSessionsListFailed" xml:space="preserve">
+    <value>Failed to open the sessions list. Please try again later.</value>
+  </data>
+  <data name="Start_SessionLaunchFailed" xml:space="preserve">
+    <value>Failed to start the session. Please try again.</value>
+  </data>
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>Unclassified</value>
+  </data>
+  <data name="Nav_RelativeJustNow" xml:space="preserve">
+    <value>Just now</value>
+  </data>
+  <data name="Nav_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} min</value>
+  </data>
+  <data name="Nav_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} hr</value>
+  </data>
+  <data name="Nav_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} d</value>
   </data>
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>Mode is not ready</value>
@@ -183,6 +201,88 @@
   <data name="ChatTurnFailure_DismissAction" xml:space="preserve">
     <value>Dismiss failure detail</value>
   </data>
+  <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
+    <value>Failed to copy the failure detail. Please try again later.</value>
+  </data>
+  <data name="ChatOperation_CreateSessionFailed" xml:space="preserve">
+    <value>Failed to create session: {0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModeFailed" xml:space="preserve">
+    <value>Failed to switch mode: {0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModelFailed" xml:space="preserve">
+    <value>Failed to switch model: {0}</value>
+  </data>
+  <data name="ChatOperation_CancelSessionFailed" xml:space="preserve">
+    <value>Failed to cancel session: {0}</value>
+  </data>
+  <data name="ChatOperation_DisconnectFailed" xml:space="preserve">
+    <value>Failed to disconnect: {0}</value>
+  </data>
+  <data name="ChatOperation_LoadSessionNoActiveConversation" xml:space="preserve">
+    <value>Failed to load session: no active conversation is selected.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingActiveBinding" xml:space="preserve">
+    <value>Failed to load session: no remote session binding is available for the active conversation.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingProfileBinding" xml:space="preserve">
+    <value>Failed to load session: no remote session binding is available for the profile-bound conversation.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionChatServiceNotReady" xml:space="preserve">
+    <value>Failed to load session: ACP chat service is not connected and initialized.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionRecoveryCapabilityMissing" xml:space="preserve">
+    <value>Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingBoundProfile" xml:space="preserve">
+    <value>Failed to load session: no ACP profile is bound to the remote conversation.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionProfileNotResolved" xml:space="preserve">
+    <value>Failed to load session: the bound ACP profile could not be resolved.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionRemoteConnectionNotReady" xml:space="preserve">
+    <value>Failed to load session: ACP profile connection did not become ready.</value>
+  </data>
+  <data name="ChatOperation_LoadSessionFailed" xml:space="preserve">
+    <value>Failed to load session: {0}</value>
+  </data>
+  <data name="ChatOperation_ReconnectSessionFailed" xml:space="preserve">
+    <value>Failed to reconnect session: {0}</value>
+  </data>
+  <data name="ChatOperation_SwitchSessionFailed" xml:space="preserve">
+    <value>Failed to switch session: {0}</value>
+  </data>
+  <data name="ChatLoading_Connecting" xml:space="preserve">
+    <value>Connecting to assistant...</value>
+  </data>
+  <data name="ChatLoading_InitializingProtocol" xml:space="preserve">
+    <value>Preparing chat environment...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistory" xml:space="preserve">
+    <value>Loading chat history...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistoryWithCount" xml:space="preserve">
+    <value>Loading chat history ({0} messages loaded)</value>
+  </data>
+  <data name="ChatLoading_PreparingSession" xml:space="preserve">
+    <value>Switching chat...</value>
+  </data>
+
+  <data name="ShutdownOverlay_PersistingState" xml:space="preserve">
+    <value>Saving conversations...</value>
+  </data>
+  <data name="ShutdownOverlay_ClosingChildProcesses" xml:space="preserve">
+    <value>Closing agent processes...</value>
+  </data>
+  <data name="ShutdownOverlay_Generic" xml:space="preserve">
+    <value>Shutting down...</value>
+  </data>
+  <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
+    <value>Failed to open mini window. Please ensure you are running as an MSIX package.</value>
+  </data>
+  <data name="ChatMiniWindow_ReturnFailed" xml:space="preserve">
+    <value>Failed to return to main window.</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>New session</value>
   </data>
@@ -224,6 +324,12 @@
   </data>
   <data name="Discover_ErrorListCapabilityMissing" xml:space="preserve">
     <value>The current agent does not advertise session/list capability.</value>
+  </data>
+  <data name="Discover_ErrorLoadSessionCapabilityMissing" xml:space="preserve">
+    <value>The current agent does not advertise ACP loadSession capability, so discovered remote sessions cannot be imported.</value>
+  </data>
+  <data name="Discover_ErrorSessionImportActivationFailed" xml:space="preserve">
+    <value>Failed to load and import the session. Check the connection status.</value>
   </data>
   <data name="Discover_UntitledSession" xml:space="preserve">
     <value>Untitled session</value>
@@ -315,11 +421,50 @@
   <data name="About_ReportAiContentBodyPrompt" xml:space="preserve">
     <value>Please describe the inappropriate AI-generated content shown in Salmon Egg.</value>
   </data>
+  <data name="Chat_ReportAiContentConfirmTitle" xml:space="preserve">
+    <value>Report AI content</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmMessage" xml:space="preserve">
+    <value>This opens your email app with a report draft that includes the selected AI content. Continue?</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmPrimary" xml:space="preserve">
+    <value>Open email</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmClose" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Chat_ReportAiContentExcerptLabel" xml:space="preserve">
+    <value>Related content:</value>
+  </data>
+  <data name="About_AcknowledgementVersionFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
+  <data name="About_AcknowledgementLicenseFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
+  <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>Opening local files or folders is not supported on this platform.</value>
   </data>
+  <data name="About_DiscordOpenFailed" xml:space="preserve">
+    <value>Could not open the Discord invite. Check your default browser, then try again.</value>
+  </data>
+  <data name="About_GitHubOpenFailed" xml:space="preserve">
+    <value>Could not open the GitHub page. Check your default browser, then try again.</value>
+  </data>
+  <data name="About_KofiOpenFailed" xml:space="preserve">
+    <value>Could not open the Ko-fi page. Check your default browser, then try again.</value>
+  </data>
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>Exporting local files is not supported on this platform.</value>
+  </data>
+  <data name="DataStorage_ExportSessionFailed" xml:space="preserve">
+    <value>Failed to export the current session. Please try again later.</value>
+  </data>
+  <data name="DataStorage_CreateDiagnosticsBundleFailed" xml:space="preserve">
+    <value>Failed to create the diagnostics package. Please try again later.</value>
   </data>
   <data name="About_MissingDocumentMessage" xml:space="preserve">
     <value>The {0} file was not found.</value>
@@ -331,6 +476,126 @@ Create the corresponding Markdown file in:
   </data>
   <data name="Diagnostics_NoLogFileFound" xml:space="preserve">
     <value>No log file found.</value>
+  </data>
+  <data name="Diagnostics_LogSnippetCopied" xml:space="preserve">
+    <value>Recent log snippet copied.</value>
+  </data>
+  <data name="Diagnostics_CopyLogSnippetFailed" xml:space="preserve">
+    <value>Failed to copy the recent log snippet. Please try again later.</value>
+  </data>
+  <data name="AgentProfileEditor_ValidationFailedFormat" xml:space="preserve">
+    <value>Validation failed: {0}</value>
+  </data>
+  <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
+    <value>Failed to save configuration: {0}</value>
+  </data>
+  <data name="AgentProfileEditor_LoadFailedFormat" xml:space="preserve">
+    <value>Failed to load configuration: {0}</value>
+  </data>
+  <data name="AgentProfileEditor_RetryLoad" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeSystem" xml:space="preserve">
+    <value>Use system proxy</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeNone" xml:space="preserve">
+    <value>No proxy</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeCustom" xml:space="preserve">
+    <value>Custom proxy</value>
+  </data>
+  <data name="AgentProfileEditor_CurrentConnectionSavedNoticeMessage" xml:space="preserve">
+    <value>Settings saved. The current connection still uses the old configuration until reconnect.</value>
+  </data>
+  <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
+    <value>Failed to refresh agent profiles. Please try again later.</value>
+  </data>
+  <data name="AcpSetup_Install_Failed" xml:space="preserve">
+    <value>Installation failed.</value>
+  </data>
+  <data name="AcpSetup_Adapter_ToolchainMissing" xml:space="preserve">
+    <value>{0} is required before this adapter can be installed. Install it, then detect again.</value>
+  </data>
+  <data name="AcpSetup_Agent_ToolchainMissingHint" xml:space="preserve">
+    <value>{0} is required to install this automatically.</value>
+  </data>
+  <data name="AcpSetup_Install_ToolchainMissing" xml:space="preserve">
+    <value>{0} is required before this component can be installed automatically. Install it, then run detection again.</value>
+  </data>
+  <data name="AcpSetup_Stage_Validation" xml:space="preserve">
+    <value>Parameter validation</value>
+  </data>
+  <data name="AcpSetup_Stage_CommandResolution" xml:space="preserve">
+    <value>Command resolution</value>
+  </data>
+  <data name="AcpSetup_Stage_AdapterStartup" xml:space="preserve">
+    <value>Adapter startup</value>
+  </data>
+  <data name="AcpSetup_Stage_Handshake" xml:space="preserve">
+    <value>Protocol handshake</value>
+  </data>
+  <data name="AcpSetup_Stage_Completed" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="AcpSetup_Step_Position" xml:space="preserve">
+    <value>Step {0} of {1}</value>
+  </data>
+  <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
+    <value>The launch command was not found. Make sure the agent runtime is installed and on PATH, then detect again.</value>
+  </data>
+  <data name="AcpSetup_Remediation_AdapterStartup" xml:space="preserve">
+    <value>The adapter failed to start. Check the install output for details and confirm the adapter supports this agent.</value>
+  </data>
+  <data name="AcpSetup_Remediation_Handshake" xml:space="preserve">
+    <value>The connection opened but the handshake failed. Confirm the agent supports the ACP protocol and check the launch parameters.</value>
+  </data>
+  <data name="AcpSetup_Agent_ClaudeCode_Description" xml:space="preserve">
+    <value>Anthropic's terminal coding agent (Claude Code CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_Codex_Description" xml:space="preserve">
+    <value>OpenAI's terminal coding agent (Codex CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_Gemini_Description" xml:space="preserve">
+    <value>Google's terminal coding agent (Gemini CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_GitHubCopilot_Description" xml:space="preserve">
+    <value>GitHub Copilot command-line coding agent.</value>
+  </data>
+  <data name="AcpSetup_Agent_QwenCode_Description" xml:space="preserve">
+    <value>Alibaba Qwen's terminal coding agent (Qwen Code).</value>
+  </data>
+  <data name="AcpSetup_Agent_Cline_Description" xml:space="preserve">
+    <value>Cline terminal coding agent.</value>
+  </data>
+  <data name="AcpSetup_Agent_Auggie_Description" xml:space="preserve">
+    <value>Augment Code's terminal coding agent (Auggie).</value>
+  </data>
+  <data name="AcpSetup_Agent_Goose_Description" xml:space="preserve">
+    <value>Block's open-source coding agent (Goose).</value>
+  </data>
+  <data name="AcpSetup_Parameter_Model_Description" xml:space="preserve">
+    <value>Model name, for example sonnet, opus, or a specific model identifier. Leave empty to use the agent's default.</value>
+  </data>
+  <data name="AcpSetup_Validation_MissingRequiredValue" xml:space="preserve">
+    <value>This parameter is required. Fill it in before continuing.</value>
+  </data>
+  <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
+    <value>Value not allowed. Pick one from the list.</value>
+  </data>
+  <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
+    <value>Failed to delete the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_SaveFailed" xml:space="preserve">
+    <value>Failed to save the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_ConnectFailed" xml:space="preserve">
+    <value>Failed to connect to the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_DisconnectFailed" xml:space="preserve">
+    <value>Failed to disconnect the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_ReconnectFailed" xml:space="preserve">
+    <value>Failed to reconnect the agent profile. Please try again later.</value>
   </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>Not started</value>
@@ -388,6 +653,15 @@ Create the corresponding Markdown file in:
   </data>
   <data name="GamepadDiagnostics_ConnectionWireless" xml:space="preserve">
     <value>wireless</value>
+  </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutNintendo" xml:space="preserve">
+    <value>Nintendo</value>
+  </data>
+  <data name="GamepadDiagnostics_StandardGamepadsNone" xml:space="preserve">
+    <value>No standard gamepads detected.</value>
   </data>
   <data name="VoiceDiagnostics_PendingRefresh" xml:space="preserve">
     <value>Waiting for refresh</value>
@@ -539,6 +813,12 @@ Create the corresponding Markdown file in:
   <data name="Shortcuts_ConflictSeparator" xml:space="preserve">
     <value>, </value>
   </data>
+  <data name="ShortcutAction_NewSession" xml:space="preserve">
+    <value>New session</value>
+  </data>
+  <data name="ShortcutAction_Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">
     <value>Connecting...</value>
   </data>
@@ -560,8 +840,8 @@ Create the corresponding Markdown file in:
   <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
     <value>WebSocket</value>
   </data>
-  <data name="AcpConnection_TransportHttpSse" xml:space="preserve">
-    <value>HTTP SSE</value>
+  <data name="AcpConnection_TransportStreamableHttp" xml:space="preserve">
+    <value>Streamable HTTP</value>
   </data>
   <data name="AcpConnection_HydrationStrictReplayName" xml:space="preserve">
     <value>Strict replay</value>
@@ -617,14 +897,23 @@ Create the corresponding Markdown file in:
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
     <value>Enter an absolute remote project path before saving.</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseTitle" xml:space="preserve">
-    <value>Analyze codebase</value>
+  <data name="StartSuggestion_ReportGuidanceTitle" xml:space="preserve">
+    <value>Report AI content</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseSubtitle" xml:space="preserve">
-    <value>Understand the project architecture and logic</value>
+  <data name="StartSuggestion_ReportGuidanceSubtitle" xml:space="preserve">
+    <value>Right-click a message or use About</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebasePrompt" xml:space="preserve">
-    <value>Analyze the current codebase architecture and core logic.</value>
+  <data name="StartSuggestion_ReportGuidanceDetail" xml:space="preserve">
+    <value>If AI-generated content looks wrong or inappropriate, right-click that message and choose Report, or open Settings &gt; About and report it there. This tip card only explains the path and cannot send a report.</value>
+  </data>
+  <data name="StartSuggestion_ReportGuidanceLabel" xml:space="preserve">
+    <value>Tip</value>
+  </data>
+  <data name="StartSuggestion_QuickLaunchLabel" xml:space="preserve">
+    <value>Quick launch</value>
+  </data>
+  <data name="AiContentReport_OpenFailed" xml:space="preserve">
+    <value>Could not open the email app. Check that an email app is configured, then try again.</value>
   </data>
   <data name="StartSuggestion_RecommendTasksTitle" xml:space="preserve">
     <value>Recommend tasks</value>
@@ -761,7 +1050,6 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>Not synced yet</value></data>
   <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>Local configuration uploaded</value></data>
   <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>Cloud configuration applied</value></data>
-  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>Cloud configuration applied; local backup retained</value></data>
   <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>Succeeded</value></data>
   <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>Last sync: {0} · {1:g}</value></data>
   <data name="DataStorage_CloudSyncSavedConnectionContext" xml:space="preserve"><value>Saved {0} connection settings</value></data>
@@ -788,6 +1076,12 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>The cloud service rejected the sign-in details. Update them and try again.</value></data>
   <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>The cloud provider could not be reached. Check your network and try again.</value></data>
   <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>The cloud configuration conflict could not be resolved. Local configuration was not replaced.</value></data>
+  <data name="DataStorage_CloudSyncConflictNeedsResolution" xml:space="preserve"><value>Local and cloud configurations both changed. Keep local and upload, or apply the cloud copy. Local configuration has not been replaced.</value></data>
+  <data name="DataStorage_CloudSyncKeepLocal" xml:space="preserve"><value>Keep local and upload</value></data>
+  <data name="DataStorage_CloudSyncApplyRemote" xml:space="preserve"><value>Apply cloud configuration</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteTitle" xml:space="preserve"><value>Apply cloud configuration?</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteMessage" xml:space="preserve"><value>This replaces the current local configuration with the cloud copy. A local backup is created first.</value></data>
+  <data name="DataStorage_CloudSyncApplyRemotePrimary" xml:space="preserve"><value>Apply cloud</value></data>
   <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>The configuration sync package could not be created or applied.</value></data>
   <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>OneDrive is not configured in this build. Choose another provider.</value></data>
   <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>Remove {0} sync setup from this device?</value></data>
@@ -796,4 +1090,191 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>Remove local setup</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>The saved cloud sync configuration is invalid. Edit the connection and check the required fields.</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>That remote project no longer exists.</value></data>
+  <data name="AddProject_InvalidSelection" xml:space="preserve"><value>That project selection is not valid. Please choose another folder or remote directory.</value></data>
+  <data name="General_ClearCacheTitle" xml:space="preserve">
+    <value>Clear cache</value>
+  </data>
+  <data name="General_ClearCacheMessage" xml:space="preserve">
+    <value>This deletes all files in the local cache folder.</value>
+  </data>
+  <data name="General_ClearCachePrimary" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="General_ClearCacheSuccess" xml:space="preserve">
+    <value>Local cache cleared.</value>
+  </data>
+  <data name="General_ClearCacheFailed" xml:space="preserve">
+    <value>Failed to clear cache. Please try again later.</value>
+  </data>
+  <data name="General_LaunchOnStartupFailed" xml:space="preserve">
+    <value>Failed to update launch on startup. Please try again later.</value>
+  </data>
+  <data name="General_LanguageApplyFailed" xml:space="preserve">
+    <value>Failed to change language. Please try again later.</value>
+  </data>
+  <data name="General_AppSettingsSaveFailed" xml:space="preserve">
+    <value>Failed to save app settings. Please try again later.</value>
+  </data>
+  <data name="General_AppSettingsLoadFailed" xml:space="preserve">
+    <value>Failed to load app settings. Please try again later.</value>
+  </data>
+  <data name="SessionActivation_FailedGeneric" xml:space="preserve">
+    <value>Failed to open this session. Please try again.</value>
+  </data>
+  <data name="SessionActivation_ConversationSelectionFailed" xml:space="preserve">
+    <value>Failed to open this session. Please try again.</value>
+  </data>
+  <data name="SessionActivation_ChatShellNavigationFailed" xml:space="preserve">
+    <value>Failed to open the chat view for this session. Please try again.</value>
+  </data>
+  <data name="Navigation_OpenSettingsFailed" xml:space="preserve">
+    <value>Failed to open settings. Please try again later.</value>
+  </data>
+  <data name="Navigation_OpenStartFailed" xml:space="preserve">
+    <value>Failed to open the start page. Please try again later.</value>
+  </data>
+  <data name="Navigation_OpenDiscoverSessionsFailed" xml:space="preserve">
+    <value>Failed to open Discover sessions. Please try again later.</value>
+  </data>
+  <data name="Navigation_OpenSessionFailed" xml:space="preserve">
+    <value>Failed to open this session. Please try again later.</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
+    <value>All local data cleared.</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataFailed" xml:space="preserve">
+    <value>Failed to clear all local data. Please try again later.</value>
+  </data>
+  <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
+    <value>Archive session</value>
+  </data>
+  <data name="Nav_ArchiveSessionMessage" xml:space="preserve">
+    <value>Archive session "{0}"?</value>
+  </data>
+  <data name="Nav_ArchiveSessionPrimary" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="Nav_ArchiveSessionFailed" xml:space="preserve">
+    <value>Failed to archive the session. Please try again later.</value>
+  </data>
+  <data name="Nav_CopySessionIdFailed" xml:space="preserve">
+    <value>Failed to copy the session ID. Please try again later.</value>
+  </data>
+  <data name="AskUser_SubmitUnavailable" xml:space="preserve">
+    <value>Answers cannot be submitted right now.</value>
+  </data>
+  <data name="AskUser_AnswerAllRequired" xml:space="preserve">
+    <value>Answer all questions before submitting.</value>
+  </data>
+  <data name="AskUser_SubmitFailed" xml:space="preserve">
+    <value>Failed to submit answers. Please try again.</value>
+  </data>
+  <data name="AskUser_MultipleChoice" xml:space="preserve">
+    <value>Multiple choice</value>
+  </data>
+  <data name="AskUser_SingleChoice" xml:space="preserve">
+    <value>Single choice</value>
+  </data>
+  <data name="VoiceInput_PermissionCheckFailed" xml:space="preserve">
+    <value>Voice input permission check failed.</value>
+  </data>
+  <data name="VoiceInput_Failed" xml:space="preserve">
+    <value>Voice input failed.</value>
+  </data>
+  <data name="VoiceInput_FailedWithDetail" xml:space="preserve">
+    <value>Voice input failed: {0}</value>
+  </data>
+  <data name="VoiceInput_StopFailed" xml:space="preserve">
+    <value>Failed to stop voice input.</value>
+  </data>
+  <data name="VoiceInput_StopFailedWithDetail" xml:space="preserve">
+    <value>Failed to stop voice input: {0}</value>
+  </data>
+  <data name="ChatAuth_Required" xml:space="preserve">
+    <value>The agent requires authentication before it can respond.</value>
+  </data>
+  <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
+    <value>Authentication failed: {0}</value>
+  </data>
+  <data name="ChatPrompt_CancelFailed" xml:space="preserve">
+    <value>Cancellation failed.</value>
+  </data>
+  <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
+    <value>Signal monitoring failed.</value>
+  </data>
+  <data name="NewSessionDraft_LoadConfigFailed" xml:space="preserve">
+    <value>Unable to load session configuration. Check the connection and try again.</value>
+  </data>
+  <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
+    <value>The remote working directory must be an absolute path.</value>
+  </data>
+  <data name="ChatBinding_UpdateFailedWithStatus" xml:space="preserve">
+    <value>Failed to update conversation binding ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_BindNewFailedWithStatus" xml:space="preserve">
+    <value>Failed to bind new conversation ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_PromoteDraftFailedWithStatus" xml:space="preserve">
+    <value>Failed to promote ACP new-session draft ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_UnknownError" xml:space="preserve">
+    <value>UnknownError</value>
+  </data>
+  <data name="ChatService_NotInitialized" xml:space="preserve">
+    <value>Chat service is not initialized</value>
+  </data>
+  <data name="ChatConversation_ActivateLocalFailed" xml:space="preserve">
+    <value>Failed to activate local conversation before applying session response.</value>
+  </data>
+  <data name="ChatSession_NoActiveLocalConversation" xml:space="preserve">
+    <value>No active local conversation is available for ACP session creation.</value>
+  </data>
+  <data name="ChatBinding_NoActiveLocalConversation" xml:space="preserve">
+    <value>Cannot update remote binding without an active local conversation.</value>
+  </data>
+  <data name="ChatService_NotConnectedInitialized" xml:space="preserve">
+    <value>ACP chat service is not connected and initialized.</value>
+  </data>
+  <data name="ChatProjectAffinity_OverrideMessage" xml:space="preserve">
+    <value>Local project override applied. You can clear it anytime.</value>
+  </data>
+  <data name="ChatProjectAffinity_NeedsMappingMessage" xml:space="preserve">
+    <value>This remote session is not matched to a local project. Correct it manually.</value>
+  </data>
+  <data name="ChatProjectAffinity_UnclassifiedMessage" xml:space="preserve">
+    <value>This session is unclassified. You can correct it manually.</value>
+  </data>
+  <data name="AgentProfileEditor_NewConfigurationName" xml:space="preserve">
+    <value>New Configuration</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholder" xml:space="preserve">
+    <value>[image]</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholderWithMime" xml:space="preserve">
+    <value>[image: {0}]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholder" xml:space="preserve">
+    <value>[audio]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholderWithMime" xml:space="preserve">
+    <value>[audio: {0}]</value>
+  </data>
+  <data name="McpSettings_DefaultServerName" xml:space="preserve">
+    <value>new-mcp-server</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedTitle" xml:space="preserve">
+    <value>Task completed</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
+    <value>The agent finished responding.</value>
+  </data>
+  <data name="SystemNotification_OpenAction" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="SystemNotification_ChannelName" xml:space="preserve">
+    <value>Agent task completions</value>
+  </data>
+  <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
+    <value>System notification permission was not granted.</value>
+  </data>
 </root>

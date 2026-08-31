@@ -9,6 +9,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
@@ -80,10 +81,11 @@ public sealed class AcpConnectionSettingsViewModelTests
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
 
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, localizer);
 
-        Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+        Assert.Equal(localizer["AcpConnection_TransportStdio"], viewModel.TransportOptions[0].Name);
     }
 
     [Fact]
@@ -107,14 +109,14 @@ public sealed class AcpConnectionSettingsViewModelTests
             localizer.Object,
             new ImmediateUiDispatcher(),
             languageService.Object);
-        viewModel.SelectedTransport = viewModel.TransportOptions.Single(option => option.Type == TransportType.HttpSse);
+        viewModel.SelectedTransport = viewModel.TransportOptions.Single(option => option.Type == TransportType.StreamableHttp);
         viewModel.SelectedHydrationCompletionMode = viewModel.HydrationCompletionModeOptions.Single(option => option.Value == "LoadResponse");
 
         languagePrefix = "en";
         languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
 
-        Assert.Equal(TransportType.HttpSse, viewModel.SelectedTransport?.Type);
-        Assert.Equal("en:AcpConnection_TransportHttpSse", viewModel.SelectedTransportName);
+        Assert.Equal(TransportType.StreamableHttp, viewModel.SelectedTransport?.Type);
+        Assert.Equal("en:AcpConnection_TransportStreamableHttp", viewModel.SelectedTransportName);
         Assert.Equal("LoadResponse", viewModel.SelectedHydrationCompletionMode?.Value);
         Assert.Equal(
             "en:AcpConnection_HydrationLoadResponseDescription",
@@ -306,6 +308,93 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task HandleConnectionToggleAsync_WhenConnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1" };
+        profiles.Profiles.Add(profile);
+        profiles.SelectedProfile = profile;
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.HandleConnectionToggleAsync(true);
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to connect to the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task HandleConnectionToggleAsync_WhenDisconnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1" };
+        profiles.Profiles.Add(profile);
+        profiles.SelectedProfile = profile;
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.HandleConnectionToggleAsync(false);
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to disconnect the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenConnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.ConnectToProfileAsync(new ServerConfiguration { Id = "profile-42", Name = "Selected Profile" });
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to connect to the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
     public async Task RemoteDirectoryRows_ExposeSharedDirectoriesRegardlessOfSelectedProfile()
     {
         var preferences = CreatePreferences();
@@ -393,7 +482,7 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         Assert.True(row.IsEditing);
         Assert.True(row.IsNew);
-        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
         Assert.Empty(preferences.AgentRemoteDirectories);
     }
 
@@ -547,8 +636,42 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         Assert.True(row.IsEditing);
         Assert.True(row.IsNew);
-        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
         Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsRemoteDirectoryValidationMessage()
+    {
+        var preferences = CreatePreferences();
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+            "请填写远程项目的绝对路径后再保存。");
+        localizer.Set(
+            "en-US",
+            "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+            "Enter an absolute remote project path before saving.");
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var viewModel = await CreateViewModelAsync(preferences, localizer, languageService.Object);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.RemotePathDraft = "relative/path";
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal("请填写远程项目的绝对路径后再保存。", row.ValidationMessage);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
     }
 
     [Fact]
@@ -750,7 +873,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             new AcpConnectionReuseKey(TransportType.WebSocket, string.Empty, string.Empty, "ws://localhost:9001")));
 
@@ -770,7 +893,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
 
         Assert.True(profiles.IsSavedCurrentConnectionNoticeOpen);
-        Assert.Equal("AgentProfileEditor_CurrentConnectionSavedNoticeMessage", profiles.SavedCurrentConnectionNoticeMessage);
+        Assert.Equal("Settings saved. The current connection still uses the old configuration until reconnect.", profiles.SavedCurrentConnectionNoticeMessage);
     }
 
     [Fact]
@@ -802,7 +925,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
 
@@ -843,7 +966,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
 
@@ -883,7 +1006,12 @@ public sealed class AcpConnectionSettingsViewModelTests
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -892,6 +1020,37 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.False(item.IsConnected);
         Assert.False(item.IsConnecting);
         Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        Assert.Equal("AcpProfiles_ConnectFailed", reportedKey);
+    }
+
+    [Fact]
+    public void ProfileVerificationProjection_OnlyExplicitSkipShowsWarningAndRefreshes()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        using var item = CreateAgentProfileItem("profile-a", registry, new TestConnectionCommands());
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        Assert.False(item.IsUnverified);
+
+        item.UpdateProfile(new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "profile-a",
+            Verification = ProfileVerification.Unverified
+        });
+
+        Assert.True(item.IsUnverified);
+        Assert.Contains(nameof(AgentProfileItemViewModel.IsUnverified), changed);
+
+        item.UpdateProfile(new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "profile-a",
+            Verification = ProfileVerification.Verified(DateTimeOffset.UtcNow)
+        });
+
+        Assert.False(item.IsUnverified);
     }
 
     [Fact]
@@ -900,7 +1059,8 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var pending = new TaskCompletionSource();
         var commands = new TestConnectionCommands { ConnectProfileInPoolTask = pending };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -913,7 +1073,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsTransitioning);
             Assert.False(item.IsStableConnected);
             Assert.False(item.IsStableDisconnected);
-            Assert.Equal("连接中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusConnecting"], item.StatusLabel);
             Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
         }
         finally
@@ -928,11 +1088,16 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -941,6 +1106,29 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.True(item.IsConnected);
         Assert.False(item.IsConnecting);
         Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        Assert.Equal("AcpProfiles_DisconnectFailed", reportedKey);
+    }
+
+    [Fact]
+    public async Task ReconnectCommand_WhenReconnectFails_ReportsOperationError()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            CreateRegistryService(),
+            new InitializeResponse(),
+            default));
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("reconnect failed") };
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
+
+        await item.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Equal("AcpProfiles_ReconnectFailed", reportedKey);
     }
 
     [Fact]
@@ -949,12 +1137,13 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var pending = new TaskCompletionSource();
         var commands = new TestConnectionCommands { DisconnectProfileInPoolTask = pending };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -967,7 +1156,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsTransitioning);
             Assert.False(item.IsStableConnected);
             Assert.False(item.IsStableDisconnected);
-            Assert.Equal("断开中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusDisconnecting"], item.StatusLabel);
             Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
         }
         finally
@@ -997,7 +1186,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands();
@@ -1037,7 +1226,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var pendingReconnect = new TaskCompletionSource();
@@ -1046,7 +1235,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             ReconnectProfileCallback = () => registry.RemoveByProfile("profile-a"),
             ReconnectProfileTask = pendingReconnect
         };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
 
         try
         {
@@ -1055,7 +1245,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsConnecting);
             Assert.False(item.IsConnected);
             Assert.True(item.IsTransitioning);
-            Assert.Equal("重连中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusReconnecting"], item.StatusLabel);
         }
         finally
         {
@@ -1209,8 +1399,11 @@ public sealed class AcpConnectionSettingsViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await preferences.InitializeAsync();
         return preferences;
@@ -1242,11 +1435,20 @@ public sealed class AcpConnectionSettingsViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
-    private static async Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)
+    private static Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)
+        => CreateViewModelAsync(preferences, new TestCoreStringLocalizer());
+
+    private static async Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(
+        AppPreferencesViewModel preferences,
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
     {
         var profiles = CreateProfiles(preferences);
         profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
@@ -1261,10 +1463,83 @@ public sealed class AcpConnectionSettingsViewModelTests
             preferences,
             CreateTransportSupportPolicy(preferences),
             logger.Object,
-            new TestCoreStringLocalizer());
+            localizer,
+            new ImmediateUiDispatcher(),
+            languageService);
 
         await Task.Delay(10);
         return viewModel;
+    }
+
+    [Fact]
+    public async Task ProfilesRefreshAsync_WhenListFails_OpensLocalizedErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ThrowsAsync(new InvalidOperationException("list failed"));
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+
+        await profiles.RefreshAsync();
+
+        Assert.True(profiles.IsOperationErrorOpen);
+        Assert.Equal(localizer["AcpProfiles_RefreshFailed"], profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ProfilesDeleteAsync_WhenDeleteFails_OpensLocalizedErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.DeleteConfigurationAsync(It.IsAny<string>()))
+            .ThrowsAsync(new InvalidOperationException("delete failed"));
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+        var profile = new ServerConfiguration { Id = "profile-a", Name = "Profile A" };
+
+        await profiles.DeleteAsync(profile);
+
+        Assert.True(profiles.IsOperationErrorOpen);
+        Assert.Equal(localizer["AcpProfiles_DeleteFailed"], profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ProfilesRefreshAsync_WhenSucceedsAfterError_DismissesErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .SetupSequence(service => service.ListConfigurationsAsync())
+            .ThrowsAsync(new InvalidOperationException("list failed"))
+            .ReturnsAsync(Array.Empty<ServerConfiguration>());
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+
+        await profiles.RefreshAsync();
+        Assert.True(profiles.IsOperationErrorOpen);
+
+        await profiles.RefreshAsync();
+
+        Assert.False(profiles.IsOperationErrorOpen);
+        Assert.Equal(string.Empty, profiles.OperationErrorMessage);
     }
 
     private static async Task<AcpProfilesViewModel> CreateProfilesWithItemsAsync(AppPreferencesViewModel preferences)
@@ -1300,7 +1575,9 @@ public sealed class AcpConnectionSettingsViewModelTests
     private static AgentProfileItemViewModel CreateAgentProfileItem(
         string profileId,
         InMemoryAcpConnectionSessionRegistry registry,
-        TestConnectionCommands commands)
+        TestConnectionCommands commands,
+        TestCoreStringLocalizer? localizer = null,
+        Action<string, string>? operationErrorReporter = null)
         => new(
             new ServerConfiguration { Id = profileId, Name = profileId },
             registry,
@@ -1308,7 +1585,15 @@ public sealed class AcpConnectionSettingsViewModelTests
             commands,
             NullLogger<AgentProfileItemViewModel>.Instance,
             new ImmediateUiDispatcher(),
-            new TestCoreStringLocalizer());
+            localizer ?? new TestCoreStringLocalizer(),
+            operationErrorReporter);
+
+    private static AcpChatServiceAdapter CreateRegistryService()
+        => new(
+            new Mock<IChatService>().Object,
+            new AcpEventAdapter(
+                _ => { },
+                new ImmediateUiDispatcher()));
 
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
@@ -1502,7 +1787,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         public Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(string remoteSessionId, string promptText, string? promptMessageId, IAcpChatCoordinatorSink sink, Func<System.Threading.CancellationToken, Task<bool>> authenticateAsync, System.Threading.CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task CancelPromptAsync(IAcpChatCoordinatorSink sink, string? reason = null, System.Threading.CancellationToken cancellationToken = default)
+        public Task CancelPromptAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task DisconnectAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
@@ -1577,6 +1862,11 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
         {
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
             ConnectedProfiles.Add(profile);
             return Task.CompletedTask;
         }
@@ -1608,6 +1898,13 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ConnectProfileAsync(ServerConfiguration profile)
         {
+            // Item commands call ConnectProfileAsync; honor the same failure/pending
+            // hooks the pool APIs use so connect failure tests drive the real item path.
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
             ProfileConnectedProfiles.Add(profile);
             ProfileOperations.Add($"connect:{profile.Id}");
             return ConnectProfileInPoolTask?.Task ?? Task.CompletedTask;
@@ -1615,6 +1912,11 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task DisconnectProfileAsync(ServerConfiguration profile)
         {
+            if (DisconnectProfileInPoolException is not null)
+            {
+                throw DisconnectProfileInPoolException;
+            }
+
             ProfileDisconnectedProfileIds.Add(profile.Id);
             ProfileOperations.Add($"disconnect:{profile.Id}");
             DisconnectProfileInPoolCallback?.Invoke();
@@ -1623,6 +1925,16 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ReconnectProfileAsync(ServerConfiguration profile)
         {
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
+            if (DisconnectProfileInPoolException is not null)
+            {
+                throw DisconnectProfileInPoolException;
+            }
+
             ProfileOperations.Add($"reconnect:{profile.Id}");
             ReconnectProfileCallback?.Invoke();
             return ReconnectProfileTask?.Task ?? Task.CompletedTask;

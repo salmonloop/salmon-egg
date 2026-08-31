@@ -80,7 +80,7 @@ public sealed class ChatStylesMarkdownXamlTests
     {
         var xaml = LoadChatStylesXaml();
 
-        Assert.Contains("Text=\"{x:Bind TextContent, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MarkdownPresentation.ShouldRenderMarkdown", xaml, StringComparison.Ordinal);
         Assert.Contains("MarkdownPresentation.ShouldRenderPlainText", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTextSelectionEnabled=\"{x:Bind MarkdownPresentation.AllowsNativeSelection, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
@@ -122,16 +122,110 @@ public sealed class ChatStylesMarkdownXamlTests
     }
 
     [Fact]
-    public void MessageTemplate_EnablesPlainTextSelectionAndCopyContextMenu()
+    public void MessageTemplate_EnablesPlainTextSelectionAndLeafOwnedCopyContextMenu()
     {
+        // ContextFlyout must live on the selectable text leaf, not the message Border. Selectable
+        // text installs its own TextCommandBarFlyout and marks the bubbling ContextRequested handled,
+        // so a Border-level flyout only fires in the empty left-rule/padding gap — never over the
+        // body text (AGENTS.md §7 leaf-owned ContextFlyout, mirrors MainPage project/session menus).
         var xaml = LoadChatStylesXaml();
 
         Assert.Contains("IsTextSelectionEnabled=\"True\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<Border.ContextFlyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock.ContextFlyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"ChatMessageCopyMenu\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind CopyTextCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border.ContextFlyout>", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsEnabled=\"{x:Bind HasTextContent", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AiSideMessageTemplates_ExposeReportContextMenuButOutgoingDoesNot()
+    {
+        var xaml = LoadChatStylesXaml();
+        var incoming = ExtractTemplate(xaml, "IncomingMessageTemplate", "OutgoingMessageTemplate");
+        var outgoing = ExtractTemplate(xaml, "OutgoingMessageTemplate", "ToolCallMessageTemplate");
+        var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
+
+        // Report belongs on every AI-side surface. Incoming leaves host the menu item directly
+        // (plain TextBlock + markdown host); the tool-call pill owns its menu internally, so the
+        // template projects the Report command into the pill via its ReportCommand DP instead.
+        Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", incoming, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", incoming, StringComparison.Ordinal);
+        Assert.Contains("ReportCommand=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
+
+        // Outgoing user messages copy only; they are never reportable AI content.
+        Assert.DoesNotContain("x:Uid=\"ChatMessageReportMenu\"", outgoing, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReportCommand=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToolCallMessageTemplate_ProjectsCopyAndReportCommandsIntoPillLeaf()
+    {
+        // The tool-call pill owns its right-click menu internally (its selectable
+        // title/summary/detail/raw text each install a text-selection command bar that
+        // marks ContextRequested handled, so a template Border flyout never fires over
+        // the pill body). The message template must therefore project Copy/Report into
+        // the pill via command DPs, not host a Border-level ContextFlyout.
+        var xaml = LoadChatStylesXaml();
+        var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
+
+        Assert.DoesNotContain("<Border.ContextFlyout>", toolCall, StringComparison.Ordinal);
+        Assert.Contains("CopyCommand=\"{x:Bind CopyTextCommand}\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("CopyCommandParameter=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("ReportCommand=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IncomingMessageBorderStyle_SetsHitTestableBackgroundSoContextFlyoutFiresOverMarkdownGaps()
+    {
+        // Uno's Border hit-test rule is `Background != null` (Border.IsViewHitImpl); a null background
+        // makes the bubble transparent to pointer input, so right-clicks that land in the empty gaps of a
+        // markdown paragraph (line spacing, wrap gaps, indents) never reach the ContextFlyout host and the
+        // Copy/Report menu never appears. A Transparent background keeps the whole bubble hit-testable while
+        // staying visually identical. This is the shared style behind both the incoming and tool-call borders.
+        var xaml = LoadChatStylesXaml();
+        var style = ExtractIncomingMessageBorderStyle(xaml);
+
+        Assert.Contains("<Setter Property=\"Background\" Value=\"Transparent\" />", style, StringComparison.Ordinal);
+    }
+
+    private static string ExtractIncomingMessageBorderStyle(string xaml)
+    {
+        var start = xaml.IndexOf("<Style x:Key=\"IncomingMessageBorderStyle\"", StringComparison.Ordinal);
+        Assert.True(start >= 0, "IncomingMessageBorderStyle must exist in ChatStyles.xaml.");
+
+        var end = xaml.IndexOf("</Style>", start, StringComparison.Ordinal);
+        Assert.True(end > start, "IncomingMessageBorderStyle must be a closed Style element.");
+        return xaml.Substring(start, end - start);
+    }
+
+    private static string ExtractTemplate(string xaml, string key, string? nextKey)
+    {
+        var start = xaml.IndexOf($"<DataTemplate x:Key=\"{key}\"", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"{key} must exist in ChatStyles.xaml.");
+
+        if (nextKey is null)
+        {
+            return xaml.Substring(start);
+        }
+
+        var end = xaml.IndexOf($"<DataTemplate x:Key=\"{nextKey}\"", StringComparison.Ordinal);
+        Assert.True(end > start, $"{nextKey} must follow {key} in ChatStyles.xaml.");
+        return xaml.Substring(start, end - start);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("en-US")]
+    [InlineData("zh-Hans")]
+    public void ChatMessageReportMenu_UsesTextLocalizationKey(string localeFolder)
+    {
+        var resources = LoadResourcesResw(localeFolder);
+
+        Assert.Contains("ChatMessageReportMenu.Text", resources, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatMessageReportMenu.Content", resources, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -28,6 +28,12 @@ public static class ChatReducer
             {
                 RuntimeStates = UpdateRuntimeStates(current.RuntimeStates, setRuntimeState.RuntimeState)
             }),
+            PromoteConversationRuntimeToWarmAction promoteRuntimeState when string.IsNullOrWhiteSpace(promoteRuntimeState.RuntimeState.ConversationId)
+                => current,
+            PromoteConversationRuntimeToWarmAction promoteRuntimeState => Mutate(current, current with
+            {
+                RuntimeStates = PromoteRuntimeStateToWarm(current.RuntimeStates, promoteRuntimeState.RuntimeState)
+            }),
             ClearConversationRuntimeStateAction clearRuntimeState when string.IsNullOrWhiteSpace(clearRuntimeState.ConversationId)
                 => current,
             ClearConversationRuntimeStateAction clearRuntimeState => Mutate(current, current with
@@ -369,6 +375,36 @@ public static class ChatReducer
         return current.SetItem(runtimeState.ConversationId, runtimeState);
     }
 
+    private static IImmutableDictionary<string, ConversationRuntimeSlice> PromoteRuntimeStateToWarm(
+        IImmutableDictionary<string, ConversationRuntimeSlice>? runtimeStates,
+        ConversationRuntimeSlice runtimeState)
+    {
+        var current = runtimeStates ?? ImmutableDictionary<string, ConversationRuntimeSlice>.Empty;
+        if (!current.TryGetValue(runtimeState.ConversationId, out var existing))
+        {
+            return current;
+        }
+
+        // 守卫必须在 reducer 内原子判定:后台恢复完成与同会话更新激活竞争 runtime。
+        // 更新激活把 phase 重置为更早 pending 阶段(或已 Stale/Faulted)后,过时完成的
+        // Warm 不得覆盖——由最新激活驱动自己的权威恢复;调用方的预检只是快速失败优化。
+        // RemoteHydrating 与 Warm 两个可晋升阶段都要求连接实例与远端会话身份等值:
+        // 同会话更新激活若已以新身份重建 hydrating,旧身份的过时完成不得先戳 Warm
+        // (否则新完成反而会因身份不匹配被拒,恰好反转正确结果);attach 复用的合法
+        // 晋升身份天然等值,不受影响。
+        var identityMatches =
+            string.Equals(existing.ConnectionInstanceId, runtimeState.ConnectionInstanceId, StringComparison.Ordinal)
+            && string.Equals(existing.RemoteSessionId, runtimeState.RemoteSessionId, StringComparison.Ordinal);
+        var promotable = identityMatches
+            && existing.Phase is ConversationRuntimePhase.RemoteHydrating or ConversationRuntimePhase.Warm;
+        if (!promotable)
+        {
+            return current;
+        }
+
+        return current.SetItem(runtimeState.ConversationId, runtimeState);
+    }
+
     private static bool IsBindingEmpty(ConversationBindingSlice binding)
         => string.IsNullOrWhiteSpace(binding.RemoteSessionId)
             && string.IsNullOrWhiteSpace(binding.ProfileId);
@@ -511,6 +547,15 @@ public static class ChatReducer
         ConversationMessageSnapshot message)
     {
         var current = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+
+        // Only non-empty Ids are authoritative upsert keys. ConversationMessageSnapshot.Id
+        // defaults to string.Empty; treating blank Ids as equal would collapse unrelated
+        // rows (corrupt persistence / projectors that forgot to assign Id) into one message.
+        if (string.IsNullOrWhiteSpace(message.Id))
+        {
+            return current.Add(message);
+        }
+
         var existingIndex = -1;
         for (var i = 0; i < current.Count; i++)
         {
@@ -539,16 +584,21 @@ public static class ChatReducer
         if (existingIndex >= 0)
         {
             var existing = current[existingIndex];
+            // Appending more text to an already-streamed message mutates content only.
+            // The message time is whatever was already authoritative (likely null, since ACP
+            // agent_message_chunk carries no per-message timestamp); we do not refresh it.
             return current.SetItem(existingIndex, CloneMessage(
                 existing,
-                textContent: (existing.TextContent ?? string.Empty) + delta,
-                timestamp: DateTime.UtcNow));
+                textContent: (existing.TextContent ?? string.Empty) + delta));
         }
 
+        // A first chunk of an assistant message starts with no authoritative time. ACP gives
+        // session/update chunks no timestamp; replayed and live chunks are identical here, so
+        // the policy is uniform: no time is better than a synthesized "now".
         return current.Add(new ConversationMessageSnapshot
         {
             Id = Guid.NewGuid().ToString(),
-            Timestamp = DateTime.UtcNow,
+            Timestamp = null,
             IsOutgoing = false,
             ContentType = "text",
             TextContent = delta,
@@ -629,16 +679,11 @@ public static class ChatReducer
             ToolCallJson = source.ToolCallJson,
             ToolCallRawInputJson = source.ToolCallRawInputJson,
             ToolCallRawOutputJson = source.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(source.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(source.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallLocations),
             PlanEntry = source.PlanEntry is null
                 ? null
-                : new ConversationPlanEntrySnapshot
-                {
-                    Content = source.PlanEntry.Content,
-                    Status = source.PlanEntry.Status,
-                    Priority = source.PlanEntry.Priority
-                },
+                : ConversationPlanWire.CloneDomain(source.PlanEntry),
             ModeId = source.ModeId
         };
     }

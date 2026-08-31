@@ -33,7 +33,9 @@ public sealed record SessionExportRequest(
 
 public sealed record SessionExportMessage(
     string Id,
-    DateTimeOffset Timestamp,
+    // null when the source message had no authoritative time (ACP replay/chunks). Exports must
+    // not synthesize a clock; the renderer omits the timestamp segment when null.
+    DateTimeOffset? Timestamp,
     bool IsOutgoing,
     string? ContentType,
     string? Title,

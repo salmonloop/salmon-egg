@@ -28,7 +28,7 @@ public sealed class ChatTerminalProjectionCoordinatorTests
         Assert.Equal("term-1", selection.SelectedTerminal?.TerminalId);
         Assert.Equal("hello", selection.SelectedTerminal?.Output);
         Assert.True(selection.SelectedTerminal?.IsTruncated);
-        Assert.Equal(7, selection.SelectedTerminal?.ExitCode);
+        Assert.Equal(7U, selection.SelectedTerminal?.ExitCode);
     }
 
     [Fact]
@@ -55,6 +55,6 @@ public sealed class ChatTerminalProjectionCoordinatorTests
         Assert.Equal("term-2", selection.SelectedTerminal?.TerminalId);
         Assert.Equal("done", selection.SelectedTerminal?.Output);
         Assert.True(selection.SelectedTerminal?.IsReleased);
-        Assert.Equal(0, selection.SelectedTerminal?.ExitCode);
+        Assert.Equal(0U, selection.SelectedTerminal?.ExitCode);
     }
 }

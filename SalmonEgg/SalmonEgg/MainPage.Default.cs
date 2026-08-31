@@ -10,6 +10,10 @@ public sealed partial class MainPage
     {
     }
 
+    partial void HideMainWindowToTray()
+    {
+    }
+
     partial void DisposePlatformTray()
     {
     }

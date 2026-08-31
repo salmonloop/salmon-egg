@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
@@ -126,7 +125,7 @@ public sealed class DelayedLoadChatService : IChatService
     public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
         => _inner.SetSessionConfigOptionAsync(@params);
 
-    public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+    public Task CancelSessionAsync(SessionCancelParams @params)
         => _inner.CancelSessionAsync(@params);
 
     public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
@@ -134,6 +133,8 @@ public sealed class DelayedLoadChatService : IChatService
 
     public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         => _inner.RespondToPermissionRequestAsync(messageId, outcome, optionId);
+
+    public void Dispose() => _inner.Dispose();
 
     public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null)
         => _inner.RespondToFileSystemRequestAsync(messageId, success, content, message);

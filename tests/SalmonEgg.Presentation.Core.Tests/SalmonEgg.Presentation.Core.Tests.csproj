@@ -15,11 +15,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="SalmonEgg.Presentation.Core.Tests.TestDoubles" />
     <Using Include="Xunit" />
   </ItemGroup>
 
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
+    <ProjectReference Include="..\SalmonEgg.TestSupport\SalmonEgg.TestSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\SalmonEgg\SalmonEgg\Presentation\Transcript\ITranscriptViewportHost.cs"
+             Link="Presentation\Transcript\ITranscriptViewportHost.cs" />
+    <Compile Include="..\..\SalmonEgg\SalmonEgg\Presentation\Transcript\TranscriptNativeScrollScheduler.cs"
+             Link="Presentation\Transcript\TranscriptNativeScrollScheduler.cs" />
+    <Compile Include="..\..\SalmonEgg\SalmonEgg\Presentation\Transcript\TranscriptProjectionRestoreController.cs"
+             Link="Presentation\Transcript\TranscriptProjectionRestoreController.cs" />
   </ItemGroup>
 </Project>

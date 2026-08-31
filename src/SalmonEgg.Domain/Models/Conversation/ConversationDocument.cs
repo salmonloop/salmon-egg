@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using SalmonEgg.Acp.Tool;
-using SalmonEgg.Acp.Plan;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {
@@ -112,9 +112,9 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool HasTitle { get; set; }
 
-        public string? Description { get; set; }
-
         public string? Cwd { get; set; }
+
+        public List<string>? AdditionalDirectories { get; set; }
 
         public DateTime? UpdatedAtUtc
         {
@@ -128,6 +128,7 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool HasUpdatedAt { get; set; }
 
+        [JsonConverter(typeof(ConversationMetaDictionaryJsonConverter))]
         public Dictionary<string, object?>? Meta { get; set; }
     }
 
@@ -157,16 +158,16 @@ namespace SalmonEgg.Domain.Models.Conversation
         {
         }
 
-        public ConversationUsageSnapshot(int? used, int? size, ConversationUsageCostSnapshot? cost)
+        public ConversationUsageSnapshot(ulong used, ulong size, ConversationUsageCostSnapshot? cost)
         {
             Used = used;
             Size = size;
             Cost = cost;
         }
 
-        public int? Used { get; set; }
+        public ulong Used { get; set; }
 
-        public int? Size { get; set; }
+        public ulong Size { get; set; }
 
         public ConversationUsageCostSnapshot? Cost { get; set; }
     }
@@ -177,22 +178,26 @@ namespace SalmonEgg.Domain.Models.Conversation
         {
         }
 
-        public ConversationUsageCostSnapshot(decimal? amount, string? currency)
+        public ConversationUsageCostSnapshot(double amount, string currency)
         {
             Amount = amount;
             Currency = currency;
         }
 
-        public decimal? Amount { get; set; }
+        public double Amount { get; set; }
 
-        public string? Currency { get; set; }
+        public string Currency { get; set; } = string.Empty;
     }
 
     public sealed class ConversationMessageSnapshot
     {
         public string Id { get; set; } = string.Empty;
 
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        // null = no authoritative message time is available.
+        // ACP session/load replay and per-chunk updates carry no message timestamp;
+        // local user prompts carry an observed emit time. The absence of a value
+        // must never be masked with a wall clock — the UI hides time when null.
+        public DateTime? Timestamp { get; set; }
 
         public bool IsOutgoing { get; set; }
 
@@ -214,9 +219,15 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string? ToolCallId { get; set; }
 
-        public ToolCallKind? ToolCallKind { get; set; }
+        /// <summary>
+        /// Open ACP tool-call kind wire value (for example read, execute).
+        /// </summary>
+        public string? ToolCallKind { get; set; }
 
-        public ToolCallStatus? ToolCallStatus { get; set; }
+        /// <summary>
+        /// Open ACP tool-call status wire value (for example pending, completed).
+        /// </summary>
+        public string? ToolCallStatus { get; set; }
 
         public string? ToolCallJson { get; set; }
 
@@ -224,9 +235,16 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string? ToolCallRawOutputJson { get; set; }
 
-        public List<ToolCallContent>? ToolCallContent { get; set; }
+        /// <summary>
+        /// Opaque ACP tool-call content array payload. Presentation deserializes through
+        /// <c>AcpJsonContext</c>; Domain never retains protocol DTO instances.
+        /// </summary>
+        public JsonElement? ToolCallContent { get; set; }
 
-        public List<ToolCallLocation>? ToolCallLocations { get; set; }
+        /// <summary>
+        /// Opaque ACP tool-call locations array payload.
+        /// </summary>
+        public JsonElement? ToolCallLocations { get; set; }
 
         public ConversationPlanEntrySnapshot? PlanEntry { get; set; }
 
@@ -237,8 +255,41 @@ namespace SalmonEgg.Domain.Models.Conversation
     {
         public string Content { get; set; } = string.Empty;
 
-        public PlanEntryStatus Status { get; set; }
+        /// <summary>
+        /// Open ACP plan entry status wire value.
+        /// </summary>
+        public string Status { get; set; } = "pending";
 
-        public PlanEntryPriority Priority { get; set; }
+        /// <summary>
+        /// Open ACP plan entry priority wire value.
+        /// </summary>
+        public string Priority { get; set; } = "low";
+    }
+
+    /// <summary>
+    /// Domain-owned meta dictionary converter. Preserves raw JSON token text for conversation
+    /// session-info metadata without depending on ACP protocol converters.
+    /// </summary>
+    public sealed class ConversationMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
+    {
+        public override Dictionary<string, object?>? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+            => ConversationMetaJson.ReadValue(ref reader);
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            Dictionary<string, object?>? value,
+            JsonSerializerOptions options)
+        {
+            if (value is null)
+            {
+                writer.WriteNullValue();
+                return;
+            }
+
+            ConversationMetaJson.WriteObject(writer, value);
+        }
     }
 }

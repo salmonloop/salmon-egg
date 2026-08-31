@@ -11,6 +11,7 @@ namespace SalmonEgg.Infrastructure.Client;
 internal sealed class DomainAcpTransportAdapter : IAcpTransport
 {
     private readonly ITransport _inner;
+    private bool _disposed;
 
     public DomainAcpTransportAdapter(ITransport inner)
     {
@@ -33,6 +34,21 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
 
     public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
         => _inner.SendMessageAsync(message, cancellationToken);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _inner.MessageReceived -= OnMessageReceived;
+        _inner.ErrorOccurred -= OnErrorOccurred;
+
+        // 适配器 1:1 包裹底层 Domain 传输，其生命周期随适配器归还。
+        _inner.Dispose();
+    }
 
     private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
     {
@@ -62,6 +78,7 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
             TransportErrorKind.StderrReadFailed => AcpTransportErrorKind.StderrReadFailed,
             TransportErrorKind.DisconnectFailed => AcpTransportErrorKind.DisconnectFailed,
             TransportErrorKind.NotConnected => AcpTransportErrorKind.NotConnected,
+            TransportErrorKind.StdoutProtocolViolation => AcpTransportErrorKind.StdoutProtocolViolation,
             _ => AcpTransportErrorKind.General
         };
 }
@@ -78,7 +95,7 @@ internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
     public bool ContainsSession(string sessionId)
         => _inner.GetSession(sessionId) is not null;
 
-    public async Task CreateSessionAsync(string sessionId, string? cwd = null)
+    public async Task CreateSessionAsync(string sessionId, string cwd)
     {
         await _inner.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
     }
@@ -87,13 +104,20 @@ internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
         => _inner.RemoveSession(sessionId);
 
     public bool UpdateCurrentMode(string sessionId, string modeId)
-        => _inner.UpdateSession(sessionId, session =>
+    {
+        if (_inner.GetSession(sessionId) is not { } session)
         {
-            session.Mode.CurrentModeId = modeId;
-        });
+            return false;
+        }
 
-    public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
-        => _inner.CancelSessionAsync(sessionId, reason);
+        // 模式切换的写入与「当前模式对象」的重新解析必须一起发生，这个不可分性属于会话自身，
+        // 因此交给 Session 在其内部临界区完成，而不是在这里拿到引用后逐字段改。
+        session.SetCurrentModeId(modeId);
+        return true;
+    }
+
+    public Task<bool> CancelSessionAsync(string sessionId)
+        => _inner.CancelSessionAsync(sessionId);
 }
 
 internal sealed class DomainAcpClientLogger : IAcpClientLogger

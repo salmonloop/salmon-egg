@@ -9,6 +9,24 @@ namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsService
 {
+    private static readonly GamepadButtons[] DiagnosticButtons =
+    [
+        GamepadButtons.A,
+        GamepadButtons.B,
+        GamepadButtons.X,
+        GamepadButtons.Y,
+        GamepadButtons.DPadUp,
+        GamepadButtons.DPadDown,
+        GamepadButtons.DPadLeft,
+        GamepadButtons.DPadRight,
+        GamepadButtons.LeftShoulder,
+        GamepadButtons.RightShoulder,
+        GamepadButtons.LeftThumbstick,
+        GamepadButtons.RightThumbstick,
+        GamepadButtons.Menu,
+        GamepadButtons.View
+    ];
+
     private readonly WindowsRawGameControllerMapper _rawMapper;
 
     public WindowsGamepadDiagnosticsService(WindowsRawGameControllerMapper rawMapper)
@@ -18,58 +36,88 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
 
     public GamepadDiagnosticsSnapshot GetCurrentSnapshot()
     {
-        var gamepads = Gamepad.Gamepads.ToArray();
-        var rawControllers = RawGameController.RawGameControllers.ToArray();
+        var standardGamepads = Gamepad.Gamepads.Select(CreateStandardGamepadDiagnostics).ToArray();
+        var rawControllers = RawGameController.RawGameControllers.Select(CreateRawControllerDiagnostics).ToArray();
 
-        var source = GamepadDiagnosticsInputSource.None;
-        var reading = default(GamepadInputReading);
-
-        foreach (var gamepad in gamepads)
+        var standardReadings = new GamepadInputReading[standardGamepads.Length];
+        for (var i = 0; i < standardGamepads.Length; i++)
         {
-            reading = GetInputReading(gamepad.GetCurrentReading());
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
-                || GamepadContextIntentProjector.HasActiveIntents(reading)
-                || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
-            {
-                source = GamepadDiagnosticsInputSource.Gamepad;
-                break;
-            }
+            standardReadings[i] = standardGamepads[i].Reading;
         }
 
-        if (source == GamepadDiagnosticsInputSource.None)
+        var rawReadings = new GamepadInputReading[rawControllers.Length];
+        for (var i = 0; i < rawControllers.Length; i++)
         {
-            foreach (var controller in rawControllers)
-            {
-                reading = _rawMapper.GetInputReading(controller);
-                if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
-                    || GamepadContextIntentProjector.HasActiveIntents(reading)
-                    || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
-                {
-                    source = GamepadDiagnosticsInputSource.RawGameController;
-                    break;
-                }
-            }
+            rawReadings[i] = rawControllers[i].Reading;
         }
 
-        var activeIntents = GamepadIntentProcessor.GetActiveIntents(reading);
-        var activeContextIntents = GamepadContextIntentProjector.GetActiveIntents(reading);
+        var active = GamepadDiagnosticsActiveReadingProjector.Project(standardReadings, rawReadings);
         return new GamepadDiagnosticsSnapshot(
             IsSupported: true,
-            ConnectedGamepadCount: gamepads.Length,
+            ConnectedGamepadCount: standardGamepads.Length,
             ConnectedRawControllerCount: rawControllers.Length,
-            InputSource: source,
-            Reading: reading,
-            ActiveIntents: activeIntents,
-            ActiveContextIntents: activeContextIntents,
-            RawControllers: rawControllers.Select(CreateRawControllerDiagnostics).ToArray());
+            InputSource: active.InputSource,
+            Reading: active.Reading,
+            ActiveIntents: active.ActiveIntents,
+            ActiveContextIntents: active.ActiveContextIntents,
+            ActiveShortcuts: active.ActiveShortcuts,
+            StandardGamepads: standardGamepads,
+            RawControllers: rawControllers);
     }
 
-    private static RawGameControllerDiagnostics CreateRawControllerDiagnostics(RawGameController controller)
+    private static StandardGamepadDiagnostics CreateStandardGamepadDiagnostics(Gamepad gamepad)
+    {
+        var reading = gamepad.GetCurrentReading();
+        var labels = WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels(gamepad);
+        var identity = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
+        return new StandardGamepadDiagnostics(
+            DisplayName: identity.DisplayName,
+            HardwareVendorId: identity.HardwareVendorId,
+            HardwareProductId: identity.HardwareProductId,
+            FaceButtonLayout: RawGameControllerFaceButtonLayoutResolver.Resolve(
+                identity.DisplayName,
+                identity.HardwareVendorId,
+                labels),
+            ButtonLabels: GetButtonLabels(gamepad),
+            PressedButtons: GetPressedButtons(reading.Buttons),
+            Reading: WindowsStandardGamepadReadingMapper.GetInputReading(gamepad, reading, labels, identity));
+    }
+
+    private static string[] GetButtonLabels(Gamepad gamepad)
+    {
+        var labels = new List<string>(DiagnosticButtons.Length);
+        foreach (var button in DiagnosticButtons)
+        {
+            var label = gamepad.GetButtonLabel(button);
+            labels.Add(label == GameControllerButtonLabel.None
+                ? $"{button}:None"
+                : $"{button}:{label}");
+        }
+
+        return labels.ToArray();
+    }
+
+    private static string[] GetPressedButtons(GamepadButtons buttons)
+    {
+        var pressedButtons = new List<string>();
+        foreach (var button in DiagnosticButtons)
+        {
+            if (buttons.HasFlag(button))
+            {
+                pressedButtons.Add(button.ToString());
+            }
+        }
+
+        return pressedButtons.ToArray();
+    }
+
+    private RawGameControllerDiagnostics CreateRawControllerDiagnostics(RawGameController controller)
     {
         var buttons = new bool[controller.ButtonCount];
         var switches = new GameControllerSwitchPosition[controller.SwitchCount];
         var axes = new double[controller.AxisCount];
         controller.GetCurrentReading(buttons, switches, axes);
+        var reading = _rawMapper.GetInputReading(controller, buttons, switches, axes);
 
         return new RawGameControllerDiagnostics(
             DisplayName: controller.DisplayName,
@@ -79,9 +127,13 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             ButtonCount: controller.ButtonCount,
             SwitchCount: controller.SwitchCount,
             AxisCount: controller.AxisCount,
+            UnlabeledIndexFallbackEnabled: RawGameControllerUnlabeledFaceIndexPolicy.SupportsFullGamepadUnlabeledIndexFallback(
+                controller.DisplayName,
+                controller.HardwareVendorId),
             PressedButtons: GetPressedButtons(controller, buttons),
             ActiveSwitches: GetActiveSwitches(switches),
-            Axes: axes);
+            Axes: axes,
+            Reading: reading);
     }
 
     private static string[] GetPressedButtons(RawGameController controller, IReadOnlyList<bool> buttons)
@@ -118,20 +170,5 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         return activeSwitches.ToArray();
     }
 
-    private static GamepadInputReading GetInputReading(GamepadReading reading)
-    {
-        return StandardGamepadInputReadingMapper.GetInputReading(
-            moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
-            moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
-            moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
-            moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            activate: reading.Buttons.HasFlag(GamepadButtons.A),
-            back: reading.Buttons.HasFlag(GamepadButtons.B),
-            shortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
-            leftTrigger: reading.LeftTrigger,
-            rightTrigger: reading.RightTrigger,
-            thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY);
-    }
 }
 #endif

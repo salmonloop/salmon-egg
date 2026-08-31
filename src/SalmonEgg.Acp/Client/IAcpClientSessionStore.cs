@@ -7,24 +7,24 @@ namespace SalmonEgg.Acp.Client
     {
         bool ContainsSession(string sessionId);
 
-        Task CreateSessionAsync(string sessionId, string? cwd = null);
+        Task CreateSessionAsync(string sessionId, string cwd);
 
         bool RemoveSession(string sessionId);
 
         bool UpdateCurrentMode(string sessionId, string modeId);
 
-        Task<bool> CancelSessionAsync(string sessionId, string? reason = null);
+        Task<bool> CancelSessionAsync(string sessionId);
     }
 
     public sealed class InMemoryAcpClientSessionStore : IAcpClientSessionStore
     {
-        private readonly ConcurrentDictionary<string, string?> _sessions = new();
+        private readonly ConcurrentDictionary<string, string> _sessions = new();
         private readonly ConcurrentDictionary<string, string> _currentModes = new();
 
         public bool ContainsSession(string sessionId)
             => !string.IsNullOrWhiteSpace(sessionId) && _sessions.ContainsKey(sessionId);
 
-        public Task CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task CreateSessionAsync(string sessionId, string cwd)
         {
             if (!string.IsNullOrWhiteSpace(sessionId))
             {
@@ -56,7 +56,7 @@ namespace SalmonEgg.Acp.Client
             return _sessions.ContainsKey(sessionId);
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(ContainsSession(sessionId));
     }
 }

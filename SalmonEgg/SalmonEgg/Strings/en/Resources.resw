@@ -273,7 +273,10 @@
   <data name="Diagnostics_GamepadThumbstickLabel.Text" xml:space="preserve">
     <value>Left thumbstick:</value>
   </data>
-  <data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
+    <data name="Diagnostics_GamepadStandardDetailsLabel.Text" xml:space="preserve">
+    <value>Standard details:</value>
+  </data>
+<data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
     <value>Raw details:</value>
   </data>
   <data name="Diagnostics_GamepadStart.Content" xml:space="preserve">
@@ -489,8 +492,14 @@
   <data name="ChatViewLoadingOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Session loading</value>
   </data>
+  <data name="ShellShutdownOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Shutting down</value>
+  </data>
   <data name="ChatMessageCopyMenu.Text" xml:space="preserve">
     <value>Copy message</value>
+  </data>
+  <data name="ChatMessageReportMenu.Text" xml:space="preserve">
+    <value>Report</value>
   </data>
   <data name="ChatMarkdownCopyCodeButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Copy code</value>
@@ -684,12 +693,6 @@
   <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
     <value>Consider loading complete when session/load returns; replay continues asynchronously.</value>
   </data>
-  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
-    <value>Payload details</value>
-  </data>
-  <data name="ToolCallPillPermissionHeader" xml:space="preserve">
-    <value>Approval required</value>
-  </data>
   <data name="ToolCallPillKindRead" xml:space="preserve">
     <value>Read file</value>
   </data>
@@ -720,26 +723,20 @@
   <data name="ToolCallPillKindDefault" xml:space="preserve">
     <value>Tool call</value>
   </data>
-  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
-    <value>Path</value>
+  <data name="ToolCallPillPermissionInfoBar.Title" xml:space="preserve">
+    <value>Approval required</value>
   </data>
-  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
-    <value>Query</value>
+  <data name="ToolCallPillViewRaw.Text" xml:space="preserve">
+    <value>View raw</value>
   </data>
-  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
-    <value>Command</value>
+  <data name="ToolCallPillRawInput.Text" xml:space="preserve">
+    <value>Input</value>
   </data>
-  <data name="ToolCallPillSummaryImageLabel" xml:space="preserve">
-    <value>Image</value>
+  <data name="ToolCallPillRawOutput.Text" xml:space="preserve">
+    <value>Output</value>
   </data>
-  <data name="ToolCallPillSummaryImageContent" xml:space="preserve">
-    <value>Image content</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioLabel" xml:space="preserve">
-    <value>Audio</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioContent" xml:space="preserve">
-    <value>Audio content</value>
+  <data name="ToolCallPillTerminalLabel.Text" xml:space="preserve">
+    <value>Terminal</value>
   </data>
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>Appearance</value>
@@ -815,6 +812,21 @@
   </data>
   <data name="General_StartupTitle.Text" xml:space="preserve">
     <value>Startup and window</value>
+  </data>
+  <data name="General_NotificationsTitle.Text" xml:space="preserve">
+    <value>Notifications</value>
+  </data>
+  <data name="General_SystemNotificationsTitle.Text" xml:space="preserve">
+    <value>Show system notifications when a task completes</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="General_SystemNotificationsUnsupported.Text" xml:space="preserve">
+    <value>System notifications are not available on this platform.</value>
   </data>
   <data name="General_AutoStartTitle.Text" xml:space="preserve">
     <value>Launch on startup</value>
@@ -1035,6 +1047,39 @@
   <data name="About_ProtocolLabel.Text" xml:space="preserve">
     <value>Protocol version:</value>
   </data>
+  <data name="About_CommunityTitle.Text" xml:space="preserve">
+    <value>Community</value>
+  </data>
+  <data name="About_DiscordTitle.Text" xml:space="preserve">
+    <value>SalmonEgg on Discord</value>
+  </data>
+  <data name="About_DiscordDescription.Text" xml:space="preserve">
+    <value>Share tips, report issues, and keep up with project news.</value>
+  </data>
+  <data name="About_JoinDiscord.Content" xml:space="preserve">
+    <value>Join the Discord community</value>
+  </data>
+  <data name="About_GitHubTitle.Text" xml:space="preserve">
+    <value>SalmonEgg on GitHub</value>
+  </data>
+  <data name="About_GitHubDescription.Text" xml:space="preserve">
+    <value>Explore the source, report issues, or give SalmonEgg a star.</value>
+  </data>
+  <data name="About_OpenGitHub.Content" xml:space="preserve">
+    <value>Star SalmonEgg on GitHub</value>
+  </data>
+  <data name="About_SupportProjectTitle.Text" xml:space="preserve">
+    <value>Support the project</value>
+  </data>
+  <data name="About_KofiTitle.Text" xml:space="preserve">
+    <value>Support development on Ko-fi</value>
+  </data>
+  <data name="About_KofiDescription.Text" xml:space="preserve">
+    <value>If SalmonEgg helps you, you can support its continued development.</value>
+  </data>
+  <data name="About_OpenKofi.Content" xml:space="preserve">
+    <value>Buy me a coffee</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>Support</value>
   </data>
@@ -1215,12 +1260,6 @@
   <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
     <value>Changes</value>
   </data>
-  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
-    <value>No task status yet</value>
-  </data>
-  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
-    <value>Agent plan updates and file changes will appear here.</value>
-  </data>
   <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
     <value>{0} in progress · {1} pending · {2} completed · {3} files changed</value>
   </data>
@@ -1326,6 +1365,159 @@
   <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
     <value>Delete</value>
   </data>
+  <data name="Acp_ProfilesSetupWizard.Content" xml:space="preserve">
+    <value>Setup wizard</value>
+  </data>
+  <data name="AcpSetup_PageTitle.Text" xml:space="preserve">
+    <value>ACP Setup Wizard</value>
+  </data>
+  <data name="AcpSetup_PageSummary.Text" xml:space="preserve">
+    <value>Detect your agent, install the ACP adapter, fill in launch parameters, verify the connection, and save it as a profile.</value>
+  </data>
+  <data name="AcpSetup_AgentsTitle.Text" xml:space="preserve">
+    <value>Choose an agent</value>
+  </data>
+  <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
+    <value>Detect again</value>
+  </data>
+  <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
+    <value>Check components</value>
+  </data>
+  <data name="AcpSetup_InstallAdapter.Content" xml:space="preserve">
+    <value>Install adapter</value>
+  </data>
+  <data name="AcpSetup_RedetectAdapter.Content" xml:space="preserve">
+    <value>Detect again</value>
+  </data>
+  <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
+    <value>Install docs</value>
+  </data>
+  <data name="AcpSetup_InstallToolchainDocs.Content" xml:space="preserve">
+    <value>Set up toolchain</value>
+  </data>
+  <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
+    <value>Launch parameters</value>
+  </data>
+  <data name="AcpSetup_CommandPreviewLabel.Text" xml:space="preserve">
+    <value>Command preview</value>
+  </data>
+  <data name="AcpSetup_TestTitle.Text" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="AcpSetup_RunTest.Content" xml:space="preserve">
+    <value>Run test</value>
+  </data>
+  <data name="AcpSetup_SkipTest.Content" xml:space="preserve">
+    <value>Skip test</value>
+  </data>
+  <data name="AcpSetup_SkipTest.AutomationProperties.HelpText" xml:space="preserve">
+    <value>Continue without testing. The saved profile will be marked unverified.</value>
+  </data>
+  <data name="AcpSetup_SaveTitle.Text" xml:space="preserve">
+    <value>Save profile</value>
+  </data>
+  <data name="AcpSetup_Back.Content" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="AcpSetup_Save.Content" xml:space="preserve">
+    <value>Save configuration</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Title" xml:space="preserve">
+    <value>Connection test passed</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Message" xml:space="preserve">
+    <value>The configuration works and can be saved as a profile.</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Title" xml:space="preserve">
+    <value>Saved</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Message" xml:space="preserve">
+    <value>The profile was added to your connection list.</value>
+  </data>
+  <data name="AcpSetup_ProfileName.Header" xml:space="preserve">
+    <value>Profile name</value>
+  </data>
+  <data name="AcpSetup_InstallAgentRow.Content" xml:space="preserve">
+    <value>Install</value>
+  </data>
+  <data name="AcpSetup_Working.Text" xml:space="preserve">
+    <value>Working, please wait…</value>
+  </data>
+  <data name="AcpSetup_CancelOperation.Content" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AcpSetup_StatusInstalled.AutomationProperties.Name" xml:space="preserve">
+    <value>Installed</value>
+  </data>
+  <data name="AcpSetup_StatusMissing.AutomationProperties.Name" xml:space="preserve">
+    <value>Not installed</value>
+  </data>
+  <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
+    <value>Step {0} of {1}</value>
+  </data>
+  <data name="AcpSetup_InstallOutputToggle.Text" xml:space="preserve">
+    <value>View installer output</value>
+  </data>
+  <data name="AcpSetup_AdapterMissingBar.Title" xml:space="preserve">
+    <value>No ACP adapter found</value>
+  </data>
+  <data name="AcpSetup_AdapterMissingBar.Message" xml:space="preserve">
+    <value>This agent needs an ACP adapter to talk to Salmon Egg. Let the wizard install one, or install it yourself and detect again.</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Title" xml:space="preserve">
+    <value>Adapter ready</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Message" xml:space="preserve">
+    <value>A separate adapter was found. You can continue.</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Title" xml:space="preserve">
+    <value>Could not confirm the adapter</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Message" xml:space="preserve">
+    <value>Detection reached no conclusion, which is not the same as the adapter being absent. You can continue; the connection test will verify it.</value>
+  </data>
+  <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
+    <value>Looking for</value>
+  </data>
+  <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
+    <value>Why was nothing found?</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
+    <value>Full path to the command</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.PlaceholderText" xml:space="preserve">
+    <value>for example /home/you/.nvm/versions/node/v24/bin/npx</value>
+  </data>
+  <data name="AcpSetup_VerifyCustomCommand.Content" xml:space="preserve">
+    <value>Detect using this path</value>
+  </data>
+  <data name="AcpSetup_PathHint.Text" xml:space="preserve">
+    <value>An app started from a desktop icon does not inherit the PATH you set up in your shell, so commands installed through nvm, asdf, or ~/.local/bin are usually invisible to it. Give the full path instead; it is used both for detection and by the profile you save.</value>
+  </data>
+  <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>Found at</value>
+  </data>
+  <data name="AcpSetup_PackageLocationLabel.Text" xml:space="preserve">
+    <value>Adapter package location</value>
+  </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Title" xml:space="preserve">
+    <value>This agent speaks ACP natively</value>
+  </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Message" xml:space="preserve">
+    <value>No separate adapter is needed. You can continue.</value>
+  </data>
+  <data name="AcpSetup_AdapterPicker.Header" xml:space="preserve">
+    <value>ACP adapter</value>
+  </data>
+  <data name="AcpSetup_MultipleCandidates.Text" xml:space="preserve">
+    <value>This machine has more than one. The first is in use, which is what a terminal would run. Pick another to change it.</value>
+  </data>
+  <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
+    <value>Which one to use</value>
+  </data>
+  <data name="AcpSetup_Next.Content" xml:space="preserve">
+    <value>Next</value>
+  </data>
   <data name="Acp_RemoteDirectoriesTitle.Text" xml:space="preserve">
     <value>Remote projects</value>
   </data>
@@ -1343,6 +1535,9 @@
   </data>
   <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>Reconnect</value>
+  </data>
+  <data name="Acp_ProfileUnverified.Text" xml:space="preserve">
+    <value>Unverified</value>
   </data>
   <data name="Acp_ProfilesAdd.Content" xml:space="preserve">
     <value>New profile</value>
@@ -1414,7 +1609,7 @@
     <value>Connection and services</value>
   </data>
   <data name="Conn_TransportHttpSse.Content" xml:space="preserve">
-    <value>HTTP SSE</value>
+    <value>Streamable HTTP</value>
   </data>
   <data name="Conn_TransportLabel.Text" xml:space="preserve">
     <value>Transport</value>
@@ -1487,6 +1682,39 @@
   </data>
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>Configuration cloud sync</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
+    <value>Share error reports and performance data</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
+    <value>Helps improve SalmonEgg by sending crash reports, performance metrics, and usage patterns. Chat content and file contents are never collected. Reports do include technical context such as your device name, app version, and operating system.</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvanced.Header" xml:space="preserve">
+    <value>Advanced: Custom telemetry endpoint</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
+    <value>For developers only. Telemetry goes to the app's built-in gateway by default; configuring this endpoint or an OTLP deployment environment variable redirects it to your address. Make sure you trust the endpoint before entering credentials.</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
+    <value>OTLP endpoint</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
+    <value>https://collector.example.com:4318  (leave blank to use the deployment environment)</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
+    <value>OTLP headers</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.PlaceholderText" xml:space="preserve">
+    <value>api-key=YOUR_KEY  (comma-separated key=value pairs, optional)</value>
+  </data>
+  <data name="DataStorage_TelemetryApplyNotice.Text" xml:space="preserve">
+    <value>Changes take effect as soon as they are saved. No restart needed.</value>
   </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
     <value>Cloud sync service</value>
@@ -1582,4 +1810,31 @@
   <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>Turn off sync (keep settings)</value></data>
   <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>Remove cloud sync setup</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>Cancel</value></data>
+  <data name="ChatModelSelector.PlaceholderText" xml:space="preserve">
+    <value>Choose model</value>
+  </data>
+  <data name="VoiceInputStartButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Start voice input</value>
+  </data>
+  <data name="VoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Start voice input</value>
+  </data>
+  <data name="VoiceInputStopButton.AutomationProperties.Name" xml:space="preserve">
+    <value>Stop voice input</value>
+  </data>
+  <data name="VoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Stop voice input</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Start voice input</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Start voice input</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Stop voice input</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Stop voice input</value>
+  </data>
 </root>

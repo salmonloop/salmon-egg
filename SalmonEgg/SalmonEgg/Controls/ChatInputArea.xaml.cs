@@ -4,8 +4,10 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -105,6 +107,9 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     private Button? _pendingActionActivationRestoreButton;
     private int _pendingActionActivationRestoreRemainingAttempts;
     private ChatViewModel? _observedViewModel;
+#if DEBUG
+    private readonly ILogger<ChatInputArea> _logger;
+#endif
 
     public event EventHandler? SelectorDropDownOpened;
 
@@ -172,6 +177,9 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     public ChatInputArea()
     {
+#if DEBUG
+        _logger = App.ServiceProvider.GetRequiredService<ILogger<ChatInputArea>>();
+#endif
         InitializeComponent();
         _inputBoxHandledKeyDownHandler = OnInputBoxHandledKeyDown;
         Loaded += OnLoaded;
@@ -982,41 +990,106 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void ExecuteSelectorCommand(object sender, SelectionChangedEventArgs e, ICommand? command)
     {
-        if (sender is ComboBox comboBox
+        var comboBox = sender as ComboBox;
+        if (comboBox is not null
             && !ReferenceEquals(_openSelectorHost, comboBox))
         {
+#if DEBUG
+            _logger.LogDebug(
+                "Composer selector selection ignored because the selector is not the open host. Selector={Selector} AutomationId={AutomationId} OpenSelector={OpenSelector} AddedItemCount={AddedItemCount} RemovedItemCount={RemovedItemCount} SelectedIndex={SelectedIndex}",
+                ResolveSelectorHostName(comboBox),
+                ResolveSelectorAutomationId(comboBox),
+                ResolveSelectorHostName(_openSelectorHost),
+                e.AddedItems.Count,
+                e.RemovedItems.Count,
+                comboBox.SelectedIndex);
+#endif
             return;
         }
 
         _selectorCommandExecutedDuringOpen |= TryExecuteSelectorCommand(
             ResolveSelectedSelectorItem(sender, e),
-            command);
+            command,
+            "SelectionChanged",
+            comboBox);
     }
 
     private void ExecuteCurrentSelectorCommand(object sender, ICommand? command)
     {
+        var comboBox = sender as ComboBox;
         _selectorCommandExecutedDuringOpen |= TryExecuteSelectorCommand(
             ResolveCurrentSelectorItem(sender),
-            command);
+            command,
+            "DropDownClosedCurrentSelection",
+            comboBox);
     }
 
-    private static bool TryExecuteSelectorCommand(ComposerSelectorItemViewModel? item, ICommand? command)
+    private bool TryExecuteSelectorCommand(
+        ComposerSelectorItemViewModel? item,
+        ICommand? command,
+        string source,
+        ComboBox? comboBox)
     {
-        if (command is null
-            || item is null
-            || item.IsPlaceholder
-            || !item.IsSelectable
-            || string.IsNullOrWhiteSpace(item.SemanticValue))
+        if (command is null)
         {
+#if DEBUG
+            LogSelectorCommandSkipped(comboBox, source, item, "CommandMissing");
+#endif
+            return false;
+        }
+
+        if (item is null)
+        {
+#if DEBUG
+            LogSelectorCommandSkipped(comboBox, source, item, "ItemMissing");
+#endif
+            return false;
+        }
+
+        if (item.IsPlaceholder)
+        {
+#if DEBUG
+            LogSelectorCommandSkipped(comboBox, source, item, "Placeholder");
+#endif
+            return false;
+        }
+
+        if (!item.IsSelectable)
+        {
+#if DEBUG
+            LogSelectorCommandSkipped(comboBox, source, item, "NotSelectable");
+#endif
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.SemanticValue))
+        {
+#if DEBUG
+            LogSelectorCommandSkipped(comboBox, source, item, "MissingSemanticValue");
+#endif
             return false;
         }
 
         if (command.CanExecute(item))
         {
+#if DEBUG
+            _logger.LogDebug(
+                "Composer selector command executing. Source={Source} Selector={Selector} AutomationId={AutomationId} ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} SelectedIndex={SelectedIndex}",
+                source,
+                ResolveSelectorHostName(comboBox),
+                ResolveSelectorAutomationId(comboBox),
+                item.Kind,
+                item.Identity,
+                item.SemanticValue,
+                comboBox?.SelectedIndex);
+#endif
             command.Execute(item);
             return true;
         }
 
+#if DEBUG
+        LogSelectorCommandSkipped(comboBox, source, item, "CanExecuteFalse");
+#endif
         return false;
     }
 
@@ -1090,18 +1163,41 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     {
         _openSelectorHost = sender as ComboBox;
         _selectorCommandExecutedDuringOpen = false;
+#if DEBUG
+        LogSelectorHostSnapshot("DropDownOpened", _openSelectorHost);
+#endif
         SelectorDropDownOpened?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSelectorDropDownClosed(object sender, object e)
     {
+#if DEBUG
+        LogSelectorHostSnapshot("DropDownClosedBeforeFallback", sender as ComboBox);
+#endif
         if (!_selectorCommandExecutedDuringOpen && sender is ComboBox comboBox)
         {
             var command = ResolveSelectorCommand(comboBox);
             if (command is not null)
             {
+#if DEBUG
+                _logger.LogDebug(
+                    "Composer selector close fallback enqueued. Selector={Selector} AutomationId={AutomationId} SelectedIndex={SelectedIndex}",
+                    ResolveSelectorHostName(comboBox),
+                    ResolveSelectorAutomationId(comboBox),
+                    comboBox.SelectedIndex);
+#endif
                 _ = DispatcherQueue.TryEnqueue(() => ExecuteCurrentSelectorCommand(comboBox, command));
             }
+#if DEBUG
+            else
+            {
+                _logger.LogDebug(
+                    "Composer selector close fallback skipped because command is missing. Selector={Selector} AutomationId={AutomationId} SelectedIndex={SelectedIndex}",
+                    ResolveSelectorHostName(comboBox),
+                    ResolveSelectorAutomationId(comboBox),
+                    comboBox.SelectedIndex);
+            }
+#endif
         }
 
         if (ReferenceEquals(_openSelectorHost, sender))
@@ -1109,6 +1205,14 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             _openSelectorHost = null;
         }
 
+#if DEBUG
+        _logger.LogDebug(
+            "Composer selector dropdown closed. Selector={Selector} AutomationId={AutomationId} CommandExecutedDuringOpen={CommandExecutedDuringOpen} OpenSelectorCleared={OpenSelectorCleared}",
+            ResolveSelectorHostName(sender as ComboBox),
+            ResolveSelectorAutomationId(sender as ComboBox),
+            _selectorCommandExecutedDuringOpen,
+            _openSelectorHost is null);
+#endif
         SelectorDropDownClosed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1133,6 +1237,117 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             ? SelectorSlots.Model.SelectionCommand
             : null;
     }
+
+#if DEBUG
+    private void LogSelectorHostSnapshot(string eventName, ComboBox? comboBox)
+    {
+        var selectedItem = comboBox is null ? null : ResolveCurrentSelectorItem(comboBox);
+        _logger.LogDebug(
+            "Composer selector dropdown event. Event={Event} Selector={Selector} AutomationId={AutomationId} ItemCount={ItemCount} SelectedIndex={SelectedIndex} SelectedKind={SelectedKind} SelectedIdentity={SelectedIdentity} SelectedSemanticValue={SelectedSemanticValue} SelectedIsPlaceholder={SelectedIsPlaceholder} SelectedIsSelectable={SelectedIsSelectable} SelectedBlocksSubmit={SelectedBlocksSubmit} IsEnabled={IsEnabled} Visibility={Visibility} ActualWidth={ActualWidth} ActualHeight={ActualHeight} CommandExecutedDuringOpen={CommandExecutedDuringOpen}",
+            eventName,
+            ResolveSelectorHostName(comboBox),
+            ResolveSelectorAutomationId(comboBox),
+            ResolveSelectorItemCount(comboBox),
+            comboBox?.SelectedIndex,
+            selectedItem?.Kind,
+            selectedItem?.Identity,
+            selectedItem?.SemanticValue,
+            selectedItem?.IsPlaceholder,
+            selectedItem?.IsSelectable,
+            selectedItem?.BlocksSubmit,
+            comboBox?.IsEnabled,
+            comboBox?.Visibility,
+            comboBox?.ActualWidth,
+            comboBox?.ActualHeight,
+            _selectorCommandExecutedDuringOpen);
+    }
+
+    private void LogSelectorCommandSkipped(
+        ComboBox? comboBox,
+        string source,
+        ComposerSelectorItemViewModel? item,
+        string reason)
+    {
+        _logger.LogDebug(
+            "Composer selector command skipped. Reason={Reason} Source={Source} Selector={Selector} AutomationId={AutomationId} ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} SelectedIndex={SelectedIndex}",
+            reason,
+            source,
+            ResolveSelectorHostName(comboBox),
+            ResolveSelectorAutomationId(comboBox),
+            item?.Kind,
+            item?.Identity,
+            item?.SemanticValue,
+            item?.IsPlaceholder,
+            item?.IsSelectable,
+            comboBox?.SelectedIndex);
+    }
+
+    private string ResolveSelectorHostName(ComboBox? comboBox)
+    {
+        if (comboBox is null)
+        {
+            return "Unknown";
+        }
+
+        if (ReferenceEquals(comboBox, AgentSelectorHost))
+        {
+            return "Agent";
+        }
+
+        if (ReferenceEquals(comboBox, ModeSelectorHost))
+        {
+            return "Mode";
+        }
+
+        if (ReferenceEquals(comboBox, ProjectSelectorHost))
+        {
+            return "Project";
+        }
+
+        if (ReferenceEquals(comboBox, ModelSelectorHost))
+        {
+            return "Model";
+        }
+
+        return string.IsNullOrWhiteSpace(comboBox.Name) ? "Unknown" : comboBox.Name;
+    }
+
+    private static string ResolveSelectorAutomationId(ComboBox? comboBox)
+    {
+        if (comboBox is null)
+        {
+            return string.Empty;
+        }
+
+        var automationId = AutomationProperties.GetAutomationId(comboBox);
+        return string.IsNullOrWhiteSpace(automationId) ? comboBox.Name : automationId;
+    }
+
+    private static int ResolveSelectorItemCount(ComboBox? comboBox)
+    {
+        if (comboBox is null)
+        {
+            return 0;
+        }
+
+        if (comboBox.ItemsSource is IReadOnlyCollection<ComposerSelectorItemViewModel> readOnlyItems)
+        {
+            return readOnlyItems.Count;
+        }
+
+        if (comboBox.ItemsSource is ICollection<ComposerSelectorItemViewModel> items)
+        {
+            return items.Count;
+        }
+
+        if (comboBox.ItemsSource is System.Collections.ICollection collection)
+        {
+            return collection.Count;
+        }
+
+        return comboBox.Items.Count;
+    }
+#endif
 
     private ChatInputFocusContext ResolveFocusContext(DependencyObject? focusedElement)
     {

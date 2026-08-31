@@ -12,12 +12,22 @@ namespace SalmonEgg.Presentation.Core.Services;
 
 public sealed class NavigationCoordinator : INavigationCoordinator
 {
+    public const string ConnectionNotInitializedMessage =
+        "The ACP connection has not finished initializing.";
+
+    public const string LoadSessionCapabilityMissingMessage =
+        "The current agent does not advertise ACP loadSession capability, so discovered remote sessions cannot be imported.";
+
+    public const string SessionImportActivationFailedMessage =
+        "Failed to load and import the session. Check the connection status.";
+
     private readonly IShellSelectionMutationSink _selectionSink;
     private readonly IShellNavigationRuntimeState _runtimeState;
     private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
     private readonly IDiscoverSessionsConnectionFacade _discoverConnectionFacade;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
+    private readonly ISettingsSectionSelectionStore _settingsSelectionStore;
     private readonly ILogger<NavigationCoordinator> _logger;
     private readonly SemaphoreSlim _sessionActivationGate = new(1, 1);
     private readonly object _sessionActivationSync = new();
@@ -31,6 +41,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         IDiscoverSessionsConnectionFacade discoverConnectionFacade,
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService,
+        ISettingsSectionSelectionStore settingsSelectionStore,
         ILogger<NavigationCoordinator>? logger = null)
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
@@ -39,6 +50,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         _discoverConnectionFacade = discoverConnectionFacade ?? throw new ArgumentNullException(nameof(discoverConnectionFacade));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
+        _settingsSelectionStore = settingsSelectionStore ?? throw new ArgumentNullException(nameof(settingsSelectionStore));
         _logger = logger ?? NullLogger<NavigationCoordinator>.Instance;
     }
 
@@ -91,7 +103,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return false;
     }
 
-    public async Task ActivateDiscoverSessionsAsync()
+    public async Task<bool> ActivateDiscoverSessionsAsync()
     {
         var activationToken = BeginActivation(ShellNavigationContent.DiscoverSessions);
         try
@@ -105,7 +117,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                     ShellNavigationContent.DiscoverSessions,
                     activationToken,
                     ActivationFaultReasons.DiscoverSessionsNavigationFailed);
-                return;
+                return false;
             }
 
             if (IsLatestActivationToken(activationToken))
@@ -113,7 +125,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.DiscoverSessions;
                 _selectionSink.SetSelection(NavigationSelectionState.DiscoverSessionsSelection);
-                return;
+                return true;
             }
 
             _logger.LogInformation(
@@ -135,14 +147,13 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         {
             ClearPendingShellContent(activationToken);
         }
+
+        return false;
     }
 
-    public async Task ActivateSettingsAsync(string settingsKey)
+    public async Task<bool> ActivateSettingsAsync(string settingsKey)
     {
-        var activationToken = BeginActivation(ShellNavigationContent.Settings);
-        var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey)
-            ? SettingsSectionCatalog.GeneralKey
-            : settingsKey;
+        var (activationToken, normalizedSettingsKey) = BeginSettingsActivation(settingsKey);
         try
         {
             CancelInFlightSessionActivation();
@@ -158,7 +169,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                     normalizedSettingsKey,
                     activationToken,
                     ActivationFaultReasons.SettingsNavigationFailed);
-                return;
+                return false;
             }
 
             if (IsLatestActivationToken(activationToken))
@@ -166,7 +177,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.Settings;
                 _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
-                return;
+                return true;
             }
 
             _logger.LogInformation(
@@ -190,6 +201,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         {
             ClearPendingShellContent(activationToken);
         }
+
+        return false;
     }
 
     public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
@@ -269,12 +282,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         var chatService = _discoverConnectionFacade.CurrentChatService;
         if (chatService is not { IsConnected: true, IsInitialized: true })
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "ACP 连接尚未完成初始化。");
+            return new DiscoverRemoteSessionOpenResult(false, null, ConnectionNotInitializedMessage);
         }
 
         if (chatService.AgentCapabilities?.SupportsSessionLoading != true)
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。");
+            return new DiscoverRemoteSessionOpenResult(false, null, LoadSessionCapabilityMissingMessage);
         }
 
         var importRequest = BeginDiscoveredRemoteSessionImport(request.RemoteSessionId);
@@ -354,7 +367,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             return new DiscoverRemoteSessionOpenResult(
                 false,
                 openResult.LocalConversationId,
-                "加载会话并导入失败，请检查连接状态。");
+                SessionImportActivationFailedMessage);
         }
 
         return openResult;
@@ -416,9 +429,16 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                         ActivationFaultReasons.ConversationSelectionFailed);
                 }
 
-                MarkSessionActivationFaulted(
-                    request,
-                    activated ? ActivationFaultReasons.SupersededAfterConversationSelection : ActivationFaultReasons.ConversationSelectionFailed);
+                if (activated)
+                {
+                    // 被取代是本层自己的事实,与下游成功与否无关。
+                    MarkSessionActivationFaulted(request, ActivationFaultReasons.SupersededAfterConversationSelection);
+                }
+                else
+                {
+                    PreserveOrMarkSessionActivationFaulted(request, ActivationFaultReasons.ConversationSelectionFailed);
+                }
+
                 return false;
             }
 
@@ -506,6 +526,18 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             _runtimeState.LatestActivationToken = activationToken;
             _runtimeState.PendingShellContent = pendingShellContent;
             return activationToken;
+        }
+    }
+
+    private (long ActivationToken, string SettingsKey) BeginSettingsActivation(string? settingsKey)
+    {
+        lock (_sessionActivationSync)
+        {
+            var normalizedSettingsKey = _settingsSelectionStore.Select(settingsKey);
+            var activationToken = _runtimeState.LatestActivationToken + 1;
+            _runtimeState.LatestActivationToken = activationToken;
+            _runtimeState.PendingShellContent = ShellNavigationContent.Settings;
+            return (activationToken, normalizedSettingsKey);
         }
     }
 
@@ -717,12 +749,50 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
+    /// <summary>
+    /// 记录一个本层自己掌握事实的终态失败（导航失败、被取代、被取消、异常逃逸）。
+    /// 这些情形下游没有、也不可能留下更具体的说明，所以整体覆写快照。
+    /// </summary>
     private void MarkSessionActivationFaulted(SessionActivationRequest request, string reason)
+        => MarkSessionActivationFaultedCore(request, reason, preserveDownstreamDetail: false);
+
+    /// <summary>
+    /// 记录一个"下游拒绝了本次激活，但本层不知道为什么"的终态失败。
+    /// 下游若已把原因写进快照（见 <see cref="SessionActivationSnapshot.FailureMessage"/>），
+    /// 那份说明比本层的占位原因具体得多，必须保留——呈现层正是按
+    /// FailureResourceKey → FailureMessage → Reason 的优先级取用的，覆写会把它降级成
+    /// "请重试"的笼统文案，而那类失败重试通常无用。
+    /// </summary>
+    private void PreserveOrMarkSessionActivationFaulted(SessionActivationRequest request, string fallbackReason)
+        => MarkSessionActivationFaultedCore(request, fallbackReason, preserveDownstreamDetail: true);
+
+    private void MarkSessionActivationFaultedCore(
+        SessionActivationRequest request,
+        string reason,
+        bool preserveDownstreamDetail)
     {
         lock (_sessionActivationSync)
         {
             if (!IsLatestActivationToken(request.Version))
             {
+                return;
+            }
+
+            // Terminal fault: drop the desired-session intent so surface projection and
+            // affinity helpers no longer treat the failed target as in-flight intent.
+            _runtimeState.DesiredSessionId = null;
+
+            if (preserveDownstreamDetail
+                && _runtimeState.ActiveSessionActivation is { } published
+                && published.Matches(request.SessionId)
+                && published.Version == request.Version
+                && !string.IsNullOrWhiteSpace(published.FailureMessage))
+            {
+                // 下游已如实报过，这里只补齐终态字段，不动它的说明。
+                _runtimeState.ActiveSessionActivation = published with
+                {
+                    Phase = SessionActivationPhase.Faulted
+                };
                 return;
             }
 

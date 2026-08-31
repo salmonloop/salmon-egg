@@ -25,8 +25,8 @@ With Salmon Egg, you can connect to local or remote ACP services, create and res
 
 ## Tech Stack
 
-- Uno Platform 6.5+
-- .NET 10
+- Uno Platform 6.6+ (repo pin: `Uno.Sdk` 6.6.29)
+- .NET 10 (repo pin: SDK 10.0.302, with 10.0.3xx patch roll-forward)
 - WinUI 3 on Windows
 - Clean Architecture + MVVM
 
@@ -40,7 +40,9 @@ SalmonEgg/
 │   ├── SalmonEgg.Application/    # Application layer
 │   ├── SalmonEgg.Infrastructure/ # Infrastructure layer
 │   ├── SalmonEgg.Infrastructure.Desktop/
-│   └── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Acp/             # Standalone ACP protocol SDK
+│   └── SalmonEgg.Cli/             # Configuration management CLI
 ├── tests/
 └── docs/
 ```
@@ -51,9 +53,9 @@ For environment requirements and detailed build steps, start with [BUILD_GUIDE.m
 
 ### Requirements
 
-- .NET SDK 10.0
-- Windows 10 1809+ / Windows 11 for WinUI 3 and MSIX validation
-- Visual Studio 2022 17.12+ or an equivalent command-line toolchain
+- .NET SDK **10.0.302** or a compatible **10.0.3xx** patch (see `global.json`)
+- Windows 10 1809+ / Windows 11 for WinUI 3 and MSIX validation; on Windows prefer Visual Studio **18.8+**
+- Or an equivalent command-line toolchain (Linux/macOS can build Desktop / WASM)
 
 ### Common Commands
 
@@ -71,8 +73,96 @@ dotnet test --solution SalmonEgg.sln
 build.bat msix
 ```
 
+### CLI configuration management
+
+The repository includes a cross-platform desktop CLI for server configuration and credential management.
+
+#### Supported platforms and installation
+
+Released as a self-contained single-file executable, so no .NET runtime is required. Installing the GUI does **not** put `salmon-egg` on PATH; the CLI packages own that.
+
+| Platform | Install | PATH |
+|---|---|---|
+| Linux x64 | `sudo dpkg -i salmon-egg-cli_<version>_amd64.deb` | dpkg installs `/usr/bin/salmon-egg` and removes it on purge |
+| Windows x64 | run `salmon-egg-cli-<version>-win-x64.msi` (per-user) | the MSI adds its install folder to your user PATH and removes it on uninstall |
+| macOS Apple Silicon | `brew install --formula ./salmon-egg-cli.rb` | Homebrew links the binary into its `bin`, already on PATH |
+
+Plain archives (`.tar.gz` / `.zip`) are also published for anyone who prefers to place the binary on PATH themselves. Other runtime identifiers — `win-arm64`, `linux-arm64`, `osx-x64` — are not officially supported: they can be cross-compiled, but nothing verifies them on a real machine.
+
+After installing, the command is available directly:
+
+```bash
+salmon-egg --help
+salmon-egg config server list
+```
+
+#### Credential storage
+
+Credential writes are fail-closed. If the platform secret store is unavailable, the write fails instead of silently downgrading to a plaintext file. Pass `--allow-insecure-storage` to accept the downgrade; the CLI still reports it on stderr. Non-credential configuration commands are unaffected either way.
+
+This matters on Linux (Secret Service) and macOS (Keychain), where the store can be missing or locked. On Windows the flag is inert: DPAPI needs no keyring daemon and is always available.
+
+```bash
+# Refuses rather than writing the token unprotected
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg set-credential <server-id> --token-stdin
+
+# Explicitly accepts plaintext storage
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credential <server-id> --token-stdin
+```
+
+#### Running from source
+
+The examples below use `dotnet run` so they work in a checkout without installing anything. Replace the `dotnet run --project ... --` prefix with `salmon-egg` when using an installed build.
+
+```bash
+# Show the command tree
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --help
+
+# Show CLI assembly version
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --version
+
+# Explore server configuration commands
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server --help
+
+# Add a server with non-sensitive proxy settings and a credential read from stdin.
+# Credential values never enter argv, shell history, or YAML.
+printf '%s\n' "$AGENT_TOKEN" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
+  --name "Example Agent" --url "https://agent.example" --transport streamable_http \
+  --token-stdin --proxy-mode custom --proxy-url "http://proxy.example:8080"
+
+# Add a stdio server. --stdio-args takes one quoted command-line string;
+# attached form preserves dash-prefixed agent arguments and inner quoting.
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
+  --name "Local Stdio Agent" --transport stdio --stdio-command "agent" \
+  --stdio-args="--serve -T --mode plan"
+
+# Update it with a new argument string; use --stdio-args="" to clear arguments.
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server update <server-id> \
+  --stdio-args="--serve --mode strict"
+
+# Existing server commands use show/remove (remove requires --yes).
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server show <server-id>
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server remove <server-id> --yes
+
+# Register exactly one credential kind for an existing server. Each command reads one stdin line.
+printf '%s\n' "$AGENT_TOKEN" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --token-stdin
+printf '%s\n' "$AGENT_API_KEY" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --api-key-stdin
+
+# Check presence without printing credential values, then clear both keys
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- has-credential <server-id>
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- clear-credential <server-id>
+
+# Show credential command guidance
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- credentials --help
+```
+
+The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection, but chooses a fail-closed downgrade policy where the GUI chooses a permissive one — a scripted invocation cannot react to a warning stream in time, so it must not persist credentials unprotected without being asked. Credential values are read from stdin and stored through `ISecureStorage`; they never enter process arguments, server YAML, or `has-credential` output. Invalid command lines return exit code `2`; state and persistence failures return `1`; successful commands return `0`.
+
+Release packaging, the supported runtime identifiers, and the install/PATH gates are documented in [docs/release-guide.md](docs/release-guide.md).
+
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [Build Guide](BUILD_GUIDE.md)
 - [Coding Standards](docs/coding-standards.md)
 - [Session / Navigation / Search Constraints](docs/hard-constraints-session-navigation-and-search.md)

@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Linux-host gamepad approximation gates:
+# 1) Core unit matrix for multi-brand identity / face / trigger / dual-path policy
+# 2) BrowserWasm multi-brand inject smoke (Playwright + getGamepads override)
+#
+# Skia Desktop GUI smoke is intentionally NOT claimed as gamepad evidence here:
+# net10.0-desktop registers NoOpGamepad* services, so physical Linux pads / XTest
+# shell probes do not exercise the authoritative gamepad semantic chain.
+#
+# This gate does NOT replace Windows MSIX + physical PS/Xbox/Switch Diagnostics.
+
+CONFIGURATION="${1:-Debug}"
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+SCRIPT_DIR="${SCRIPT_SOURCE%/*}"
+if [ "${SCRIPT_DIR}" = "${SCRIPT_SOURCE}" ]; then
+  SCRIPT_DIR="."
+fi
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
+PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
+CORE_TESTS="${REPO_ROOT}/tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj"
+WWWROOT="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-browserwasm/wwwroot"
+SERVER_PID=""
+PLAYWRIGHT_WORKDIR=""
+
+DOTNET_BIN="${DOTNET_BIN:-$(command -v dotnet || true)}"
+NODE_BIN="${NODE_BIN:-$(command -v node || true)}"
+NPM_BIN="${NPM_BIN:-$(command -v npm || true)}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
+CURL_BIN="${CURL_BIN:-$(command -v curl || true)}"
+
+if [ -z "${DOTNET_BIN}" ]; then
+  echo "Unable to locate dotnet in PATH." >&2
+  exit 1
+fi
+if [ -z "${NODE_BIN}" ]; then
+  echo "Unable to locate node in PATH." >&2
+  exit 1
+fi
+if [ -z "${NPM_BIN}" ]; then
+  echo "Unable to locate npm in PATH." >&2
+  exit 1
+fi
+if [ -z "${PYTHON_BIN}" ]; then
+  echo "Unable to locate python3 in PATH." >&2
+  exit 1
+fi
+if [ -z "${CURL_BIN}" ]; then
+  echo "Unable to locate curl in PATH." >&2
+  exit 1
+fi
+
+cleanup() {
+  if [ -n "${SERVER_PID}" ] && kill -0 "${SERVER_PID}" 2>/dev/null; then
+    kill "${SERVER_PID}" 2>/dev/null || true
+    wait "${SERVER_PID}" 2>/dev/null || true
+  fi
+  if [ -n "${PLAYWRIGHT_WORKDIR}" ] && [ -d "${PLAYWRIGHT_WORKDIR}" ]; then
+    rm -rf "${PLAYWRIGHT_WORKDIR}"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+resolve_selected_dotnet_sdk_root() {
+  local selected_version sdk_list sdk_version sdk_parent
+  if ! selected_version="$("${DOTNET_BIN}" --version)"; then
+    return 1
+  fi
+  if ! sdk_list="$("${DOTNET_BIN}" --list-sdks)"; then
+    return 1
+  fi
+
+  selected_version="${selected_version//$'\r'/}"
+  sdk_list="${sdk_list//$'\r'/}"
+
+  while read -r sdk_version sdk_parent; do
+    if [ "${sdk_version}" != "${selected_version}" ]; then
+      continue
+    fi
+
+    sdk_parent="${sdk_parent#\[}"
+    sdk_parent="${sdk_parent%\]}"
+    case "${sdk_parent}" in
+      [a-zA-Z]:\\*)
+        if ! command -v cygpath >/dev/null 2>&1; then
+          return 1
+        fi
+        sdk_parent="$(cygpath -u "${sdk_parent}")"
+        ;;
+    esac
+
+    if [ -d "${sdk_parent}/${selected_version}" ]; then
+      printf '%s\n' "${sdk_parent}/${selected_version}"
+      return 0
+    fi
+  done <<< "${sdk_list}"
+
+  return 1
+}
+
+run_playwright_smoke() {
+  if command -v xvfb-run >/dev/null 2>&1; then
+    xvfb-run -a "${NODE_BIN}" "$@"
+    return
+  fi
+  "${NODE_BIN}" "$@"
+}
+
+echo "[linux-gamepad] Core multi-brand unit matrix"
+"${DOTNET_BIN}" test \
+  --project "${CORE_TESTS}" \
+  --configuration "${CONFIGURATION}" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadHidMaestroProfileCatalogTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadControllerIdentityTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadActiveReadingSelectorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadReadingPipelineTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadDiagnosticsActiveReadingProjectorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadInputPathTrackerTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserStandardGamepadBrandSemanticsTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadIdentityParserTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadInputReadingMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserStandardGamepadPressedButtonsTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.StandardGamepadInputReadingMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerTriggerAxisPolicyTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerUnlabeledFaceIndexPolicyTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerFaceButtonLayoutResolverTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerInputReadingMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerAxisNormalizerTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerButtonLabelMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadAdaptationPipelineTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadIntentProcessorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadShortcutProcessorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadContextIntentProcessorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Settings.GamepadDiagnosticsViewModelTests" \
+  --timeout 3m \
+  --output Normal
+
+echo "[linux-gamepad] Restore browserwasm dependencies"
+"${DOTNET_BIN}" restore "${PROJECT}"
+
+echo "[linux-gamepad] Clean browserwasm output (avoid stale HotReload / package base assets)"
+"${DOTNET_BIN}" clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal
+
+echo "[linux-gamepad] Build browserwasm app for gamepad inject smoke"
+"${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
+
+# Debug browserwasm configs reference HotReload JS modules that are produced under
+# obj/.../hotreload but are not always copied into wwwroot/_framework by publish-less
+# `dotnet build`. Stage the known module so first-paint is not blocked on 404 retries.
+HOTRELOAD_MODULE_NAME="Microsoft.DotNet.HotReload.WebAssembly.Browser.lib.module.js"
+HOTRELOAD_SRC="${REPO_ROOT}/SalmonEgg/SalmonEgg/obj/${CONFIGURATION}/net10.0-browserwasm/hotreload/${HOTRELOAD_MODULE_NAME}"
+if [ ! -f "${HOTRELOAD_SRC}" ]; then
+  HOTRELOAD_SRC=""
+fi
+if [ -z "${HOTRELOAD_SRC}" ] && [ "${CONFIGURATION}" = "Debug" ]; then
+  if ! DOTNET_SDK_ROOT="$(resolve_selected_dotnet_sdk_root)"; then
+    echo "Unable to resolve the selected .NET SDK directory from dotnet --list-sdks." >&2
+    exit 1
+  fi
+
+  HOTRELOAD_SDK_CANDIDATE="${DOTNET_SDK_ROOT}/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0/${HOTRELOAD_MODULE_NAME}"
+  if [ -f "${HOTRELOAD_SDK_CANDIDATE}" ]; then
+    HOTRELOAD_SRC="${HOTRELOAD_SDK_CANDIDATE}"
+  fi
+fi
+if [ -n "${HOTRELOAD_SRC}" ]; then
+  mkdir -p "${WWWROOT}/_framework"
+  cp -f "${HOTRELOAD_SRC}" "${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+  echo "[linux-gamepad] Staged HotReload browser module -> ${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+elif [ "${CONFIGURATION}" = "Debug" ]; then
+  echo "HotReload browser module was not produced by the build or selected .NET SDK." >&2
+  exit 1
+fi
+
+if [ ! -f "${WWWROOT}/index.html" ]; then
+  echo "browserwasm wwwroot was not produced: ${WWWROOT}" >&2
+  exit 1
+fi
+
+HOST="127.0.0.1"
+PORT="${SALMONEGG_WASM_SMOKE_PORT:-$("${PYTHON_BIN}" - <<'PY'
+import socket
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)}"
+BASE_URL="http://${HOST}:${PORT}/"
+
+echo "[linux-gamepad] Serve browserwasm wwwroot port=${PORT}"
+"${PYTHON_BIN}" -m http.server "${PORT}" --bind "${HOST}" --directory "${WWWROOT}" >/tmp/salmonegg-linux-gamepad-wasm-http.log 2>&1 &
+SERVER_PID="$!"
+
+for _ in {1..50}; do
+  if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+    echo "browserwasm static server exited before readiness." >&2
+    cat /tmp/salmonegg-linux-gamepad-wasm-http.log >&2
+    exit 1
+  fi
+  if "${CURL_BIN}" --noproxy '*' -fsS "${BASE_URL}index.html" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.2
+done
+"${CURL_BIN}" --noproxy '*' -fsS "${BASE_URL}index.html" >/dev/null
+
+PLAYWRIGHT_WORKDIR="$(mktemp -d)"
+cp "${REPO_ROOT}/scripts/gates/wasm-gamepad-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp -R "${REPO_ROOT}/scripts/gates/wasm-smoke-lib" "${PLAYWRIGHT_WORKDIR}/"
+
+echo "[linux-gamepad] Install Playwright + Chromium"
+"${NPM_BIN}" --prefix "${PLAYWRIGHT_WORKDIR}" install --no-audit --no-fund --no-save playwright
+"${NPM_BIN}" --prefix "${PLAYWRIGHT_WORKDIR}" exec -- playwright install chromium
+
+echo "[linux-gamepad] Run WASM multi-brand gamepad boundary smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-gamepad-boundary-smoke.mjs" \
+  "${BASE_URL}"
+
+echo "[linux-gamepad] PASS"
+echo "[linux-gamepad] Covered on Linux:"
+echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector/path tracker (incl. standard voice-shortcut-only over raw face), shared GamepadReadingPipeline + Diagnostics active projector, intent/shortcut/context processors, mapper matrix (incl. Sony standard-path), Diagnostics VM projection"
+echo "  - BrowserWasm Playwright inject for Xbox/DualSense/Switch Pro ids + standard-position intents + Diagnostics ActiveInputs"
+echo "[linux-gamepad] Not covered here (need Windows host):"
+echo "  - HIDMaestro multi-profile OS-path runner: scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1"
+echo "  - FlaUI native-device Diagnostics smoke / MSIX physical matrix"
+echo "  - Skia Desktop shell (NoOpGamepad* on Linux desktop — not gamepad semantic evidence)"

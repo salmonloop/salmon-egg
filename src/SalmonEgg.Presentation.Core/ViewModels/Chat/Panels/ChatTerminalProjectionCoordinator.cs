@@ -113,7 +113,7 @@ public sealed class ChatTerminalProjectionCoordinator
             && exitStatus.ValueKind == JsonValueKind.Object
             && exitStatus.TryGetProperty("exitCode", out var exitCode)
             && exitCode.ValueKind == JsonValueKind.Number
-            && exitCode.TryGetInt32(out var value))
+            && exitCode.TryGetUInt32(out var value))
         {
             terminal.ExitCode = value;
         }

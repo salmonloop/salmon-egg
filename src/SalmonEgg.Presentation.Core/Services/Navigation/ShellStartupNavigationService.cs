@@ -4,39 +4,62 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Services;
 
 public sealed class ShellStartupNavigationService : IShellStartupNavigationService
 {
-    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel _navigationViewModel;
+    private readonly IShellNavigationRuntimeState _runtimeState;
+    private readonly IActivationTokenShellNavigationService _shellNavigationService;
+    private readonly ISettingsSectionSelectionStore _settingsSelectionStore;
     private readonly ILogger<ShellStartupNavigationService> _logger;
-    private int _activationInFlight;
+    private readonly SemaphoreSlim _activationGate = new(1, 1);
     private bool _activationCompleted;
 
     public ShellStartupNavigationService(
-        INavigationCoordinator navigationCoordinator,
+        MainNavigationViewModel navigationViewModel,
+        IShellNavigationRuntimeState runtimeState,
+        IActivationTokenShellNavigationService shellNavigationService,
+        ISettingsSectionSelectionStore settingsSelectionStore,
         ILogger<ShellStartupNavigationService>? logger = null)
     {
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _navigationViewModel = navigationViewModel ?? throw new ArgumentNullException(nameof(navigationViewModel));
+        _runtimeState = runtimeState ?? throw new ArgumentNullException(nameof(runtimeState));
+        _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
+        _settingsSelectionStore = settingsSelectionStore ?? throw new ArgumentNullException(nameof(settingsSelectionStore));
         _logger = logger ?? NullLogger<ShellStartupNavigationService>.Instance;
     }
 
     public async Task ActivateInitialContentAsync()
     {
-        if (_activationCompleted)
-        {
-            return;
-        }
-
-        if (Interlocked.CompareExchange(ref _activationInFlight, 1, 0) != 0)
-        {
-            return;
-        }
-
+        _navigationViewModel.RebuildTree();
+        var content = ShellNavigationContent.Start;
+        await _activationGate.WaitAsync().ConfigureAwait(true);
         try
         {
-            var activated = await _navigationCoordinator.ActivateStartAsync().ConfigureAwait(true);
+            if (_activationCompleted || !IsPristineStartupState())
+            {
+                content = ResolveContentToRestore();
+                var restoreResult = await RestoreAuthoritativeContentAsync(content).ConfigureAwait(true);
+                if (restoreResult.Succeeded)
+                {
+                    _activationCompleted = true;
+                    return;
+                }
+
+                _logger.LogWarning(
+                    "Shell content restore failed. content={Content} reason={Reason}",
+                    content,
+                    restoreResult.FailureReason ?? "NavigationRejected");
+                return;
+            }
+
+            // Route through the navigation VM owner so cold-start Start activation
+            // failures surface the same localized ShowInfo used by later shell entry points.
+            var activated = await _navigationViewModel.ActivateStartAsync().ConfigureAwait(true);
             if (activated)
             {
                 _activationCompleted = true;
@@ -52,13 +75,35 @@ public sealed class ShellStartupNavigationService : IShellStartupNavigationServi
         {
             _logger.LogError(
                 ex,
-                "Initial shell navigation activation threw. content={Content} reason={Reason}",
-                ShellNavigationContent.Start,
+                "Shell content activation threw. content={Content} reason={Reason}",
+                content,
                 ex.GetType().Name);
         }
         finally
         {
-            Interlocked.Exchange(ref _activationInFlight, 0);
+            _activationGate.Release();
         }
+    }
+
+    private bool IsPristineStartupState()
+        => _runtimeState.CurrentShellContent == ShellNavigationContent.Start
+           && _runtimeState.PendingShellContent is null;
+
+    private ShellNavigationContent ResolveContentToRestore()
+        => _runtimeState.PendingShellContent ?? _runtimeState.CurrentShellContent;
+
+    private ValueTask<ShellNavigationResult> RestoreAuthoritativeContentAsync(ShellNavigationContent content)
+    {
+        var activationToken = _runtimeState.LatestActivationToken;
+        return content switch
+        {
+            ShellNavigationContent.Chat => _shellNavigationService.NavigateToChat(activationToken),
+            ShellNavigationContent.Settings => _shellNavigationService.NavigateToSettings(
+                _settingsSelectionStore.CurrentSectionKey,
+                activationToken),
+            ShellNavigationContent.DiscoverSessions => _shellNavigationService.NavigateToDiscoverSessions(activationToken),
+            ShellNavigationContent.Start or ShellNavigationContent.None => _shellNavigationService.NavigateToStart(activationToken),
+            _ => _shellNavigationService.NavigateToStart(activationToken)
+        };
     }
 }

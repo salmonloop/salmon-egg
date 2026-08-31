@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -59,15 +60,17 @@ public sealed class DiagnosticsSettingsViewModelTests
         var storageLocations = new Mock<IStorageLocationService>();
         storageLocations.Setup(service => service.OpenAsync(AppStorageLocation.Logs)).ReturnsAsync(false);
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsExternalOpen: false,
             storageLocations: storageLocations,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.OpenLogsFolderCommand.ExecuteAsync(null);
 
         storageLocations.Verify(service => service.OpenAsync(AppStorageLocation.Logs), Times.Once);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持打开本地文件或目录。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_ExternalOpenUnsupported"]), Times.Once);
     }
 
     [Fact]
@@ -75,27 +78,114 @@ public sealed class DiagnosticsSettingsViewModelTests
     {
         var bundle = new Mock<IDiagnosticsBundleService>();
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsLocalFileExport: false,
             bundle: bundle,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
 
         bundle.Verify(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()), Times.Never);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持导出本地文件。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_LocalFileExportUnsupported"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDiagnosticsBundleCommand_WhenBundleThrows_ShowsLocalizedFailure()
+    {
+        var bundle = new Mock<IDiagnosticsBundleService>();
+        bundle.Setup(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()))
+            .ThrowsAsync(new IOException("zip failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            bundle: bundle,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_CreateDiagnosticsBundleFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenNoLogFile_ShowsLocalizedMessage()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync((LogFileSummary?)null);
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["Diagnostics_NoLogFileFound"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenClipboardUnsupported_ShowsLocalizedMessage()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync(new LogFileSummary("C:/app/logs/app.log", DateTimeOffset.UtcNow));
+        catalog.Setup(service => service.ReadTailAsync(It.IsAny<string>(), It.IsAny<int>()))
+            .ReturnsAsync("line1\nline2");
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.CopyToClipboardAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            shell: shell,
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_ClipboardUnsupported"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenCopyThrows_ShowsLocalizedFailure()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync(new LogFileSummary("C:/app/logs/app.log", DateTimeOffset.UtcNow));
+        catalog.Setup(service => service.ReadTailAsync(It.IsAny<string>(), It.IsAny<int>()))
+            .ThrowsAsync(new IOException("read failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["Diagnostics_CopyLogSnippetFailed"]), Times.Once);
     }
 
     private static DiagnosticsSettingsViewModel CreateViewModel(
         bool supportsExternalOpen = true,
         bool supportsLocalFileExport = true,
         Mock<IDiagnosticsBundleService>? bundle = null,
+        Mock<IPlatformShellService>? shell = null,
+        Mock<ILogFileCatalog>? logFileCatalog = null,
         Mock<IStorageLocationService>? storageLocations = null,
         Mock<IUiInteractionService>? ui = null,
         LiveLogViewerViewModel? liveLogViewer = null,
         GamepadDiagnosticsViewModel? gamepadDiagnostics = null,
-        VoiceInputDiagnosticsViewModel? voiceInputDiagnostics = null)
+        VoiceInputDiagnosticsViewModel? voiceInputDiagnostics = null,
+        TestCoreStringLocalizer? localizer = null)
     {
+        localizer ??= new TestCoreStringLocalizer();
         var chat = (ChatViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ChatViewModel));
         var paths = new Mock<IAppDataService>();
         paths.SetupGet(p => p.AppDataRootPath).Returns("C:/app");
@@ -108,15 +198,15 @@ public sealed class DiagnosticsSettingsViewModelTests
             chat,
             paths.Object,
             bundle?.Object ?? Mock.Of<IDiagnosticsBundleService>(),
-            Mock.Of<IPlatformShellService>(),
+            shell?.Object ?? Mock.Of<IPlatformShellService>(),
             capabilities.Object,
             storageLocations?.Object ?? Mock.Of<IStorageLocationService>(),
-            Mock.Of<ILogFileCatalog>(),
+            logFileCatalog?.Object ?? Mock.Of<ILogFileCatalog>(),
             ui?.Object ?? Mock.Of<IUiInteractionService>(),
             liveLogViewer ?? CreateLiveLogViewer(),
             voiceInputDiagnostics ?? CreateVoiceInputDiagnostics(),
             gamepadDiagnostics ?? CreateGamepadDiagnostics(),
-            new TestCoreStringLocalizer(),
+            localizer,
             Mock.Of<ILogger<DiagnosticsSettingsViewModel>>());
     }
 

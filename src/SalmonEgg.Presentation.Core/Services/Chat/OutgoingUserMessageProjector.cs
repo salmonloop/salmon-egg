@@ -134,16 +134,11 @@ public sealed class OutgoingUserMessageProjector
             ToolCallJson = snapshot.ToolCallJson,
             ToolCallRawInputJson = snapshot.ToolCallRawInputJson,
             ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson,
-            ToolCallContent = snapshot.ToolCallContent is null ? null : new List<ToolCallContent>(snapshot.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallLocations),
             PlanEntry = snapshot.PlanEntry is null
                 ? null
-                : new ConversationPlanEntrySnapshot
-                {
-                    Content = snapshot.PlanEntry.Content,
-                    Status = snapshot.PlanEntry.Status,
-                    Priority = snapshot.PlanEntry.Priority
-                },
+                : ConversationPlanWire.CloneDomain(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
     }

@@ -1,0 +1,108 @@
+name: ACP SDK CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/SalmonEgg.Acp/**"
+      - "src/SalmonEgg.Acp/README.md"
+      - "tests/SalmonEgg.Acp.Tests/**"
+      - "scripts/gates/run-acp-sdk-gates.*"
+      - "scripts/gates/run-acp-consumer-package-smoke.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh"
+      - ".github/workflows/ci-acp-sdk.yml"
+      - "Directory.Build.props"
+      - "NuGet.config"
+      - "global.json"
+  pull_request:
+    branches: [develop]
+    paths:
+      - "src/SalmonEgg.Acp/**"
+      - "src/SalmonEgg.Acp/README.md"
+      - "tests/SalmonEgg.Acp.Tests/**"
+      - "scripts/gates/run-acp-sdk-gates.*"
+      - "scripts/gates/run-acp-consumer-package-smoke.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh"
+      - ".github/workflows/ci-acp-sdk.yml"
+      - "Directory.Build.props"
+      - "NuGet.config"
+      - "global.json"
+  workflow_dispatch:
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
+
+concurrency:
+  group: acp-sdk-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONFIGURATION: "Release"
+  PACKAGE_OUTPUT: "artifacts/acp-sdk-pack"
+
+jobs:
+  sdk-gates:
+    name: ACP SDK Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The package version is derived from the acp-sdk-v* tag history by MinVer, so the full
+      # history (tags included) must be present. A shallow clone would pack a 0.0.0-alpha version
+      # and the baseline guard in SalmonEgg.Acp.csproj would fail the pack.
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Run ACP SDK gate script
+        env:
+          DOTNET_BIN: dotnet
+          # Every version after the first shipped one must package-validate against the last
+          # published package. The baseline is stored as a repository variable, matching the
+          # release workflow, so CI and release cannot disagree about what was last published.
+          ACP_PACKAGE_BASELINE_VERSION: ${{ vars.ACP_PACKAGE_BASELINE_VERSION }}
+        run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Verify release tag/version gate rules
+        run: ./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
+
+      - name: Upload ACP SDK package
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: acp-sdk-package
+          path: "${{ env.PACKAGE_OUTPUT }}/*.nupkg"
+
+  consumer-integration:
+    name: ACP Consumer Integration
+    needs: sdk-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Download ACP SDK package
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: acp-sdk-package
+          path: artifacts/acp-sdk-package
+
+      - name: Run package consumer smoke
+        env:
+          DOTNET_BIN: dotnet
+        run: ./scripts/gates/run-acp-consumer-package-smoke.sh artifacts/acp-sdk-package "${{ env.CONFIGURATION }}"

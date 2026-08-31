@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.Utilities;
 
@@ -18,13 +19,11 @@ internal static class ConversationSessionInfoSnapshots
         {
             Title = sessionInfo.Title,
             HasTitle = sessionInfo.HasTitle,
-            Description = sessionInfo.Description,
             Cwd = sessionInfo.Cwd,
+            AdditionalDirectories = CloneAdditionalDirectories(sessionInfo.AdditionalDirectories),
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
-            Meta = sessionInfo.Meta is null
-                ? null
-                : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
+            Meta = AcpMetaJson.Clone(sessionInfo.Meta)
         };
     }
 
@@ -34,12 +33,11 @@ internal static class ConversationSessionInfoSnapshots
     {
         ArgumentNullException.ThrowIfNull(incoming);
 
-        var mergedMeta = existing?.Meta is null
-            ? new Dictionary<string, object?>(StringComparer.Ordinal)
-            : new Dictionary<string, object?>(existing.Meta, StringComparer.Ordinal);
+        var mergedMeta = AcpMetaJson.Clone(existing?.Meta)
+            ?? new Dictionary<string, object?>(StringComparer.Ordinal);
         if (incoming.Meta is not null)
         {
-            foreach (var pair in incoming.Meta)
+            foreach (var pair in AcpMetaJson.Clone(incoming.Meta)!)
             {
                 mergedMeta[pair.Key] = pair.Value;
             }
@@ -49,8 +47,10 @@ internal static class ConversationSessionInfoSnapshots
         {
             Title = incoming.HasTitle ? incoming.Title : existing?.Title,
             HasTitle = incoming.HasTitle || existing?.HasTitle == true,
-            Description = ResolveIncomingField(incoming.Description, existing?.Description),
             Cwd = ResolveIncomingField(incoming.Cwd, existing?.Cwd),
+            AdditionalDirectories = incoming.AdditionalDirectories is null
+                ? CloneAdditionalDirectories(existing?.AdditionalDirectories)
+                : new List<string>(incoming.AdditionalDirectories),
             UpdatedAtUtc = ResolveIncomingUpdatedAt(existing?.UpdatedAtUtc, incoming),
             HasUpdatedAt = incoming.HasUpdatedAt || existing?.HasUpdatedAt == true,
             Meta = mergedMeta.Count == 0 ? null : mergedMeta
@@ -59,6 +59,9 @@ internal static class ConversationSessionInfoSnapshots
 
     private static string? ResolveIncomingField(string? incoming, string? existing)
         => !string.IsNullOrWhiteSpace(incoming) ? incoming : existing;
+
+    private static List<string>? CloneAdditionalDirectories(IReadOnlyCollection<string>? directories)
+        => directories is null ? null : new List<string>(directories);
 
     private static DateTime? ResolveIncomingUpdatedAt(
         DateTime? existing,

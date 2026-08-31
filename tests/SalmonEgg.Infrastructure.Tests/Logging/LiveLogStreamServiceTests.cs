@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Diagnostics;
@@ -206,6 +207,96 @@ public sealed class LiveLogStreamServiceTests
             {
                 Directory.Delete(tempRoot, true);
             }
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_PreservesMultibyteCodePointsAcrossChunkBoundary()
+    {
+        // Each emoji below is a 4-byte UTF-8 sequence. Filling the read buffer
+        // (4096 bytes) so the boundary lands mid-codepoint must not corrupt the
+        // character into a replacement char.
+        var line = "emoji \U0001F600 test \U0001F929 end\n";
+        var oneLineBytes = Encoding.UTF8.GetByteCount(line);
+        var linesPerBuffer = (4096 / oneLineBytes) + 1;
+        var fullBlock = string.Concat(Enumerable.Repeat(line, linesPerBuffer));
+        // Ensure the full block exceeds one 4096-byte read so a codepoint
+        // can straddle the boundary.
+        Assert.True(Encoding.UTF8.GetByteCount(fullBlock) > 4096);
+
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var logFile = Path.Combine(tempRoot, "app.log");
+            await File.WriteAllTextAsync(logFile, fullBlock, TestContext.Current.CancellationToken);
+
+            var updates = new ConcurrentQueue<LiveLogStreamUpdate>();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var service = new LiveLogStreamService(pollInterval: TimeSpan.FromMilliseconds(30));
+
+            var runTask = service.StartAsync(tempRoot, update =>
+            {
+                updates.Enqueue(update);
+                return Task.CompletedTask;
+            }, cts.Token);
+
+            await WaitForConditionAsync(
+                () => updates.Any(u => u.AppendedText.Contains("\U0001F600", StringComparison.Ordinal) && u.AppendedText.Contains("\U0001F929", StringComparison.Ordinal)),
+                cts.Token);
+
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runTask);
+
+            var combined = string.Concat(updates.Select(u => u.AppendedText));
+            Assert.DoesNotContain("�", combined); // no replacement chars from split codepoints
+            Assert.Contains("\U0001F600", combined);
+            Assert.Contains("\U0001F929", combined);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, true);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_PreservesMultibyteCodePointsInRecentTail()
+    {
+        // The recent-tail path reads from an arbitrary byte offset; the start
+        // must align to a codepoint boundary so the leading bytes of a split
+        // multi-byte sequence are not turned into replacement chars.
+        var prefix = string.Concat(Enumerable.Repeat("prefix line\n", 400));
+        var suffix = "tail \U0001F600 marker \U0001F929 end\n";
+        var tempRoot = CreateTempDirectory();
+        try
+        {
+            var logFile = Path.Combine(tempRoot, "app.log");
+            await File.WriteAllTextAsync(logFile, prefix + suffix, TestContext.Current.CancellationToken);
+
+            var updates = new ConcurrentQueue<LiveLogStreamUpdate>();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var service = new LiveLogStreamService(pollInterval: TimeSpan.FromMilliseconds(30));
+
+            var runTask = service.StartAsync(tempRoot, update =>
+            {
+                updates.Enqueue(update);
+                return Task.CompletedTask;
+            }, cts.Token);
+
+            await WaitForConditionAsync(
+                () => updates.Any(u => u.AppendedText.Contains("\U0001F600", StringComparison.Ordinal)),
+                cts.Token);
+
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runTask);
+
+            var tailUpdate = updates.Last(u => !string.IsNullOrEmpty(u.AppendedText));
+            Assert.DoesNotContain("�", tailUpdate.AppendedText);
+            Assert.Contains("\U0001F600", tailUpdate.AppendedText);
+            Assert.Contains("\U0001F929", tailUpdate.AppendedText);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, true);
         }
     }
 

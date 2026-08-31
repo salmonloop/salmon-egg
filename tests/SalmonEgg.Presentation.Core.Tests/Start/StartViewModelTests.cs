@@ -9,7 +9,6 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
@@ -36,6 +35,7 @@ using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Start;
 
@@ -44,8 +44,8 @@ public sealed class StartViewModelTests
 {
     private static readonly TimeSpan PreviousFixedDraftIdentityWaitTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DraftIdentityWaitRegressionBuffer = TimeSpan.FromMilliseconds(150);
-    private const string RemoteModeProjectPrompt = "请先选择远程项目";
-    private const string RemoteProjectPrompt = "请选择远程项目";
+    private const string RemoteModeProjectPrompt = "Select a remote project first";
+    private const string RemoteProjectPrompt = "Select a remote project";
 
     [Fact]
     public async Task StartSessionAndSendAsync_DoesNotInvokeWorkflow_WhenPromptIsBlank()
@@ -56,7 +56,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             var startLogger = new Mock<ILogger<StartViewModel>>();
@@ -84,8 +84,11 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -123,13 +126,13 @@ public sealed class StartViewModelTests
                 RemotePath = "/remote/workspace"
             });
             preferences.LastSelectedProjectId = "remote-directory:dir-remote";
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             ChatLaunchRequest? capturedRequest = null;
             workflow
                 .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
                 .Callback<ChatLaunchRequest, CancellationToken>((request, _) => capturedRequest = request)
-                .Returns(Task.CompletedTask);
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -158,7 +161,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             workflow.Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("boom"));
@@ -181,7 +184,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void ExecuteSuggestion_UpdatesSharedChatPromptDraft()
+    public async Task ExecuteSuggestion_UpdatesSharedChatPromptDraft()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -189,7 +192,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -198,9 +201,10 @@ public sealed class StartViewModelTests
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
 
-            var suggestion = startViewModel.Suggestions[0];
-            startViewModel.ExecuteSuggestionCommand.Execute(suggestion);
+            var suggestion = startViewModel.Suggestions[1];
+            await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
 
+            Assert.False(suggestion.IsInformational);
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
             workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -212,7 +216,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void QuickSuggestions_ResolveUserVisibleTextFromCoreStrings()
+    public async Task ExecuteInformationalSuggestion_ShowsGuidanceWithoutUpdatingPrompt()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -220,39 +224,91 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var localizer = new TestCoreStringLocalizer();
             var startViewModel = CreateStartViewModel(
                 chat,
                 preferences,
                 nav,
                 workflow.Object,
-                localizer: new TestCoreStringLocalizer());
+                localizer: localizer,
+                ui: ui.Object);
+
+            chat.ViewModel.CurrentPrompt = "chat draft";
+            startViewModel.OnComposerLoaded();
+
+            var tip = startViewModel.Suggestions[0];
+            await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(tip);
+
+            Assert.True(tip.IsInformational);
+            Assert.Equal("chat draft", chat.ViewModel.CurrentPrompt);
+            Assert.Equal("chat draft", startViewModel.StartPrompt);
+            ui.Verify(
+                service => service.ShowInfoAsync(localizer["StartSuggestion_ReportGuidanceDetail"]),
+                Times.Once);
+            workflow.Verify(
+                w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task QuickSuggestions_ResolveUserVisibleTextFromCoreStrings()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+
+            var localizer = new TestCoreStringLocalizer();
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: localizer);
 
             Assert.Collection(
                 startViewModel.Suggestions,
                 suggestion =>
                 {
-                    Assert.Equal("StartView.Suggestion.AnalyzeCodebase", suggestion.AutomationId);
-                    Assert.Equal("分析代码库", suggestion.Title);
-                    Assert.Equal("深入理解项目架构与逻辑", suggestion.Subtitle);
-                    Assert.Equal("请帮我分析一下当前代码库的架构和核心逻辑。", suggestion.Prompt);
+                    Assert.Equal("StartView.Suggestion.ReportGuidance", suggestion.AutomationId);
+                    Assert.True(suggestion.IsInformational);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceLabel"], suggestion.CategoryLabel);
+                    Assert.Equal(string.Empty, suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.RecommendTasks", suggestion.AutomationId);
-                    Assert.Equal("推荐开发任务", suggestion.Title);
-                    Assert.Equal("明确接下来该做什么", suggestion.Subtitle);
-                    Assert.Equal("根据当前进度，推荐几个接下来可以进行的开发任务或优化点。", suggestion.Prompt);
+                    Assert.False(suggestion.IsInformational);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_QuickLaunchLabel"], suggestion.CategoryLabel);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksPrompt"], suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.ResolveErrors", suggestion.AutomationId);
-                    Assert.Equal("解决最近报错", suggestion.Title);
-                    Assert.Equal("提交错误日志让我看看", suggestion.Subtitle);
-                    Assert.Equal("我刚才遇到了一些报错，请帮我分析并解决它们。", suggestion.Prompt);
+                    Assert.False(suggestion.IsInformational);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_QuickLaunchLabel"], suggestion.CategoryLabel);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsPrompt"], suggestion.Prompt);
                 });
         }
         finally
@@ -262,7 +318,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void LanguageChanged_RebuildsCachedQuickSuggestions()
+    public async Task LanguageChanged_RebuildsCachedQuickSuggestions()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -270,7 +326,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var languageService = new Mock<IAppLanguageService>();
             var languagePrefix = "zh";
@@ -287,19 +343,72 @@ public sealed class StartViewModelTests
                 localizer: localizer.Object,
                 languageService: languageService.Object);
 
-            Assert.Equal("zh:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+            Assert.Equal("zh:StartSuggestion_ReportGuidanceTitle", startViewModel.Suggestions[0].Title);
+            Assert.True(startViewModel.Suggestions[0].IsInformational);
 
             languagePrefix = "en";
             languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
 
             Assert.Equal(3, startViewModel.Suggestions.Count);
-            Assert.Equal("en:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+            Assert.Equal("en:StartSuggestion_ReportGuidanceTitle", startViewModel.Suggestions[0].Title);
+            Assert.True(startViewModel.Suggestions[0].IsInformational);
         }
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
     }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsOpenStartLaunchFailureMessage()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var languageService = new Mock<IAppLanguageService>();
+            var languagePrefix = "zh";
+            var localizer = new Mock<IStringLocalizer<CoreStrings>>();
+            localizer
+                .Setup(service => service[It.IsAny<string>()])
+                .Returns((string key) => new LocalizedString(key, $"{languagePrefix}:{key}"));
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Failed);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: localizer.Object,
+                languageService: languageService.Object);
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.StartPrompt = "hello";
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("zh:Start_SessionLaunchFailed", startViewModel.StartSessionDraftErrorMessage);
+
+            languagePrefix = "en";
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("en:Start_SessionLaunchFailed", startViewModel.StartSessionDraftErrorMessage);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
 
     [Fact]
     public void QuickSuggestion_AllowsRuntimeProjectionUpdates()
@@ -309,8 +418,9 @@ public sealed class StartViewModelTests
             "\uE10F",
             "Initial title",
             "Initial subtitle",
+            "Initial category",
             "Initial prompt",
-            new RelayCommand(() => { }));
+            new AsyncRelayCommand<QuickSuggestionViewModel>(_ => Task.CompletedTask));
         var changedProperties = new List<string?>();
         suggestion.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
 
@@ -318,22 +428,25 @@ public sealed class StartViewModelTests
         suggestion.Icon = "\uE11B";
         suggestion.Title = "Updated title";
         suggestion.Subtitle = "Updated subtitle";
+        suggestion.CategoryLabel = "Updated category";
         suggestion.Prompt = "Updated prompt";
 
         Assert.Equal("StartView.Suggestion.Updated", suggestion.AutomationId);
         Assert.Equal("\uE11B", suggestion.Icon);
         Assert.Equal("Updated title", suggestion.Title);
         Assert.Equal("Updated subtitle", suggestion.Subtitle);
+        Assert.Equal("Updated category", suggestion.CategoryLabel);
         Assert.Equal("Updated prompt", suggestion.Prompt);
         Assert.Contains(nameof(QuickSuggestionViewModel.AutomationId), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Icon), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Title), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Subtitle), changedProperties);
+        Assert.Contains(nameof(QuickSuggestionViewModel.CategoryLabel), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Prompt), changedProperties);
     }
 
     [Fact]
-    public void StartPromptChanged_UpdatesSharedChatPromptDraft()
+    public async Task StartPromptChanged_UpdatesSharedChatPromptDraft()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -341,7 +454,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-codex",
@@ -366,7 +479,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelection_DefaultsToUnclassifiedOption()
+    public async Task StartProjectSelection_DefaultsToUnclassifiedOption()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -374,7 +487,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -383,7 +496,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
             Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId);
-            Assert.Equal("未归类", option.DisplayName);
+            Assert.Equal("Unclassified", option.DisplayName);
         }
         finally
         {
@@ -402,7 +515,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
@@ -429,7 +542,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator.Setup(x => x.ActivateStartAsync(null)).ReturnsAsync(true);
@@ -475,7 +588,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator.Setup(x => x.ActivateStartAsync("project-a")).ReturnsAsync(true);
@@ -514,7 +627,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var navigationCoordinator = new Mock<INavigationCoordinator>();
             navigationCoordinator.Setup(x => x.ActivateStartAsync(null)).ReturnsAsync(true);
@@ -552,7 +665,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelection_WhenRecentConversationHasProject_DefaultsToRecentConversationProject()
+    public async Task StartProjectSelection_WhenRecentConversationHasProject_DefaultsToRecentConversationProject()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -561,7 +674,7 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var conversationCatalog = new FakeConversationCatalogReadModel(
@@ -593,7 +706,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelection_WhenCatalogRefreshArrivesOffUiThread_UpdatesOnlyAfterDispatcherDrain()
+    public async Task StartProjectSelection_WhenCatalogRefreshArrivesOffUiThread_UpdatesOnlyAfterDispatcherDrain()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -602,7 +715,7 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var dispatcher = new QueueingUiDispatcher();
@@ -651,7 +764,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -682,7 +795,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartModeSelector_BeforeDraftReady_IsDisabled()
+    public async Task StartModeSelector_BeforeDraftReady_IsDisabled()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -690,7 +803,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -720,7 +833,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -755,7 +868,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -789,7 +902,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -847,7 +960,7 @@ public sealed class StartViewModelTests
                 RootPath = @"C:\Repo\Alpha"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -920,23 +1033,16 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-            var timeoutAt = DateTime.UtcNow.AddSeconds(10);
-            while (true)
+            await WaitForConditionAsync(async () =>
             {
                 var connectionState = await chat.GetConnectionStateAsync();
-                if (connectionState.NewSessionDraft is not null
+                return connectionState.NewSessionDraft is not null
                     && string.Equals(connectionState.NewSessionDraft.ProfileId, "profile-2", StringComparison.Ordinal)
                     && string.Equals(connectionState.NewSessionDraft.ConnectionInstanceId, "conn-2", StringComparison.Ordinal)
                     && string.Equals(connectionState.NewSessionDraft.RemoteSessionId, "remote-2", StringComparison.Ordinal)
                     && startViewModel.IsStartModeSelectorEnabled
-                    && startViewModel.StartModeStage == StartSessionModeStage.Ready)
-                {
-                    break;
-                }
-
-                Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for profile-2 new-session draft to become ready.");
-                await Task.Delay(20, TestContext.Current.CancellationToken);
-            }
+                    && startViewModel.StartModeStage == StartSessionModeStage.Ready;
+            });
 
             var finalState = await chat.GetConnectionStateAsync();
             Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
@@ -965,7 +1071,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/home/ubuntu/Projects/Alpha"
             });
 
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>());
@@ -1074,7 +1180,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             var commands = new Mock<IAcpConnectionCommands>();
             ChatViewModelHarness? chatHarness = null;
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -1217,7 +1323,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/remote/alpha"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -1365,7 +1471,7 @@ public sealed class StartViewModelTests
                 DisplayName = "Remote Workspace",
                 RemotePath = "/workspace/demo"
             });
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-remote",
@@ -1467,7 +1573,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/home/ubuntu/Projects/Alpha"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -1544,7 +1650,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-1",
@@ -1609,7 +1715,7 @@ public sealed class StartViewModelTests
 
             var commands = new Mock<IAcpConnectionCommands>();
             ChatViewModelHarness? chatHarness = null;
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -1756,7 +1862,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/home/ubuntu/Projects/Alpha"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-remote",
@@ -1851,7 +1957,7 @@ public sealed class StartViewModelTests
             });
 
             var registry = new InMemoryAcpConnectionSessionRegistry();
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -1949,7 +2055,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void ComposerSelectorSlots_ExposeThreeVisibleStartSelectors()
+    public async Task ComposerSelectorSlots_ExposeThreeVisibleStartSelectors()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1957,7 +2063,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1995,8 +2101,8 @@ public sealed class StartViewModelTests
                 DisplayName = "Alpha Remote",
                 RemotePath = "/remote/alpha"
             });
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.HttpSse, ServerUrl = "https://example.test" });
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.StreamableHttp, ServerUrl = "https://example.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
             var chatService = CreateConnectedChatService();
             chatService
@@ -2042,7 +2148,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2093,7 +2199,7 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             var commands = new Mock<IAcpConnectionCommands>();
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -2153,7 +2259,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal("profile switch failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
-            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Equal("Mode unavailable", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.NotEqual(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
@@ -2173,7 +2279,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2193,7 +2299,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartSelectorProjection_WhenNoAgentsConfigured_ShowsNonBlockingAgentPlaceholder()
+    public async Task StartSelectorProjection_WhenNoAgentsConfigured_ShowsNonBlockingAgentPlaceholder()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2201,13 +2307,13 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             Assert.Equal(SelectorPlaceholderKind.Default, startViewModel.StartAgentSelectorProjection.PlaceholderKind);
-            Assert.Equal("未选择 Agent", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
+            Assert.Equal("No agent selected", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
             Assert.False(startViewModel.StartAgentSelectorProjection.IsSubmitBlocked);
             Assert.DoesNotContain(startViewModel.StartAgentSelectorProjection.DisplayItems, item => !item.IsPlaceholder);
         }
@@ -2226,7 +2332,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2250,7 +2356,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartAgentSelection_WhenSelectorIdentityIsStaleButProfileStillExists_SelectsProfile()
+    public async Task StartAgentSelection_WhenSelectorIdentityIsStaleButProfileStillExists_SelectsProfile()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2258,7 +2364,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-remote",
@@ -2285,6 +2391,53 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartAgentSelection_WhenExplicitProfileIsSelectedAgain_DoesNotRefreshSelectorProjections()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Agent One",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await WaitForConditionAsync(() =>
+                string.Equals(chat.ViewModel.SelectedAcpProfile?.Id, "profile-1", StringComparison.Ordinal)
+                && string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-1", StringComparison.Ordinal));
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var selectedAgentItem = Assert.Single(
+                startViewModel.StartAgentSelectorItems,
+                item => string.Equals(item.SemanticValue, "profile-1", StringComparison.Ordinal));
+            var changedProperties = new List<string?>();
+            startViewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
+
+            startViewModel.SelectStartAgentDisplayCommand.Execute(selectedAgentItem);
+
+            Assert.Equal("profile-1", chat.ViewModel.SelectedAcpProfile?.Id);
+            Assert.Equal("profile-1", chat.ViewModel.SelectedProfileIntentId);
+            Assert.DoesNotContain(nameof(StartViewModel.StartAgentSelectorProjection), changedProperties);
+            Assert.DoesNotContain(nameof(StartViewModel.ComposerSelectorSlots), changedProperties);
+            Assert.DoesNotContain(nameof(StartViewModel.StartProjectSelectorProjection), changedProperties);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartModeSelector_WhenConnectionFailsWithoutDraftError_SeparatesSelectorStatusFromErrorMessage()
     {
         var originalContext = SynchronizationContext.Current;
@@ -2293,7 +2446,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2309,8 +2462,8 @@ public sealed class StartViewModelTests
 
             Assert.True(startViewModel.HasStartSessionDraftError);
             Assert.Equal("Internal error: Already initialized", startViewModel.StartSessionDraftErrorMessage);
-            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
-            Assert.Equal("模式不可用", startViewModel.StartModeSelectorProjection.SubmitBlockReason);
+            Assert.Equal("Mode unavailable", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Equal("Mode unavailable", startViewModel.StartModeSelectorProjection.SubmitBlockReason);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
         }
         finally
@@ -2328,7 +2481,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2345,8 +2498,8 @@ public sealed class StartViewModelTests
             await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
             Assert.True(startViewModel.IsStartModeSelectorEnabled);
 
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.HttpSse, ServerUrl = "https://example-1.test" });
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-1.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-2.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
 
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
@@ -2371,7 +2524,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2415,7 +2568,7 @@ public sealed class StartViewModelTests
                 IsSupported = true,
                 PermissionResult = new VoiceInputPermissionResult(VoiceInputPermissionStatus.Denied, "Denied")
             };
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2450,7 +2603,7 @@ public sealed class StartViewModelTests
                 IsSupported = true,
                 PermissionResult = VoiceInputPermissionResult.Granted()
             };
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), voiceInput);
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2484,7 +2637,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2518,7 +2671,7 @@ public sealed class StartViewModelTests
         {
             var uiDispatcher = new QueueingUiDispatcher();
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -2561,7 +2714,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void ProfileChange_WhileComposerIsNotLoaded_DoesNotStartLaunchWorkflow()
+    public async Task ProfileChange_WhileComposerIsNotLoaded_DoesNotStartLaunchWorkflow()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2569,9 +2722,9 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.HttpSse, ServerUrl = "https://example-1.test" });
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-1.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-2.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             var workflow = new Mock<IChatLaunchWorkflow>();
@@ -2595,7 +2748,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelection_SelectingProject_ProjectsToGlobalPreferences()
+    public async Task StartProjectSelection_SelectingProject_ProjectsToGlobalPreferences()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2606,7 +2759,7 @@ public sealed class StartViewModelTests
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-b", Name = "Beta", RootPath = @"C:\Repo\Beta" });
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2628,7 +2781,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelection_SelectingUnclassified_ClearsGlobalPreferences()
+    public async Task StartProjectSelection_SelectingUnclassified_ClearsGlobalPreferences()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2639,7 +2792,7 @@ public sealed class StartViewModelTests
             preferences.Projects.Add(new ProjectDefinition { ProjectId = "project-a", Name = "Alpha", RootPath = @"C:\Repo\Alpha" });
             preferences.LastSelectedProjectId = "project-a";
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2656,7 +2809,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectOptions_WhenPreferencesProjectsChange_RefreshesProjection()
+    public async Task StartProjectOptions_WhenPreferencesProjectsChange_RefreshesProjection()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2664,7 +2817,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2693,9 +2846,9 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflowStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var workflowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var workflowCompletion = new TaskCompletionSource<ChatLaunchCompletion>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflow = new Mock<IChatLaunchWorkflow>();
             workflow.Setup(w => w.StartSessionAndSendAsync(
                     It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
@@ -2717,7 +2870,7 @@ public sealed class StartViewModelTests
             Assert.True(startViewModel.IsStarting);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
 
-            workflowCompletion.TrySetResult(null);
+            workflowCompletion.TrySetResult(ChatLaunchCompletion.PromptDispatched);
             await executeTask;
 
             Assert.False(startViewModel.IsStarting);
@@ -2739,7 +2892,7 @@ public sealed class StartViewModelTests
         try
         {
             var preferences = CreatePreferences();
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var exception = new InvalidOperationException("boom");
             workflow.Setup(w => w.StartSessionAndSendAsync(
@@ -2749,7 +2902,13 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var loggerMock = new Mock<ILogger<StartViewModel>>();
-            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object, loggerMock.Object);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                loggerMock.Object,
+                localizer: new TestCoreStringLocalizer());
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2766,6 +2925,8 @@ public sealed class StartViewModelTests
 
             Assert.False(startViewModel.IsStarting);
             Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("Failed to start the session. Please try again.", startViewModel.StartSessionDraftErrorMessage);
             Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
@@ -2775,7 +2936,86 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelector_RemoteProfile_DisablesUnclassifiedAndLocalProjectsButEnablesRemoteDirectories()
+    public async Task StartSessionAndSendAsync_WhenWorkflowFails_PreservesDraftAndSurfacesError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Failed);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+            startViewModel.StartPrompt = "launch";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("Failed to start the session. Please try again.", startViewModel.StartSessionDraftErrorMessage);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_WhenWorkflowIncomplete_PreservesDraftWithoutError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Incomplete);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+            startViewModel.StartPrompt = "launch";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.False(startViewModel.HasStartSessionDraftError);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartProjectSelector_RemoteProfile_DisablesUnclassifiedAndLocalProjectsButEnablesRemoteDirectories()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2791,7 +3031,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/remote/a"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-remote",
@@ -2817,7 +3057,7 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
-    public void StartProjectSelector_WhenSwitchingToRemoteProfileFromAgentSelector_ShowsConfiguredRemoteDirectories()
+    public async Task StartProjectSelector_WhenSwitchingToRemoteProfileFromAgentSelector_ShowsConfiguredRemoteDirectories()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -2833,7 +3073,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/remote/a"
             });
 
-            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
             {
                 Id = "profile-local",
@@ -2897,7 +3137,7 @@ public sealed class StartViewModelTests
                     (profile, _, _, _) => connectedProfileIds.Add(profile.Id))
                 .ReturnsAsync(new AcpTransportApplyResult(CreateConnectedChatService().Object, new InitializeResponse()));
 
-            using var chat = CreateChatViewModel(
+            await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
                 Mock.Of<ISessionManager>(),
@@ -2949,8 +3189,6 @@ public sealed class StartViewModelTests
         var connectionStore = new ChatConnectionStore(connectionState);
         var chatStore = new ChatStore(state);
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var serilog = new Mock<SerilogLogger>();
 
@@ -3044,8 +3282,11 @@ public sealed class StartViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static MainNavigationViewModel CreateNavigationViewModel(
@@ -3093,7 +3334,8 @@ public sealed class StartViewModelTests
         ILogger<StartViewModel>? logger = null,
         IConversationCatalogReadModel? conversationCatalog = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? ui = null)
     {
         return new StartViewModel(
             chatViewModel: chat.ViewModel,
@@ -3108,7 +3350,8 @@ public sealed class StartViewModelTests
             chatConnectionStore: chat.ConnectionStore,
             conversationCatalog: conversationCatalog,
             localizer: localizer,
-            languageService: languageService);
+            languageService: languageService,
+            ui: ui);
     }
 
     private static NewSessionDraftState CreateReadyDraft(string selectedModeId)
@@ -3211,6 +3454,24 @@ public sealed class StartViewModelTests
         }
     }
 
+    // Async-predicate variant: the predicate awaits real work (e.g. a connection-state fetch)
+    // on every poll, so it carries a higher wall-clock floor than the sync overload to absorb
+    // CPU contention when the full suite runs in parallel; a genuine hang still fails.
+    private static async Task WaitForConditionAsync(Func<Task<bool>> predicate, int timeoutMilliseconds = 15000, int pollDelayMilliseconds = 20)
+    {
+        timeoutMilliseconds = Math.Max(timeoutMilliseconds, 15000);
+        var started = DateTime.UtcNow;
+        while (!await predicate())
+        {
+            if ((DateTime.UtcNow - started).TotalMilliseconds >= timeoutMilliseconds)
+            {
+                throw new TimeoutException("Timed out waiting for expected asynchronous condition.");
+            }
+
+            await Task.Delay(pollDelayMilliseconds);
+        }
+    }
+
     private static Task WaitPastPreviousFixedDraftIdentityWaitAsync()
         => Task.Delay(PreviousFixedDraftIdentityWaitTimeout + DraftIdentityWaitRegressionBuffer);
 
@@ -3235,7 +3496,7 @@ public sealed class StartViewModelTests
         public bool IsPaneOpen { get; private set; }
         public event EventHandler? PaneStateChanged;
 
-        public void SetPaneOpen(bool isOpen)
+        public async Task SetPaneOpen(bool isOpen)
         {
             if (IsPaneOpen == isOpen)
             {
@@ -3357,7 +3618,7 @@ public sealed class StartViewModelTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -3365,13 +3626,13 @@ public sealed class StartViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
     }
 
-    private sealed class ChatViewModelHarness : IDisposable
+    private sealed class ChatViewModelHarness : IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
@@ -3413,11 +3674,11 @@ public sealed class StartViewModelTests
         public ValueTask<ChatConnectionState> GetConnectionStateAsync()
             => _connectionStore.GetCurrentStateAsync();
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             ViewModel.Dispose();
-            _connectionState.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _state.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await _connectionState.DisposeAsync();
+            await _state.DisposeAsync();
         }
     }
 }

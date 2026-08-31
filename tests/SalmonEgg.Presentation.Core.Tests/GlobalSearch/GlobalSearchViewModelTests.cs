@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,6 +21,7 @@ using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.GlobalSearch;
 
@@ -54,13 +56,17 @@ public sealed class GlobalSearchViewModelTests
         ]);
 
         var navigationCoordinator = new Mock<INavigationCoordinator>();
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -89,7 +95,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -114,7 +122,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
             Mock.Of<ILogger<GlobalSearchViewModel>>(),
@@ -136,15 +146,17 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -166,14 +178,16 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -194,14 +208,16 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -225,14 +241,16 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -291,7 +309,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -312,13 +332,17 @@ public sealed class GlobalSearchViewModelTests
         var preferences = CreatePreferencesWithProject();
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -369,7 +393,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -384,6 +410,98 @@ public sealed class GlobalSearchViewModelTests
         Assert.Equal(GlobalSearchViewState.Results, viewModel.ViewState);
         Assert.False(viewModel.IsError);
         Assert.True(viewModel.HasResults);
+    }
+
+    [Fact]
+    public async Task SelectResultAsync_WhenSessionActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var preferences = CreatePreferencesWithProject();
+        var presenter = new ConversationCatalogPresenter();
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSessionAsync("session-1", It.IsAny<string?>()))
+            .ReturnsAsync(false);
+
+        using var navigationViewModel = CreateNavigationViewModel(
+            preferences,
+            presenter,
+            navigationCoordinator.Object,
+            ui.Object);
+        using var viewModel = new GlobalSearchViewModel(
+            navigationViewModel,
+            preferences,
+            navigationCoordinator.Object,
+            presenter,
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
+        {
+            Id = "session-1",
+            Title = "Session 1",
+            Kind = SearchResultKind.Session
+        });
+
+        navigationCoordinator.Verify(
+            coordinator => coordinator.ActivateSessionAsync("session-1", It.IsAny<string?>()),
+            Times.Once);
+        Assert.Equal(
+            ["Failed to open this session. Please try again later."],
+            shownMessages);
+    }
+
+    [Fact]
+    public async Task SelectResultAsync_WhenSettingsActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var preferences = CreatePreferencesWithProject();
+        var presenter = new ConversationCatalogPresenter();
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey))
+            .ReturnsAsync(false);
+
+        using var navigationViewModel = CreateNavigationViewModel(
+            preferences,
+            presenter,
+            navigationCoordinator.Object,
+            ui.Object);
+        using var viewModel = new GlobalSearchViewModel(
+            navigationViewModel,
+            preferences,
+            navigationCoordinator.Object,
+            presenter,
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
+        {
+            Id = SettingsSectionCatalog.AgentAcpKey,
+            Title = "ACP 配置",
+            Kind = SearchResultKind.Setting
+        });
+
+        navigationCoordinator.Verify(
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey),
+            Times.Once);
+        Assert.Equal(
+            ["Failed to open settings. Please try again later."],
+            shownMessages);
     }
 
     private static async Task WaitForConditionAsync(
@@ -407,13 +525,15 @@ public sealed class GlobalSearchViewModelTests
 
     private static MainNavigationViewModel CreateNavigationViewModel(
         AppPreferencesViewModel preferences,
-        ConversationCatalogPresenter presenter)
+        ConversationCatalogPresenter presenter,
+        INavigationCoordinator? navigationCoordinator = null,
+        IUiInteractionService? ui = null)
     {
         return new MainNavigationViewModel(
             Mock.Of<IConversationCatalog>(),
             new NavigationProjectPreferencesAdapter(preferences),
-            Mock.Of<IUiInteractionService>(),
-            Mock.Of<INavigationCoordinator>(),
+            ui ?? Mock.Of<IUiInteractionService>(),
+            navigationCoordinator ?? Mock.Of<INavigationCoordinator>(),
             Mock.Of<ILogger<MainNavigationViewModel>>(),
             new FakeNavigationPaneState(),
             Mock.Of<IShellLayoutMetricsSink>(),
@@ -423,7 +543,7 @@ public sealed class GlobalSearchViewModelTests
             presenter,
             new ProjectAffinityResolver(),
             new ImmediateUiDispatcher(),
-            Mock.Of<IStringLocalizer<CoreStrings>>());
+            new TestCoreStringLocalizer());
     }
 
     private static AppPreferencesViewModel CreatePreferencesWithProject()
@@ -439,8 +559,11 @@ public sealed class GlobalSearchViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         preferences.Projects.Add(new ProjectDefinition
         {

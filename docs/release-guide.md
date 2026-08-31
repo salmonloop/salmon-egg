@@ -10,7 +10,8 @@
 4. [Android 发布](#android-发布)
 5. [iOS 发布](#ios-发布)
 6. [macOS 发布](#macos-发布)
-7. [持续集成发布](#持续集成发布)
+7. [CLI 发布](#cli-发布)
+8. [持续集成发布](#持续集成发布)
 
 ---
 
@@ -19,7 +20,7 @@
 ### 通用要求
 
 - .NET 10.0 SDK 或更高版本
-- Visual Studio 2022 (17.12+) 或 Visual Studio Code
+- Visual Studio 18.8+ 或 Visual Studio Code
 - Git
 
 ### 平台特定要求
@@ -263,6 +264,85 @@ create-dmg \
 
 ---
 
+## CLI 发布
+
+### 正式支持矩阵
+
+CLI 的支持矩阵事实源是 `src/SalmonEgg.Cli/SalmonEgg.Cli.csproj` 中的 `SalmonEggCliSupportedRuntimeIdentifiers`；发布脚本与工作流都从该属性读取，不另行维护列表。
+
+| Runtime identifier | 平台 | 安装包 | PATH 注册方式 |
+|---|---|---|---|
+| `linux-x64` | Linux x64 | `tar.gz` + `.deb` | `.deb` 安装到 `/usr/bin/salmon-egg`，由 dpkg 拥有 |
+| `win-x64` | Windows x64 | `zip` + per-user `.msi` | MSI 的 `Environment` 元素追加安装目录到**用户** PATH，卸载时自动移除 |
+| `osx-arm64` | macOS Apple Silicon | `tar.gz` + Homebrew formula | `brew install` 链接到 Homebrew `bin`，已在 PATH 上 |
+
+矩阵之外的 RID（`win-arm64`、`linux-arm64`、`osx-x64` 等）不进入正式支持：能交叉编译不等于有真实运行验证。`--allow-unsupported-rid` 仅供本机验证，产物不得发布。
+
+产物为 self-contained 单文件，用户无需预装 .NET；`scripts/gates/run-cli-release-artifact-smoke.sh` 会在移除可用 .NET 的环境下运行刚构建出的可执行文件来验证这一点。
+
+### 构建 CLI 产物
+
+```bash
+# 单个 RID：发布、打包、生成 SHA-256
+scripts/release/build-cli-artifacts.sh --rid linux-x64
+
+# Linux 安装包
+scripts/release/build-cli-deb.sh \
+  --executable artifacts/cli-publish/linux-x64/salmon-egg \
+  --architecture amd64
+
+# Windows 安装包（需要 WiX Toolset）
+./scripts/release/build-cli-msi.ps1 -Executable artifacts/cli-publish/win-x64/salmon-egg.exe
+```
+
+产物命名：
+
+```text
+salmon-egg-cli-1.0.5-win-x64.zip
+salmon-egg-cli-1.0.5-linux-x64.tar.gz
+salmon-egg-cli-1.0.5-osx-arm64.tar.gz
+salmon-egg-cli_1.0.5_amd64.deb
+salmon-egg-cli-1.0.5-win-x64.msi
+```
+
+Homebrew formula 在 release 聚合阶段由 `scripts/release/build-cli-homebrew-formula.sh` 依据本次产物的 `.sha256` 旁文件生成，不手工维护校验和。
+
+### 发布前门禁
+
+```bash
+# 真实产物行为门禁（退出码契约、凭据边界、事务残留、无需 .NET 运行时）
+scripts/gates/run-cli-release-artifact-smoke.sh artifacts/cli-publish/linux-x64/salmon-egg
+
+# 安装 / PATH / 卸载门禁（需要 root 或免密 sudo）
+scripts/gates/run-cli-linux-package-smoke.sh artifacts/cli/salmon-egg-cli-1.0.5_amd64.deb
+
+# Windows MSI PATH 注册规则的正反例门禁（纯字符串逻辑，任意平台可跑，无需 WiX）
+pwsh -NoProfile -File scripts/gates/run-cli-msi-path-contract-gate.ps1
+```
+
+前两个门禁必须使用**本次构建产出**的产物；`dotnet run` 不是有效验证口径。第三个门禁验证的是规则本身而非产物，因此不受此限制。
+
+### PATH 与凭据约定
+
+- GUI 安装包不修改 PATH。全局 `salmon-egg` 命令只来自 CLI 安装包。
+- 不允许用脚本编辑 `.bashrc`、`.zshrc` 或用户 PATH 字符串：安装、升级、卸载必须由同一个包管理器拥有。
+- CLI 凭据写入默认 fail-closed。平台安全存储不可用时写入失败而非降级为明文；需要明文降级必须显式传 `--allow-insecure-storage`。非凭据配置操作不受影响。该策略在 Linux（Secret Service）与 macOS（Keychain）上生效；Windows DPAPI 不依赖 keyring 守护进程、始终可用，因此该 flag 在 Windows 上无实际作用。
+- Windows MSI 的 PATH 注册由 `build-cli-msi.ps1` 直接读取本次构建产出的 MSI 的 `Environment` 表验证：表中必须恰好一行，且该行必须满足下表全部断言。
+
+  | 断言 | 违规后果 |
+  |---|---|
+  | 变量为 `PATH` | 命令不会变得可发现 |
+  | 前缀含 `=`、不含 `!` | 安装时不写入，或安装时就把变量删掉 |
+  | 前缀含 `-` | 卸载后安装目录永久留在 PATH 上 |
+  | 前缀不含 `*` | 写的是机器环境而非当前用户 |
+  | 值以 `[~]` + 分隔符开头 | 缺 `[~]` 会整体覆盖 PATH（MSI 文档明确警告可能导致机器无法启动）；`[~]` 出现在结尾则是前置插入，会遮蔽用户原有工具 |
+  | 值引用 `[INSTALLFOLDER]` | 加进 PATH 的不是本包的安装目录 |
+
+  规则本身在 `scripts/release/CliMsiPathContract.ps1`，与读取 MSI 的 COM 代码分离，因此 `scripts/gates/run-cli-msi-path-contract-gate.ps1` 能在任意平台（含 Linux）直接用正反例跑这条规则；该门禁在 `ci-core.yml` 的每次 push / PR 上执行，不必等到打 tag 才发现规则被削弱。
+- 上述断言只覆盖包内表结构。真实安装 / 卸载需要交互式 Windows 会话，不在 CI 覆盖范围：发布 Windows 安装包前仍需手工确认安装后新开终端 `where salmon-egg` 命中安装目录、卸载后命令消失、且用户原有 PATH 条目完好无残留重复项。
+
+---
+
 ## 持续集成发布
 
 ### GitHub Actions 配置
@@ -284,13 +364,13 @@ git push origin v1.0.0
 发布前检查清单：
 
 - [ ] 所有测试通过
-- [ ] 版本号已更新
+- [ ] CLI 三个支持 RID 的产物均已构建
+- [ ] CLI 真实产物 smoke 与安装 / PATH 门禁通过
 - [ ] 确认 GitHub 自动生成的 release notes 或维护中的变更记录已覆盖本版本
 - [ ] 更新 README.md（如需要）
 - [ ] 构建发布版本
 - [ ] 在测试环境验证
-- [ ] 创建 Git tag
-- [ ] 推送到远程仓库
+- [ ] 创建 Git tag 并推送到远程仓库（版本号由 MinVer 从 tag 推导，无需改任何文件）
 - [ ] 验证 CI/CD 流程
 - [ ] 检查发布产物
 
@@ -333,3 +413,95 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj -f net10.0-browserwasm -c Re
 - [Uno Platform 文档](https://platform.uno/docs/)
 - [.NET 发布指南](https://docs.microsoft.com/dotnet/core/deploying/)
 - [GitHub Issues](https://github.com/salmonloop/salmon-egg/issues)
+
+---
+
+## ACP SDK（`SalmonEgg.Acp`）发布
+
+SDK 与应用是两条独立的发布线，各有自己的 tag 命名空间与版本号：
+
+| | tag | 版本来源 | workflow |
+|---|---|---|---|
+| GUI / CLI | `v*` | git tag（MinVer 从 tag 推导，根 `Directory.Build.props` 派生 `SalmonEggDisplayVersion`） | `release-packaging.yml` |
+| ACP SDK | `acp-sdk-v*` | git tag（MinVer 以 `MinVerTagPrefix=acp-sdk-v` 推导） | `release-acp-sdk.yml` |
+
+两者必须保持分离：共用 `v*` 会让每次 SDK 发布都重建桌面安装包，也会让应用发版误触发 NuGet 推送。
+
+### 一次性准备（受信任发布 / Trusted Publishing）
+
+通道不存长期 API key。`publish-nuget` job 用 GitHub OIDC 向 nuget.org 换一枚有效期 1 小时的临时 key，用完即弃。
+
+1. 登录 nuget.org → 点用户名 → **Trusted Publishing** → 新建策略：
+
+    | 字段 | 值 |
+    |---|---|
+    | Package owner | `Salmon` |
+    | Scopes | Push new packages and package versions |
+    | Glob Patterns and Packages | `SalmonEgg.Acp` |
+    | Repository Owner | `salmonloop` |
+    | Repository | `salmon-egg` |
+    | Workflow File | `release-acp-sdk.yml` |
+    | Environment | `nuget-publish` |
+
+    Workflow File 只填文件名，**不要带** `.github/workflows/` 路径。Environment 必须与 workflow 里的 `environment:` 完全一致，否则令牌交换会被拒。Scopes 必须包含 "new packages"：首发时包还不存在，只给 "new versions" 会推不上去。
+
+    填表时请关闭浏览器页面翻译。`salmon-egg` 被译成中文后写入策略，与 GitHub 令牌里的原始仓库名不匹配，交换同样会失败。
+
+2. 策略的 **Package owner** 决定它归谁名下，并对该 owner 名下**所有**包生效，因此不要求 `SalmonEgg.Acp` 事先存在。选个人比选组织稳：策略归组织名下时，创建者若离开该组织，策略会失效。
+
+3. 创建名为 `nuget-publish` 的 GitHub Environment；`publish-nuget` job 绑定该环境，可在此挂必要的审批人。策略若限定了 environment，该环境就是鉴权边界的一部分，不是装饰。
+
+4. 在 `Settings → Secrets and variables → Actions → Variables` 添加变量 `NUGET_USER`，值为 nuget.org 的**用户名（profile name），不是邮箱**。它不是机密，但也不该硬编码进 workflow：fork 会连同用户名一起继承。
+
+新建策略会先带一个 7 天临时有效期，即使仓库是公开的也会看到。nuget.org 需要 GitHub 仓库与所有者的**数字 ID** 才能把策略永久锁定到本仓库（防止有人删库、重建同名仓库后冒名发布），而这些 ID 只随一次成功发布的 OIDC 令牌送达。7 天内未发布则转为 inactive，可随时重启该窗口。
+
+OIDC 交换未产出 key 时 `publish-nuget` 会显式失败而非静默跳过 —— 一次"绿灯但什么都没发布"的运行比失败更难发现。
+
+### 发布步骤
+
+```bash
+# 1. 本地跑完整门禁 + 真实包消费验证（SDK 版本由 MinVer 从 tag 历史推导；
+#    非首发版本必须同时提供上一个已发布版本作为兼容性基线）
+ACP_PACKAGE_BASELINE_VERSION=1.0.0 ./scripts/gates/run-acp-sdk-gates.sh Release artifacts/acp-sdk-pack
+./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
+./scripts/gates/run-acp-sdk-tag-version-gate.sh acp-sdk-v1.0.1 artifacts/acp-sdk-pack
+./scripts/gates/run-acp-consumer-package-smoke.sh artifacts/acp-sdk-pack Release
+
+# 2. 打 tag 推送，workflow 接管 pack -> consumer smoke -> nuget push；
+#    版本号即 tag 上的数字，MinVer 负责把同样的版本打进包里
+git tag acp-sdk-v1.0.1
+git push origin acp-sdk-v1.0.1
+```
+
+### 兼容性基线
+
+`EnablePackageValidation` 需要一个已发布版本作为对比基线才有意义。首发版本（`AcpPackageFirstReleasedVersion`，当前 `1.0.0`）在 nuget.org 上没有前身，写死基线会导致 restore 报 `NU1101`，因此该版本不启用基线比对。
+
+版本一旦超过首发版本，pack 就要求显式传入基线，否则 `AcpBaselineRequired` 直接报错（普通开发构建与测试不受影响，报错只在产出包的 pack 管线触发）：
+
+```bash
+dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj -c Release -p:AcpPackageBaselineVersion=1.0.0
+```
+
+CI 侧由仓库变量 `ACP_PACKAGE_BASELINE_VERSION` 提供基线：发下一个 SDK 版本前，把它设为当前已发布的版本号。`run-acp-sdk-gates.sh` 会在带该属性的 restore 中预先下载基线包，pack 时 ApiCompat 才能找到它做比对。
+
+这条门禁是 fail-closed 的：忘记传基线会构建失败，而不是让包验证退化成"什么都不比"的假绿。
+
+### 不可逆性
+
+nuget.org 的推送无法撤回，也无法覆盖同版本号。因此：
+
+- `run-acp-sdk-tag-version-gate.sh` 在推送前校验 tag 版本与产物版本一致、`.nupkg` 与 `.snupkg` 各恰好一个；
+- `concurrency` 不取消进行中的发布，避免出现"包已推、符号未推"的半成品；
+- `.snupkg` 与 `.nupkg` 分别显式推送，不用通配符（glob 会连带匹配 `.snupkg`）。
+
+### SDK 发布清单
+
+- [ ] 版本号由 `acp-sdk-v*` tag 决定，无需改文件；非首发版本时已设置仓库变量 `ACP_PACKAGE_BASELINE_VERSION`
+- [ ] `run-acp-sdk-gates.sh` 全绿（format / analyzer / 契约测试 / pack）
+- [ ] `run-acp-sdk-tag-version-gate-selftest.sh` 通过（门禁规则本身的正反例）
+- [ ] `run-acp-sdk-tag-version-gate.sh` 通过
+- [ ] `run-acp-consumer-package-smoke.sh` 通过（真实 nupkg restore + build + run）
+- [ ] tag 使用 `acp-sdk-v` 前缀（包版本即 tag 上的数字，由 MinVer 推导）
+- [ ] nuget.org 受信任发布策略、`NUGET_USER` 变量与 `nuget-publish` environment 均已就绪
+- [ ] 发布后在 nuget.org 确认包与符号均已上架

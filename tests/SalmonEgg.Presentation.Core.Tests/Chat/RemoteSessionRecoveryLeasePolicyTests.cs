@@ -70,6 +70,30 @@ public class RemoteSessionRecoveryLeasePolicyTests
     }
 
     [Fact]
+    public void Decide_WhenSameRemoteSessionUsesSameOrderedAdditionalDirectories_ReusesExistingLease()
+    {
+        var existing = Lease(additionalDirectories: [@"C:\shared\one", @"C:\shared\two"]);
+        var requested = Lease(additionalDirectories: [@"C:\shared\one", @"C:\shared\two"]);
+
+        var decision = RemoteSessionRecoveryLeasePolicy.Decide(requested, [existing]);
+
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.ReuseExisting, decision.Kind);
+        Assert.Equal(existing, decision.ExistingLeaseToReuse);
+    }
+
+    [Fact]
+    public void Decide_WhenSameRemoteSessionUsesDifferentAdditionalDirectories_CancelsExistingLease()
+    {
+        var existing = Lease(additionalDirectories: [@"C:\shared\one", @"C:\shared\two"]);
+        var requested = Lease(additionalDirectories: [@"C:\shared\two", @"C:\shared\one"]);
+
+        var decision = RemoteSessionRecoveryLeasePolicy.Decide(requested, [existing]);
+
+        Assert.Equal(RemoteSessionRecoveryLeaseDecisionKind.StartNew, decision.Kind);
+        Assert.Equal([existing], decision.ConflictingLeasesToCancel);
+    }
+
+    [Fact]
     public void Decide_WhenSameRemoteSessionUsesDifferentRecoveryMode_CancelsExistingLease()
     {
         var existing = Lease(remoteSessionId: "remote-a", recoveryMode: AcpSessionRecoveryMode.Load);
@@ -136,12 +160,14 @@ public class RemoteSessionRecoveryLeasePolicyTests
         string? profileId = "profile-1",
         string? connectionInstanceId = "conn-1",
         string remoteSessionId = "remote-1",
-        string cwd = "C:\\repo")
+        string cwd = "C:\\repo",
+        IReadOnlyList<string>? additionalDirectories = null)
         => new(
             recoveryMode,
             conversationId,
             profileId,
             connectionInstanceId,
             remoteSessionId,
-            cwd);
+            cwd,
+            new RemoteSessionRecoveryDirectorySet(additionalDirectories));
 }

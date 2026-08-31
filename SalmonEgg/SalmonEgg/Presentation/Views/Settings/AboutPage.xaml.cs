@@ -18,6 +18,9 @@ public sealed partial class AboutPage : SettingsPageBase
 
     protected override Control? GetSectionEntryFocusTarget()
         => FirstAvailableSectionEntryTarget(
+            AboutJoinDiscordButton,
+            AboutOpenGitHubButton,
+            AboutOpenKofiButton,
             AboutOpenAppDataButton,
             AboutOpenReleaseNotesButton,
             AboutOpenPrivacyPolicyButton,

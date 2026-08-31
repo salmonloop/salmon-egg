@@ -30,6 +30,9 @@ public sealed class ChatViewModelSessionCatalogAdapter : IChatSessionCatalog
     public Task RestoreAsync(CancellationToken cancellationToken = default)
         => _conversationCatalog.RestoreAsync(cancellationToken);
 
+    public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default)
+        => _conversationCatalog.FlushPendingSaveAsync(cancellationToken);
+
     public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
         => _conversationCatalog.ArchiveConversationAsync(conversationId, cancellationToken);
 

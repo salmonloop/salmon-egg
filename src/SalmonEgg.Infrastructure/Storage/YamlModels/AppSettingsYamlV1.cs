@@ -21,6 +21,8 @@ internal sealed class AppSettingsYamlV1
 
     public bool MinimizeToTray { get; set; } = true;
 
+    public bool SystemNotificationsEnabled { get; set; }
+
     public string Language { get; set; } = "System";
 
     // Appearance
@@ -30,6 +32,15 @@ internal sealed class AppSettingsYamlV1
     public bool SaveLocalHistory { get; set; } = true;
 
     public int CacheRetentionDays { get; set; } = 7;
+
+    // Telemetry & Error Reporting
+    public bool TelemetrySharingEnabled { get; set; } = true;
+
+    public string? TelemetryCustomEndpoint { get; set; }
+
+    // Legacy plaintext migration source. New writes must leave this null because OTLP headers are
+    // credentials and belong to ISecureStorage.
+    public string? TelemetryAuthHeader { get; set; }
 
     public CloudConfigSyncYamlV1 CloudConfigSync { get; set; } = new();
 

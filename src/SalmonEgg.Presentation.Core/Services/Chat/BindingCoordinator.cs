@@ -95,7 +95,8 @@ public sealed class BindingCoordinator : IConversationBindingCommands
             }
             if (duplicateOwners.Count > 0 || conversationExists)
             {
-                _workspace.ScheduleSave();
+                // Binding ownership is recovery metadata; persist before returning success.
+                await _workspace.PersistRecoveryMetadataAsync().ConfigureAwait(false);
             }
             return BindingUpdateResult.Success();
         }

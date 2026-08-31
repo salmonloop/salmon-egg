@@ -3,35 +3,36 @@ using System.Text.Json.Serialization;
 namespace SalmonEgg.Acp.Content
 {
     /// <summary>
-    /// 文本内容块。
-    /// 用于表示纯文本内容。
+    /// A text content block.
+    /// Represents plain text content.
     /// </summary>
-    public class TextContentBlock : ContentBlock
+    public sealed record TextContentBlock : ContentBlock
     {
         /// <summary>
-        /// 内容块类型标识符，固定为 "text"。
-        /// 此属性被 [JsonIgnore] 忽略，因为类型信息已由 JsonPolymorphic 自动处理。
+        /// The content block type identifier, always "text".
+        /// This property is marked [JsonIgnore]; the wire discriminator is read and written by hand in
+        /// ContentBlockJsonConverter (which keeps RawPayload pass-through for unknown types).
         /// </summary>
         [JsonIgnore]
         public override string Type => "text";
 
         /// <summary>
-        /// 文本内容。
+        /// The text content.
         /// </summary>
         [JsonPropertyName("text")]
-        public string Text { get; set; } = string.Empty;
+        public string Text { get; init; } = string.Empty;
 
         /// <summary>
-        /// 创建新的文本内容块实例。
+        /// Creates a new text content block instance.
         /// </summary>
         public TextContentBlock()
         {
         }
 
         /// <summary>
-        /// 创建新的文本内容块实例。
+        /// Creates a new text content block instance.
         /// </summary>
-        /// <param name="text">文本内容</param>
+        /// <param name="text">The text content.</param>
         public TextContentBlock(string text)
         {
             Text = text;

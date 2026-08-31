@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
@@ -43,8 +44,8 @@ public sealed class ChatPlanEntriesProjectionCoordinator
                 }
                 else
                 {
-                    target[i].Status = entry.Status;
-                    target[i].Priority = entry.Priority;
+                    target[i].Status = ConversationPlanWire.ParseStatus(entry.Status);
+                    target[i].Priority = ConversationPlanWire.ParsePriority(entry.Priority);
                 }
             }
             else
@@ -90,8 +91,8 @@ public sealed class ChatPlanEntriesProjectionCoordinator
         => new()
         {
             Content = entry.Content ?? string.Empty,
-            Status = entry.Status,
-            Priority = entry.Priority
+            Status = ConversationPlanWire.ParseStatus(entry.Status),
+            Priority = ConversationPlanWire.ParsePriority(entry.Priority)
         };
 
     private void OnPlanEntriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

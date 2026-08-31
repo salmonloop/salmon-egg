@@ -38,7 +38,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "unknown";
 
-    public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
+    public string ProtocolVersion => AcpProtocolVersion.Default.ToString();
 
     public string OsDescription => System.Runtime.InteropServices.RuntimeInformation.OSDescription;
 
@@ -112,26 +112,26 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
             await RefreshLatestLogFileAsync();
             if (string.IsNullOrWhiteSpace(LatestLogFilePath))
             {
-                _ = await _shell.CopyToClipboardAsync(_localizer["Diagnostics_NoLogFileFound"]);
+                await _ui.ShowInfoAsync(_localizer["Diagnostics_NoLogFileFound"]).ConfigureAwait(true);
                 return;
             }
 
             var text = await _logFileCatalog.ReadTailAsync(LatestLogFilePath, 8000);
-            if (text is null)
+            if (string.IsNullOrWhiteSpace(text))
             {
-                _ = await _shell.CopyToClipboardAsync(_localizer["Diagnostics_NoLogFileFound"]);
+                await _ui.ShowInfoAsync(_localizer["Diagnostics_NoLogFileFound"]).ConfigureAwait(true);
                 return;
             }
 
-            var copied = await _shell.CopyToClipboardAsync(text);
-            if (!copied)
-            {
-                _logger.LogWarning("Clipboard copy is not supported on the current platform.");
-            }
+            var copied = await _shell.CopyToClipboardAsync(text).ConfigureAwait(true);
+            await _ui.ShowInfoAsync(copied
+                ? _localizer["Diagnostics_LogSnippetCopied"]
+                : _localizer["About_ClipboardUnsupported"]).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CopyRecentLogSnippet failed");
+            await _ui.ShowInfoAsync(_localizer["Diagnostics_CopyLogSnippetFailed"]).ConfigureAwait(true);
         }
     }
 
@@ -176,6 +176,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateDiagnosticsBundle failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_CreateDiagnosticsBundleFailed"]).ConfigureAwait(true);
         }
     }
 

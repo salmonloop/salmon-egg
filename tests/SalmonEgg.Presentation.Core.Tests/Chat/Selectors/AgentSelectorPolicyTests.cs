@@ -91,7 +91,7 @@ public sealed class AgentSelectorPolicyTests
         {
             Id = id,
             Name = name,
-            Transport = TransportType.HttpSse,
+            Transport = TransportType.StreamableHttp,
             ServerUrl = "https://example.test"
         };
 

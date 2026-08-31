@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace SalmonEgg.Infrastructure.Network
 {
     /// <summary>
-    /// Defines the abstraction for network transport layers (WebSocket, HTTP SSE).
+    /// Defines the abstraction for network transport layers (WebSocket, Streamable HTTP).
     /// </summary>
     public interface ITransport
     {

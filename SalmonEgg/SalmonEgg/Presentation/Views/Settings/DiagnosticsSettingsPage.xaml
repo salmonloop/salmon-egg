@@ -16,11 +16,54 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
     </views:SettingsPageBase.Resources>
 
-    <ScrollViewer Padding="0"
-                  HorizontalScrollBarVisibility="Disabled">
+    <Grid>
+        <!-- Short windows: densify the live-log TextBox fixed Height so the diagnostics surface
+             remains scrollable without a large reserved chrome block. Comfortable restores
+             the prior 320px height (MinWindowHeight=760, same threshold as Start/ACP/MCP). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LiveLogHeightStates">
+                <VisualState x:Name="LiveLogHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="LiveLogTextBox.Height" Value="160" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="LiveLogHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="LiveLogTextBox.Height" Value="320" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!-- Short windows: densify section stack spacing so diagnostics remains scannable
+                 without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="DiagnosticsHeightStates">
+                <VisualState x:Name="DiagnosticsHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="DiagnosticsContentStack.Padding" Value="0,0,0,16" />
+                        <Setter Target="DiagnosticsContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DiagnosticsHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="DiagnosticsContentStack.Padding" Value="0,0,0,32" />
+                        <Setter Target="DiagnosticsContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <ScrollViewer Padding="0"
+                      HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28"
+                <StackPanel x:Name="DiagnosticsContentStack"
+                            Spacing="16"
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="4">
                         <TextBlock x:Uid="Diagnostics_PageTitle"
@@ -406,6 +449,7 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_GamepadMonitorHeader"
                                                AutomationProperties.AutomationId="Diagnostics.GamepadMonitorHeader"
+                                                       AutomationProperties.Name="Diagnostics.GamepadMonitorHeader"
                                                Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
 
@@ -444,6 +488,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.StatusText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadStatus"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStatus"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -461,6 +506,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ConnectedGamepadsText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadStandardCount"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStandardCount"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -478,6 +524,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ConnectedRawControllersText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadRawCount"
+                                                       AutomationProperties.Name="Diagnostics.GamepadRawCount"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -495,6 +542,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.InputSourceText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadInputSource"
+                                                       AutomationProperties.Name="Diagnostics.GamepadInputSource"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -512,6 +560,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ActiveInputsText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadActiveInputs"
+                                                       AutomationProperties.Name="Diagnostics.GamepadActiveInputs"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -529,7 +578,27 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ThumbstickText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadThumbstick"
+                                                       AutomationProperties.Name="Diagnostics.GamepadThumbstick"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_GamepadStandardDetailsLabel"
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.StandardGamepadsText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.GamepadStandardDetails"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStandardDetails"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
 
@@ -546,6 +615,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.RawControllersText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadRawDetails"
+                                                       AutomationProperties.Name="Diagnostics.GamepadRawDetails"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>
@@ -668,7 +738,7 @@
                                          AcceptsReturn="True"
                                          TextChanged="OnLiveLogTextChanged"
                                          TextWrapping="Wrap"
-                                         Height="320" />
+                                         Height="160" />
 
                                 <TextBlock x:Uid="Diagnostics_LiveLogHint"
                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
@@ -707,7 +777,7 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_AgentLabel"
-                                                   Text="Agent："
+                                                   Text="Agent:"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
@@ -765,5 +835,6 @@
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

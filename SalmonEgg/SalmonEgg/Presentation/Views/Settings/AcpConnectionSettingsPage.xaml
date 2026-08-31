@@ -18,314 +18,409 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:HydrationCompletionModeLocalizationConverter x:Key="HydrationCompletionModeLocalizationConverter"/>
 
-        <Style x:Key="AgentListItemStyle" TargetType="ListViewItem">
+        <!-- Compact short-height default keeps touch-friendly row floors (>=44) while
+             reclaiming reserved list space. Comfortable restores prior 64 MinHeight. -->
+        <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+        <Style x:Key="AgentListItemStyleCompact" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="48"/>
+        </Style>
+        <Style x:Key="AgentListItemStyleComfortable" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="MinHeight" Value="64"/>
         </Style>
     </Page.Resources>
 
-    <ScrollViewer Padding="0"
-                  HorizontalScrollBarVisibility="Disabled">
-        <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
-            <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28">
-                    <StackPanel Spacing="8">
-                        <TextBlock x:Uid="Acp_PageTitle"
-                                   Text="ACP Agent"
-                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
-                        <TextBlock x:Uid="Acp_PageSummary"
-                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
-                    </StackPanel>
+    <Grid>
+        <!-- Short windows: lower list MinHeight so empty reserved space does not dominate the
+             scrollable settings surface. Comfortable restores prior reservation (MinWindowHeight=760). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ListHeightStates">
+                <VisualState x:Name="ListHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AcpProfilesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleCompact}" />
+                        <Setter Target="AcpRemoteDirectoriesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleCompact}" />
+                        <Setter Target="AcpProfilesList.MinHeight" Value="88" />
+                        <Setter Target="AcpRemoteDirectoriesList.MinHeight" Value="72" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ListHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AcpProfilesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleComfortable}" />
+                        <Setter Target="AcpRemoteDirectoriesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleComfortable}" />
+                        <Setter Target="AcpProfilesList.MinHeight" Value="140" />
+                        <Setter Target="AcpRemoteDirectoriesList.MinHeight" Value="120" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
 
-                    <!-- Profiles -->
-                    <StackPanel Spacing="12">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock x:Uid="Acp_ProfilesTitle"
-                                       Style="{StaticResource SettingsSectionTitleTextStyle}"
-                                       VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="8"
-                                        VerticalAlignment="Center">
-                                <Button x:Name="AcpProfilesRefreshButton"
-                                        x:Uid="Acp_ProfilesRefresh"
-                                        AutomationProperties.AutomationId="Acp.Profiles.Refresh"
-                                        Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
-                                        IsEnabled="{x:Bind ViewModel.CanRefreshProfiles, Mode=OneWay}"/>
-                                <Button x:Name="AcpProfilesAddButton"
-                                        x:Uid="Acp_ProfilesAdd"
-                                        AutomationProperties.AutomationId="Acp.Profiles.Add"
-                                        Style="{StaticResource AccentButtonStyle}"
-                                        Click="OnAddProfileClick"/>
-                            </StackPanel>
-                        </Grid>
+            <!-- Short windows: densify section stack spacing so ACP settings remain scannable
+                 without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="AcpHeightStates">
+                <VisualState x:Name="AcpHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AcpContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="AcpHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AcpContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
-                        <InfoBar IsOpen="{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}"
-                                 Severity="Informational"
-                                 Message="{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}"
-                                 IsClosable="True"/>
+        <ScrollViewer Padding="0"
+                      HorizontalScrollBarVisibility="Disabled">
+            <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+                <controls:ResponsiveContentHost.Child>
+                    <StackPanel x:Name="AcpContentStack"
+                                Spacing="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Uid="Acp_PageTitle"
+                                       Text="ACP Agent"
+                                       Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                            <TextBlock x:Uid="Acp_PageSummary"
+                                       Style="{StaticResource SettingsPageSummaryTextStyle}"/>
+                        </StackPanel>
 
-                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <ListView ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"
-                                      SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}"
-                                      SelectionMode="Single"
-                                      MinHeight="140"
-                                      Background="Transparent"
-                                      ItemContainerStyle="{StaticResource AgentListItemStyle}">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AgentProfileItemViewModel">
-                                        <Grid Padding="16,14"
-                                              ColumnDefinitions="Auto,*,Auto"
-                                              ColumnSpacing="16"
-                                              RowDefinitions="Auto,Auto"
-                                              RowSpacing="4">
-                                            <Border Grid.RowSpan="2"
-                                                    Width="36"
-                                                    Height="36"
-                                                    CornerRadius="8"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    Opacity="0.18"
-                                                    VerticalAlignment="Center">
-                                                <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                              Glyph="{x:Bind TransportGlyph}"
-                                                              Foreground="{ThemeResource AccentBrush}"/>
-                                                </Viewbox>
-                                            </Border>
+                        <!-- Profiles -->
+                        <StackPanel Spacing="12">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock x:Uid="Acp_ProfilesTitle"
+                                           Style="{StaticResource SettingsSectionTitleTextStyle}"
+                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <Button x:Name="AcpProfilesRefreshButton"
+                                            x:Uid="Acp_ProfilesRefresh"
+                                            AutomationProperties.AutomationId="Acp.Profiles.Refresh"
+                                            Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CanRefreshProfiles, Mode=OneWay}"/>
+                                    <Button x:Name="AcpProfilesWizardButton"
+                                            x:Uid="Acp_ProfilesSetupWizard"
+                                            AutomationProperties.AutomationId="Acp.Profiles.SetupWizard"
+                                            Click="OnOpenSetupWizardClick"/>
+                                    <Button x:Name="AcpProfilesAddButton"
+                                            x:Uid="Acp_ProfilesAdd"
+                                            AutomationProperties.AutomationId="Acp.Profiles.Add"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="OnAddProfileClick"/>
+                                </StackPanel>
+                            </Grid>
 
-                                            <Grid Grid.Column="1"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="10"
-                                                  VerticalAlignment="Center">
-                                                <TextBlock Text="{x:Bind Name}"
-                                                           Style="{StaticResource SettingsRowTitleTextStyle}"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center"/>
+                            <InfoBar IsOpen="{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}"
+                                     Severity="Informational"
+                                     Message="{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}"
+                                     IsClosable="True"/>
+
+                            <InfoBar IsOpen="{x:Bind ViewModel.Profiles.IsOperationErrorOpen, Mode=TwoWay}"
+                                     Severity="Error"
+                                     Message="{x:Bind ViewModel.Profiles.OperationErrorMessage, Mode=OneWay}"
+                                     IsClosable="True"/>
+
+                            <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                                <ListView x:Name="AcpProfilesList"
+                                          ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}"
+                                          SelectionMode="Single"
+                                          MinHeight="88"
+                                          Background="Transparent"
+                                          ItemContainerStyle="{StaticResource AgentListItemStyleCompact}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AgentProfileItemViewModel">
+                                            <Grid Padding="12,10"
+                                                  ColumnDefinitions="Auto,*,Auto"
+                                                  ColumnSpacing="12"
+                                                  RowDefinitions="Auto,Auto"
+                                                  RowSpacing="2">
+                                                <Border Grid.RowSpan="2"
+                                                        Width="36"
+                                                        Height="36"
+                                                        CornerRadius="8"
+                                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Opacity="0.18"
+                                                        VerticalAlignment="Center">
+                                                    <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="{x:Bind TransportGlyph}"
+                                                                  Foreground="{ThemeResource AccentBrush}"/>
+                                                    </Viewbox>
+                                                </Border>
 
                                                 <Grid Grid.Column="1"
+                                                      ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="10"
                                                       VerticalAlignment="Center">
-                                                    <Border CornerRadius="12"
-                                                            Padding="8,4"
-                                                            Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                                                            Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                                                   FontSize="12"
-                                                                   FontWeight="Medium"
-                                                                   Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
-                                                    </Border>
+                                                    <TextBlock Text="{x:Bind Name}"
+                                                               Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center"/>
 
-                                                    <Border CornerRadius="12"
-                                                            Padding="8,4"
-                                                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                                                            Visibility="{x:Bind IsTransitioning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                                                   FontSize="12"
-                                                                   FontWeight="Medium"
-                                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
-                                                    </Border>
+                                                    <Grid Grid.Column="1"
+                                                          VerticalAlignment="Center">
+                                                        <Border CornerRadius="12"
+                                                                Padding="8,4"
+                                                                Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                                                Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                       FontSize="12"
+                                                                       FontWeight="Medium"
+                                                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
+                                                        </Border>
 
-                                                    <Border CornerRadius="12"
-                                                            Padding="8,4"
-                                                            Background="{ThemeResource SystemFillColorNeutralBrush}"
-                                                            Visibility="{x:Bind IsStableDisconnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
-                                                                   FontSize="12"
-                                                                   FontWeight="Medium"
-                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                                    </Border>
+                                                        <Border CornerRadius="12"
+                                                                Padding="8,4"
+                                                                Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                                                Visibility="{x:Bind IsTransitioning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                       FontSize="12"
+                                                                       FontWeight="Medium"
+                                                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                                                        </Border>
+
+                                                        <Border CornerRadius="12"
+                                                                Padding="8,4"
+                                                                Background="{ThemeResource SystemFillColorNeutralBrush}"
+                                                                Visibility="{x:Bind IsStableDisconnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{x:Bind StatusLabel, Mode=OneWay}"
+                                                                       FontSize="12"
+                                                                       FontWeight="Medium"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                        </Border>
+                                                    </Grid>
                                                 </Grid>
-                                            </Grid>
 
-                                            <TextBlock Grid.Row="1"
-                                                       Grid.Column="1"
-                                                       Text="{x:Bind EndpointDescription}"
-                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                       TextWrapping="NoWrap"
-                                                       TextTrimming="CharacterEllipsis"/>
-
-                                            <Grid Grid.RowSpan="2"
-                                                  Grid.Column="2"
-                                                  ColumnDefinitions="Auto,Auto"
-                                                  ColumnSpacing="10"
-                                                  VerticalAlignment="Center"
-                                                  HorizontalAlignment="Right">
-                                                <ToggleSwitch VerticalAlignment="Center"
-                                                              OffContent=""
-                                                              OnContent=""
-                                                              IsOn="{x:Bind IsConnected, Mode=OneWay}"
-                                                              IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
-                                                              Toggled="OnProfileConnectionToggleToggled"/>
-
-                                                <Button Grid.Column="1"
-                                                        VerticalAlignment="Center"
-                                                        x:Uid="Acp_ProfileMore">
-                                                    <Button.Content>
-                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
-                                                    </Button.Content>
-                                                    <Button.Flyout>
-                                                        <MenuFlyout>
-                                                            <MenuFlyoutItem Text="{x:Bind Acp_ProfileReconnectText}"
-                                                                            Command="{x:Bind ReconnectCommand}"
-                                                                            Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                            AutomationProperties.AutomationId="Acp.Profile.Reconnect">
-                                                                <MenuFlyoutItem.Icon>
-                                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;"/>
-                                                                </MenuFlyoutItem.Icon>
-                                                            </MenuFlyoutItem>
-                                                            <MenuFlyoutSeparator Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                            <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
-                                                                            Tag="{x:Bind ProfileId}"
-                                                                            Click="OnEditProfileMenuClick"/>
-                                                            <MenuFlyoutItem x:Uid="Acp_ProfileDelete"
-                                                                            Tag="{x:Bind ProfileId}"
-                                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                                            Click="OnDeleteProfileMenuClick"/>
-                                                        </MenuFlyout>
-                                                    </Button.Flyout>
-                                                </Button>
-                                            </Grid>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Remote projects -->
-                    <StackPanel Spacing="12"
-                                AutomationProperties.AutomationId="Acp.RemoteDirectories.Section">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock x:Uid="Acp_RemoteDirectoriesTitle"
-                                       Style="{StaticResource SettingsSectionTitleTextStyle}"
-                                       VerticalAlignment="Center"/>
-                            <Button Grid.Column="1"
-                                    x:Name="AcpRemoteDirectoriesAddButton"
-                                    x:Uid="Acp_RemoteDirectoriesAdd"
-                                    Command="{x:Bind ViewModel.AddRemoteDirectoryCommand}"
-                                    AutomationProperties.AutomationId="Acp.RemoteDirectories.Add"/>
-                        </Grid>
-
-                        <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
-                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-
-                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <ListView x:Name="AcpRemoteDirectoriesList"
-                                      ItemsSource="{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}"
-                                      SelectionMode="None"
-                                      MinHeight="120"
-                                      Background="Transparent"
-                                      ItemContainerStyle="{StaticResource AgentListItemStyle}"
-                                      AutomationProperties.AutomationId="Acp.RemoteDirectories.List">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:AcpRemoteDirectoryRowViewModel">
-                                        <StackPanel Spacing="10"
-                                                    Padding="{StaticResource SettingsRowPadding}">
-                                            <Grid ColumnDefinitions="*,Auto,Auto"
-                                                  ColumnSpacing="10"
-                                                  Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
-                                                <StackPanel Spacing="4"
-                                                            VerticalAlignment="Center">
-                                                    <TextBlock Text="{x:Bind SummaryTitle, Mode=OneWay}"
-                                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
-                                                    <TextBlock Text="{x:Bind RemotePath, Mode=OneWay}"
-                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                                </StackPanel>
-
-                                                <Button Grid.Column="1"
-                                                        x:Uid="Acp_RemoteDirectoryEdit"
-                                                        Command="{x:Bind BeginEditCommand, Mode=OneWay}"
-                                                        AutomationProperties.AutomationId="Acp.RemoteDirectories.Edit"
-                                                        VerticalAlignment="Center"/>
-
-                                                <Button Grid.Column="2"
-                                                        x:Uid="Acp_RemoteDirectoriesRemove"
-                                                        Command="{x:Bind RemoveCommand}"
-                                                        AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"
-                                                        VerticalAlignment="Center">
-                                                    <Button.Content>
+                                                <Grid Grid.Row="1"
+                                                      Grid.Column="1"
+                                                      ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="10">
+                                                    <TextBlock Text="{x:Bind EndpointDescription}"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <!-- Verification and connection are independent facts: an
+                                                         unverified profile may still be connected successfully. -->
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                Spacing="4"
+                                                                VerticalAlignment="Center"
+                                                                Visibility="{x:Bind IsUnverified, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                AutomationProperties.AutomationId="Acp.Profile.Unverified">
                                                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                                  Glyph="&#xE74D;"/>
-                                                    </Button.Content>
-                                                </Button>
-                                            </Grid>
-
-                                            <StackPanel Spacing="10"
-                                                        Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
-                                                         x:Name="AcpRemoteDirectoryDisplayNameBox"
-                                                         AutomationProperties.AutomationId="Acp.RemoteDirectories.DisplayName"
-                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
-                                                <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
-                                                         AutomationProperties.AutomationId="Acp.RemoteDirectories.RemotePath"
-                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
-                                                <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
-                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                           Visibility="{x:Bind ValidationMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <Grid ColumnDefinitions="Auto,Auto,Auto,*"
-                                                      ColumnSpacing="8">
-                                                    <Button x:Uid="Acp_RemoteDirectorySave"
-                                                            Command="{x:Bind SaveCommand, Mode=OneWay}"
-                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Save"
-                                                            Style="{StaticResource AccentButtonStyle}"/>
-                                                    <Button Grid.Column="1"
-                                                            x:Uid="Acp_RemoteDirectoryCancel"
-                                                            Command="{x:Bind CancelCommand, Mode=OneWay}"
-                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Cancel"/>
-                                                    <Button Grid.Column="2"
-                                                            x:Uid="Acp_RemoteDirectoryDelete"
-                                                            Command="{x:Bind RemoveCommand}"
-                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"/>
+                                                                  Glyph="&#xE7BA;"
+                                                                  FontSize="12"
+                                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                                  AutomationProperties.AccessibilityView="Raw"/>
+                                                        <TextBlock x:Uid="Acp_ProfileUnverified"
+                                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                                                    </StackPanel>
                                                 </Grid>
+
+                                                <Grid Grid.RowSpan="2"
+                                                      Grid.Column="2"
+                                                      ColumnDefinitions="Auto,Auto"
+                                                      ColumnSpacing="10"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Right">
+                                                    <ToggleSwitch VerticalAlignment="Center"
+                                                                  OffContent=""
+                                                                  OnContent=""
+                                                                  IsOn="{x:Bind IsConnected, Mode=OneWay}"
+                                                                  IsEnabled="{x:Bind IsConnecting, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"
+                                                                  Toggled="OnProfileConnectionToggleToggled"/>
+
+                                                    <Button Grid.Column="1"
+                                                            VerticalAlignment="Center"
+                                                            x:Uid="Acp_ProfileMore">
+                                                        <Button.Content>
+                                                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
+                                                        </Button.Content>
+                                                        <Button.Flyout>
+                                                            <MenuFlyout>
+                                                                <MenuFlyoutItem x:Uid="Acp_ProfileReconnect"
+                                                                                Command="{x:Bind ReconnectCommand}"
+                                                                                Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                                AutomationProperties.AutomationId="Acp.Profile.Reconnect">
+                                                                    <MenuFlyoutItem.Icon>
+                                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE72C;"/>
+                                                                    </MenuFlyoutItem.Icon>
+                                                                </MenuFlyoutItem>
+                                                                <MenuFlyoutSeparator Visibility="{x:Bind IsStableConnected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <MenuFlyoutItem x:Uid="Acp_ProfileEdit"
+                                                                                Tag="{x:Bind ProfileId}"
+                                                                                Click="OnEditProfileMenuClick">
+                                                                    <MenuFlyoutItem.Icon>
+                                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE70F;"/>
+                                                                    </MenuFlyoutItem.Icon>
+                                                                </MenuFlyoutItem>
+                                                                <MenuFlyoutItem x:Uid="Acp_ProfileDelete"
+                                                                                Tag="{x:Bind ProfileId}"
+                                                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                                Click="OnDeleteProfileMenuClick">
+                                                                    <MenuFlyoutItem.Icon>
+                                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                                  Glyph="&#xE74D;"
+                                                                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                                                                    </MenuFlyoutItem.Icon>
+                                                                </MenuFlyoutItem>
+                                                            </MenuFlyout>
+                                                        </Button.Flyout>
+                                                    </Button>
+                                                </Grid>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Remote projects -->
+                        <StackPanel Spacing="12"
+                                    AutomationProperties.AutomationId="Acp.RemoteDirectories.Section">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock x:Uid="Acp_RemoteDirectoriesTitle"
+                                           Style="{StaticResource SettingsSectionTitleTextStyle}"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        x:Name="AcpRemoteDirectoriesAddButton"
+                                        x:Uid="Acp_RemoteDirectoriesAdd"
+                                        Command="{x:Bind ViewModel.AddRemoteDirectoryCommand}"
+                                        AutomationProperties.AutomationId="Acp.RemoteDirectories.Add"/>
+                            </Grid>
+
+                            <TextBlock x:Uid="Acp_RemoteDirectoriesHint"
+                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+
+                            <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                                <ListView x:Name="AcpRemoteDirectoriesList"
+                                          ItemsSource="{x:Bind ViewModel.RemoteDirectoryRows, Mode=OneWay}"
+                                          SelectionMode="None"
+                                          MinHeight="72"
+                                          Background="Transparent"
+                                          ItemContainerStyle="{StaticResource AgentListItemStyleCompact}"
+                                          AutomationProperties.AutomationId="Acp.RemoteDirectories.List">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AcpRemoteDirectoryRowViewModel">
+                                            <StackPanel Spacing="10"
+                                                        Padding="{StaticResource SettingsRowPadding}">
+                                                <Grid ColumnDefinitions="*,Auto,Auto"
+                                                      ColumnSpacing="10"
+                                                      Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                                                    <StackPanel Spacing="4"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind SummaryTitle, Mode=OneWay}"
+                                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                        <TextBlock Text="{x:Bind RemotePath, Mode=OneWay}"
+                                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                    </StackPanel>
+
+                                                    <Button Grid.Column="1"
+                                                            x:Uid="Acp_RemoteDirectoryEdit"
+                                                            Command="{x:Bind BeginEditCommand, Mode=OneWay}"
+                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Edit"
+                                                            VerticalAlignment="Center"/>
+
+                                                    <Button Grid.Column="2"
+                                                            x:Uid="Acp_RemoteDirectoriesRemove"
+                                                            Command="{x:Bind RemoveCommand}"
+                                                            AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"
+                                                            VerticalAlignment="Center">
+                                                        <Button.Content>
+                                                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                      Glyph="&#xE74D;"/>
+                                                        </Button.Content>
+                                                    </Button>
+                                                </Grid>
+
+                                                <StackPanel Spacing="10"
+                                                            Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
+                                                             x:Name="AcpRemoteDirectoryDisplayNameBox"
+                                                             AutomationProperties.AutomationId="Acp.RemoteDirectories.DisplayName"
+                                                             Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
+                                                    <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
+                                                             AutomationProperties.AutomationId="Acp.RemoteDirectories.RemotePath"
+                                                             Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
+                                                    <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                               Visibility="{x:Bind ValidationMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,*"
+                                                          ColumnSpacing="8">
+                                                        <Button x:Uid="Acp_RemoteDirectorySave"
+                                                                Command="{x:Bind SaveCommand, Mode=OneWay}"
+                                                                AutomationProperties.AutomationId="Acp.RemoteDirectories.Save"
+                                                                Style="{StaticResource AccentButtonStyle}"/>
+                                                        <Button Grid.Column="1"
+                                                                x:Uid="Acp_RemoteDirectoryCancel"
+                                                                Command="{x:Bind CancelCommand, Mode=OneWay}"
+                                                                AutomationProperties.AutomationId="Acp.RemoteDirectories.Cancel"/>
+                                                        <Button Grid.Column="2"
+                                                                x:Uid="Acp_RemoteDirectoryDelete"
+                                                                Command="{x:Bind RemoveCommand}"
+                                                                AutomationProperties.AutomationId="Acp.RemoteDirectories.Remove"/>
+                                                    </Grid>
+                                                </StackPanel>
                                             </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Hydration policy -->
+                        <StackPanel Spacing="12">
+                            <TextBlock x:Uid="Acp_HydrationCompletionTitle"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                            <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                                <Expander x:Uid="Acp_AdvancedExpander"
+                                          IsExpanded="False"
+                                          Background="Transparent"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch"
+                                          Padding="0">
+                                    <StackPanel Padding="{StaticResource SettingsRowPadding}"
+                                                Spacing="12"
+                                                HorizontalAlignment="Stretch">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock x:Uid="Acp_HydrationCompletionHint"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                            <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </StackPanel>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
-                        </Border>
-                    </StackPanel>
 
-                    <!-- Hydration policy -->
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Acp_HydrationCompletionTitle"
-                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-
-                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <Expander x:Uid="Acp_AdvancedExpander"
-                                      IsExpanded="False"
-                                      Background="Transparent"
-                                      HorizontalAlignment="Stretch"
-                                      HorizontalContentAlignment="Stretch"
-                                      Padding="0">
-                                <StackPanel Padding="{StaticResource SettingsRowPadding}"
-                                            Spacing="12"
-                                            HorizontalAlignment="Stretch">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Uid="Acp_HydrationCompletionHint"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                        <TextBlock Text="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=OneWay, Converter={StaticResource HydrationCompletionModeLocalizationConverter}, ConverterParameter=Description}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
+                                                  SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
+                                                  MinWidth="{StaticResource SettingsRowControlMinWidth}"
+                                                  IsFocusEngagementEnabled="True"
+                                                  HorizontalAlignment="Stretch">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">
+                                                    <TextBlock Text="{x:Bind Value, Converter={StaticResource HydrationCompletionModeLocalizationConverter}}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                     </StackPanel>
-
-                                    <ComboBox ItemsSource="{x:Bind ViewModel.HydrationCompletionModeOptions, Mode=OneWay}"
-                                              SelectedItem="{x:Bind ViewModel.SelectedHydrationCompletionMode, Mode=TwoWay}"
-                                              MinWidth="{StaticResource SettingsRowControlMinWidth}"
-                                              IsFocusEngagementEnabled="True"
-                                              HorizontalAlignment="Stretch">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:HydrationCompletionModeOptionViewModel">
-                                                <TextBlock Text="{x:Bind Value, Converter={StaticResource HydrationCompletionModeLocalizationConverter}}"/>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                </StackPanel>
-                            </Expander>
-                        </Border>
+                                </Expander>
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </controls:ResponsiveContentHost.Child>
-        </controls:ResponsiveContentHost>
-    </ScrollViewer>
+                </controls:ResponsiveContentHost.Child>
+            </controls:ResponsiveContentHost>
+        </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -19,6 +19,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -219,8 +220,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "workspace plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -249,7 +250,7 @@ public sealed class ConversationActivationCoordinatorTests
                     new ConversationUsageSnapshot(
                         5,
                         128,
-                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+                        new ConversationUsageCostSnapshot(1.5, "USD"))))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -281,7 +282,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.Value.SessionInfo);
         Assert.Equal("store title", sessionState.Value.SessionInfo!.Title);
         Assert.NotNull(sessionState.Value.Usage);
-        Assert.Equal(5, sessionState.Value.Usage!.Used);
+        Assert.Equal(5UL, sessionState.Value.Usage!.Used);
     }
 
     [Fact]
@@ -304,8 +305,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -361,7 +362,7 @@ public sealed class ConversationActivationCoordinatorTests
             {
                 Title = "workspace title"
             },
-            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25m, "USD"))),
+            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25, "USD"))),
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
@@ -400,7 +401,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.SessionInfo);
         Assert.Equal("workspace title", sessionState.SessionInfo!.Title);
         Assert.NotNull(sessionState.Usage);
-        Assert.Equal(3, sessionState.Usage!.Used);
+        Assert.Equal(3UL, sessionState.Usage!.Used);
     }
 
     [Fact]
@@ -457,7 +458,7 @@ public sealed class ConversationActivationCoordinatorTests
                     new ConversationUsageSnapshot(
                         5,
                         128,
-                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+                        new ConversationUsageCostSnapshot(1.5, "USD"))))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -485,7 +486,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.SessionInfo);
         Assert.Equal("store title", sessionState.SessionInfo!.Title);
         Assert.NotNull(sessionState.Usage);
-        Assert.Equal(5, sessionState.Usage!.Used);
+        Assert.Equal(5UL, sessionState.Usage!.Used);
     }
 
     [Fact]
@@ -508,8 +509,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -561,8 +562,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -600,7 +601,7 @@ public sealed class ConversationActivationCoordinatorTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
 
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = CreateChatStore(state);
@@ -647,7 +648,8 @@ public sealed class ConversationActivationCoordinatorTests
             new ControlledConversationSessionSwitcher(activationGate.Task),
             Mock.Of<IDiscoverSessionsConnectionFacade>(),
             projectSelectionStore,
-            new StubShellNavigationService(ShellNavigationResult.Success()));
+            new StubShellNavigationService(ShellNavigationResult.Success()),
+            new SettingsSectionSelectionStore());
 
         var activationTask = coordinator.ActivateSessionAsync("session-1", "project-1");
 
@@ -735,8 +737,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -843,6 +845,7 @@ public sealed class ConversationActivationCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -869,6 +872,57 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.ClearedActiveConversation);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
         var currentState = await WaitForStateAsync(chatStore, current => current?.HydratedConversationId is null);
+        Assert.Null(currentState.HydratedConversationId);
+    }
+
+    [Fact]
+    public async Task ArchiveConversation_PendingShellActivation_ClearsActiveConversation()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(new object(), () => ChatState.Empty);
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var shellRuntimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            DesiredSessionId = "session-1",
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivationVersion = 7,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                7,
+                SessionActivationPhase.RemoteHydrationPending)
+        };
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>(),
+            shellRuntimeState: shellRuntimeState);
+
+        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.ClearedActiveConversation);
+        Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
+        var currentState = await chatStore.GetCurrentStateAsync();
         Assert.Null(currentState.HydratedConversationId);
     }
 
@@ -920,6 +974,7 @@ public sealed class ConversationActivationCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -958,6 +1013,7 @@ public sealed class ConversationActivationCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -998,6 +1054,7 @@ public sealed class ConversationActivationCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1151,13 +1208,16 @@ public sealed class ConversationActivationCoordinatorTests
             var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
 
             return new AppPreferencesViewModel(
-                appSettingsService.Object,
-                startupService.Object,
-                languageService.Object,
-                capabilities.Object,
-                uiRuntime.Object,
-                prefsLogger.Object,
-                new ImmediateUiDispatcher());
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
+            prefsLogger.Object,
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         }
         finally
         {
@@ -1254,7 +1314,7 @@ public sealed class ConversationActivationCoordinatorTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd)
             {
@@ -1266,24 +1326,23 @@ public sealed class ConversationActivationCoordinatorTests
 
         public bool RemoveSession(string sessionId) => _sessions.Remove(sessionId);
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.LastActivityAt = DateTime.UtcNow;
-            }
-
-            return true;
-        }
-
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
+
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
+        {
+            if (_sessions.TryGetValue(sessionId, out var existing))
+            {
+                return existing;
+            }
+
+            var session = new Session(sessionId, cwd)
+            {
+                DisplayName = sessionId
+            };
+            _sessions[sessionId] = session;
+            return session;
+        }
     }
 
     private sealed class ControlledConversationSessionSwitcher : IConversationSessionSwitcher

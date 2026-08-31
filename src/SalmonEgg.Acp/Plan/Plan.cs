@@ -2,88 +2,79 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.Plan
 {
     /// <summary>
-    /// 计划类。
-    /// 表示 Agent 的行动计划，包含一系列计划条目。
+    /// Plan.
+    /// Represents an agent's action plan, containing a sequence of plan entries.
     /// </summary>
-    public class Plan
+    public sealed record Plan : AcpProtocolObject
     {
-        private List<PlanEntry> _entries = new List<PlanEntry>();
+        private readonly List<PlanEntry> _entries = new();
 
         /// <summary>
-        /// 计划条目列表。
+        /// The list of plan entries.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("entries")]
         public List<PlanEntry> Entries
         {
             get => _entries;
-            set => _entries = ValidateEntries(value);
+            init => _entries = ValidateEntries(value);
         }
 
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
-        /// 创建新的计划实例。
+        /// Creates a new plan instance.
         /// </summary>
         public Plan()
         {
         }
 
         /// <summary>
-        /// 创建新的计划实例。
+        /// Creates a new plan instance.
         /// </summary>
-        /// <param name="entries">计划条目列表</param>
+        /// <param name="entries">The list of plan entries</param>
         public Plan(List<PlanEntry> entries)
         {
-            Entries = entries;
+            Entries = ValidateEntries(entries);
         }
 
         /// <summary>
-        /// 添加一个新的计划条目。
+        /// Returns a snapshot of the plan with one new entry appended (the current instance is not modified).
         /// </summary>
-        /// <param name="content">条目内容</param>
-        /// <param name="status">条目状态</param>
-        /// <param name="priority">条目优先级</param>
-        public void AddEntry(string content, PlanEntryStatus status = PlanEntryStatus.Pending, PlanEntryPriority priority = PlanEntryPriority.Medium)
+        public Plan WithEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
-            Entries.Add(new PlanEntry
+            var entries = new List<PlanEntry>(Entries)
             {
-                Content = content,
-                Status = status,
-                Priority = priority
-            });
+                new PlanEntry(
+                    content,
+                    status ?? PlanEntryStatus.Pending,
+                    priority ?? PlanEntryPriority.Medium)
+            };
+            return this with { Entries = entries };
         }
 
         /// <summary>
-        /// 获取所有待处理的条目。
+        /// Gets all pending entries.
         /// </summary>
         public List<PlanEntry> GetPendingEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.Pending);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.Pending);
 
         /// <summary>
-        /// 获取所有进行中的条目。
+        /// Gets all in-progress entries.
         /// </summary>
         public List<PlanEntry> GetInProgressEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.InProgress);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.InProgress);
 
         /// <summary>
-        /// 获取所有已完成的条目。
+        /// Gets all completed entries.
         /// </summary>
         public List<PlanEntry> GetCompletedEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
 
-        private static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
+        internal static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
         {
             if (entries is null)
             {
@@ -103,125 +94,212 @@ namespace SalmonEgg.Acp.Plan
     }
 
     /// <summary>
-    /// 计划条目类。
-    /// 表示计划中的一个具体任务或步骤。
+    /// Plan entry.
+    /// Represents a specific task or step within a plan.
     /// </summary>
-    public class PlanEntry
+    public sealed record PlanEntry : AcpProtocolObject
     {
-        private string _content = string.Empty;
-
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
+        private readonly string _content = string.Empty;
 
         /// <summary>
-        /// 条目的内容描述。
+        /// The content description of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("content")]
         public string Content
         {
             get => _content;
-            set => _content = value ?? throw new JsonException("Plan entry content must not be null.");
+            init => _content = value ?? throw new JsonException("Plan entry content must not be null.");
         }
 
         /// <summary>
-        /// 条目的当前状态。
+        /// The current status of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("status")]
-        public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
+        public PlanEntryStatus Status { get; init; } = PlanEntryStatus.Pending;
 
         /// <summary>
-        /// 条目的优先级。
+        /// The priority of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("priority")]
-        public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Medium;
+        public PlanEntryPriority Priority { get; init; } = PlanEntryPriority.Medium;
 
         /// <summary>
-        /// 创建新的计划条目实例。
+        /// Creates a new plan entry instance.
         /// </summary>
         public PlanEntry()
         {
         }
 
         /// <summary>
-        /// 创建新的计划条目实例。
+        /// Creates a new plan entry instance.
         /// </summary>
-        /// <param name="content">条目内容</param>
-        /// <param name="status">条目状态</param>
-        /// <param name="priority">条目优先级</param>
-        public PlanEntry(string content, PlanEntryStatus status = PlanEntryStatus.Pending, PlanEntryPriority priority = PlanEntryPriority.Medium)
+        /// <param name="content">The entry content</param>
+        /// <param name="status">The entry status</param>
+        /// <param name="priority">The entry priority</param>
+        public PlanEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
-            Content = content;
-            Status = status;
-            Priority = priority;
+            Content = content ?? throw new JsonException("Plan entry content must not be null.");
+            Status = status ?? PlanEntryStatus.Pending;
+            Priority = priority ?? PlanEntryPriority.Medium;
         }
 
         /// <summary>
-        /// 标记条目为进行中。
+        /// Returns a snapshot of the entry marked as in progress (the current instance is not modified).
         /// </summary>
-        public void Start()
-        {
-            Status = PlanEntryStatus.InProgress;
-        }
+        public PlanEntry Started()
+            => this with { Status = PlanEntryStatus.InProgress };
 
         /// <summary>
-        /// 标记条目为已完成。
+        /// Returns a snapshot of the entry marked as completed (the current instance is not modified).
         /// </summary>
-        public void Complete()
-        {
-            Status = PlanEntryStatus.Completed;
-        }
+        public PlanEntry Completed()
+            => this with { Status = PlanEntryStatus.Completed };
     }
 
+
     /// <summary>
-    /// 计划条目状态枚举。
-    /// 表示计划条目的当前状态。
+    /// The status of a plan entry.
     /// </summary>
+    /// <remarks>
+    /// Modeled as an extensible value type rather than a closed enum, so that unknown wire values are
+    /// preserved losslessly and round-trip intact, matching the authoritative ACP schema
+    /// (<c>PlanEntryStatus</c> is <c>#[non_exhaustive]</c> with an untagged <c>Other(String)</c> fallback).
+    /// Per the ACP extension contract, unknown values that do not start with <c>_</c> are reserved for future
+    /// ACP variants and must not be rejected by a client.
+    /// </remarks>
     [JsonConverter(typeof(PlanEntryStatusJsonConverter))]
-    public enum PlanEntryStatus
+    public readonly struct PlanEntryStatus : IEquatable<PlanEntryStatus>
     {
-        /// <summary>
-        /// 条目已创建但尚未开始。
-        /// </summary>
-        Pending,
+        private readonly string? _value;
 
         /// <summary>
-        /// 条目正在执行中。
+        /// Creates a plan entry status carrying the given wire value.
         /// </summary>
-        InProgress,
+        /// <param name="value">The protocol string value.</param>
+        public PlanEntryStatus(string value)
+        {
+            _value = value ?? throw new ArgumentNullException(nameof(value));
+        }
 
         /// <summary>
-        /// 条目已成功完成。
+        /// The entry has been created but has not started yet.
         /// </summary>
-        Completed
+        public static PlanEntryStatus Pending { get; } = new("pending");
+
+        /// <summary>
+        /// The entry is currently in progress.
+        /// </summary>
+        public static PlanEntryStatus InProgress { get; } = new("in_progress");
+
+        /// <summary>
+        /// The entry completed successfully.
+        /// </summary>
+        public static PlanEntryStatus Completed { get; } = new("completed");
+
+        /// <summary>
+        /// The entry was cancelled before completion.
+        /// </summary>
+        public static PlanEntryStatus Cancelled { get; } = new("cancelled");
+
+        /// <summary>
+        /// The wire value carried by this status.
+        /// </summary>
+        public string Value => _value ?? string.Empty;
+
+        /// <inheritdoc />
+        public bool Equals(PlanEntryStatus other) => string.Equals(_value, other._value, StringComparison.Ordinal);
+
+        /// <inheritdoc />
+        public override bool Equals(object? obj) => obj is PlanEntryStatus other && Equals(other);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
+
+        /// <summary>
+        /// Determines whether two statuses carry the same wire value.
+        /// </summary>
+        public static bool operator ==(PlanEntryStatus left, PlanEntryStatus right) => left.Equals(right);
+
+        /// <summary>
+        /// Determines whether two statuses carry different wire values.
+        /// </summary>
+        public static bool operator !=(PlanEntryStatus left, PlanEntryStatus right) => !left.Equals(right);
+
+        /// <inheritdoc />
+        public override string ToString() => Value;
     }
 
     /// <summary>
-    /// 计划条目优先级枚举。
-    /// 表示计划条目的重要程度。
+    /// The priority of a plan entry.
     /// </summary>
+    /// <remarks>
+    /// Modeled as an extensible value type rather than a closed enum, so that unknown wire values are
+    /// preserved losslessly and round-trip intact, matching the authoritative ACP schema
+    /// (<c>PlanEntryPriority</c> is <c>#[non_exhaustive]</c> with an untagged <c>Other(String)</c> fallback).
+    /// Per the ACP extension contract, unknown values that do not start with <c>_</c> are reserved for future
+    /// ACP variants and must not be rejected by a client.
+    /// </remarks>
     [JsonConverter(typeof(PlanEntryPriorityJsonConverter))]
-    public enum PlanEntryPriority
+    public readonly struct PlanEntryPriority : IEquatable<PlanEntryPriority>
     {
-        /// <summary>
-        /// 低优先级。
-        /// </summary>
-        Low,
+        private readonly string? _value;
 
         /// <summary>
-        /// 中等优先级。
+        /// Creates a plan entry priority carrying the given wire value.
         /// </summary>
-        Medium,
+        /// <param name="value">The protocol string value.</param>
+        public PlanEntryPriority(string value)
+        {
+            _value = value ?? throw new ArgumentNullException(nameof(value));
+        }
 
         /// <summary>
-        /// 高优先级。
+        /// Low priority.
         /// </summary>
-        High
+        public static PlanEntryPriority Low { get; } = new("low");
+
+        /// <summary>
+        /// Medium priority.
+        /// </summary>
+        public static PlanEntryPriority Medium { get; } = new("medium");
+
+        /// <summary>
+        /// High priority.
+        /// </summary>
+        public static PlanEntryPriority High { get; } = new("high");
+
+        /// <summary>
+        /// The wire value carried by this priority.
+        /// </summary>
+        public string Value => _value ?? string.Empty;
+
+        /// <inheritdoc />
+        public bool Equals(PlanEntryPriority other) => string.Equals(_value, other._value, StringComparison.Ordinal);
+
+        /// <inheritdoc />
+        public override bool Equals(object? obj) => obj is PlanEntryPriority other && Equals(other);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
+
+        /// <summary>
+        /// Determines whether two priorities carry the same wire value.
+        /// </summary>
+        public static bool operator ==(PlanEntryPriority left, PlanEntryPriority right) => left.Equals(right);
+
+        /// <summary>
+        /// Determines whether two priorities carry different wire values.
+        /// </summary>
+        public static bool operator !=(PlanEntryPriority left, PlanEntryPriority right) => !left.Equals(right);
+
+        /// <inheritdoc />
+        public override string ToString() => Value;
     }
 
-    public sealed class PlanEntryStatusJsonConverter : JsonConverter<PlanEntryStatus>
+    internal sealed class PlanEntryStatusJsonConverter : JsonConverter<PlanEntryStatus>
     {
         public override PlanEntryStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -230,28 +308,16 @@ namespace SalmonEgg.Acp.Plan
                 throw new JsonException("Plan entry status must be a string.");
             }
 
-            return reader.GetString() switch
-            {
-                "pending" => PlanEntryStatus.Pending,
-                "in_progress" => PlanEntryStatus.InProgress,
-                "completed" => PlanEntryStatus.Completed,
-                var value => throw new JsonException($"Unsupported plan entry status '{value}'.")
-            };
+            return new PlanEntryStatus(reader.GetString()!);
         }
 
         public override void Write(Utf8JsonWriter writer, PlanEntryStatus value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value switch
-            {
-                PlanEntryStatus.Pending => "pending",
-                PlanEntryStatus.InProgress => "in_progress",
-                PlanEntryStatus.Completed => "completed",
-                _ => throw new JsonException($"Unsupported plan entry status '{value}'.")
-            });
+            writer.WriteStringValue(value.Value);
         }
     }
 
-    public sealed class PlanEntryPriorityJsonConverter : JsonConverter<PlanEntryPriority>
+    internal sealed class PlanEntryPriorityJsonConverter : JsonConverter<PlanEntryPriority>
     {
         public override PlanEntryPriority Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -260,24 +326,12 @@ namespace SalmonEgg.Acp.Plan
                 throw new JsonException("Plan entry priority must be a string.");
             }
 
-            return reader.GetString() switch
-            {
-                "low" => PlanEntryPriority.Low,
-                "medium" => PlanEntryPriority.Medium,
-                "high" => PlanEntryPriority.High,
-                var value => throw new JsonException($"Unsupported plan entry priority '{value}'.")
-            };
+            return new PlanEntryPriority(reader.GetString()!);
         }
 
         public override void Write(Utf8JsonWriter writer, PlanEntryPriority value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value switch
-            {
-                PlanEntryPriority.Low => "low",
-                PlanEntryPriority.Medium => "medium",
-                PlanEntryPriority.High => "high",
-                _ => throw new JsonException($"Unsupported plan entry priority '{value}'.")
-            });
+            writer.WriteStringValue(value.Value);
         }
     }
 }

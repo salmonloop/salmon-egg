@@ -16,11 +16,33 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
+        <Grid>
+        <!-- Short windows: densify section stack spacing so settings remain scannable without
+             oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DataStorageHeightStates">
+                <VisualState x:Name="DataStorageHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="DataStorageContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DataStorageHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="DataStorageContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28">
+                <StackPanel x:Name="DataStorageContentStack"
+                            Spacing="16">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="DataStorage_PageTitle"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
@@ -54,6 +76,61 @@
                                               VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_TelemetrySharingTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_TelemetrySharingDescription"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  x:Name="DataStorageTelemetrySharingToggle"
+                                                  x:Uid="DataStorage_TelemetrySharingSwitch"
+                                                  AutomationProperties.AutomationId="DataStorage.TelemetrySharing"
+                                                  IsOn="{x:Bind ViewModel.Preferences.TelemetrySharingEnabled, Mode=TwoWay}"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <!-- 自定义端点属于开发者选项：默认收起，普通用户不必看到。
+                                     整节随总开关联动禁用，避免"关闭上报却仍可编辑端点"的矛盾状态。 -->
+                                <Expander x:Uid="DataStorage_TelemetryAdvanced"
+                                          IsExpanded="False"
+                                          IsEnabled="{x:Bind ViewModel.Preferences.TelemetrySharingEnabled, Mode=OneWay}"
+                                          Margin="16,12,16,12"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                    <StackPanel Spacing="8" Padding="0,8,0,0">
+                                        <TextBlock x:Uid="DataStorage_TelemetryAdvancedWarning"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBox x:Uid="DataStorage_TelemetryCustomEndpoint"
+                                                 AutomationProperties.AutomationId="DataStorage.TelemetryCustomEndpoint"
+                                                 Text="{x:Bind ViewModel.Preferences.TelemetryCustomEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <PasswordBox x:Name="TelemetryAuthHeaderBox"
+                                                     x:Uid="DataStorage_TelemetryAuthHeader"
+                                                     AutomationProperties.AutomationId="DataStorage.TelemetryAuthHeader"
+                                                     PasswordChanged="OnTelemetryAuthHeaderChanged"/>
+                                        <TextBlock x:Uid="DataStorage_TelemetryApplyNotice"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel Spacing="12">
@@ -78,7 +155,8 @@
                                                   Visibility="{x:Bind ViewModel.CloudConfig.IsChecking, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                   Width="32"
                                                   Height="32"/>
-                                    <FontIcon Glyph="&#xE930;"
+                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                              Glyph="&#xE930;"
                                               Visibility="{x:Bind ViewModel.CloudConfig.IsChecking, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -103,6 +181,19 @@
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     </StackPanel>
                                 </Grid>
+
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.HasPendingConflict, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Button AutomationProperties.AutomationId="DataStorage.CloudSync.KeepLocal"
+                                            Content="{x:Bind ViewModel.CloudConfig.KeepLocalConflictText, Mode=OneWay}"
+                                            Command="{x:Bind ViewModel.CloudConfig.KeepLocalConflictCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanResolveConflict, Mode=OneWay}"/>
+                                    <Button AutomationProperties.AutomationId="DataStorage.CloudSync.ApplyRemote"
+                                            Content="{x:Bind ViewModel.CloudConfig.ApplyRemoteConflictText, Mode=OneWay}"
+                                            Command="{x:Bind ViewModel.CloudConfig.ApplyRemoteConflictCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanResolveConflict, Mode=OneWay}"/>
+                                </StackPanel>
 
                                 <StackPanel Orientation="Horizontal"
                                             Spacing="8"
@@ -434,4 +525,5 @@
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

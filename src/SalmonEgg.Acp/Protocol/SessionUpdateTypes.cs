@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Tool;
@@ -9,36 +10,37 @@ using SalmonEgg.Acp.Tool;
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Session/Update 通知的参数。
-    /// 用于 Agent 向客户端发送会话更新。
+    /// Parameters for the session/update notification.
+    /// Used by the agent to send session updates to the client.
     /// </summary>
-    public class SessionUpdateParams
+    [JsonConverter(typeof(SessionUpdateParamsJsonConverter))]
+    public record SessionUpdateParams : AcpProtocolObject
     {
         /// <summary>
-        /// 会话 ID（必填）。
+        /// Session ID (required).
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 更新内容（多态类型）。
-        /// 可以是文本、工具调用、计划、模式切换等。
+        /// The update payload (polymorphic type).
+        /// May be text, a tool call, a plan, a mode switch, and so on.
         /// </summary>
         [JsonPropertyName("update")]
-        public SessionUpdate Update { get; set; } = null!;
+        public SessionUpdate Update { get; init; } = null!;
 
         /// <summary>
-        /// 创建新的 SessionUpdateParams 实例。
+        /// Creates a new SessionUpdateParams instance.
         /// </summary>
         public SessionUpdateParams()
         {
         }
 
         /// <summary>
-        /// 创建新的 SessionUpdateParams 实例。
+        /// Creates a new SessionUpdateParams instance.
         /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="update">更新内容</param>
+        /// <param name="sessionId">Session ID.</param>
+        /// <param name="update">The update payload.</param>
         public SessionUpdateParams(string sessionId, SessionUpdate update)
         {
             SessionId = sessionId;
@@ -47,8 +49,8 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话更新的基类/多态类型。
-    /// 使用 JsonPolymorphic 特性支持不同类型的更新。
+    /// Base polymorphic type for session updates.
+    /// Uses the JsonPolymorphic attribute to support different kinds of updates.
     /// </summary>
     [JsonPolymorphic(
         TypeDiscriminatorPropertyName = "sessionUpdate",
@@ -61,66 +63,156 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(ToolCallStatusUpdate), "tool_call_update")]
     [JsonDerivedType(typeof(PlanUpdate), "plan")]
     [JsonDerivedType(typeof(CurrentModeUpdate), "current_mode_update")]
-    [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_options_update")]
     [JsonDerivedType(typeof(AvailableCommandsUpdate), "available_commands_update")]
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     [JsonDerivedType(typeof(SessionInfoUpdate), "session_info_update")]
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
-    public class SessionUpdate
+    public record SessionUpdate : AcpProtocolObject
     {
-        [JsonPropertyName("messageId")]
-        public string? MessageId { get; set; }
-
-        // Keep unknown fields so we can safely ignore newer protocol updates without crashing.
+        /// <summary>
+        /// Forward-compatible fields that are not bound to a known contract (including the complete payload of an
+        /// unknown sessionUpdate discriminator value).
+        /// The protocol requires unknown updates to be preserved verbatim and to round-trip; the client neither
+        /// interprets nor discards them, and their semantics are decided by the agent
+        /// (AGENTS.md: protocol leniency must never be tightened in reverse).
+        /// </summary>
+        // STJ requires JsonExtensionData binders to be settable (not init-only) when the
+        // polymorphic record hierarchy uses a deserialization constructor. Keep mutation
+        // confined to serializer/converter paths; protocol consumers should treat this as
+        // opaque forward-compat payload.
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
+        /// <summary>
+        /// The raw discriminator value of an unknown update kind; non-null only when this instance is the base-type
+        /// fallback produced by an unrecognized discriminator value.
+        /// </summary>
+        [JsonIgnore]
+        public string? UnknownUpdateKind =>
+            ExtensionData is not null
+                && ExtensionData.TryGetValue("sessionUpdate", out var kind)
+                && kind.ValueKind == JsonValueKind.String
+            ? kind.GetString()
+            : null;
+    }
+
+    /// <summary>
+    /// Reads and writes session/update parameters. Known updates are delegated entirely to the polymorphic
+    /// contract; when an unrecognized discriminator value falls back to the base type, STJ discards that
+    /// discriminator as polymorphic metadata, so it is restored here into
+    /// <see cref="SessionUpdate.ExtensionData"/> to guarantee that unknown updates round-trip verbatim instead of
+    /// being silently downgraded by the client.
+    /// </summary>
+    internal sealed class SessionUpdateParamsJsonConverter : JsonConverter<SessionUpdateParams>
+    {
+        public override SessionUpdateParams? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("session/update params must be a JSON object.");
+            }
+
+            var sessionId = root.TryGetProperty("sessionId", out var sessionIdElement)
+                    && sessionIdElement.ValueKind == JsonValueKind.String
+                ? sessionIdElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            SessionUpdate? update = null;
+            if (root.TryGetProperty("update", out var updateElement) && updateElement.ValueKind == JsonValueKind.Object)
+            {
+                update = updateElement.Deserialize(
+                    (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
+                if (update is not null
+                    && update.GetType() == typeof(SessionUpdate)
+                    && updateElement.TryGetProperty("sessionUpdate", out var kindElement))
+                {
+                    var extensionData = update.ExtensionData is null
+                        ? new Dictionary<string, JsonElement>()
+                        : new Dictionary<string, JsonElement>(update.ExtensionData);
+                    extensionData["sessionUpdate"] = kindElement.Clone();
+                    update = update with { ExtensionData = extensionData };
+                }
+            }
+
+            return new SessionUpdateParams
+            {
+                SessionId = sessionId,
+                Update = update!,
+                Meta = AcpMetaJson.Read(root)
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, SessionUpdateParams value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("sessionId", value.SessionId);
+            if (value.Update is not null)
+            {
+                writer.WritePropertyName("update");
+                JsonSerializer.Serialize(
+                    writer,
+                    value.Update,
+                    (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
+            }
+
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
+    }
+
+    public abstract record ContentChunkUpdate : SessionUpdate
+    {
+        [JsonPropertyName("messageId")]
+        public string? MessageId { get; init; }
     }
 
     /// <summary>
     /// Usage update extension.
     /// Represents resource usage or other telemetry sent by the agent.
     /// </summary>
-    public class UsageUpdate : SessionUpdate
+    public sealed record UsageUpdate : SessionUpdate
     {
         [JsonPropertyName("used")]
-        public int? Used { get; set; }
+        public ulong Used { get; init; }
 
         [JsonPropertyName("size")]
-        public int? Size { get; set; }
+        public ulong Size { get; init; }
 
         [JsonPropertyName("cost")]
-        public UsageCost? Cost { get; set; }
+        public UsageCost? Cost { get; init; }
     }
 
-    public class UsageCost
+    public sealed record UsageCost : AcpProtocolObject
     {
         [JsonPropertyName("amount")]
-        public decimal? Amount { get; set; }
+        public double Amount { get; init; }
 
         [JsonPropertyName("currency")]
-        public string? Currency { get; set; }
+        public string Currency { get; init; } = string.Empty;
     }
 
     /// <summary>
-    /// Agent 消息片段更新。
-    /// 用于流式传输 Agent 的文本响应。
+    /// Agent message chunk update.
+    /// Used to stream the agent's text response.
     /// </summary>
-    public class AgentMessageUpdate : SessionUpdate
+    public sealed record AgentMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
-        public ContentBlock? Content { get; set; }
+        public ContentBlock? Content { get; init; }
 
         /// <summary>
-        /// 创建新的 AgentMessageUpdate 实例。
+        /// Creates a new AgentMessageUpdate instance.
         /// </summary>
         public AgentMessageUpdate()
         {
         }
 
         /// <summary>
-        /// 创建新的 AgentMessageUpdate 实例。
+        /// Creates a new AgentMessageUpdate instance.
         /// </summary>
-        /// <param name="content">内容块</param>
+        /// <param name="content">The content block.</param>
         public AgentMessageUpdate(ContentBlock? content)
         {
             Content = content;
@@ -128,12 +220,12 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 用户消息片段更新（用于 session/load 回放或多端同步）。
+    /// User message chunk update (used for session/load replay or multi-client synchronization).
     /// </summary>
-    public class UserMessageUpdate : SessionUpdate
+    public sealed record UserMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
-        public ContentBlock? Content { get; set; }
+        public ContentBlock? Content { get; init; }
 
         public UserMessageUpdate()
         {
@@ -146,89 +238,89 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Agent 思考片段更新（通常不直接展示给用户，但必须可解析/可跳过）。
+    /// Agent thought chunk update (usually not shown to the user directly, but it must remain parsable/skippable).
     /// </summary>
-    public class AgentThoughtUpdate : SessionUpdate
+    public sealed record AgentThoughtUpdate : ContentChunkUpdate
     {
         /// <summary>
-        /// 消息内容块。
+        /// The message content block.
         /// </summary>
         [JsonPropertyName("content")]
-        public ContentBlock? Content { get; set; }
+        public ContentBlock? Content { get; init; }
     }
 
     /// <summary>
-    /// 工具调用更新。
-    /// 用于通知客户端工具调用的状态变化。
+    /// Tool call update.
+    /// Used to notify the client that the state of a tool call has changed.
     /// </summary>
-    public class ToolCallUpdate : SessionUpdate
+    public sealed record ToolCallUpdate : SessionUpdate
     {
         /// <summary>
-        /// 工具调用 ID。
+        /// Tool call ID.
         /// </summary>
         [JsonPropertyName("toolCallId")]
-        public string? ToolCallId { get; set; }
+        public string? ToolCallId { get; init; }
 
         /// <summary>
-        /// 工具调用类型。
+        /// Tool call kind.
         /// </summary>
         [JsonPropertyName("kind")]
-        public ToolCallKind? Kind { get; set; }
+        public ToolCallKind? Kind { get; init; }
 
         /// <summary>
-        /// 工具调用状态。
+        /// Tool call status.
         /// </summary>
         [JsonPropertyName("status")]
-        public ToolCallStatus? Status { get; set; }
+        public ToolCallStatus? Status { get; init; }
 
         /// <summary>
-        /// 标题（可选）。
+        /// Title (optional).
         /// </summary>
         [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        public string? Title { get; init; }
 
         /// <summary>
-        /// 工具调用产生的内容。
+        /// Content produced by the tool call.
         /// </summary>
         [JsonPropertyName("content")]
-        public List<ToolCallContent>? Content { get; set; }
+        public List<ToolCallContent>? Content { get; init; }
 
         /// <summary>
-        /// 文件位置列表，表示工具调用影响的文件。
+        /// List of file locations, indicating the files affected by the tool call.
         /// </summary>
         [JsonPropertyName("locations")]
-        public List<ToolCallLocation>? Locations { get; set; }
+        public List<ToolCallLocation>? Locations { get; init; }
 
         /// <summary>
-        /// 原始输入参数。
+        /// Raw input parameters.
         /// </summary>
         [JsonPropertyName("rawInput")]
-        public JsonElement? RawInput { get; set; }
+        public JsonElement? RawInput { get; init; }
 
         /// <summary>
-        /// 原始输出结果。
+        /// Raw output result.
         /// </summary>
         [JsonPropertyName("rawOutput")]
-        public JsonElement? RawOutput { get; set; }
+        public JsonElement? RawOutput { get; init; }
 
         /// <summary>
-        /// 创建新的 ToolCallUpdate 实例。
+        /// Creates a new ToolCallUpdate instance.
         /// </summary>
         public ToolCallUpdate()
         {
         }
 
         /// <summary>
-        /// 创建新的 ToolCallUpdate 实例。
+        /// Creates a new ToolCallUpdate instance.
         /// </summary>
-        /// <param name="toolCallId">工具调用 ID</param>
-        /// <param name="kind">工具调用类型</param>
-        /// <param name="status">工具调用状态</param>
-        /// <param name="title">标题</param>
-        /// <param name="content">工具调用产生的内容</param>
-        /// <param name="locations">文件位置列表</param>
-        /// <param name="rawInput">原始输入参数</param>
-        /// <param name="rawOutput">原始输出结果</param>
+        /// <param name="toolCallId">Tool call ID.</param>
+        /// <param name="kind">Tool call kind.</param>
+        /// <param name="status">Tool call status.</param>
+        /// <param name="title">Title.</param>
+        /// <param name="content">Content produced by the tool call.</param>
+        /// <param name="locations">List of file locations.</param>
+        /// <param name="rawInput">Raw input parameters.</param>
+        /// <param name="rawOutput">Raw output result.</param>
         public ToolCallUpdate(
             string? toolCallId = null,
             ToolCallKind? kind = null,
@@ -251,197 +343,139 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 计划更新。
-    /// 用于通知客户端 Agent 的行动计划变化。
+    /// Plan update.
+    /// Used to notify the client that the agent's action plan has changed.
     /// </summary>
-    public class PlanUpdate : SessionUpdate
+    public sealed record PlanUpdate : SessionUpdate
     {
-        private List<PlanEntry> _entries = new();
-
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
+        private readonly List<PlanEntry> _entries = new();
 
         /// <summary>
-        /// 计划条目列表（用于 plan 类型的更新）。
+        /// List of plan entries (used by the plan update kind).
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("entries")]
         public List<PlanEntry> Entries
         {
             get => _entries;
-            set => _entries = ValidateEntries(value);
+            init => _entries = global::SalmonEgg.Acp.Plan.Plan.ValidateEntries(value);
         }
 
         /// <summary>
-        /// 创建新的 PlanUpdate 实例。
+        /// Creates a new PlanUpdate instance.
         /// </summary>
         public PlanUpdate()
         {
         }
 
         /// <summary>
-        /// 创建新的 PlanUpdate 实例。
+        /// Creates a new PlanUpdate instance.
         /// </summary>
-        /// <param name="entries">计划条目列表</param>
+        /// <param name="entries">List of plan entries.</param>
         public PlanUpdate(List<PlanEntry> entries)
         {
             Entries = entries;
         }
-
-        private static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
-        {
-            if (entries is null)
-            {
-                throw new JsonException("Plan update entries must not be null.");
-            }
-
-            foreach (var entry in entries)
-            {
-                if (entry is null)
-                {
-                    throw new JsonException("Plan update entries must not contain null items.");
-                }
-            }
-
-            return entries;
-        }
     }
 
     /// <summary>
-    /// 当前模式更新（current_mode_update）。
-    /// ACP 会通过 session/update 通知发送当前模式的变化。
+    /// Current mode update (current_mode_update).
+    /// ACP sends changes to the current mode through the session/update notification.
     /// </summary>
-    public class CurrentModeUpdate : SessionUpdate
+    public sealed record CurrentModeUpdate : SessionUpdate
     {
         [JsonPropertyName("currentModeId")]
-        public string ModeId { get; set; } = string.Empty;
-
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        public string ModeId { get; init; } = string.Empty;
 
         public CurrentModeUpdate()
         {
         }
 
-        public CurrentModeUpdate(string modeId, string? title = null)
+        public CurrentModeUpdate(string modeId)
         {
             ModeId = modeId;
-            Title = title;
         }
     }
 
     /// <summary>
-    /// 配置更新。
-    /// 用于通知客户端会话配置选项的变化。
+    /// Tool call status update (tool_call_update).
+    /// Some agents do not send the complete toolCall object in a tool_call update and push only the status and the
+    /// output content.
     /// </summary>
-    public class ConfigUpdateUpdate : SessionUpdate
+    public sealed record ToolCallStatusUpdate : SessionUpdate
     {
         /// <summary>
-        /// 配置选项列表（完整状态）。
-        /// </summary>
-        [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
-
-        /// <summary>
-        /// 创建新的 ConfigUpdateUpdate 实例。
-        /// </summary>
-        public ConfigUpdateUpdate()
-        {
-        }
-
-        /// <summary>
-        /// 创建新的 ConfigUpdateUpdate 实例。
-        /// </summary>
-        /// <param name="configOptions">配置选项</param>
-        public ConfigUpdateUpdate(List<ConfigOption>? configOptions = null)
-        {
-            ConfigOptions = configOptions;
-        }
-    }
-
-    /// <summary>
-    /// 工具调用状态更新（tool_call_update）。
-    /// 某些 Agent 不会在 tool_call update 中发送完整 toolCall 对象，只会推送状态与输出内容。
-    /// </summary>
-    public class ToolCallStatusUpdate : SessionUpdate
-    {
-        /// <summary>
-        /// 工具调用 ID。
+        /// Tool call ID.
         /// </summary>
         [JsonPropertyName("toolCallId")]
-        public string? ToolCallId { get; set; }
+        public string? ToolCallId { get; init; }
 
         /// <summary>
-        /// 工具调用类型。
+        /// Tool call kind.
         /// </summary>
         [JsonPropertyName("kind")]
-        public ToolCallKind? Kind { get; set; }
+        public ToolCallKind? Kind { get; init; }
 
         /// <summary>
-        /// 标题（可选）。
+        /// Title (optional).
         /// </summary>
         [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        public string? Title { get; init; }
 
         /// <summary>
-        /// 工具调用状态。
+        /// Tool call status.
         /// </summary>
         [JsonPropertyName("status")]
-        public ToolCallStatus? Status { get; set; }
+        public ToolCallStatus? Status { get; init; }
 
         /// <summary>
-        /// 工具调用产生的内容。
+        /// Content produced by the tool call.
         /// </summary>
         [JsonPropertyName("content")]
-        public List<ToolCallContent>? Content { get; set; }
+        public List<ToolCallContent>? Content { get; init; }
 
         /// <summary>
-        /// 文件位置列表，表示工具调用影响的文件。
+        /// List of file locations, indicating the files affected by the tool call.
         /// </summary>
         [JsonPropertyName("locations")]
-        public List<ToolCallLocation>? Locations { get; set; }
+        public List<ToolCallLocation>? Locations { get; init; }
 
         /// <summary>
-        /// 原始输入参数。
+        /// Raw input parameters.
         /// </summary>
         [JsonPropertyName("rawInput")]
-        public JsonElement? RawInput { get; set; }
+        public JsonElement? RawInput { get; init; }
 
         /// <summary>
-        /// 原始输出结果。
+        /// Raw output result.
         /// </summary>
         [JsonPropertyName("rawOutput")]
-        public JsonElement? RawOutput { get; set; }
+        public JsonElement? RawOutput { get; init; }
     }
 
     /// <summary>
-    /// 配置选项更新（config_option_update）。
+    /// Configuration option update (config_option_update).
     /// </summary>
-    public class ConfigOptionUpdate : SessionUpdate
+    public sealed record ConfigOptionUpdate : SessionUpdate
     {
         /// <summary>
-        /// 配置选项列表。
+        /// List of configuration options.
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; init; }
     }
 
     /// <summary>
-    /// 会话信息更新（session_info_update）。
+    /// Session info update (session_info_update).
     /// </summary>
-    public class SessionInfoUpdate : SessionUpdate
+    public sealed record SessionInfoUpdate : SessionUpdate
     {
         private string? _title;
         private string? _updatedAt;
 
         /// <summary>
-        /// 协议扩展字段（_meta）。
-        /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
-        /// <summary>
-        /// 会话标题（可选）。
+        /// Session title (optional).
+        /// Setter tracks JSON presence so omitted vs explicit-null can be distinguished after deserialize.
         /// </summary>
         [JsonPropertyName("title")]
         public string? Title
@@ -455,10 +489,11 @@ namespace SalmonEgg.Acp.Protocol
         }
 
         [JsonIgnore]
-        public bool HasTitle { get; set; }
+        public bool HasTitle { get; private set; }
 
         /// <summary>
-        /// 最近更新时间（UTC iso8601）。
+        /// Last updated timestamp (UTC iso8601).
+        /// Setter tracks JSON presence so omitted vs explicit-null can be distinguished after deserialize.
         /// </summary>
         [JsonPropertyName("updatedAt")]
         public string? UpdatedAt
@@ -472,6 +507,6 @@ namespace SalmonEgg.Acp.Protocol
         }
 
         [JsonIgnore]
-        public bool HasUpdatedAt { get; set; }
+        public bool HasUpdatedAt { get; private set; }
     }
 }

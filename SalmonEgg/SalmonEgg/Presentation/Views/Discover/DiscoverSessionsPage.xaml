@@ -16,6 +16,78 @@
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <converters:TransportTypeLocalizationConverter x:Key="TransportTypeLocalizationConverter"/>
+        <converters:TransportTypeGlyphConverter x:Key="TransportTypeGlyphConverter"/>
+
+        <!-- Row metrics. Kept as resources (coding-standards 5.2) because the same values are
+             referenced from both container styles and the templates they lay out. -->
+        <Thickness x:Key="DiscoverSessionRowPadding">12,10</Thickness>
+        <Thickness x:Key="DiscoverProfileRowPadding">12,8</Thickness>
+        <Thickness x:Key="DiscoverListInset">12,0</Thickness>
+        <x:Double x:Key="DiscoverRowIconBadgeSize">32</x:Double>
+        <x:Double x:Key="DiscoverRowIconGlyphSize">16</x:Double>
+        <x:Double x:Key="DiscoverRowColumnSpacing">12</x:Double>
+        <x:Double x:Key="DiscoverRowTextSpacing">2</x:Double>
+        <x:Double x:Key="DiscoverRowMetaSpacing">4</x:Double>
+        <x:Double x:Key="DiscoverRowMetaGlyphSpacing">6</x:Double>
+        <x:Double x:Key="DiscoverRowMetaGlyphSize">12</x:Double>
+
+        <!-- Row chrome belongs to the item container, not to the DataTemplate: ListViewItemPresenter
+             renders PointerOver / Selected / Focus *beneath* the template, so an opaque Border in the
+             template would mask every native state. Fills are therefore left entirely to the default
+             ListViewItem style (that is what supplies the state brushes); these styles only set what
+             layout needs. Padding is template-bound to the presenter's ContentMargin, which is why
+             the templates below carry no padding of their own, and why row spacing needs no Margin.
+             Compact short-height default keeps touch-friendly row height (>=44) while reclaiming
+             vertical budget. Comfortable restores prior 104 marketing density. -->
+        <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+        <Style x:Key="DiscoverSessionItemStyleCompact" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="MinHeight" Value="80"/>
+            <Setter Property="Padding" Value="{StaticResource DiscoverSessionRowPadding}"/>
+        </Style>
+        <Style x:Key="DiscoverSessionItemStyleComfortable" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="MinHeight" Value="104"/>
+            <Setter Property="Padding" Value="{StaticResource DiscoverSessionRowPadding}"/>
+        </Style>
+
+        <!-- Profile rows are a single-selection master list: the row template inherited through the
+             seam owns the selection visuals, so the item template is layout only. -->
+        <Style x:Key="DiscoverProfileItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="{StaticResource DiscoverProfileRowPadding}"/>
+        </Style>
+
+        <!-- Placeholder blocks for the loading skeletons. They stand in for text and controls that
+             have not arrived yet, so they use the Fluent subtle fills rather than an opacity-scaled
+             control brush, and their sizes match the real row parts they replace. -->
+        <Style x:Key="DiscoverSkeletonIconStyle" TargetType="Border">
+            <Setter Property="Width" Value="{StaticResource DiscoverRowIconBadgeSize}"/>
+            <Setter Property="Height" Value="{StaticResource DiscoverRowIconBadgeSize}"/>
+            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="DiscoverSkeletonTitleStyle" TargetType="Border">
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="DiscoverSkeletonDetailStyle" TargetType="Border">
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="DiscoverSkeletonActionStyle" TargetType="Border">
+            <Setter Property="Width" Value="96"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Page.Resources>
 
     <Grid x:Name="LayoutRoot"
@@ -57,6 +129,58 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+            <!-- Short windows: denser empty chrome so fixed icon rings do not dominate the
+                 details pane. Comfortable restores marketing-scale empty art. Mirrors StartView
+                 HeroHeightStates (MinWindowHeight=760). -->
+            <VisualStateGroup x:Name="EmptyStateHeightStates">
+                <VisualState x:Name="EmptyHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="ProfilesHeaderHost.Margin" Value="16,16,16,10" />
+                        <Setter Target="ProfilesHeaderHost.Spacing" Value="4" />
+                        <Setter Target="DetailsProfileHeader.Margin" Value="0,0,0,12" />
+                        <Setter Target="NoSelectionEmptyHost.Spacing" Value="12" />
+                        <Setter Target="NoSelectionEmptyBadge.Width" Value="72" />
+                        <Setter Target="NoSelectionEmptyBadge.Height" Value="72" />
+                        <Setter Target="NoSelectionEmptyIcon.FontSize" Value="32" />
+                        <Setter Target="SessionsEmptyHost.Spacing" Value="10" />
+                        <Setter Target="SessionsEmptyIcon.FontSize" Value="32" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="EmptyHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ProfilesHeaderHost.Margin" Value="24,32,24,16" />
+                        <Setter Target="ProfilesHeaderHost.Spacing" Value="8" />
+                        <Setter Target="DetailsProfileHeader.Margin" Value="0,0,0,24" />
+                        <Setter Target="NoSelectionEmptyHost.Spacing" Value="24" />
+                        <Setter Target="NoSelectionEmptyBadge.Width" Value="120" />
+                        <Setter Target="NoSelectionEmptyBadge.Height" Value="120" />
+                        <Setter Target="NoSelectionEmptyIcon.FontSize" Value="56" />
+                        <Setter Target="SessionsEmptyHost.Spacing" Value="16" />
+                        <Setter Target="SessionsEmptyIcon.FontSize" Value="48" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <!-- Short windows: densify session-row container min-height/gap so more rows fit
+                 before scrolling. Comfortable restores MinHeight=104 at MinWindowHeight=760.
+                 Touch MinHeight stays >=80. -->
+            <VisualStateGroup x:Name="SessionListHeightStates">
+                <VisualState x:Name="SessionListHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="SessionsList.ItemContainerStyle" Value="{StaticResource DiscoverSessionItemStyleCompact}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SessionListHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="SessionsList.ItemContainerStyle" Value="{StaticResource DiscoverSessionItemStyleComfortable}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <!-- Left Pane: Profiles Master List -->
@@ -70,7 +194,10 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <StackPanel Grid.Row="0" Margin="24,32,24,16" Spacing="8">
+            <StackPanel x:Name="ProfilesHeaderHost"
+                        Grid.Row="0"
+                        Margin="16,16,16,10"
+                        Spacing="4">
                 <TextBlock
                     x:Uid="DiscoverSessionsTitle"
                     AutomationProperties.AutomationId="DiscoverSessions.Title"
@@ -85,39 +212,36 @@
             <!-- Profiles List Area -->
             <Grid Grid.Row="1">
                 <!-- Skeleton View for Profiles -->
+                <!-- Profile skeleton rows mirror the loaded profile row (icon column + one text line)
+                     at the same container inset, so the list does not shift when data lands. -->
                 <StackPanel x:Name="LeftSkeletonPanel"
                     Visibility="{x:Bind ViewModel.ProfilesViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                    Padding="12" Spacing="12">
-                    <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="36" Height="36" CornerRadius="18" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                            <Border Width="120" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
-                    <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="36" Height="36" CornerRadius="18" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                            <Border Width="150" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
-                    <Border Padding="12" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Width="36" Height="36" CornerRadius="18" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                            <Border Width="80" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
+                    Padding="{StaticResource DiscoverListInset}"
+                    Spacing="{StaticResource DiscoverRowMetaSpacing}">
+                    <Grid Padding="{StaticResource DiscoverProfileRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                        <Border Grid.Column="1" Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="120" VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid Padding="{StaticResource DiscoverProfileRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                        <Border Grid.Column="1" Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="150" VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid Padding="{StaticResource DiscoverProfileRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                        <Border Grid.Column="1" Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="80" VerticalAlignment="Center" />
+                    </Grid>
                 </StackPanel>
 
                 <ListView
@@ -129,41 +253,45 @@
                     SelectionMode="Single"
                     IsFocusEngagementEnabled="True"
                     IsItemClickEnabled="True"
-                    ItemClick="OnProfileItemClick">
+                    ItemClick="OnProfileItemClick"
+                    Padding="{StaticResource DiscoverListInset}"
+                    ItemContainerStyle="{StaticResource DiscoverProfileItemStyle}">
+                <!-- Double-line list item (icon + two lines of text), per the WinUI item-template
+                     guidance. Layout only: the container style supplies inset and corner radius so
+                     the presenter's selection and hover fills stay visible. -->
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="models:ServerConfiguration">
-                        <Grid Padding="12,10"
-                              ColumnSpacing="12"
+                        <Grid ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}"
                               AutomationProperties.Name="{x:Bind Name}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            
-                            <Border Grid.Column="0"
-                                    Width="36" Height="36"
-                                    CornerRadius="6"
-                                    Background="{ThemeResource SystemControlBackgroundAccentBrush}"
-                                    Opacity="0.8">
-                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          Glyph="{x:Bind TransportGlyph}"
-                                          Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                          FontSize="16" />
-                            </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="{x:Bind Name}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="{x:Bind TransportDisplayName}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <FontIcon Grid.Column="0"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="{x:Bind Transport, Converter={StaticResource TransportTypeGlyphConverter}}"
+                                      FontSize="{StaticResource DiscoverRowIconGlyphSize}"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                      Width="{StaticResource DiscoverRowIconBadgeSize}"
+                                      VerticalAlignment="Center" />
+
+                            <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Spacing="{StaticResource DiscoverRowTextSpacing}">
+                                <TextBlock Text="{x:Bind Name}"
+                                           Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1" />
+                                <TextBlock Text="{x:Bind Transport, Converter={StaticResource TransportTypeLocalizationConverter}}"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxLines="1" />
                             </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="Margin" Value="12,2,12,2" />
-                        <Setter Property="CornerRadius" Value="6" />
-                    </Style>
-                </ListView.ItemContainerStyle>
             </ListView>
         </Grid>
     </Grid>
@@ -176,18 +304,24 @@
               AutomationProperties.AutomationId="DiscoverSessions.DetailsPane"
               Grid.Column="2"
               Background="Transparent"
-              CornerRadius="8"
               Visibility="{x:Bind ViewModel.ShowDetailsPane, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <!-- Empty State when no profile is selected -->
             <Grid Visibility="{x:Bind ViewModel.HasNoSelectedProfile, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
-                    <Grid Width="120" Height="120">
+                <StackPanel x:Name="NoSelectionEmptyHost"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                    <Grid x:Name="NoSelectionEmptyBadge" Width="72" Height="72">
                         <Ellipse Fill="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
-                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE716;" FontSize="56" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <FontIcon x:Name="NoSelectionEmptyIcon"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  Glyph="&#xE716;"
+                                  FontSize="32"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                     <StackPanel Spacing="8">
-                        <TextBlock x:Uid="DiscoverSessionsNoSelectionTitle" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock x:Uid="DiscoverSessionsNoSelectionDescription" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionTitle" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionDescription" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -205,7 +339,10 @@
                     </Grid.RowDefinitions>
 
                     <!-- Header for Selected Profile -->
-                    <Grid Grid.Row="0" Margin="0,0,0,24" ColumnSpacing="16">
+                    <Grid x:Name="DetailsProfileHeader"
+                          Grid.Row="0"
+                          Margin="0,0,0,12"
+                          ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -227,8 +364,8 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
                             <TextBlock Text="{x:Bind ViewModel.SelectedProfile.Name, Mode=OneWay}" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="Bold" />
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2">
-                                    <TextBlock Text="{x:Bind ViewModel.SelectedProfile.TransportDisplayName, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="{ThemeResource ControlCornerRadius}" Padding="{StaticResource DiscoverProfileRowPadding}">
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedProfile.Transport, Mode=OneWay, Converter={StaticResource TransportTypeLocalizationConverter}}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Border>
                                 <TextBlock x:Uid="DiscoverSessionsImportableListLabel" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             </StackPanel>
@@ -264,11 +401,13 @@
                             IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                             IsClosable="False" />
 
+                        <!-- Inline progress status. Uses the Fluent control fill and shared corner
+                             radius so it reads as one surface with the rows below it. -->
                         <Border Grid.Row="1"
-                                Padding="12,8"
-                                CornerRadius="8"
-                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                Padding="{StaticResource DiscoverSessionRowPadding}"
+                                CornerRadius="{ThemeResource ControlCornerRadius}"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                 BorderThickness="1"
                                 Visibility="{x:Bind ViewModel.ShowBusyStatus, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                             <StackPanel Orientation="Horizontal"
@@ -288,14 +427,20 @@
 
                         <Grid Grid.Row="2"
                               Visibility="{x:Bind ViewModel.ShowEmptyState, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            <StackPanel x:Name="SessionsEmptyHost"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="10">
+                                <FontIcon x:Name="SessionsEmptyIcon"
+                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           Glyph="&#xE8B7;"
-                                          FontSize="48"
+                                          FontSize="32"
                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <TextBlock x:Uid="DiscoverSessionsEmptyTitle"
                                            Style="{ThemeResource TitleTextBlockStyle}"
-                                           HorizontalAlignment="Center" />
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap" />
                                 <TextBlock x:Uid="DiscoverSessionsEmptyDescription"
                                            Style="{ThemeResource BodyTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -306,58 +451,56 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- Skeleton rows mirror the loaded row's shape (icon column, two text lines,
+                             trailing action) so the list does not reflow when data lands. Placeholder
+                             fills are subtle theme brushes, matching the row chrome the container now
+                             draws instead of the removed card border. -->
                         <StackPanel x:Name="RightSkeletonPanel"
                                     Grid.Row="2"
                                     Visibility="{x:Bind ViewModel.ShowSessionsSkeleton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Spacing="10"
+                                    Spacing="{StaticResource DiscoverRowMetaSpacing}"
                                     Padding="0,0,0,40">
-                            <Border Padding="14" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="36" Height="36" CornerRadius="6" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                                        <Border Width="160" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" HorizontalAlignment="Left" />
-                                        <Border Width="300" Height="10" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.06" HorizontalAlignment="Left" />
-                                    </StackPanel>
-                                    <Border Grid.Column="2" Width="96" Height="32" CornerRadius="4" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                                </Grid>
-                            </Border>
+                            <Grid Padding="{StaticResource DiscoverSessionRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}" MinHeight="80">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DiscoverRowMetaGlyphSpacing}" VerticalAlignment="Center">
+                                    <Border Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="160" />
+                                    <Border Style="{StaticResource DiscoverSkeletonDetailStyle}" Width="300" />
+                                </StackPanel>
+                                <Border Grid.Column="2" Style="{StaticResource DiscoverSkeletonActionStyle}" />
+                            </Grid>
 
-                            <Border Padding="14" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="36" Height="36" CornerRadius="6" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                                        <Border Width="120" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" HorizontalAlignment="Left" />
-                                        <Border Width="260" Height="10" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.06" HorizontalAlignment="Left" />
-                                    </StackPanel>
-                                    <Border Grid.Column="2" Width="96" Height="32" CornerRadius="4" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                                </Grid>
-                            </Border>
+                            <Grid Padding="{StaticResource DiscoverSessionRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}" MinHeight="80">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DiscoverRowMetaGlyphSpacing}" VerticalAlignment="Center">
+                                    <Border Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="120" />
+                                    <Border Style="{StaticResource DiscoverSkeletonDetailStyle}" Width="260" />
+                                </StackPanel>
+                                <Border Grid.Column="2" Style="{StaticResource DiscoverSkeletonActionStyle}" />
+                            </Grid>
 
-                            <Border Padding="14" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="36" Height="36" CornerRadius="6" Background="{ThemeResource ButtonBackground}" Opacity="0.1" />
-                                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                                        <Border Width="180" Height="14" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.1" HorizontalAlignment="Left" />
-                                        <Border Width="220" Height="10" CornerRadius="2" Background="{ThemeResource ButtonBackground}" Opacity="0.06" HorizontalAlignment="Left" />
-                                    </StackPanel>
-                                    <Border Grid.Column="2" Width="96" Height="32" CornerRadius="4" Background="{ThemeResource ButtonBackground}" Opacity="0.1" VerticalAlignment="Center" />
-                                </Grid>
-                            </Border>
+                            <Grid Padding="{StaticResource DiscoverSessionRowPadding}" ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}" MinHeight="80">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource DiscoverSkeletonIconStyle}" />
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource DiscoverRowMetaGlyphSpacing}" VerticalAlignment="Center">
+                                    <Border Style="{StaticResource DiscoverSkeletonTitleStyle}" Width="180" />
+                                    <Border Style="{StaticResource DiscoverSkeletonDetailStyle}" Width="220" />
+                                </StackPanel>
+                                <Border Grid.Column="2" Style="{StaticResource DiscoverSkeletonActionStyle}" />
+                            </Grid>
                         </StackPanel>
 
                         <ListView
@@ -369,143 +512,132 @@
                             IsFocusEngagementEnabled="True"
                             SelectionMode="None"
                             IsItemClickEnabled="False"
-                            Padding="0,0,0,40">
+                            Padding="0,0,0,40"
+                            ItemContainerStyle="{StaticResource DiscoverSessionItemStyleCompact}">
 
-                            <ListView.ItemContainerStyle>
-                                <Style TargetType="ListViewItem">
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                    <Setter Property="Margin" Value="0,0,0,10"/>
-                                    <Setter Property="MinHeight" Value="104"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                </Style>
-                            </ListView.ItemContainerStyle>
-
+                            <!-- Layout-only row template: the container supplies the inset and corner
+                                 radius, and the default ListViewItem style supplies the state fills.
+                                 ListViewItemPresenter draws PointerOver / Focus beneath the template,
+                                 so painting card chrome here would mask them. -->
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="viewModels:DiscoverSessionItemViewModel">
-                                    <Border
-                                        AutomationProperties.Name="{x:Bind AutomationName}"
-                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Padding="14">
+                                    <Grid AutomationProperties.Name="{x:Bind AutomationName}"
+                                          ColumnSpacing="{StaticResource DiscoverRowColumnSpacing}"
+                                          RowSpacing="{StaticResource DiscoverRowTextSpacing}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                                        <Grid ColumnSpacing="12" RowSpacing="6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
+                                        <FontIcon Grid.Column="0"
+                                                  Grid.RowSpan="3"
+                                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                  Glyph="&#xE8F2;"
+                                                  FontSize="{StaticResource DiscoverRowIconGlyphSize}"
+                                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                  Width="{StaticResource DiscoverRowIconBadgeSize}"
+                                                  VerticalAlignment="Top" />
 
-                                            <Border Grid.Column="0"
-                                                    Grid.RowSpan="3"
-                                                    Width="36" Height="36"
-                                                    CornerRadius="8"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    Opacity="0.18"
-                                                    VerticalAlignment="Top">
-                                                <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                              Glyph="&#xE8F2;"
-                                                              Foreground="{ThemeResource AccentBrush}" />
-                                                </Viewbox>
-                                            </Border>
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Grid.Row="0"
+                                            Text="{x:Bind Title}"
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            TextWrapping="NoWrap"
+                                            TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock
-                                                Grid.Column="1"
-                                                Grid.Row="0"
-                                                Text="{x:Bind Title}"
-                                                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                                TextWrapping="NoWrap"
-                                                TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Grid.Row="1"
+                                            Text="{x:Bind Description}"
+                                            Style="{ThemeResource BodyTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            TextWrapping="Wrap"
+                                            MaxLines="2"
+                                            TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock
-                                                Grid.Column="1"
-                                                Grid.Row="1"
-                                                Text="{x:Bind Description}"
-                                                Style="{ThemeResource BodyTextBlockStyle}"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                TextWrapping="Wrap"
-                                                MaxLines="2"
-                                                TextTrimming="CharacterEllipsis" />
+                                        <Grid Grid.Column="1"
+                                              Grid.Row="2"
+                                              RowDefinitions="Auto,Auto,Auto"
+                                              RowSpacing="{StaticResource DiscoverRowMetaSpacing}">
+                                            <StackPanel Orientation="Horizontal"
+                                                        Spacing="{StaticResource DiscoverRowMetaGlyphSpacing}"
+                                                        Visibility="{x:Bind HasFormattedDate, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE787;" FontSize="{StaticResource DiscoverRowMetaGlyphSize}" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock
+                                                    Text="{x:Bind FormattedDate}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
 
-                                            <Grid Grid.Column="1"
-                                                  Grid.Row="2"
-                                                  RowDefinitions="Auto,Auto,Auto"
-                                                  RowSpacing="4">
-                                                <StackPanel Orientation="Horizontal"
-                                                            Spacing="6"
-                                                            Visibility="{x:Bind HasFormattedDate, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE787;" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                            <StackPanel Grid.Row="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="{StaticResource DiscoverRowMetaGlyphSpacing}"
+                                                        Visibility="{x:Bind HasSessionCwd, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8B7;" FontSize="{StaticResource DiscoverRowMetaGlyphSize}" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock
+                                                    Text="{x:Bind SessionCwdDisplayText, Mode=OneTime}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+
+                                            <Grid Grid.Row="2"
+                                                  ColumnDefinitions="Auto,Auto,*"
+                                                  ColumnSpacing="{StaticResource DiscoverRowMetaGlyphSpacing}">
+                                                <!-- Affinity badge. The one deliberate piece of chrome in this
+                                                     template: it is a distinct inline surface inside the row, not
+                                                     the row itself, so it does not compete with container states. -->
+                                                <Border
+                                                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{ThemeResource ControlCornerRadius}"
+                                                    Padding="{StaticResource DiscoverProfileRowPadding}">
                                                     <TextBlock
-                                                        Text="{x:Bind FormattedDate}"
+                                                        Text="{x:Bind ProjectAffinityBadgeText, Mode=OneTime}"
                                                         Style="{ThemeResource CaptionTextBlockStyle}"
-                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                                </StackPanel>
-
-                                                <StackPanel Grid.Row="1"
-                                                            Orientation="Horizontal"
-                                                            Spacing="6"
-                                                            Visibility="{x:Bind HasSessionCwd, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE8B7;" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                                    <TextBlock
-                                                        Text="{x:Bind SessionCwdDisplayText, Mode=OneTime}"
-                                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        MaxWidth="280"
                                                         TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-
-                                                <Grid Grid.Row="2"
-                                                      ColumnDefinitions="Auto,Auto,*"
-                                                      ColumnSpacing="8">
-                                                    <Border
-                                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4"
-                                                        Padding="6,2">
-                                                        <TextBlock
-                                                            Text="{x:Bind ProjectAffinityBadgeText, Mode=OneTime}"
-                                                            Style="{ThemeResource CaptionTextBlockStyle}"
-                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                            MaxWidth="280"
-                                                            TextTrimming="CharacterEllipsis" />
-                                                    </Border>
-                                                    <FontIcon
-                                                        Grid.Column="1"
-                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                        Glyph="&#xE7BA;"
-                                                        FontSize="12"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        VerticalAlignment="Center"
-                                                        Visibility="{x:Bind NeedsUserAttention, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                    <TextBlock
-                                                        Grid.Column="2"
-                                                        Text="{x:Bind AffinityStatusText, Mode=OneTime}"
-                                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        TextWrapping="WrapWholeWords"
-                                                        MaxLines="2" />
-                                                </Grid>
+                                                </Border>
+                                                <FontIcon
+                                                    Grid.Column="1"
+                                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                    Glyph="&#xE7BA;"
+                                                    FontSize="{StaticResource DiscoverRowMetaGlyphSize}"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind NeedsUserAttention, Mode=OneTime, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    Text="{x:Bind AffinityStatusText, Mode=OneTime}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    TextWrapping="WrapWholeWords"
+                                                    MaxLines="2" />
                                             </Grid>
-
-                                            <Button
-                                                x:Name="ActionBtn"
-                                                AutomationProperties.AutomationId="DiscoverSessions.ImportButton"
-                                                Grid.Column="2"
-                                                Grid.RowSpan="3"
-                                                x:Uid="DiscoverSessionsImportButton"
-                                                Style="{StaticResource AccentButtonStyle}"
-                                                VerticalAlignment="Center"
-                                                Command="{x:Bind LoadSessionCommand, Mode=OneTime}"
-                                                CommandParameter="{x:Bind}" />
                                         </Grid>
-                                    </Border>
+
+                                        <!-- Nested UI: secondary action sits at the right of the row, per the
+                                             WinUI nested-UI placement guidance. -->
+                                        <Button
+                                            x:Name="ActionBtn"
+                                            AutomationProperties.AutomationId="DiscoverSessions.ImportButton"
+                                            Grid.Column="2"
+                                            Grid.RowSpan="3"
+                                            x:Uid="DiscoverSessionsImportButton"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            VerticalAlignment="Center"
+                                            Command="{x:Bind LoadSessionCommand, Mode=OneTime}"
+                                            CommandParameter="{x:Bind}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>

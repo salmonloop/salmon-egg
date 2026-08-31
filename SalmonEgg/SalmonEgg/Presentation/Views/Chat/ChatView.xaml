@@ -50,15 +50,62 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <!-- Short windows: densify session-header chrome and transcript list padding so
+                 short heights reclaim vertical budget. Comfortable restores prior density at
+                 MinWindowHeight=760 (same threshold as Start/Diagnostics). Theme via
+                 ThemeResource only. -->
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="SessionHeaderHeightStates">
+                    <VisualState x:Name="SessionHeaderHeightCompact">
+                        <VisualState.Setters>
+                            <Setter Target="SessionHeaderChrome.Padding" Value="12,6" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="SessionHeaderHeightComfortable">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowHeight="760" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="SessionHeaderChrome.Padding" Value="16,8" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="TranscriptHeightStates">
+                    <VisualState x:Name="TranscriptHeightCompact">
+                        <VisualState.Setters>
+                            <Setter Target="MessagesList.Padding" Value="12" />
+                            <Setter Target="TurnStatusStrip.Margin" Value="12,0,12,4" />
+                            <Setter Target="SessionActivationFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="ConversationOperationFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="TurnFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="AskUserHost.Margin" Value="12,0,12,8" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="TranscriptHeightComfortable">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowHeight="760" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="MessagesList.Padding" Value="20" />
+                            <Setter Target="TurnStatusStrip.Margin" Value="24,0,24,8" />
+                            <Setter Target="SessionActivationFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="ConversationOperationFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="TurnFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="AskUserHost.Margin" Value="24,0,24,12" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
             <!-- 顶部状态条 -->
-            <Border Grid.Row="0"
+            <Border x:Name="SessionHeaderChrome"
+                    Grid.Row="0"
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1"
-                    Padding="16,8"
+                    Padding="12,6"
                     Visibility="{x:Bind ViewModel.ShouldShowSessionHeader, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Grid x:Name="SessionHeaderRoot"
-                      >
+                <Grid x:Name="SessionHeaderRoot">
                     <VisualStateManager.VisualStateGroups>
                         <VisualStateGroup x:Name="SessionHeaderWidthStates">
                             <VisualState x:Name="SessionHeaderNarrow">
@@ -128,6 +175,7 @@
                               ColumnDefinitions="Auto,*"
                               ColumnSpacing="12">
                             <FontIcon Grid.Column="0"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       Glyph="&#xE8BD;"
                                       FontSize="16"
                                       Foreground="{ThemeResource AccentBrush}"
@@ -157,7 +205,7 @@
                                    ToolTipService.ToolTip="{x:Bind ViewModel.CurrentAgentDisplayText, Mode=OneWay}"
                                    FontSize="12"
                                    FontWeight="SemiBold"
-                                   Opacity="0.72"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
@@ -179,7 +227,7 @@
                                   AutomationProperties.AutomationId="ChatView.MessagesList"
                                   ItemsSource="{x:Bind MessagesItemsSource, Mode=OneWay}"
                                   ItemTemplateSelector="{StaticResource MessageTemplateSelector}"
-                                  Padding="20"
+                                  Padding="12"
                                   SelectionMode="None"
                                   HorizontalAlignment="Stretch"
                                   MinWidth="0"
@@ -194,6 +242,9 @@
                                 </ItemsPanelTemplate>
                             </ListView.ItemsPanel>
                             <ListView.ItemContainerStyle>
+                                <!-- Deliberately not chained to AppListRowBaseStyle: a transcript is not a row picker.
+                                     SelectionMode is None and the bubbles own their bounds, so row chrome would only
+                                     paint hover fills behind chrome the bubble already draws. -->
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                     <Setter Property="Padding" Value="0" />
@@ -209,15 +260,20 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.IsTurnStatusVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="24,0,24,8">
+                        <StackPanel x:Name="TurnStatusStrip"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    Margin="12,0,12,4">
                             <ProgressRing IsActive="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay}"
                                           Width="16" Height="16"
                                           Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <FontIcon Glyph="&#xE783;" FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE783;"
+                                      FontSize="14"
+                                      Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                       Visibility="{x:Bind ViewModel.IsTurnStatusFaulted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{x:Bind ViewModel.TurnStatusText, Mode=OneWay}"
                                        FontSize="12"
-                                       Opacity="0.7"
                                        VerticalAlignment="Center"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
@@ -225,31 +281,38 @@
                 </controls:ResponsiveContentHost>
 
                 <controls:ResponsiveContentHost Grid.Row="2"
-                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
-                                                Visibility="{x:Bind ViewModel.HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border AutomationProperties.AutomationId="ChatView.SessionActivationFailureCallout"
-                                Margin="24,0,24,12"
-                                Padding="12"
-                                CornerRadius="6"
-                                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
-                                BorderThickness="1">
-                            <Grid ColumnDefinitions="Auto,*"
-                                  ColumnSpacing="10">
-                                <FontIcon Grid.Column="0"
-                                          Glyph="&#xEA39;"
-                                          FontSize="14"
-                                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                          VerticalAlignment="Top"
-                                          Margin="0,2,0,0" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                        <StackPanel>
+                            <Border x:Name="SessionActivationFailureHost"
+                                    Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Margin="12,0,12,8"
+                                    Padding="12"
+                                    CornerRadius="6"
+                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                                    BorderThickness="1">
+                                <TextBlock AutomationProperties.AutomationId="ChatView.SessionActivationFailureCallout"
+                                           Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
                                            TextWrapping="WrapWholeWords"
                                            FontSize="12"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </Grid>
-                        </Border>
+                            </Border>
+                            <Border x:Name="ConversationOperationFailureHost"
+                                    Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Margin="12,0,12,8"
+                                    Padding="12"
+                                    CornerRadius="6"
+                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                                    BorderThickness="1">
+                                <TextBlock AutomationProperties.AutomationId="ChatView.ConversationOperationFailureCallout"
+                                           Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
+                                           TextWrapping="WrapWholeWords"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Border>
+                        </StackPanel>
                     </controls:ResponsiveContentHost.Child>
                 </controls:ResponsiveContentHost>
 
@@ -257,8 +320,9 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.IsTurnFailureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border AutomationProperties.AutomationId="ChatView.TurnFailureCallout"
-                                Margin="24,0,24,12"
+                        <Border x:Name="TurnFailureHost"
+                                AutomationProperties.AutomationId="ChatView.TurnFailureCallout"
+                                Margin="12,0,12,8"
                                 Padding="12"
                                 CornerRadius="6"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -267,6 +331,7 @@
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                                   ColumnSpacing="10">
                                 <FontIcon Grid.Column="0"
+                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           Glyph="&#xEA39;"
                                           FontSize="14"
                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
@@ -296,6 +361,7 @@
                                         MinHeight="32"
                                         VerticalAlignment="Top">
                                     <FontIcon Glyph="&#xE8C8;"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="12" />
                                 </Button>
                                 <Button Grid.Column="3"
@@ -308,6 +374,7 @@
                                         MinHeight="32"
                                         VerticalAlignment="Top">
                                     <FontIcon Glyph="&#xE711;"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="12" />
                                 </Button>
                             </Grid>
@@ -319,7 +386,8 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.HasPendingAskUserRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border Margin="24,0,24,12"
+                        <Border x:Name="AskUserHost"
+                                Margin="12,0,12,8"
                                 Padding="16"
                                 CornerRadius="12"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -344,7 +412,7 @@
                                                     <TextBlock Text="{x:Bind Header}"
                                                                FontWeight="SemiBold"
                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                                    <TextBlock Text="{x:Bind SelectionHint}"
+                                                    <TextBlock Text="{x:Bind SelectionHint, Mode=OneWay}"
                                                                FontSize="12"
                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                 </StackPanel>

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using Xunit.Sdk;
 
@@ -65,6 +66,11 @@ public sealed class DiagnosticsSettingsSmokeTests
             $"Gamepad diagnostics stop button did not become enabled after starting native-device monitoring.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         var gamepad = session.CreateConfiguredGamepadInput();
+        var nativeGamepad = gamepad as NativeDeviceGamepadTestInput
+            ?? throw new InvalidOperationException(
+                "Native-device Diagnostics smoke requires NativeDeviceGamepadTestInput; "
+                + "set SALMONEGG_GUI_GAMEPAD_INPUT_BACKEND=native-device.");
+        var expectedFamily = nativeGamepad.ActiveFamily;
         var standardCount = session.FindByAutomationId("Diagnostics.GamepadStandardCount", TimeSpan.FromSeconds(5));
 
         Assert.True(
@@ -75,6 +81,24 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}StandardCount={ReadElementText(standardCount)}"
             + $"{Environment.NewLine}RawCount={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawCount", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Multi-brand evidence: Diagnostics must project the family token for the active
+        // HIDMaestro profile (Xbox default; DualSense/Switch when SALMONEGG_HIDMAESTRO_PROFILE_ID is set).
+        Assert.True(
+            session.WaitUntil(
+                () =>
+                {
+                    var standard = ReadElementText(session.FindByAutomationId("Diagnostics.GamepadStandardDetails", TimeSpan.FromSeconds(2)));
+                    var raw = ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawDetails", TimeSpan.FromSeconds(2)));
+                    var familyToken = "family " + expectedFamily;
+                    return standard.Contains(familyToken, StringComparison.Ordinal)
+                        || raw.Contains(familyToken, StringComparison.Ordinal);
+                },
+                TimeSpan.FromSeconds(5)),
+            $"Native-device Diagnostics did not project family '{expectedFamily}' for HIDMaestro profile '{nativeGamepad.ActiveProfileId}'."
+            + $"{Environment.NewLine}StandardDetails={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadStandardDetails", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}RawDetails={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawDetails", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         gamepad.PressDown();
@@ -88,6 +112,154 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Semantic face presses (activate/back/west/voice) resolve physical buttons from the
+        // active HIDMaestro profile family so DualSense / Switch Pro re-runs stay correct.
+        // Default xbox-360-wired still maps A/B/X/Y. Record Activate / Back / west no-op / Voice.
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressActivate,
+            activeInputs,
+            expectedFragment: "Activate",
+            label: "Activate (semantic face)",
+            appData);
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressBack,
+            activeInputs,
+            expectedFragment: "Back",
+            label: "Back (semantic face)",
+            appData);
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressShortcutVoiceToggle,
+            activeInputs,
+            expectedFragment: "ToggleVoiceInput",
+            label: "Voice toggle (semantic face)",
+            appData);
+
+        // Sticky west face replaces any prior face hold. After Activate, west must clear
+        // Activate and must not introduce Back / ToggleVoiceInput / Move* semantics.
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressActivate,
+            activeInputs,
+            expectedFragment: "Activate",
+            label: "Activate before west-face gate",
+            appData);
+        gamepad.PressWestFaceButton();
+        Assert.True(
+            session.WaitUntil(
+                () =>
+                {
+                    var text = ReadElementText(activeInputs);
+                    return !text.Contains("Activate", StringComparison.Ordinal)
+                        && !text.Contains("Back", StringComparison.Ordinal)
+                        && !text.Contains("ToggleVoiceInput", StringComparison.Ordinal)
+                        && !text.Contains("Move", StringComparison.Ordinal);
+                },
+                TimeSpan.FromSeconds(5)),
+            $"Native-device west face button did not clear Activate or projected an unexpected semantic."
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Analog triggers on the Xbox 360 HID profile project to PageUp / PageDown
+        // context intents (left >= 0.5 -> PageUp, right >= 0.5 -> PageDown) and
+        // must also surface unit LT/RT values on the Diagnostics reading line.
+        var thumbstick = session.FindByAutomationId("Diagnostics.GamepadThumbstick", TimeSpan.FromSeconds(5));
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressLeftTrigger,
+            activeInputs,
+            expectedFragment: "PageUp",
+            label: "PageUp (LT)",
+            appData);
+        Assert.True(
+            session.WaitUntil(
+                () => TryReadTriggerValue(ReadElementText(thumbstick), "LT") >= 0.5,
+                TimeSpan.FromSeconds(5)),
+            $"Native-device LT press did not surface LT >= 0.5 on Diagnostics reading text."
+            + $"{Environment.NewLine}Thumbstick={ReadElementText(thumbstick)}"
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressRightTrigger,
+            activeInputs,
+            expectedFragment: "PageDown",
+            label: "PageDown (RT)",
+            appData);
+        Assert.True(
+            session.WaitUntil(
+                () => TryReadTriggerValue(ReadElementText(thumbstick), "RT") >= 0.5,
+                TimeSpan.FromSeconds(5)),
+            $"Native-device RT press did not surface RT >= 0.5 on Diagnostics reading text."
+            + $"{Environment.NewLine}Thumbstick={ReadElementText(thumbstick)}"
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    private static void AssertActiveInputAfterPress(
+        WindowsGuiAppSession session,
+        Action press,
+        AutomationElement activeInputs,
+        string expectedFragment,
+        string label,
+        GuiAppDataScope appData)
+    {
+        press();
+        Assert.True(
+            session.WaitUntil(
+                () => ReadElementText(activeInputs).Contains(expectedFragment, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5)),
+            $"Native-device bridge did not project {label} into diagnostics active-intents text."
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+
+    private static double TryReadTriggerValue(string readingText, string label)
+    {
+        if (string.IsNullOrEmpty(readingText) || string.IsNullOrEmpty(label))
+        {
+            return double.NaN;
+        }
+
+        var marker = label + " ";
+        var index = readingText.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return double.NaN;
+        }
+
+        var start = index + marker.Length;
+        var end = start;
+        while (end < readingText.Length)
+        {
+            var ch = readingText[end];
+            if (char.IsDigit(ch) || ch is '.' or '-' or '+')
+            {
+                end++;
+                continue;
+            }
+
+            break;
+        }
+
+        if (end <= start)
+        {
+            return double.NaN;
+        }
+
+        return double.TryParse(
+            readingText.AsSpan(start, end - start),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : double.NaN;
     }
 
     private static void NavigateToDiagnosticsSettings(WindowsGuiAppSession session)

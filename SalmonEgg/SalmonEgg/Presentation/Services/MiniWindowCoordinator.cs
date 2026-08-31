@@ -81,9 +81,7 @@ public sealed class MiniWindowCoordinator : IMiniWindowCoordinator
                 }
 #endif
 
-#if HAS_UNO
-                window.SetWindowIcon();
-#endif
+                WindowShellIdentity.Apply(window);
 
                 window.Activate();
                 _miniWindow = window;

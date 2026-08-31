@@ -1,5 +1,6 @@
-using Microsoft.UI.Windowing;
+using System.Threading.Tasks;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using SalmonEgg.Platforms.Windows;
 using WinUIKeyEventArgs = Microsoft.UI.Input.KeyEventArgs;
 
@@ -11,18 +12,13 @@ public sealed partial class MainPage
 #if DEBUG
     private InputKeyboardSource? _debugKeyboardSource;
 #endif
-    private bool _allowClose;
 
     partial void InitializeTray()
     {
+        // 只管托盘。窗口关闭路径已上提到共享的 MainPage.Shutdown.cs——Uno 的三个 Skia host
+        // 同样 raise AppWindow.Closing 并尊重 Cancel，留在这里会让非 Windows 平台永远没有
+        // teardown 时机（issue #126）。
         UpdateTrayState();
-
-        var window = App.MainWindowInstance;
-        if (window?.AppWindow != null)
-        {
-            window.AppWindow.Closing -= OnAppWindowClosing;
-            window.AppWindow.Closing += OnAppWindowClosing;
-        }
     }
 
     partial void UpdateTrayState()
@@ -47,6 +43,11 @@ public sealed partial class MainPage
     {
         _trayIcon?.Dispose();
         _trayIcon = null;
+    }
+
+    partial void HideMainWindowToTray()
+    {
+        App.MainWindowInstance?.AppWindow?.Hide();
     }
 
     private void EnsureTrayIcon()
@@ -83,32 +84,19 @@ public sealed partial class MainPage
         {
             window.AppWindow?.Show();
         }
-        catch
+        catch (Exception ex)
         {
+            // Restoring from tray is best-effort, but the failure must stay diagnosable.
+            _logger.LogWarning(ex, "Failed to show main window from tray.");
         }
     }
 
     private void ExitFromTray()
     {
-        _allowClose = true;
         DisposePlatformTray();
-        App.MainWindowInstance?.Close();
-    }
-
-    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
-    {
-        if (_allowClose)
-        {
-            return;
-        }
-
-        if (!Preferences.MinimizeToTray)
-        {
-            return;
-        }
-
-        args.Cancel = true;
-        sender.Hide();
+        // Tray exit is a second process boundary and must persist state like the window close path.
+        // The shutdown workflow is idempotent, so both paths can drive it.
+        _ = FlushRuntimeThenCloseAsync();
     }
 
     partial void AttachDebugKeyLogging()

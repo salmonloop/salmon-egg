@@ -11,9 +11,9 @@ const browser = await chromium.launch({ headless: true });
 
 const expectedSuggestions = [
   {
-    automationId: "StartView.Suggestion.AnalyzeCodebase",
-    title: ["分析代码库", "Analyze codebase"],
-    subtitle: ["深入理解项目架构与逻辑", "Understand the project architecture and logic"]
+    automationId: "StartView.Suggestion.ReportGuidance",
+    title: ["举报 AI 内容", "Report AI content"],
+    subtitle: ["右键消息或在“关于”中举报", "Right-click a message or use About"]
   },
   {
     automationId: "StartView.Suggestion.RecommendTasks",
@@ -133,6 +133,16 @@ try {
     if (failures.length > 0) {
       throw new Error(`Start suggestion visibility failed:\n${failures.join("\n")}`);
     }
+
+    await page.locator('[aria-label="StartView.Suggestion.ReportGuidance"]').click({ timeout: 10_000 });
+    await page.waitForFunction(
+      () => {
+        const bodyText = (document.body?.innerText ?? "").replace(/\u200B/g, " ");
+        return bodyText.includes("这张提示卡本身只是说明，不会发送举报")
+          || bodyText.includes("This tip card only explains the path and cannot send a report");
+      },
+      null,
+      { timeout: 10_000 });
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
     console.log("WASM start visibility smoke passed");

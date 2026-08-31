@@ -28,6 +28,7 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Discover;
 
@@ -56,15 +57,14 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-needs-mapping",
                                 Title = "Needs Mapping",
-                                Description = "No local project root match",
                                 UpdatedAt = "2026-03-28T10:00:00+08:00",
-                                Cwd = "/remote/worktree/service-a"
+                                Cwd = "/remote/worktree/service-a",
+                                AdditionalDirectories = ["/remote/shared/first", "/remote/shared/second"]
                             },
                             new AgentSessionInfo
                             {
                                 SessionId = "remote-unclassified",
                                 Title = "Unclassified",
-                                Description = "No cwd from remote metadata",
                                 UpdatedAt = "2026-03-28T10:05:00+08:00",
                                 Cwd = string.Empty
                             }
@@ -87,6 +87,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal(ProjectAffinitySource.NeedsMapping, needsMappingRow.AffinitySource);
             Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
             Assert.True(needsMappingRow.NeedsUserAttention);
+            Assert.Equal(["/remote/shared/first", "/remote/shared/second"], needsMappingRow.AdditionalDirectories);
             Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
 
             var unclassifiedRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-unclassified");
@@ -94,6 +95,66 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal("Unclassified", unclassifiedRow.ProjectAffinityBadgeText);
             Assert.False(unclassifiedRow.NeedsUserAttention);
             Assert.Contains("ACP working path", unclassifiedRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshSessionsAsync_WhenOverrideMapsToUnclassified_ProjectsLocalizedBadge()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-override-unclassified",
+                                Title = "Overridden",
+                                UpdatedAt = "2026-03-28T10:00:00+08:00",
+                                Cwd = "/remote/worktree/service-a"
+                            }
+                        }
+                    }
+                }
+            };
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set("zh-Hans", "Discover_AffinityUnclassified", "未归类");
+            var resolver = new StubProjectAffinityResolver(new ProjectAffinityResolution(
+                EffectiveProjectId: NavigationProjectIds.Unclassified,
+                Source: ProjectAffinitySource.Override,
+                MatchedProjectId: null,
+                OverrideProjectId: NavigationProjectIds.Unclassified,
+                RemoteCwd: "/remote/worktree/service-a",
+                LocalResolvedPath: null,
+                NeedsUserAttention: false,
+                Reason: "Override"));
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new StubNavigationCoordinator(),
+                projectAffinityResolver: resolver,
+                localizer: localizer);
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            var row = Assert.Single(viewModel.AgentSessions);
+            Assert.Equal(ProjectAffinitySource.Override, row.AffinitySource);
+            Assert.Equal("未归类", row.ProjectAffinityBadgeText);
+            Assert.DoesNotContain("__unclassified__", row.ProjectAffinityBadgeText, StringComparison.Ordinal);
         }
         finally
         {
@@ -159,7 +220,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 Cwd = @"C:\repo\remote"
                             }
                         }
@@ -217,7 +277,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             Assert.Equal(0, listCalls);
             Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
-            Assert.Equal("无法获取会话列表: 当前 Agent 未声明 session/list 能力。", viewModel.ErrorMessage);
+            Assert.Equal("Unable to fetch sessions: The current agent does not advertise session/list capability.", viewModel.ErrorMessage);
         }
         finally
         {
@@ -281,7 +341,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -298,9 +357,18 @@ public sealed class DiscoverSessionsViewModelTests
                 connectionFacade,
                 navigationCoordinator);
 
-            await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+            var sessionItem = CreateSessionItem(
+                [@"C:\shared\first", @"D:\shared\second"]);
+            Assert.Equal(
+                [@"C:\shared\first", @"D:\shared\second"],
+                sessionItem.AdditionalDirectories);
+
+            await viewModel.LoadSessionCommand.ExecuteAsync(sessionItem);
 
             Assert.Equal(("remote-session-1", @"C:\repo\remote", "profile-1", "Remote Session"), navigationCoordinator.LastDiscoverOpenRequest);
+            Assert.Equal(
+                [@"C:\shared\first", @"D:\shared\second"],
+                navigationCoordinator.LastDiscoverAdditionalDirectories);
             Assert.Null(viewModel.ErrorMessage);
         }
         finally
@@ -343,6 +411,27 @@ public sealed class DiscoverSessionsViewModelTests
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
+    }
+
+    [Fact]
+    public void LoadSessionCommand_WhenSessionCwdIsEmpty_CannotExecute()
+    {
+        var profile = CreateProfile();
+        var profilesViewModel = CreateProfilesViewModel(profile);
+        using var viewModel = CreateViewModel(
+            profilesViewModel,
+            new FakeDiscoverSessionsConnectionFacade(),
+            new StubNavigationCoordinator());
+
+        var cwdlessItem = new DiscoverSessionItemViewModel(
+            "remote-no-cwd",
+            "No Working Directory",
+            "Invalid session",
+            new DateTime(2026, 3, 27, 12, 0, 0, DateTimeKind.Local),
+            viewModel.LoadSessionCommand,
+            sessionCwd: null);
+
+        Assert.False(viewModel.LoadSessionCommand.CanExecute(cwdlessItem));
     }
 
     [Fact]
@@ -411,7 +500,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -460,7 +548,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -470,7 +557,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             var navigationCoordinator = new StubNavigationCoordinator
             {
-                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。")
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, NavigationCoordinator.LoadSessionCapabilityMissingMessage)
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
@@ -480,7 +567,81 @@ public sealed class DiscoverSessionsViewModelTests
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
             Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
-            Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", viewModel.ErrorMessage);
+            Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, viewModel.ErrorMessage);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsMappedNavigationCoordinatorOpenError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new CountingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                }
+            };
+            var navigationCoordinator = new StubNavigationCoordinator
+            {
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(
+                    false,
+                    null,
+                    NavigationCoordinator.LoadSessionCapabilityMissingMessage)
+            };
+
+            var currentLanguageTag = "zh-Hans";
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set(
+                "zh-Hans",
+                "Discover_ErrorLoadSessionCapabilityMissing",
+                "zh-cap-missing");
+            localizer.Set(
+                "en-US",
+                "Discover_ErrorLoadSessionCapabilityMissing",
+                "en-cap-missing");
+            var languageService = new Mock<IAppLanguageService>();
+            languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                navigationCoordinator,
+                localizer: localizer,
+                languageService: languageService.Object);
+
+            await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+
+            Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
+            Assert.Equal("zh-cap-missing", viewModel.ErrorMessage);
+
+            currentLanguageTag = "en-US";
+            localizer.SetLanguageTag("en-US");
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            Assert.Equal("en-cap-missing", viewModel.ErrorMessage);
         }
         finally
         {
@@ -552,7 +713,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             Assert.True(viewModel.IsLoading);
-            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
+            Assert.Equal("Importing session...", viewModel.LoadingStatus);
 
             allowImportCompletion.TrySetResult(null);
             await loadTask;
@@ -587,7 +748,6 @@ public sealed class DiscoverSessionsViewModelTests
                         {
                             SessionId = "remote-session-1",
                             Title = "Remote Session",
-                            Description = "Imported from ACP",
                             UpdatedAt = "2026-03-27T12:00:00+08:00",
                             Cwd = @"C:\repo\remote"
                         }
@@ -625,7 +785,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.False(viewModel.CanRefreshSessions);
             Assert.False(viewModel.AreSessionActionsEnabled);
             Assert.False(viewModel.LoadSessionCommand.CanExecute(CreateSessionItem()));
-            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
+            Assert.Equal("Importing session...", viewModel.LoadingStatus);
 
             allowActivationCompletion.TrySetResult(null);
             await loadTask;
@@ -657,6 +817,94 @@ public sealed class DiscoverSessionsViewModelTests
 
         viewModel.SelectedProfile = null;
         Assert.False(viewModel.LoadSessionCommand.CanExecute(item));
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsAffinityBadgeAndUntitledTitle()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-untitled",
+                                Title = "   ",
+                                UpdatedAt = "2026-03-28T10:00:00+08:00",
+                                Cwd = string.Empty
+                            },
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-needs-mapping",
+                                Title = "Needs Mapping",
+                                UpdatedAt = "2026-03-28T10:05:00+08:00",
+                                Cwd = "/remote/worktree/service-a"
+                            }
+                        }
+                    }
+                }
+            };
+
+            var currentLanguageTag = "zh-Hans";
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set("zh-Hans", "Discover_UntitledSession", "未命名会话");
+            localizer.Set("zh-Hans", "Discover_NoDescription", "暂无描述");
+            localizer.Set("zh-Hans", "Discover_AffinityUnclassified", "未归类");
+            localizer.Set("zh-Hans", "Discover_AffinityNeedsMapping", "需要映射");
+            localizer.Set("zh-Hans", "Discover_AffinityStatusMissingCwd", "远程元数据没有可用的 ACP 工作路径。");
+            localizer.Set("zh-Hans", "Discover_AffinityStatusNeedsMapping", "远程 ACP 工作路径需要分配项目。");
+            localizer.Set("en-US", "Discover_UntitledSession", "Untitled session");
+            localizer.Set("en-US", "Discover_NoDescription", "No description");
+            localizer.Set("en-US", "Discover_AffinityUnclassified", "Unclassified");
+            localizer.Set("en-US", "Discover_AffinityNeedsMapping", "Needs mapping");
+            localizer.Set("en-US", "Discover_AffinityStatusMissingCwd", "Remote metadata has no usable ACP working path.");
+            localizer.Set("en-US", "Discover_AffinityStatusNeedsMapping", "Remote ACP working path needs a project assignment.");
+            var languageService = new Mock<IAppLanguageService>();
+            languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new StubNavigationCoordinator(),
+                localizer: localizer,
+                languageService: languageService.Object);
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            var untitledRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-untitled");
+            var needsMappingRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-needs-mapping");
+            Assert.Equal("未命名会话", untitledRow.Title);
+            Assert.Equal("暂无描述", untitledRow.Description);
+            Assert.Equal("未归类", untitledRow.ProjectAffinityBadgeText);
+            Assert.Equal("需要映射", needsMappingRow.ProjectAffinityBadgeText);
+
+            currentLanguageTag = "en-US";
+            localizer.SetLanguageTag("en-US");
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            untitledRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-untitled");
+            needsMappingRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-needs-mapping");
+            Assert.Equal("Untitled session", untitledRow.Title);
+            Assert.Equal("No description", untitledRow.Description);
+            Assert.Equal("Unclassified", untitledRow.ProjectAffinityBadgeText);
+            Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
+            Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
     }
 
     [Fact]
@@ -1037,7 +1285,10 @@ public sealed class DiscoverSessionsViewModelTests
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
         INavigationCoordinator navigationCoordinator,
-        IShellLayoutStore? shellLayoutStore = null)
+        IShellLayoutStore? shellLayoutStore = null,
+        IProjectAffinityResolver? projectAffinityResolver = null,
+        Microsoft.Extensions.Localization.IStringLocalizer<SalmonEgg.Presentation.Core.Resources.CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         var projectPreferences = new NavigationProjectPreferencesAdapter(CreatePreferences());
         var uiDispatcher = SynchronizationContext.Current as IUiDispatcher ?? new ImmediateUiDispatcher();
@@ -1048,7 +1299,10 @@ public sealed class DiscoverSessionsViewModelTests
             profilesViewModel,
             connectionFacade,
             uiDispatcher,
-            shellLayoutStore);
+            shellLayoutStore,
+            projectAffinityResolver,
+            localizer,
+            languageService);
     }
 
     private static ShellLayoutStore CreateShellLayoutStore(ShellLayoutState initialState)
@@ -1107,8 +1361,11 @@ public sealed class DiscoverSessionsViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static ServerConfiguration CreateProfile()
@@ -1120,14 +1377,16 @@ public sealed class DiscoverSessionsViewModelTests
             StdioCommand = "agent.exe"
         };
 
-    private static DiscoverSessionItemViewModel CreateSessionItem()
+    private static DiscoverSessionItemViewModel CreateSessionItem(
+        IReadOnlyList<string>? additionalDirectories = null)
         => new(
             "remote-session-1",
             "Remote Session",
             "Imported from ACP",
             new DateTime(2026, 3, 27, 12, 0, 0, DateTimeKind.Local),
             new AsyncRelayCommand<DiscoverSessionItemViewModel?>(_ => Task.CompletedTask),
-            @"C:\repo\remote");
+            @"C:\repo\remote",
+            additionalDirectories: additionalDirectories);
 
     private static void SetSelectedProfileWithoutNotification(
         AcpProfilesViewModel profilesViewModel,
@@ -1320,6 +1579,13 @@ public sealed class DiscoverSessionsViewModelTests
             IsConnected = true;
         }
 
+        public ValueTask DisposeAsync()
+        {
+            IsConnected = false;
+            CurrentChatService = null;
+            return ValueTask.CompletedTask;
+        }
+
         private void SetProperty<T>(ref T field, T value, string propertyName)
         {
             if (EqualityComparer<T>.Default.Equals(field, value))
@@ -1340,13 +1606,14 @@ public sealed class DiscoverSessionsViewModelTests
 
         public DiscoverRemoteSessionOpenResult DiscoverOpenResult { get; set; } = new(true, "local-session", null);
         public (string RemoteSessionId, string? RemoteSessionCwd, string? ProfileId, string? RemoteSessionTitle)? LastDiscoverOpenRequest { get; private set; }
+        public IReadOnlyList<string>? LastDiscoverAdditionalDirectories { get; private set; }
         public Func<Task<DiscoverRemoteSessionOpenResult>>? DiscoverOpenAsync { get; set; }
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
         {
@@ -1362,6 +1629,7 @@ public sealed class DiscoverSessionsViewModelTests
                 request.RemoteSessionCwd,
                 request.ProfileId,
                 request.RemoteSessionTitle);
+            LastDiscoverAdditionalDirectories = request.RemoteSessionAdditionalDirectories;
             return DiscoverOpenAsync is null
                 ? Task.FromResult(DiscoverOpenResult)
                 : DiscoverOpenAsync();
@@ -1384,9 +1652,9 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => _activation();
 
@@ -1416,9 +1684,9 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
         {
@@ -1444,8 +1712,24 @@ public sealed class DiscoverSessionsViewModelTests
 
     }
 
+    private sealed class StubProjectAffinityResolver : IProjectAffinityResolver
+    {
+        private readonly ProjectAffinityResolution _resolution;
+
+        public StubProjectAffinityResolver(ProjectAffinityResolution resolution)
+        {
+            _resolution = resolution;
+        }
+
+        public ProjectAffinityResolution Resolve(ProjectAffinityRequest request) => _resolution;
+    }
+
     private sealed class FakeChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId => null;
 
         public bool IsInitialized => true;
@@ -1554,7 +1838,7 @@ public sealed class DiscoverSessionsViewModelTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

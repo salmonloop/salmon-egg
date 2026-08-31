@@ -37,7 +37,7 @@ namespace SalmonEgg.Application.Validators
                     .WithMessage("Stdio transport requires a command or launcher");
             });
 
-            When(x => x.Transport == TransportType.WebSocket || x.Transport == TransportType.HttpSse, () =>
+            When(x => x.Transport == TransportType.WebSocket || x.Transport == TransportType.StreamableHttp, () =>
             {
                 RuleFor(x => x.ServerUrl)
                     .NotEmpty()

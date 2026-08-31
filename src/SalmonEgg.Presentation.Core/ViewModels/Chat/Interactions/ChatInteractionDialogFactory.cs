@@ -25,7 +25,7 @@ public static class ChatInteractionDialogFactory
                 OptionId = opt.OptionId,
                 Name = opt.Name,
                 Kind = opt.Kind,
-                Description = opt.Description ?? string.Empty
+                Description = string.Empty
             })
             .ToArray();
 

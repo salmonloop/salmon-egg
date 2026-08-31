@@ -1,25 +1,90 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <IsPackable>true</IsPackable>
+
+    <!-- SDK hard gates: AOT/trim safety + zero-warning builds. Protocol serialization is
+         source-generated (AcpJsonContext); polymorphic converters use GetTypeInfo. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- The package version comes from the acp-sdk-v* tag namespace via MinVer, separate from the
+         v* tags that drive the GUI and CLI releases. Baseline validation (PackageValidationBaselineVersion)
+         is wired in the AcpBaselineRequired target below, which runs after MinVer because "$(Version)"
+         is only meaningful once MinVer has derived it. -->
+    <MinVerTagPrefix>acp-sdk-v</MinVerTagPrefix>
+    <AcpPackageFirstReleasedVersion>1.0.0</AcpPackageFirstReleasedVersion>
+
     <PackageId>SalmonEgg.Acp</PackageId>
     <Title>SalmonEgg ACP SDK</Title>
-    <Description>ACP protocol contracts and SDK primitives used by SalmonEgg.</Description>
+    <Description>Agent Client Protocol (ACP) contracts and client primitives for .NET.</Description>
     <Authors>SalmonEgg</Authors>
+    <Company>SalmonEgg</Company>
+    <Copyright>Copyright (c) 2026 SalmonEgg contributors</Copyright>
+    <PackageTags>acp;agent-client-protocol;json-rpc;sdk;aot</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageProjectUrl>https://agentclientprotocol.com/</PackageProjectUrl>
+    <!-- The package home is this repository. agentclientprotocol.com is the upstream spec, not
+         this project, and pointing ProjectUrl there would imply an official ACP package. -->
+    <PackageProjectUrl>https://github.com/salmonloop/salmon-egg</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/salmonloop/salmon-egg</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Public surface docs are English, but many members are still undocumented. CS1591 keeps that
+         backlog from blocking warn-as-error; it is not a licence to ship undocumented new public API.
+         CS1572/CS1573 stay enforced: a param tag naming a parameter that does not exist, or a
+         documented member that silently drops a parameter, is a defect in shipped documentation. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
-    <PackageReference Include="System.Text.Json" Version="10.0.9" />
+  <!-- Package validation needs two things that only exist once MinVer has run: the derived $(Version)
+       and a baseline package restored with PackageValidationBaselineVersion already set. Both hooks are
+       pack-scoped on purpose - a plain developer build or test run must not demand a published baseline,
+       while producing a package past the first release must not silently validate nothing. -->
+  <Target Name="AcpDerivePackageValidationBaseline" AfterTargets="MinVer">
+    <PropertyGroup>
+      <PackageValidationBaselineVersion Condition="'$(Version)' != '$(AcpPackageFirstReleasedVersion)'">$(AcpPackageBaselineVersion)</PackageValidationBaselineVersion>
+    </PropertyGroup>
+  </Target>
+
+  <!-- Fail closed on a missing baseline. GenerateNuspec only runs during pack, so forgetting
+       AcpPackageBaselineVersion is a pack-time error, not something that blocks everyday builds.
+       The baseline package itself is downloaded by a restore that runs with the baseline property
+       set (see scripts/gates/run-acp-sdk-gates.sh); validation compares against its nupkg on disk.
+
+       The first error is a distinct diagnosis: 0.0.0 is MinVer's no-tag fallback, so reaching it
+       means the acp-sdk-v* history was never fetched (shallow checkout), not that the baseline is
+       missing. Packing a 0.0.0 package must fail regardless of what baseline was supplied. -->
+  <Target Name="AcpBaselineRequired" BeforeTargets="GenerateNuspec">
+    <Error Condition="$([System.String]::Copy('$(Version)').StartsWith('0.0.0'))"
+           Text="SalmonEgg.Acp version is $(Version), which means MinVer found no acp-sdk-v* tag: the checkout is shallow. Fetch the full history (fetch-depth: 0) so the package version can be derived, instead of packing a placeholder version." />
+    <Error Condition="'$(Version)' != '$(AcpPackageFirstReleasedVersion)' AND '$(PackageValidationBaselineVersion)' == ''"
+           Text="SalmonEgg.Acp $(Version) is past the first release $(AcpPackageFirstReleasedVersion), so package validation needs a published baseline. Pass -p:AcpPackageBaselineVersion=&lt;last published version&gt; (or set the ACP_PACKAGE_BASELINE_VERSION repository variable)." />
+  </Target>
+
+  <ItemGroup>
+    <!-- MinVer is a build-time versioning tool, not a runtime dependency: PrivateAssets keeps it
+         out of the packed nuspec, where it would force every consumer to resolve a package their
+         source mapping may not carry. -->
+    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Internals remain available to first-party contract tests. External consumers use the public surface. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SalmonEgg.Acp.Tests" />
   </ItemGroup>
 
 </Project>

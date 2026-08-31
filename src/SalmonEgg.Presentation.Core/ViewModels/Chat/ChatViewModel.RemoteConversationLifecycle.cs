@@ -113,7 +113,7 @@ public partial class ChatViewModel
 
     public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
     {
-        _currentMcpServers = McpServerJsonConverter.CloneServers(mcpServers);
+        _currentMcpServers = McpServerSnapshots.CloneServers(mcpServers);
     }
 
     public async Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -236,24 +236,38 @@ public partial class ChatViewModel
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var operationOwner = CurrentSessionId;
+        var failureContext = CaptureFailurePublicationContext(
+            operationOwner ?? string.Empty,
+            activationVersion: null,
+            operationOwner);
+
         var state = await _chatStore.GetCurrentStateAsync();
         var conversationId = ResolveActiveConversationId(state);
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            SetError("Failed to load session: no active conversation is selected.");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_LoadSessionNoActiveConversation",
+                    "Failed to load session: no active conversation is selected.")
+                .ConfigureAwait(false);
             return false;
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId!, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
-            SetError("Failed to load session: no remote session binding is available for the active conversation.");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "ChatOperation_LoadSessionMissingActiveBinding",
+                    "Failed to load session: no remote session binding is available for the active conversation.")
+                .ConfigureAwait(false);
             return false;
         }
 
         var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
                 conversationId!,
-                activationVersion: null,
+                failureContext with { ConversationId = conversationId! },
                 cancellationToken)
             .ConfigureAwait(false);
         if (!remoteConnectionReady)
@@ -264,7 +278,7 @@ public partial class ChatViewModel
         return await HydrateConversationAsync(
                 conversationId!,
                 binding!,
-                activationVersion: null,
+                failureContext with { ConversationId = conversationId! },
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -272,10 +286,11 @@ public partial class ChatViewModel
     private async Task<bool> HydrateConversationAsync(
         string conversationId,
         ConversationBindingSlice binding,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
 
         var authoritativeConnection = await ResolveAuthoritativeForegroundConnectionAsync(
                 binding.ProfileId,
@@ -289,15 +304,10 @@ public partial class ChatViewModel
                     reason: "ChatServiceNotReady",
                     cancellationToken)
                 .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "ChatServiceNotReady")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "ChatServiceNotReady",
+                    "ChatOperation_LoadSessionChatServiceNotReady",
                     "Failed to load session: ACP chat service is not connected and initialized.")
                 .ConfigureAwait(false);
             return false;
@@ -307,23 +317,23 @@ public partial class ChatViewModel
         var recoveryMode = AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "RecoveryCapabilityMissing")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "RecoveryCapabilityMissing",
+                    "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                    "Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.")
                 .ConfigureAwait(false);
             return false;
         }
 
         if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
-            SetError("Failed to load session: no remote session binding is available for the active conversation.");
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "MissingRemoteSessionId",
+                    "ChatOperation_LoadSessionMissingActiveBinding",
+                    "Failed to load session: no remote session binding is available for the active conversation.")
+                .ConfigureAwait(false);
             return false;
         }
 
@@ -374,14 +384,15 @@ public partial class ChatViewModel
             var knownTranscriptGrowthGraceDeadlineUtc = DateTime.UtcNow + RemoteReplayKnownTranscriptGrowthGracePeriod;
             var replayBaseline = GetSessionUpdateObservationCount(binding.RemoteSessionId);
             var transcriptProjectionBaseline = GetTranscriptProjectionObservationCount(binding.RemoteSessionId);
-            var canObserveReplayProjection = recoveryMode == AcpSessionRecoveryMode.Load && adapter != null;
+            var canObserveReplayProjection =
+                AcpSessionRecoveryPolicy.ExpectsHistoryReplayForHydration(recoveryMode) && adapter != null;
             var hasCachedTranscript = transcriptBaselineCount > 0;
             var shouldAwaitReplayProjection =
                 ownsRemoteHydrationUi &&
                 canObserveReplayProjection &&
                 _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay &&
                 !hasCachedTranscript;
-            Logger.LogInformation(
+            Logger.LogDebug(
                 "Hydration replay wait policy resolved. conversationId={ConversationId} remoteSessionId={RemoteSessionId} shouldAwaitReplayProjection={ShouldAwaitReplayProjection} cachedTranscriptCount={CachedTranscriptCount}",
                 conversationId,
                 binding.RemoteSessionId,
@@ -411,7 +422,7 @@ public partial class ChatViewModel
                     SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.RequestingSessionLoad);
                 }).ConfigureAwait(false);
 #if DEBUG
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "Remote hydration overlay acquired. conversationId={ConversationId} activationVersion={ActivationVersion} remoteSessionId={RemoteSessionId}",
                     conversationId,
                     activationVersion,
@@ -427,28 +438,37 @@ public partial class ChatViewModel
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            AcpSessionRecoveryProjection recoveryProjection;
-            if (recoveryMode == AcpSessionRecoveryMode.Load)
+            var recoveryContext = await ResolveRecoverySessionContextAsync(
+                    chatService,
+                    binding,
+                    conversationId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (recoveryContext is not { } resolvedRecoveryContext)
             {
-                var recoveryCwd = await ResolveRecoverySessionCwdOrSessionListAsync(
-                        chatService,
-                        binding,
-                        conversationId,
-                        cancellationToken)
+                // Agent 的 session/list 与持久化副本都没给出 cwd，而 ACP 的 session/load 与
+                // session/resume 都要求它，所以这次激活确实无法完成。这不是缺陷、重试也无用,
+                // 因此和本方法前面几个守卫一样如实报给用户,而不是抛异常——异常只会被
+                // NavigationCoordinator 的兜底 catch 收敛成"请重试"的笼统文案。
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "MissingRemoteSessionCwd",
+                        "ChatOperation_LoadSessionMissingRemoteCwd",
+                        "Failed to load session: the agent did not report a working directory for it.")
                     .ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(recoveryCwd))
-                {
-                    throw new InvalidOperationException(
-                        "Cannot recover remote session because working directory is missing.");
-                }
+                return false;
+            }
 
+            AcpSessionRecoveryProjection recoveryProjection;
+            // Cold hydration always expects history: V1 session/load, or V2 resume+replayFrom start.
+            {
                 var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
                         chatService,
                         recoveryMode,
                         conversationId,
                         binding,
                         resolvedConnection.ConnectionInstanceId,
-                        recoveryCwd,
+                        resolvedRecoveryContext,
                         adapter,
                         activationVersion,
                         ownsRemoteHydrationUi);
@@ -518,59 +538,6 @@ public partial class ChatViewModel
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
-            else
-            {
-                var recoveryCwd = await ResolveRecoverySessionCwdOrSessionListAsync(
-                        chatService,
-                        binding,
-                        conversationId,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(recoveryCwd))
-                {
-                    throw new InvalidOperationException(
-                        "Cannot recover remote session because working directory is missing.");
-                }
-
-                var recoveryStart = GetOrStartRemoteSessionRecoveryProjection(
-                        chatService,
-                        recoveryMode,
-                        conversationId,
-                        binding,
-                        resolvedConnection.ConnectionInstanceId,
-                        recoveryCwd,
-                        adapter: null,
-                        activationVersion,
-                        ownsRemoteHydrationUi);
-                ownsRecoveryLease = recoveryStart.BufferScope.OwnsRecoveryLease;
-                recoveryCancellationToken = recoveryStart.BufferScope.RecoveryCancellationToken;
-                ownedRecoveryRequest = ownsRecoveryLease ? recoveryStart.RecoveryRequest : null;
-                ownedRecoveryLeaseKey = ownsRecoveryLease ? recoveryStart.RecoveryLeaseKey : null;
-                if (recoveryStart.ConflictingRecoveryCompletion is not null)
-                {
-                    await AwaitConflictingRemoteSessionRecoveryCompletionAsync(
-                            recoveryStart.ConflictingRecoveryCompletion,
-                            recoveryMode,
-                            binding.RemoteSessionId!)
-                        .ConfigureAwait(false);
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                await SetHydrationOverlayPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        HydrationOverlayPhase.RequestingSessionLoad)
-                    .ConfigureAwait(false);
-                await AwaitRemoteHydrationOverlayProjectionAsync(conversationId, activationVersion)
-                    .ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-                recoveryStart.StartRecoveryTransport?.Invoke();
-                recoveryProjection = await recoveryStart.RecoveryTask
-                    .WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
             if (!recoveryProjection.WasPublished)
             {
                 await RecoverProjectionAfterStaleHydrationAttemptAsync(
@@ -623,19 +590,6 @@ public partial class ChatViewModel
                     conversationId)
                 .ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-            var metadataRefreshToken = _disposeCts.Token;
-            var metadataRefreshGeneration = _foregroundChatServiceGeneration;
-            _ = ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
-                conversationId,
-                binding,
-                resolvedConnection.ConnectionInstanceId,
-                metadataRefreshGeneration,
-                LoadRemoteSessionInfoSnapshotFromSsotAsync(
-                    conversationId,
-                    binding,
-                    chatService,
-                    metadataRefreshToken),
-                metadataRefreshToken);
             Logger.LogInformation(
                 "Conversation hydration completed. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId} ElapsedMs={ElapsedMs}",
                 conversationId,
@@ -690,16 +644,12 @@ public partial class ChatViewModel
                         reason: "RemoteSessionNotFound",
                         cancellationToken: CancellationToken.None)
                     .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: ex.Message)
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
-                        $"Failed to load session: {ex.Message}")
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        ex.Message,
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        ex.Message)
                     .ConfigureAwait(false);
                 return false;
             }
@@ -720,17 +670,13 @@ public partial class ChatViewModel
                 conversationId,
                 binding.RemoteSessionId,
                 hydrationStopwatch.ElapsedMilliseconds);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: ex.Message)
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
-                    $"Failed to load session: {ex.Message}")
-                .ConfigureAwait(false);
+            await PublishConversationFailureAsync(
+                        failureContext,
+                        ex.Message,
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        ex.Message)
+                    .ConfigureAwait(false);
             return false;
         }
         finally
@@ -757,7 +703,7 @@ public partial class ChatViewModel
                     IsRemoteHydrationPending = false;
                 }).ConfigureAwait(false);
 #if DEBUG
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "Remote hydration logical completion reached. conversationId={ConversationId} activationVersion={ActivationVersion} pendingHistoryDismiss={PendingHistoryDismissConversationId}",
                     conversationId,
                     activationVersion,
@@ -1325,6 +1271,84 @@ public partial class ChatViewModel
         return false;
     }
 
+    private async Task MaterializeWarmReusableProjectionFromWorkspaceIfNeededAsync(
+        string conversationId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
+        if (!RemoteConversationWorkspaceSnapshotPolicy.CanReuseWarmProjectionSnapshot(
+                binding,
+                snapshot,
+                snapshotOrigin)
+            || snapshot is null)
+        {
+            return;
+        }
+
+        var snapshotTranscript = snapshot.Transcript?.ToImmutableList()
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var snapshotPlan = snapshot.Plan?.ToImmutableList()
+            ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var snapshotDurableMessageCount = ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(
+            snapshotTranscript);
+        if (snapshotDurableMessageCount == 0
+            && snapshotPlan.Count == 0
+            && !snapshot.ShowPlanPanel)
+        {
+            return;
+        }
+
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var contentSlice = state.ResolveContentSlice(conversationId);
+        if (contentSlice is null
+            && string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal))
+        {
+            contentSlice = new ConversationContentSlice(
+                state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                state.ShowPlanPanel);
+        }
+
+        var storeTranscript = contentSlice?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var storePlan = contentSlice?.PlanEntries
+            ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var storeShowPlanPanel = contentSlice?.ShowPlanPanel ?? false;
+        var storeDurableMessageCount = ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(
+            storeTranscript);
+
+        // Hollow shells (thinking-only / ShowPlanPanel-only) count as projected for UI chrome,
+        // but they are not durable warm content. Rematerialize when RuntimeProjection still
+        // owns richer transcript/plan so A->B->A cannot land blank.
+        var needsMaterialization =
+            storeDurableMessageCount < snapshotDurableMessageCount
+            || storePlan.Count < snapshotPlan.Count
+            || (!storeShowPlanPanel && snapshot.ShowPlanPanel);
+        if (!needsMaterialization)
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Materializing warm-reusable workspace projection before warm short-circuit. ConversationId={ConversationId} StoreDurableCount={StoreDurableCount} SnapshotDurableCount={SnapshotDurableCount}",
+            conversationId,
+            storeDurableMessageCount,
+            snapshotDurableMessageCount);
+        await _chatStore.Dispatch(new HydrateConversationAction(
+            conversationId,
+            snapshotDurableMessageCount >= storeDurableMessageCount ? snapshotTranscript : storeTranscript,
+            snapshotPlan.Count >= storePlan.Count ? snapshotPlan : storePlan,
+            storeShowPlanPanel || snapshot.ShowPlanPanel)).ConfigureAwait(false);
+    }
+
     private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
         string conversationId)
     {
@@ -1437,10 +1461,11 @@ public partial class ChatViewModel
 
     private async Task<bool> EnsureActiveConversationRemoteConnectionReadyAsync(
         string conversationId,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
         if (_disposed || string.IsNullOrWhiteSpace(conversationId))
         {
             return false;
@@ -1491,32 +1516,23 @@ public partial class ChatViewModel
                 if (!string.IsNullOrWhiteSpace(finalConnectionState.Error))
                 {
                     await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-                    await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                            conversationId,
-                            activationVersion,
-                            SessionActivationPhase.Faulted,
-                            reason: finalConnectionState.Error)
-                        .ConfigureAwait(false);
-                    await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                            conversationId,
-                            activationVersion,
-                            $"Failed to load session: {finalConnectionState.Error}")
-                        .ConfigureAwait(false);
+                    await PublishConversationFailureAsync(
+                        failureContext,
+                        finalConnectionState.Error,
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        finalConnectionState.Error)
+                    .ConfigureAwait(false);
                     return false;
                 }
             }
 
             if (string.IsNullOrWhiteSpace(binding.ProfileId))
             {
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "MissingBoundProfile")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "MissingBoundProfile",
+                        "ChatOperation_LoadSessionMissingBoundProfile",
                         "Failed to load session: no ACP profile is bound to the remote conversation.")
                     .ConfigureAwait(false);
                 return false;
@@ -1529,15 +1545,10 @@ public partial class ChatViewModel
                     "Skipping remote conversation connection because the bound profile could not be resolved. ConversationId={ConversationId} ProfileId={ProfileId}",
                     conversationId,
                     binding.ProfileId);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "ProfileNotResolved")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "ProfileNotResolved",
+                        "ChatOperation_LoadSessionProfileNotResolved",
                         "Failed to load session: the bound ACP profile could not be resolved.")
                     .ConfigureAwait(false);
                 return false;
@@ -1556,15 +1567,10 @@ public partial class ChatViewModel
             if (!readyAfterConnect)
             {
                 await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "RemoteConnectionNotReady")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "RemoteConnectionNotReady",
+                        "ChatOperation_LoadSessionRemoteConnectionNotReady",
                         "Failed to load session: ACP profile connection did not become ready.")
                     .ConfigureAwait(false);
             }
@@ -1729,7 +1735,11 @@ public partial class ChatViewModel
 
                     await EnsureActiveConversationRemoteHydratedAsync(
                             snapshot.ConversationId,
-                            activationVersion: null,
+                            new ConversationFailurePublicationContext(
+                                snapshot.ConversationId,
+                                ActivationVersion: null,
+                                OperationOwner: snapshot.ConversationId,
+                                ExpectedShellSnapshotVersion: null),
                             cancellationToken,
                             allowWarmReuseShortCircuit: false)
                         .ConfigureAwait(false);
@@ -1757,14 +1767,12 @@ public partial class ChatViewModel
                 ex,
                 "Failed to recover active remote WebSocket conversation after transport error. ConversationId={ConversationId}",
                 conversationId);
-            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-            {
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion: null,
-                        $"Failed to reconnect session: {ex.Message}")
-                    .ConfigureAwait(false);
-            }
+            await PublishConversationOperationFailureAsync(
+                    conversationId,
+                    "ChatOperation_ReconnectSessionFailed",
+                    "Failed to reconnect session: {0}",
+                    ex.Message)
+                .ConfigureAwait(false);
         }
     }
 
@@ -1825,11 +1833,12 @@ public partial class ChatViewModel
 
     private async Task<bool> EnsureActiveConversationRemoteHydratedAsync(
         string conversationId,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken,
         bool allowWarmReuseShortCircuit = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
         if (_disposed || string.IsNullOrWhiteSpace(conversationId))
         {
             return false;
@@ -1847,23 +1856,17 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (authoritativeConnection is not { } resolvedConnection)
         {
-            const string message = "Failed to load session: ACP chat service is not connected and initialized.";
             await SetConversationRuntimeStateAsync(
                     conversationId,
                     ConversationRuntimePhase.Faulted,
                     reason: "ChatServiceNotReady",
                     cancellationToken)
                 .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "ChatServiceNotReady")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
-                    message)
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "ChatServiceNotReady",
+                    "ChatOperation_LoadSessionChatServiceNotReady",
+                    "Failed to load session: ACP chat service is not connected and initialized.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -1871,16 +1874,11 @@ public partial class ChatViewModel
         var chatService = resolvedConnection.ChatService;
         if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "RecoveryCapabilityMissing")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "RecoveryCapabilityMissing",
+                    "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                    "Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -1919,13 +1917,12 @@ public partial class ChatViewModel
                 denialReason);
         }
 
-        await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                conversationId,
-                activationVersion,
+        await PublishConversationActivationPhaseAsync(
+                failureContext,
                 SessionActivationPhase.RemoteHydrationPending,
                 reason: "RemoteHydrationPending")
             .ConfigureAwait(false);
-        return await HydrateConversationAsync(conversationId, binding!, activationVersion, cancellationToken).ConfigureAwait(false);
+        return await HydrateConversationAsync(conversationId, binding!, failureContext, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ConversationActivationHydrationMode> ResolveConversationActivationHydrationModeAsync(
@@ -1996,12 +1993,12 @@ public partial class ChatViewModel
         string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
-        string? cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         IAcpSessionUpdateBufferController? adapter,
         long? activationVersion,
         bool ownsProjection)
     {
-        if (string.IsNullOrWhiteSpace(cwd))
+        if (string.IsNullOrWhiteSpace(recoveryContext.Cwd))
         {
             return new AcpSessionRecoveryStartResult(
                 Task.FromException<AcpSessionRecoveryProjection>(
@@ -2031,7 +2028,8 @@ public partial class ChatViewModel
             binding.ProfileId,
             connectionInstanceId,
             binding.RemoteSessionId!,
-            cwd);
+            recoveryContext.Cwd,
+            new RemoteSessionRecoveryDirectorySet(recoveryContext.AdditionalDirectories));
 
         List<RemoteSessionRecoveryRequest> requestsToCancel;
         RemoteSessionRecoveryRequest requestToStart;
@@ -2049,7 +2047,7 @@ public partial class ChatViewModel
                     conversationId,
                     binding,
                     connectionInstanceId,
-                    cwd,
+                    recoveryContext,
                     adapter,
                     activationVersion,
                     ownsProjection,
@@ -2094,7 +2092,7 @@ public partial class ChatViewModel
             conversationId,
             binding,
             connectionInstanceId,
-            cwd,
+            recoveryContext,
             adapter);
     }
 
@@ -2105,7 +2103,7 @@ public partial class ChatViewModel
         string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
-        string cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         IAcpSessionUpdateBufferController? adapter,
         long? activationVersion,
         bool ownsProjection,
@@ -2149,7 +2147,7 @@ public partial class ChatViewModel
             conversationId,
             binding,
             connectionInstanceId,
-            cwd,
+            recoveryContext,
             adapter,
             canStartRecoveryTransport: false);
         return true;
@@ -2184,11 +2182,11 @@ public partial class ChatViewModel
         string conversationId,
         ConversationBindingSlice binding,
         string? connectionInstanceId,
-        string? cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         IAcpSessionUpdateBufferController? adapter,
         bool canStartRecoveryTransport = true)
     {
-        if (string.IsNullOrWhiteSpace(cwd))
+        if (string.IsNullOrWhiteSpace(recoveryContext.Cwd))
         {
             return new AcpSessionRecoveryStartResult(
                 Task.FromException<AcpSessionRecoveryProjection>(
@@ -2214,7 +2212,7 @@ public partial class ChatViewModel
                 binding,
                 connectionInstanceId,
                 binding.RemoteSessionId!,
-                cwd,
+                recoveryContext,
                 request,
                 adapter)
                 : null);
@@ -2227,7 +2225,7 @@ public partial class ChatViewModel
         ConversationBindingSlice binding,
         string? connectionInstanceId,
         string remoteSessionId,
-        string cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         RemoteSessionRecoveryRequest request,
         IAcpSessionUpdateBufferController? adapter)
     {
@@ -2244,7 +2242,7 @@ public partial class ChatViewModel
             binding,
             connectionInstanceId,
             remoteSessionId,
-            cwd,
+            recoveryContext,
             request,
             adapter,
             request.HydrationAttemptId));
@@ -2258,7 +2256,7 @@ public partial class ChatViewModel
     {
         if (adapter is null
             || request.HydrationAttemptId.HasValue
-            || recoveryMode != AcpSessionRecoveryMode.Load)
+            || !AcpSessionRecoveryPolicy.ExpectsHistoryReplayForHydration(recoveryMode))
         {
             return;
         }
@@ -2274,7 +2272,7 @@ public partial class ChatViewModel
         ConversationBindingSlice binding,
         string? connectionInstanceId,
         string remoteSessionId,
-        string cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         RemoteSessionRecoveryRequest request,
         IAcpSessionUpdateBufferController? adapter,
         long? hydrationAttemptId)
@@ -2287,7 +2285,7 @@ public partial class ChatViewModel
                     binding,
                     connectionInstanceId,
                     remoteSessionId,
-                    cwd,
+                    recoveryContext,
                     request,
                     adapter,
                     hydrationAttemptId)
@@ -2296,26 +2294,50 @@ public partial class ChatViewModel
 
         var requestToken = request.Token;
         var mcpServers = await ResolveCurrentMcpServersAsync(requestToken).ConfigureAwait(false);
-        var resumeTask = chatService.ResumeSessionAsync(
-            CreateSessionResumeParams(remoteSessionId, cwd, mcpServers),
-            requestToken);
-        request.TrackTransportTask(resumeTask);
-        _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
-        var projection = AcpSessionRecoveryProjection.FromResume(
-            await resumeTask
-                .WaitAsync(requestToken)
-                .ConfigureAwait(false));
-        var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
-                conversationId,
-                binding,
-                connectionInstanceId,
-                projection,
-                request,
-                adapter: null,
-                hydrationAttemptId: null,
-                requestToken)
-            .ConfigureAwait(false);
-        return projection with { WasPublished = wasPublished };
+        try
+        {
+            var resumeTask = chatService.ResumeSessionAsync(
+                AcpRemoteSessionRecoveryRequestFactory.CreateResumeParams(
+                    remoteSessionId,
+                    recoveryContext,
+                    mcpServers),
+                requestToken);
+            request.TrackTransportTask(resumeTask);
+            _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);
+            var projection = AcpSessionRecoveryProjection.FromResume(
+                await resumeTask
+                    .WaitAsync(requestToken)
+                    .ConfigureAwait(false));
+            var wasPublished = await PublishRemoteSessionRecoveryProjectionAsync(
+                    conversationId,
+                    binding,
+                    connectionInstanceId,
+                    projection,
+                    request,
+                    adapter,
+                    hydrationAttemptId,
+                    requestToken)
+                .ConfigureAwait(false);
+            return projection with { WasPublished = wasPublished };
+        }
+        catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+        {
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryCanceled");
+            throw;
+        }
+        catch
+        {
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoveryFailed");
+            throw;
+        }
     }
 
     private async Task<AcpSessionRecoveryProjection> RunRemoteSessionLoadRecoveryProjectionAsync(
@@ -2324,7 +2346,7 @@ public partial class ChatViewModel
         ConversationBindingSlice binding,
         string? connectionInstanceId,
         string remoteSessionId,
-        string cwd,
+        AcpRemoteSessionRecoveryContext recoveryContext,
         RemoteSessionRecoveryRequest request,
         IAcpSessionUpdateBufferController? adapter,
         long? hydrationAttemptId)
@@ -2332,7 +2354,7 @@ public partial class ChatViewModel
         var requestToken = request.Token;
         var mcpServers = await ResolveCurrentMcpServersAsync(requestToken).ConfigureAwait(false);
         var loadTask = chatService.LoadSessionAsync(
-            CreateSessionLoadParams(remoteSessionId, cwd, mcpServers),
+            AcpRemoteSessionRecoveryRequestFactory.CreateLoadParams(remoteSessionId, recoveryContext, mcpServers),
             requestToken);
         request.TrackTransportTask(loadTask);
 
@@ -2377,18 +2399,6 @@ public partial class ChatViewModel
             throw;
         }
     }
-
-    private static SessionLoadParams CreateSessionLoadParams(
-        string remoteSessionId,
-        string cwd,
-        IReadOnlyList<McpServer> mcpServers)
-        => new(remoteSessionId, cwd, McpServerJsonConverter.CloneServers(mcpServers));
-
-    private static SessionResumeParams CreateSessionResumeParams(
-        string remoteSessionId,
-        string cwd,
-        IReadOnlyList<McpServer> mcpServers)
-        => new(remoteSessionId, cwd, McpServerJsonConverter.CloneServers(mcpServers));
 
     private async Task<bool> PublishRemoteSessionRecoveryProjectionAsync(
         string conversationId,
@@ -2465,39 +2475,135 @@ public partial class ChatViewModel
             return false;
         }
 
-        if (!IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId))
+        // Binding and connection identity were validated above, so a completed session/load is a
+        // legitimate warm result for this conversation whether or not the activation that started it
+        // is still the foreground owner. The two branches below differ only in their buffering-scope
+        // reason/log and in the stale-supersession guard the background branch adds.
+        var isForegroundProjectionOwner = IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId);
+        if (isForegroundProjectionOwner)
         {
-            Logger.LogInformation(
-                "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                conversationId,
-                expectedBinding.RemoteSessionId);
-            var backgroundBufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+            var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
                 adapter,
                 hydrationAttemptId,
-                "RemoteSessionRecoveryBackgroundCompleted");
-            if (backgroundBufferingCompleted)
+                "RemoteSessionRecoveryCompleted");
+            if (!bufferingCompleted)
             {
-                await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+                Logger.LogWarning(
+                    "Discarding remote session recovery projection because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    expectedBinding.RemoteSessionId);
+                return false;
             }
 
-            return backgroundBufferingCompleted;
+            await PromoteRemoteSessionRecoveryToWarmAsync(
+                    conversationId,
+                    currentBinding,
+                    expectedConnectionInstanceId,
+                    projection,
+                    hydrationAttemptId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return true;
         }
 
-        var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
-            adapter,
-            hydrationAttemptId,
-            "RemoteSessionRecoveryCompleted");
-        if (!bufferingCompleted)
+        // The activation that started this recovery was superseded. Binding and connection identity
+        // still match (validated above), so the completed session/load is a legitimate warm result
+        // for this conversation. Promote it to authoritative Warm so returning to the conversation is
+        // a zero-round-trip warm reuse instead of another slow session/load. The work is
+        // conversationId-scoped and never touches the foreground (HydratedConversationId / overlays
+        // stay owned by the newest activation).
+        //
+        // Exception: if a newer activation for this same conversation is already mid-flight it will
+        // have reset the runtime to an earlier pending phase (Selecting/Selected/RemoteConnectionReady).
+        // That activation owns hydration and must drive its own authoritative session/load, so this
+        // stale completion must neither land its projection nor report a publication — waiters
+        // attached to this request must observe WasPublished=false and recover on their own. This
+        // read is only a fast-fail optimization; the authoritative, race-free gate is the reducer
+        // guard behind PromoteConversationRuntimeToWarmAction at dispatch time.
+        var currentRuntime = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false))
+            .ResolveRuntimeState(conversationId);
+        var newerActivationOwnsHydration = currentRuntime is
         {
-            Logger.LogWarning(
-                "Discarding remote session recovery projection because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+            Phase: ConversationRuntimePhase.Selecting
+                or ConversationRuntimePhase.Selected
+                or ConversationRuntimePhase.RemoteConnectionReady
+        };
+        if (newerActivationOwnsHydration)
+        {
+            Logger.LogInformation(
+                "Discarding superseded remote session recovery completion because a newer activation owns hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
                 conversationId,
                 expectedBinding.RemoteSessionId);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoverySupersededByNewerActivation");
             return false;
         }
 
+        Logger.LogInformation(
+            "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+            conversationId,
+            expectedBinding.RemoteSessionId);
+
+        var backgroundBufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+            adapter,
+            hydrationAttemptId,
+            "RemoteSessionRecoveryBackgroundCompleted");
+        if (!backgroundBufferingCompleted)
+        {
+            return false;
+        }
+
+        await PromoteRemoteSessionRecoveryToWarmAsync(
+                conversationId,
+                currentBinding,
+                expectedConnectionInstanceId,
+                projection,
+                hydrationAttemptId,
+                cancellationToken,
+                isSupersededCompletion: true)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task PromoteRemoteSessionRecoveryToWarmAsync(
+        string conversationId,
+        ConversationBindingSlice currentBinding,
+        string? expectedConnectionInstanceId,
+        AcpSessionRecoveryProjection projection,
+        long? hydrationAttemptId,
+        CancellationToken cancellationToken,
+        bool isSupersededCompletion = false)
+    {
         await ApplySessionLoadResponseAsync(conversationId, projection.SessionLoadResponse).ConfigureAwait(true);
-        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+
+        // 前台 LoadResponse 模式:session/load 响应投影完即视为完成,不阻塞等待 buffered replay
+        // 抽干;replay 随后以 following 追加(Transcript 视口事实源保持 follow 语义)。StrictReplay
+        // 以及所有 superseded background 完成仍必须等 drain,以保证回切为完整正文的零往返 warm reuse。
+        var awaitReplayDrain =
+            isSupersededCompletion
+            || _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay;
+        if (awaitReplayDrain)
+        {
+            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+        }
+
+        if (isSupersededCompletion)
+        {
+            // 被 supersede 的完成必须走 reducer 内的原子守卫:与同会话更新激活竞争时,
+            // dispatch 时刻 phase 已被重置的过时 Warm 会被拒绝,而不是覆盖最新激活。
+            await PromoteConversationRuntimeToWarmGuardedAsync(
+                    conversationId,
+                    currentBinding,
+                    projection.CompletedRuntimeReason,
+                    cancellationToken,
+                    connectionInstanceId: expectedConnectionInstanceId)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await SetConversationRuntimeStateAsync(
                 conversationId,
                 ConversationRuntimePhase.Warm,
@@ -2506,7 +2612,6 @@ public partial class ChatViewModel
                 cancellationToken,
                 connectionInstanceId: expectedConnectionInstanceId)
             .ConfigureAwait(false);
-        return true;
     }
 
     private async Task ObserveRemoteSessionRecoveryTransportTaskAsync<TResponse>(
@@ -2887,6 +2992,60 @@ public partial class ChatViewModel
             return;
         }
 
+        var runtimeState = await BuildConversationRuntimeSliceAsync(
+                conversationId,
+                phase,
+                binding,
+                reason,
+                connectionInstanceId)
+            .ConfigureAwait(false);
+        await _chatStore.Dispatch(new SetConversationRuntimeStateAction(runtimeState)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
+            conversationId,
+            phase,
+            runtimeState.ConnectionInstanceId,
+            runtimeState.RemoteSessionId,
+            runtimeState.ProfileId,
+            reason);
+    }
+
+    private async Task PromoteConversationRuntimeToWarmGuardedAsync(
+        string conversationId,
+        ConversationBindingSlice? binding,
+        string? reason,
+        CancellationToken cancellationToken,
+        string? connectionInstanceId)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var runtimeState = await BuildConversationRuntimeSliceAsync(
+                conversationId,
+                ConversationRuntimePhase.Warm,
+                binding,
+                reason,
+                connectionInstanceId)
+            .ConfigureAwait(false);
+        await _chatStore.Dispatch(new PromoteConversationRuntimeToWarmAction(runtimeState)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Superseded conversation runtime warm promotion dispatched. ConversationId={ConversationId} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} Reason={Reason}",
+            conversationId,
+            runtimeState.ConnectionInstanceId,
+            runtimeState.RemoteSessionId,
+            reason);
+    }
+
+    private async Task<ConversationRuntimeSlice> BuildConversationRuntimeSliceAsync(
+        string conversationId,
+        ConversationRuntimePhase phase,
+        ConversationBindingSlice? binding,
+        string? reason,
+        string? connectionInstanceId)
+    {
         var currentState = await _chatStore.GetCurrentStateAsync();
         var existingRuntime = currentState.ResolveRuntimeState(conversationId);
         var preserveExistingConnectionInstanceId =
@@ -2911,7 +3070,7 @@ public partial class ChatViewModel
             profileId ??= existingRuntime?.ProfileId ?? currentState.ResolveBinding(conversationId)?.ProfileId;
         }
 
-        var runtimeState = new ConversationRuntimeSlice(
+        return new ConversationRuntimeSlice(
             ConversationId: conversationId,
             Phase: phase,
             ConnectionInstanceId: effectiveConnectionInstanceId,
@@ -2919,15 +3078,6 @@ public partial class ChatViewModel
             ProfileId: profileId,
             Reason: reason,
             UpdatedAtUtc: DateTime.UtcNow);
-        await _chatStore.Dispatch(new SetConversationRuntimeStateAction(runtimeState)).ConfigureAwait(false);
-        Logger.LogInformation(
-            "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
-            conversationId,
-            phase,
-            effectiveConnectionInstanceId,
-            remoteSessionId,
-            profileId,
-            reason);
     }
 
     private bool ShouldOwnRemoteHydrationUi(string conversationId, long? activationVersion)
@@ -2986,149 +3136,64 @@ public partial class ChatViewModel
         return AcpHydrationCompletionMode.StrictReplay;
     }
 
-    private async Task<ConversationSessionInfoSnapshot?> LoadRemoteSessionInfoSnapshotFromSsotAsync(
-        string conversationId,
-        ConversationBindingSlice binding,
+    private async Task<AcpRemoteSessionRecoveryContext?> ResolveRecoverySessionContextAsync(
         IChatService chatService,
+        ConversationBindingSlice binding,
+        string conversationId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(conversationId)
-            || string.IsNullOrWhiteSpace(binding.RemoteSessionId)
-            || chatService.AgentCapabilities?.SessionCapabilities?.List is null)
+        var fallback = await GetSessionRecoveryFallbackAsync(conversationId, cancellationToken)
+            .ConfigureAwait(false);
+        var resolution = await _remoteSessionRecoveryContextResolver
+            .ResolveAsync(chatService, binding.RemoteSessionId!, fallback, cancellationToken)
+            .ConfigureAwait(false);
+        if (resolution.AuthoritativeSessionInfo is { } sessionInfo)
         {
-            return null;
+            await ApplyConversationRemoteSessionInfoAsync(conversationId, sessionInfo, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        AgentSessionInfo? sessionInfo;
-        try
-        {
-            sessionInfo = await FindRemoteSessionInfoAsync(chatService, binding.RemoteSessionId!, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(
-                ex,
-                "Failed to refresh remote session metadata before hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                conversationId,
-                binding.RemoteSessionId);
-            return null;
-        }
+        return resolution.Context;
+    }
 
-        if (sessionInfo is null)
-        {
-            return null;
-        }
+    public async ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var fallbackAdditionalDirectories = storeState
+            .ResolveSessionStateSlice(conversationId)?
+            .SessionInfo?
+            .AdditionalDirectories
+            ?? TryGetConversationSnapshot(conversationId)?.SessionInfo?.AdditionalDirectories;
+        return new AcpRemoteSessionRecoveryFallback(
+            GetSessionCwdOrDefault(conversationId),
+            fallbackAdditionalDirectories?.ToArray());
+    }
 
-        return ToConversationSessionInfoSnapshot(new AcpSessionInfoSnapshot(
-            sessionInfo.Title,
+    public async Task ApplyConversationRemoteSessionInfoAsync(
+        string conversationId,
+        AgentSessionInfo sessionInfo,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sessionInfo);
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = ToConversationSessionInfoSnapshot(new AcpSessionInfoSnapshot(
+            Title: sessionInfo.Title,
             HasTitle: true,
-            sessionInfo.Description,
-            string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd,
-            sessionInfo.UpdatedAt,
+            Cwd: sessionInfo.Cwd,
+            AdditionalDirectories: sessionInfo.AdditionalDirectories is null
+                ? Array.Empty<string>()
+                : sessionInfo.AdditionalDirectories.ToArray(),
+            UpdatedAt: sessionInfo.UpdatedAt,
             HasUpdatedAt: true,
-            sessionInfo.Meta));
-    }
-
-    private async Task ApplyRemoteSessionInfoSnapshotWhenReadyAsync(
-        string conversationId,
-        ConversationBindingSlice expectedBinding,
-        string? expectedConnectionInstanceId,
-        int expectedChatServiceGeneration,
-        Task<ConversationSessionInfoSnapshot?> sessionInfoTask,
-        CancellationToken cancellationToken)
-    {
-        ConversationSessionInfoSnapshot? sessionInfo;
-        try
+            Meta: sessionInfo.Meta));
+        if (snapshot is not null)
         {
-            sessionInfo = await sessionInfoTask.ConfigureAwait(false);
+            await ApplySessionInfoSnapshotProjectionAsync(conversationId, snapshot, cancellationToken)
+                .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(
-                ex,
-                "Failed to apply asynchronous remote session metadata refresh. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                conversationId,
-                expectedBinding.RemoteSessionId);
-            return;
-        }
-
-        if (sessionInfo is null)
-        {
-            return;
-        }
-
-        sessionInfo = NormalizeSessionInfoSnapshotForEstablishedConversationContext(conversationId, sessionInfo);
-
-        var currentBinding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
-        if (currentBinding is null
-            || !string.Equals(currentBinding.RemoteSessionId, expectedBinding.RemoteSessionId, StringComparison.Ordinal)
-            || !string.Equals(currentBinding.ProfileId, expectedBinding.ProfileId, StringComparison.Ordinal))
-        {
-            Logger.LogDebug(
-                "Discarding asynchronous remote session metadata refresh because binding changed. ConversationId={ConversationId} ExpectedRemoteSessionId={ExpectedRemoteSessionId} CurrentRemoteSessionId={CurrentRemoteSessionId}",
-                conversationId,
-                expectedBinding.RemoteSessionId,
-                currentBinding?.RemoteSessionId);
-            return;
-        }
-
-        var currentConnectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        var currentConnectionInstanceId = currentConnectionState.ConnectionInstanceId;
-        if (expectedChatServiceGeneration != _foregroundChatServiceGeneration
-            || !string.Equals(currentConnectionInstanceId, expectedConnectionInstanceId, StringComparison.Ordinal))
-        {
-            Logger.LogDebug(
-                "Discarding asynchronous remote session metadata refresh because connection identity changed. ConversationId={ConversationId} ExpectedConnectionInstanceId={ExpectedConnectionInstanceId} CurrentConnectionInstanceId={CurrentConnectionInstanceId}",
-                conversationId,
-                expectedConnectionInstanceId,
-                currentConnectionInstanceId);
-            return;
-        }
-
-        await ApplySessionInfoSnapshotProjectionAsync(
-                conversationId,
-                sessionInfo,
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private async Task<string?> ResolveRecoverySessionCwdOrSessionListAsync(
-        IChatService chatService,
-        ConversationBindingSlice binding,
-        string conversationId,
-        CancellationToken cancellationToken)
-    {
-        var establishedCwd = GetSessionCwdOrDefault(conversationId);
-        if (!string.IsNullOrWhiteSpace(establishedCwd))
-        {
-            return establishedCwd;
-        }
-
-        var remoteSessionInfo = await LoadRemoteSessionInfoSnapshotFromSsotAsync(
-            conversationId,
-            binding,
-            chatService,
-            cancellationToken)
-            .ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(remoteSessionInfo?.Cwd))
-        {
-            return null;
-        }
-
-        var normalizedCwd = remoteSessionInfo.Cwd.Trim();
-        await ApplySessionInfoSnapshotProjectionAsync(conversationId, remoteSessionInfo, cancellationToken)
-            .ConfigureAwait(false);
-
-        return normalizedCwd;
     }
 
     private async Task ApplySessionInfoSnapshotProjectionAsync(
@@ -3186,89 +3251,7 @@ public partial class ChatViewModel
     private static DateTime? ParseSessionUpdatedAtUtc(string? updatedAt)
         => AcpSessionTimestampPolicy.ParseUpdatedAtUtc(updatedAt);
 
-    private static async Task<AgentSessionInfo?> FindRemoteSessionInfoAsync(
-        IChatService chatService,
-        string remoteSessionId,
-        CancellationToken cancellationToken)
-    {
-        if (chatService.AgentCapabilities?.SessionCapabilities?.List is null)
-        {
-            return null;
-        }
-
-        string? cursor = null;
-        do
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var response = await chatService
-                .ListSessionsAsync(new SessionListParams { Cursor = cursor }, cancellationToken)
-                .ConfigureAwait(false);
-            var match = response?.Sessions?.FirstOrDefault(session =>
-                string.Equals(session.SessionId, remoteSessionId, StringComparison.Ordinal));
-            if (match != null)
-            {
-                return match;
-            }
-
-            cursor = response?.NextCursor;
-        }
-        while (!string.IsNullOrWhiteSpace(cursor));
-
-        return null;
-    }
-
-    private ConversationSessionInfoSnapshot NormalizeSessionInfoSnapshotForEstablishedConversationContext(
-        string conversationId,
-        ConversationSessionInfoSnapshot sessionInfo)
-    {
-        if (string.IsNullOrWhiteSpace(conversationId))
-        {
-            return sessionInfo;
-        }
-
-        var establishedCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
-        if (string.IsNullOrWhiteSpace(establishedCwd))
-        {
-            var remoteSessionId = _conversationWorkspace.GetRemoteBinding(conversationId)?.RemoteSessionId;
-            if (!string.IsNullOrWhiteSpace(remoteSessionId))
-            {
-                establishedCwd = _sessionManager.GetSession(remoteSessionId)?.Cwd?.Trim();
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(establishedCwd))
-        {
-            establishedCwd = TryGetConversationSnapshot(conversationId)?.SessionInfo?.Cwd?.Trim();
-        }
-
-        if (string.IsNullOrWhiteSpace(establishedCwd))
-        {
-            return sessionInfo;
-        }
-
-        var incomingCwd = sessionInfo.Cwd?.Trim();
-        if (string.Equals(incomingCwd, establishedCwd, StringComparison.Ordinal))
-        {
-            return sessionInfo;
-        }
-
-        // ACP session/list is a discovery API and must not redefine immutable session setup
-        // fields such as cwd after session/load or session/new has already established them.
-        return new ConversationSessionInfoSnapshot
-        {
-            Title = sessionInfo.Title,
-            HasTitle = sessionInfo.HasTitle,
-            Description = sessionInfo.Description,
-            Cwd = establishedCwd,
-            UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
-            HasUpdatedAt = sessionInfo.HasUpdatedAt,
-            Meta = sessionInfo.Meta is null
-                ? null
-                : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
-        };
-    }
-
-    private void SetConversationOverlayOwners(
+    private bool SetConversationOverlayOwners(
         string? sessionSwitchConversationId,
         string? connectionLifecycleConversationId,
         string? historyConversationId)
@@ -3277,7 +3260,7 @@ public partial class ChatViewModel
             && string.Equals(_connectionLifecycleOverlayConversationId, connectionLifecycleConversationId, StringComparison.Ordinal)
             && string.Equals(_historyOverlayConversationId, historyConversationId, StringComparison.Ordinal))
         {
-            return;
+            return false;
         }
 
         _sessionSwitchOverlayConversationId = sessionSwitchConversationId;
@@ -3294,7 +3277,7 @@ public partial class ChatViewModel
 
         ResetHydrationOverlayPhaseIfOwnerChanged(historyConversationId);
 #if DEBUG
-        Logger.LogInformation(
+        Logger.LogDebug(
             "Overlay owners updated. currentSession={CurrentSessionId} sessionSwitch={SessionSwitchConversationId} connectionLifecycle={ConnectionLifecycleConversationId} history={HistoryConversationId} pendingHistoryDismiss={PendingHistoryDismissConversationId} isHydrating={IsHydrating} isRemoteHydrationPending={IsRemoteHydrationPending}",
             CurrentSessionId,
             _sessionSwitchOverlayConversationId,
@@ -3305,6 +3288,7 @@ public partial class ChatViewModel
             IsRemoteHydrationPending);
 #endif
         RaiseOverlayStateChanged();
+        return true;
     }
 
     private void ScheduleSessionSwitchOverlayDismissal(long activationVersion, string conversationId)
@@ -3348,7 +3332,7 @@ public partial class ChatViewModel
         }
 
 #if DEBUG
-        Logger.LogInformation(
+        Logger.LogDebug(
             "Completing history overlay dismissal. conversationId={ConversationId} transcriptCount={TranscriptCount} hasVisibleTranscript={HasVisibleTranscript} turnStatusVisible={IsTurnStatusVisible}",
             projection.HydratedConversationId,
             projection.Transcript.Count,

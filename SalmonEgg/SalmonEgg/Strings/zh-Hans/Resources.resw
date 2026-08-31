@@ -87,6 +87,21 @@
   <data name="General_StartupTitle.Text" xml:space="preserve">
     <value>启动与窗口</value>
   </data>
+  <data name="General_NotificationsTitle.Text" xml:space="preserve">
+    <value>通知</value>
+  </data>
+  <data name="General_SystemNotificationsTitle.Text" xml:space="preserve">
+    <value>任务完成时显示系统通知</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="General_SystemNotificationsUnsupported.Text" xml:space="preserve">
+    <value>当前平台不支持系统通知</value>
+  </data>
   <data name="General_AutoStartTitle.Text" xml:space="preserve">
     <value>开机自动启动</value>
   </data>
@@ -336,7 +351,10 @@
   <data name="Diagnostics_GamepadThumbstickLabel.Text" xml:space="preserve">
     <value>左摇杆：</value>
   </data>
-  <data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
+    <data name="Diagnostics_GamepadStandardDetailsLabel.Text" xml:space="preserve">
+    <value>标准 Gamepad 明细：</value>
+  </data>
+<data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
     <value>Raw 明细：</value>
   </data>
   <data name="Diagnostics_GamepadStart.Content" xml:space="preserve">
@@ -495,6 +513,39 @@
   <data name="About_ProtocolLabel.Text" xml:space="preserve">
     <value>协议版本：</value>
   </data>
+  <data name="About_CommunityTitle.Text" xml:space="preserve">
+    <value>社区</value>
+  </data>
+  <data name="About_DiscordTitle.Text" xml:space="preserve">
+    <value>SalmonEgg Discord 社群</value>
+  </data>
+  <data name="About_DiscordDescription.Text" xml:space="preserve">
+    <value>交流使用经验、反馈问题，并及时了解项目动态。</value>
+  </data>
+  <data name="About_JoinDiscord.Content" xml:space="preserve">
+    <value>加入 Discord 社群</value>
+  </data>
+  <data name="About_GitHubTitle.Text" xml:space="preserve">
+    <value>SalmonEgg GitHub</value>
+  </data>
+  <data name="About_GitHubDescription.Text" xml:space="preserve">
+    <value>查看源码、提交问题，或者为 SalmonEgg 点一个 Star。</value>
+  </data>
+  <data name="About_OpenGitHub.Content" xml:space="preserve">
+    <value>在 GitHub 上给个 Star</value>
+  </data>
+  <data name="About_SupportProjectTitle.Text" xml:space="preserve">
+    <value>支持项目</value>
+  </data>
+  <data name="About_KofiTitle.Text" xml:space="preserve">
+    <value>在 Ko-fi 上支持开发</value>
+  </data>
+  <data name="About_KofiDescription.Text" xml:space="preserve">
+    <value>如果 SalmonEgg 对你有帮助，可以支持项目继续开发。</value>
+  </data>
+  <data name="About_OpenKofi.Content" xml:space="preserve">
+    <value>疯狂星期四，V 我 50</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>支持</value>
   </data>
@@ -565,7 +616,7 @@
     <value>WebSocket</value>
   </data>
   <data name="Conn_TransportHttpSse.Content" xml:space="preserve">
-    <value>HTTP SSE</value>
+    <value>Streamable HTTP</value>
   </data>
   <data name="Conn_StdioCommand.Header" xml:space="preserve">
     <value>执行命令</value>
@@ -663,6 +714,9 @@
   <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>重新连接</value>
   </data>
+  <data name="Acp_ProfileUnverified.Text" xml:space="preserve">
+    <value>未验证</value>
+  </data>
   <data name="Acp_ProfileConnect.Text" xml:space="preserve">
     <value>连接</value>
   </data>
@@ -707,6 +761,159 @@
   </data>
   <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
     <value>删除</value>
+  </data>
+  <data name="Acp_ProfilesSetupWizard.Content" xml:space="preserve">
+    <value>配置向导</value>
+  </data>
+  <data name="AcpSetup_PageTitle.Text" xml:space="preserve">
+    <value>ACP 配置向导</value>
+  </data>
+  <data name="AcpSetup_PageSummary.Text" xml:space="preserve">
+    <value>按步骤检测 Agent、安装 ACP 适配器、填写启动参数并验证连接，最后保存为配置。</value>
+  </data>
+  <data name="AcpSetup_AgentsTitle.Text" xml:space="preserve">
+    <value>选择 Agent</value>
+  </data>
+  <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
+    <value>重新检测</value>
+  </data>
+  <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
+    <value>检查组件</value>
+  </data>
+  <data name="AcpSetup_InstallAdapter.Content" xml:space="preserve">
+    <value>一键安装适配器</value>
+  </data>
+  <data name="AcpSetup_RedetectAdapter.Content" xml:space="preserve">
+    <value>重新检测</value>
+  </data>
+  <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
+    <value>安装文档</value>
+  </data>
+  <data name="AcpSetup_InstallToolchainDocs.Content" xml:space="preserve">
+    <value>安装工具链</value>
+  </data>
+  <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
+    <value>启动参数</value>
+  </data>
+  <data name="AcpSetup_CommandPreviewLabel.Text" xml:space="preserve">
+    <value>启动命令预览</value>
+  </data>
+  <data name="AcpSetup_TestTitle.Text" xml:space="preserve">
+    <value>测试连接</value>
+  </data>
+  <data name="AcpSetup_RunTest.Content" xml:space="preserve">
+    <value>开始测试</value>
+  </data>
+  <data name="AcpSetup_SkipTest.Content" xml:space="preserve">
+    <value>跳过测试</value>
+  </data>
+  <data name="AcpSetup_SkipTest.AutomationProperties.HelpText" xml:space="preserve">
+    <value>不测试并继续。保存后的配置会标记为未验证。</value>
+  </data>
+  <data name="AcpSetup_SaveTitle.Text" xml:space="preserve">
+    <value>保存配置</value>
+  </data>
+  <data name="AcpSetup_Back.Content" xml:space="preserve">
+    <value>上一步</value>
+  </data>
+  <data name="AcpSetup_Save.Content" xml:space="preserve">
+    <value>保存配置</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Title" xml:space="preserve">
+    <value>连接测试通过</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Message" xml:space="preserve">
+    <value>配置可用，可以保存为连接配置了。</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Title" xml:space="preserve">
+    <value>已保存</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Message" xml:space="preserve">
+    <value>配置已加入连接列表，可返回使用。</value>
+  </data>
+  <data name="AcpSetup_ProfileName.Header" xml:space="preserve">
+    <value>配置名称</value>
+  </data>
+  <data name="AcpSetup_InstallAgentRow.Content" xml:space="preserve">
+    <value>安装</value>
+  </data>
+  <data name="AcpSetup_Working.Text" xml:space="preserve">
+    <value>正在处理，请稍候…</value>
+  </data>
+  <data name="AcpSetup_CancelOperation.Content" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="AcpSetup_StatusInstalled.AutomationProperties.Name" xml:space="preserve">
+    <value>已安装</value>
+  </data>
+  <data name="AcpSetup_StatusMissing.AutomationProperties.Name" xml:space="preserve">
+    <value>未安装</value>
+  </data>
+  <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
+    <value>第 {0} 步，共 {1} 步</value>
+  </data>
+  <data name="AcpSetup_InstallOutputToggle.Text" xml:space="preserve">
+    <value>查看安装输出</value>
+  </data>
+  <data name="AcpSetup_AdapterMissingBar.Title" xml:space="preserve">
+    <value>未检测到 ACP 适配器</value>
+  </data>
+  <data name="AcpSetup_AdapterMissingBar.Message" xml:space="preserve">
+    <value>这个 Agent 需要一个 ACP 适配器才能通话。可以让向导装一个，或者装好后重新检测。</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Title" xml:space="preserve">
+    <value>适配器已就绪</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Message" xml:space="preserve">
+    <value>已找到独立的适配器，可以直接进入下一步。</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Title" xml:space="preserve">
+    <value>无法确认适配器是否已安装</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Message" xml:space="preserve">
+    <value>检测没能得出结论，不代表适配器不存在。可以继续下一步，由连接测试来验证。</value>
+  </data>
+  <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
+    <value>检测的命令</value>
+  </data>
+  <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
+    <value>为什么没检测到？</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
+    <value>自定义命令的完整路径</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.PlaceholderText" xml:space="preserve">
+    <value>例如 /home/you/.nvm/versions/node/v24/bin/npx</value>
+  </data>
+  <data name="AcpSetup_VerifyCustomCommand.Content" xml:space="preserve">
+    <value>用这个路径重新检测</value>
+  </data>
+  <data name="AcpSetup_PathHint.Text" xml:space="preserve">
+    <value>从桌面图标启动的应用读不到你在终端里配置的 PATH，所以 nvm、asdf、~/.local/bin 里的命令通常检测不到。填上完整路径即可，它会同时用于检测和保存后的启动。</value>
+  </data>
+  <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>已找到</value>
+  </data>
+  <data name="AcpSetup_PackageLocationLabel.Text" xml:space="preserve">
+    <value>适配器安装位置</value>
+  </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Title" xml:space="preserve">
+    <value>这个 Agent 自带 ACP</value>
+  </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Message" xml:space="preserve">
+    <value>不需要额外的适配器，可以直接进入下一步。</value>
+  </data>
+  <data name="AcpSetup_AdapterPicker.Header" xml:space="preserve">
+    <value>ACP 适配器</value>
+  </data>
+  <data name="AcpSetup_MultipleCandidates.Text" xml:space="preserve">
+    <value>这台机器上有多份，当前用的是列表里第一个（和终端里的行为一致）。要换请点选另一份。</value>
+  </data>
+  <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
+    <value>选择要使用的一份</value>
+  </data>
+  <data name="AcpSetup_Next.Content" xml:space="preserve">
+    <value>下一步</value>
   </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>
@@ -951,8 +1158,14 @@
   <data name="ChatViewLoadingOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>会话加载中</value>
   </data>
+  <data name="ShellShutdownOverlay.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>正在关闭</value>
+  </data>
   <data name="ChatMessageCopyMenu.Text" xml:space="preserve">
     <value>复制消息</value>
+  </data>
+  <data name="ChatMessageReportMenu.Text" xml:space="preserve">
+    <value>举报</value>
   </data>
   <data name="ChatMarkdownCopyCodeButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>复制代码</value>
@@ -1248,12 +1461,6 @@
   <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
     <value>每行一个请求头，格式 Header: value。</value>
   </data>
-  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
-    <value>调用参数详情</value>
-  </data>
-  <data name="ToolCallPillPermissionHeader" xml:space="preserve">
-    <value>需要审批</value>
-  </data>
   <data name="ToolCallPillKindRead" xml:space="preserve">
     <value>读取文件</value>
   </data>
@@ -1284,26 +1491,20 @@
   <data name="ToolCallPillKindDefault" xml:space="preserve">
     <value>工具调用</value>
   </data>
-  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
-    <value>路径</value>
+  <data name="ToolCallPillPermissionInfoBar.Title" xml:space="preserve">
+    <value>需要批准</value>
   </data>
-  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
-    <value>查询</value>
+  <data name="ToolCallPillViewRaw.Text" xml:space="preserve">
+    <value>查看原始</value>
   </data>
-  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
-    <value>命令</value>
+  <data name="ToolCallPillRawInput.Text" xml:space="preserve">
+    <value>输入</value>
   </data>
-  <data name="ToolCallPillSummaryImageLabel" xml:space="preserve">
-    <value>图片</value>
+  <data name="ToolCallPillRawOutput.Text" xml:space="preserve">
+    <value>输出</value>
   </data>
-  <data name="ToolCallPillSummaryImageContent" xml:space="preserve">
-    <value>图片内容</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioLabel" xml:space="preserve">
-    <value>音频</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioContent" xml:space="preserve">
-    <value>音频内容</value>
+  <data name="ToolCallPillTerminalLabel.Text" xml:space="preserve">
+    <value>终端</value>
   </data>
   <data name="TaskOverviewPanelButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>任务概览</value>
@@ -1319,12 +1520,6 @@
   </data>
   <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
     <value>改动</value>
-  </data>
-  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
-    <value>暂无任务状态</value>
-  </data>
-  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
-    <value>Agent 更新计划或文件改动后会显示在这里。</value>
   </data>
   <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
     <value>{0} 个进行中 · {1} 个待处理 · {2} 个已完成 · {3} 个文件改动</value>
@@ -1382,6 +1577,39 @@
   </data>
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>配置云同步</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
+    <value>分享错误报告与性能数据</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
+    <value>发送崩溃报告、性能指标与使用情况，帮助我们定位并修复问题。不会收集聊天内容与文件内容；但会包含设备名称、应用版本、操作系统等技术信息。</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvanced.Header" xml:space="preserve">
+    <value>高级：自定义上报端点</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
+    <value>仅供开发者使用。默认情况下遥测发往应用内置网关；配置此端点或部署环境中的 OTLP 环境变量后，将改发你指定的地址。填入凭证前请确认你信任该端点。</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
+    <value>OTLP 端点</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
+    <value>https://collector.example.com:4318　（留空则使用部署环境配置）</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
+    <value>OTLP 请求头</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.PlaceholderText" xml:space="preserve">
+    <value>api-key=YOUR_KEY　（逗号分隔的 key=value，可选）</value>
+  </data>
+  <data name="DataStorage_TelemetryApplyNotice.Text" xml:space="preserve">
+    <value>变更在保存后立即生效，无需重启应用。</value>
   </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
     <value>云同步服务</value>
@@ -1477,4 +1705,31 @@
   <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>关闭云同步（保留设置）</value></data>
   <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>移除本机云同步设置</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>取消</value></data>
+  <data name="ChatModelSelector.PlaceholderText" xml:space="preserve">
+    <value>选择模型</value>
+  </data>
+  <data name="VoiceInputStartButton.AutomationProperties.Name" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="VoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="VoiceInputStopButton.AutomationProperties.Name" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="VoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
 </root>

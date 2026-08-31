@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 
@@ -10,25 +9,19 @@ internal sealed class ConversationActivationOutcomePublisher
 {
     private readonly IShellNavigationRuntimeState? _runtimeState;
     private readonly IUiDispatcher _uiDispatcher;
-    private readonly ILogger _logger;
     private readonly Func<bool> _isChatShellVisible;
     private readonly Func<long, bool> _isLatestActivationVersion;
-    private readonly Action<string> _setError;
 
     public ConversationActivationOutcomePublisher(
         IShellNavigationRuntimeState? runtimeState,
         IUiDispatcher uiDispatcher,
-        ILogger logger,
         Func<bool> isChatShellVisible,
-        Func<long, bool> isLatestActivationVersion,
-        Action<string> setError)
+        Func<long, bool> isLatestActivationVersion)
     {
         _runtimeState = runtimeState;
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _isChatShellVisible = isChatShellVisible ?? throw new ArgumentNullException(nameof(isChatShellVisible));
         _isLatestActivationVersion = isLatestActivationVersion ?? throw new ArgumentNullException(nameof(isLatestActivationVersion));
-        _setError = setError ?? throw new ArgumentNullException(nameof(setError));
     }
 
     public bool CanPublish(long? activationVersion)
@@ -47,24 +40,62 @@ internal sealed class ConversationActivationOutcomePublisher
         return !activationVersion.HasValue || _isLatestActivationVersion(activationVersion.Value);
     }
 
-    public Task TrySetActivationErrorAsync(string conversationId, long? activationVersion, string message)
+    public Task TryPublishFailureAsync(
+        string conversationId,
+        long? activationVersion,
+        long expectedSnapshotVersion,
+        string reason,
+        string message,
+        string? failureResourceKey = null,
+        string? failureFallback = null,
+        object[]? failureFormatArgs = null)
     {
-        if (!CanPublish(activationVersion))
+        if (_runtimeState is null || !CanPublish(activationVersion))
         {
-            _logger.LogInformation(
-                "Discarding stale conversation activation error because the chat shell no longer owns the latest intent. conversationId={ConversationId} activationVersion={ActivationVersion} message={Message}",
-                conversationId,
-                activationVersion,
-                message);
             return Task.CompletedTask;
         }
 
-        return _uiDispatcher.EnqueueAsync(() => _setError(message));
+        var expectedActivation = _runtimeState.ActiveSessionActivation;
+        if (expectedActivation is null
+            || !expectedActivation.Matches(conversationId)
+            || expectedActivation.Version != expectedSnapshotVersion)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _uiDispatcher.EnqueueAsync(() =>
+        {
+            if (!CanPublish(activationVersion))
+            {
+                return;
+            }
+
+            var activeActivation = _runtimeState.ActiveSessionActivation;
+            if (activeActivation is null
+                || !activeActivation.Matches(conversationId)
+                || activeActivation.Version != expectedSnapshotVersion)
+            {
+                return;
+            }
+
+            _runtimeState.ActiveSessionActivation = activeActivation with
+            {
+                Phase = SessionActivationPhase.Faulted,
+                Reason = reason,
+                FailureMessage = message,
+                FailureResourceKey = failureResourceKey,
+                FailureFallback = failureFallback,
+                FailureFormatArgs = failureFormatArgs
+            };
+            _runtimeState.IsSessionActivationInProgress = false;
+            _runtimeState.ActiveSessionActivationVersion = 0;
+        });
     }
 
     public Task TryPublishPhaseAsync(
         string conversationId,
         long? activationVersion,
+        long expectedSnapshotVersion,
         SessionActivationPhase phase,
         string? reason = null)
     {
@@ -81,18 +112,26 @@ internal sealed class ConversationActivationOutcomePublisher
             }
 
             var activeActivation = _runtimeState.ActiveSessionActivation;
-            if (activeActivation is null || !activeActivation.Matches(conversationId))
+            if (activeActivation is null
+                || !activeActivation.Matches(conversationId)
+                || activeActivation.Version != expectedSnapshotVersion)
             {
                 return;
             }
 
-            if (phase != SessionActivationPhase.Faulted
-                && activeActivation.Phase == SessionActivationPhase.Faulted)
+            if (activeActivation.Phase == SessionActivationPhase.Faulted)
             {
-                return;
+                // A prior fault self-heals only on a genuine success terminal (Hydrated) for the
+                // same latest-intent snapshot. CanPublish + the Version match above already restrict
+                // this to the current owner's own recovery, so a superseded/stale callback cannot
+                // un-fault it. Any non-Hydrated phase (e.g. a late SelectingConversation) is stale
+                // relative to the fault and must not silently clear it.
+                if (phase != SessionActivationPhase.Hydrated)
+                {
+                    return;
+                }
             }
-
-            if (phase != SessionActivationPhase.Faulted
+            else if (phase != SessionActivationPhase.Faulted
                 && phase < activeActivation.Phase)
             {
                 return;

@@ -48,8 +48,32 @@ public enum CloudTransferOutcome
 {
     None,
     Uploaded,
-    Restored,
-    ConflictRemoteApplied
+    Restored
+}
+
+/// <summary>
+/// 基线未知（首次采用）时的显式策略。不使用时钟启发式。
+/// SyncNow 默认 RequireManual；ApplyAndActivate 使用 PreferRemote（连接已有云配置）。
+/// </summary>
+public enum CloudSyncFirstAdoptPolicy
+{
+    /// <summary>基线未知且两侧内容不同 → fail-closed，不覆盖本地。</summary>
+    RequireManual = 0,
+
+    /// <summary>基线未知且两侧内容不同 → 采用远端（激活已有云配置）。</summary>
+    PreferRemote = 1
+}
+
+/// <summary>
+/// 用户显式解决 fail-closed 冲突时的选择。禁止静默默认。
+/// </summary>
+public enum CloudSyncConflictResolution
+{
+    /// <summary>保留本地：无条件上传本地包，覆盖远端。</summary>
+    KeepLocal = 0,
+
+    /// <summary>采用远端：重新下载并 restore，覆盖本地（先备份）。</summary>
+    ApplyRemote = 1
 }
 
 public enum CloudSyncOperationKind
@@ -90,7 +114,10 @@ public sealed record CloudSecretUpdate(CloudSecretUpdateKind Kind, string? Value
     public static CloudSecretUpdate Clear() => new(CloudSecretUpdateKind.Clear);
 }
 
-public sealed record CloudSyncFailure(CloudSyncFailureKind Kind, string Message);
+public sealed record CloudSyncFailure(
+    CloudSyncFailureKind Kind,
+    string Message,
+    string? ArtifactPath = null);
 
 public sealed record CloudSyncConfiguration(
     bool Enabled,
@@ -251,6 +278,13 @@ public interface ICloudConfigSyncCoordinator
     Task ApplyAndActivateAsync(CloudProviderDraft draft, CancellationToken cancellationToken = default);
 
     Task SyncNowAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 解决当前 fail-closed 冲突。仅在最近一次失败为 RemoteConflict 且云同步已启用时有效。
+    /// </summary>
+    Task ResolveConflictAsync(
+        CloudSyncConflictResolution resolution,
+        CancellationToken cancellationToken = default);
 
     Task DisableAsync(CancellationToken cancellationToken = default);
 

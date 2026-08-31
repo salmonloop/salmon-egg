@@ -72,7 +72,11 @@ indent_size = 2
 end_of_line = lf
 
 [*.cs]
-# EOL should be normalized by Git. See https://github.com/dotnet/format/issues/1099
+# EOL must stay `unset` here. The dotnet format whitespace fixer (verified on SDK 10.0.400)
+# ignores `end_of_line` entirely and demands the running platform's NewLine: CRLF on the
+# Windows runner that hosts the format gate, LF on Linux. Git's core.autocrlf owns what lands
+# on disk (CRLF checked out on Windows, LF on Linux), so both sides agree by construction.
+# Setting any explicit value would be false for one of the two platforms.
 end_of_line = unset
 
 # See https://github.com/dotnet/roslyn/issues/20356#issuecomment-310143926

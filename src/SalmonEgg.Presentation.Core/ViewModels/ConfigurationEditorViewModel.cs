@@ -5,10 +5,13 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentValidation;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels;
@@ -21,11 +24,13 @@ public partial class ConfigurationEditorViewModel(
     IValidator<ServerConfiguration> validator,
     IConfigurationService configurationService,
     ITransportSupportPolicy transportSupportPolicy,
+    IStringLocalizer<CoreStrings> localizer,
     ILogger<ConfigurationEditorViewModel> logger) : ViewModelBase(logger)
 {
     private readonly IValidator<ServerConfiguration> _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     private readonly IConfigurationService _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
     private readonly ITransportSupportPolicy _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
+    private readonly IStringLocalizer<CoreStrings> _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -45,18 +50,18 @@ public partial class ConfigurationEditorViewModel(
     private TransportType _transport;
 
     public ObservableCollection<TransportOption> TransportOptions { get; } =
-        CreateTransportOptions(transportSupportPolicy);
+        CreateTransportOptions(transportSupportPolicy, localizer);
 
     [ObservableProperty]
     private TransportOption? _selectedTransportOption;
 
     public bool IsStdio => Transport == TransportType.Stdio;
 
-    public bool IsRemote => Transport == TransportType.WebSocket || Transport == TransportType.HttpSse;
+    public bool IsRemote => Transport == TransportType.WebSocket || Transport == TransportType.StreamableHttp;
 
     public bool IsCustomProxy => ProxyMode == ProxyMode.Custom;
 
-    public ObservableCollection<ProxyModeOption> ProxyModeOptions { get; } = CreateProxyModeOptions();
+    public ObservableCollection<ProxyModeOption> ProxyModeOptions { get; } = CreateProxyModeOptions(localizer);
 
     [ObservableProperty]
     private string _token = string.Empty;
@@ -84,9 +89,27 @@ public partial class ConfigurationEditorViewModel(
     public bool IsEditing { get; private set; }
     public ServerConfiguration Configuration { get; private set; } = new();
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveConfiguration))]
+    [NotifyPropertyChangedFor(nameof(CanRetryProfileLoad))]
+    [NotifyPropertyChangedFor(nameof(CanDismissError))]
+    private bool _hasProfileLoadError;
+
+    private string? _profileId;
+
+    public bool CanSaveConfiguration => !IsBusy && !HasProfileLoadError;
+
+    public bool CanRetryProfileLoad => HasProfileLoadError && !IsBusy && !string.IsNullOrWhiteSpace(_profileId);
+
+    public bool CanDismissError => !HasProfileLoadError;
+
+    public string RetryProfileLoadLabel => _localizer["AgentProfileEditor_RetryLoad"];
+
     public void LoadBlankConfiguration()
     {
         var defaultTransport = _transportSupportPolicy.DefaultTransport;
+        _profileId = null;
+        HasProfileLoadError = false;
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
@@ -148,10 +171,73 @@ public partial class ConfigurationEditorViewModel(
         ProxyMode = value.Mode;
     }
 
+    protected override void OnIsBusyChangedCore(bool value)
+    {
+        OnPropertyChanged(nameof(CanSaveConfiguration));
+        OnPropertyChanged(nameof(CanRetryProfileLoad));
+    }
+
+    public async Task LoadConfigurationAsync(string profileId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
+
+        _profileId = profileId;
+        IsBusy = true;
+
+        try
+        {
+            var configuration = await _configurationService.LoadConfigurationAsync(profileId);
+            if (configuration == null)
+            {
+                LoadBlankConfiguration();
+                return;
+            }
+
+            LoadConfiguration(configuration);
+            _profileId = profileId;
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            Logger.LogError(ex, "Failed to load configuration: {Reason}", ex.Reason);
+            LoadBlankConfiguration();
+            _profileId = profileId;
+            HasProfileLoadError = true;
+            SetError(_localizer["AgentProfileEditor_LoadFailedFormat", ex.UserMessage]);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load configuration");
+            LoadBlankConfiguration();
+            _profileId = profileId;
+            HasProfileLoadError = true;
+            SetError(_localizer["AgentProfileEditor_LoadFailedFormat", ex.Message]);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RetryProfileLoadAsync()
+    {
+        if (!CanRetryProfileLoad)
+        {
+            return;
+        }
+
+        await LoadConfigurationAsync(_profileId!);
+    }
+
     public void LoadConfiguration(ServerConfiguration config)
     {
+        ArgumentNullException.ThrowIfNull(config);
+
+        _profileId = config.Id;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = true;
-        Configuration = config ?? new ServerConfiguration();
+        Configuration = config;
         var transport = ResolveSupportedTransportType(Configuration.Transport);
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
@@ -181,11 +267,14 @@ public partial class ConfigurationEditorViewModel(
 
     public void LoadNewConfiguration()
     {
+        _profileId = null;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
-            Name = "New Configuration",
+            Name = ResolveNewConfigurationName(),
             ServerUrl = "ws://localhost:8080",
             Transport = _transportSupportPolicy.DefaultTransport,
             ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
@@ -212,11 +301,14 @@ public partial class ConfigurationEditorViewModel(
         }
 
         var transport = ResolveSupportedTransportType(transportConfig.SelectedTransportType);
+        _profileId = null;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
-            Name = string.IsNullOrWhiteSpace(name) ? "New Configuration" : name.Trim(),
+            Name = string.IsNullOrWhiteSpace(name) ? ResolveNewConfigurationName() : name.Trim(),
             Transport = transport,
             ServerUrl = transport == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
             StdioCommand = transport == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
@@ -240,6 +332,11 @@ public partial class ConfigurationEditorViewModel(
     [RelayCommand]
     public async Task SaveConfigurationAsync()
     {
+        if (!CanSaveConfiguration)
+        {
+            return;
+        }
+
         try
         {
             ClearError();
@@ -281,7 +378,7 @@ public partial class ConfigurationEditorViewModel(
             if (!validationResult.IsValid)
             {
                 var errors = string.Join("; ", validationResult.Errors);
-                SetError("验证失败：" + errors);
+                SetError(_localizer["AgentProfileEditor_ValidationFailedFormat", errors]);
                 return;
             }
 
@@ -289,14 +386,23 @@ public partial class ConfigurationEditorViewModel(
         }
         catch (ConfigurationPersistenceException ex)
         {
-            Logger.LogError(ex, "保存配置失败：{Reason}", ex.Reason);
-            SetError("保存配置失败：" + ex.UserMessage);
+            Logger.LogError(ex, "Failed to save configuration: {Reason}", ex.Reason);
+            SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.UserMessage]);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "保存配置失败");
-            SetError("保存配置失败：" + ex.Message);
+            Logger.LogError(ex, "Failed to save configuration");
+            SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.Message]);
         }
+    }
+
+    private string ResolveNewConfigurationName()
+    {
+        const string fallback = "New Configuration";
+        var localized = _localizer["AgentProfileEditor_NewConfigurationName"];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     [RelayCommand]
@@ -304,28 +410,36 @@ public partial class ConfigurationEditorViewModel(
     {
     }
 
-    private static ObservableCollection<TransportOption> CreateTransportOptions(ITransportSupportPolicy transportSupportPolicy)
+    private static ObservableCollection<TransportOption> CreateTransportOptions(
+        ITransportSupportPolicy transportSupportPolicy,
+        IStringLocalizer<CoreStrings> localizer)
     {
         ArgumentNullException.ThrowIfNull(transportSupportPolicy);
+        ArgumentNullException.ThrowIfNull(localizer);
 
         var options = new ObservableCollection<TransportOption>();
         if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
-            options.Add(new TransportOption(TransportType.Stdio, "Stdio（子进程）"));
+            options.Add(new TransportOption(TransportType.Stdio, localizer[AcpTransportLocalization.StdioResourceKey]));
         }
 
-        options.Add(new TransportOption(TransportType.WebSocket, "WebSocket"));
-        options.Add(new TransportOption(TransportType.HttpSse, "HTTP SSE"));
+        options.Add(new TransportOption(TransportType.WebSocket, localizer[AcpTransportLocalization.WebSocketResourceKey]));
+        options.Add(new TransportOption(TransportType.StreamableHttp, localizer[AcpTransportLocalization.StreamableHttpResourceKey]));
         return options;
     }
 
-    private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions()
-        => new()
+    private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions(
+        IStringLocalizer<CoreStrings> localizer)
+    {
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        return new ObservableCollection<ProxyModeOption>
         {
-            new ProxyModeOption(ProxyMode.System, "使用系统代理"),
-            new ProxyModeOption(ProxyMode.None, "不使用代理"),
-            new ProxyModeOption(ProxyMode.Custom, "自定义代理")
+            new(ProxyMode.System, localizer["AgentProfileEditor_ProxyModeSystem"]),
+            new(ProxyMode.None, localizer["AgentProfileEditor_ProxyModeNone"]),
+            new(ProxyMode.Custom, localizer["AgentProfileEditor_ProxyModeCustom"])
         };
+    }
 
     private TransportType ResolveDefaultTransportType()
         => _transportSupportPolicy.DefaultTransport;

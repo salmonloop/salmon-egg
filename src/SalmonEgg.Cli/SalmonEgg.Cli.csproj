@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>salmon-egg</AssemblyName>
+    <RootNamespace>SalmonEgg.Cli</RootNamespace>
+    <!-- Version identity comes from the git tag via MinVer (root Directory.Build.props). -->
+    <SalmonEggCliSupportedRuntimeIdentifiers>win-x64;linux-x64;osx-arm64</SalmonEggCliSupportedRuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsCliReleaseBuild)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Trimming stays off: the configuration stack resolves services through DI, FluentValidation and
+         YAML serialization reflection, none of which survive an untested trim pass. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <!-- SalmonEgg.Infrastructure.Desktop carries a native dependency (Porta.Pty). Without this the
+         native library would sit next to the executable and every install package would have to ship a
+         directory instead of one file. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>None</DebugType>
+    <!-- Referenced projects keep their own symbols; this stops their .pdb/.xml from being copied into
+         the release payload, which would otherwise defeat the single-file layout. -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+  <!--
+    Release publishing is gated on the declared support matrix so a typo or an aspirational RID cannot
+    silently produce a release asset for a platform that has no native smoke coverage. The list is read
+    back by scripts/release/build-cli-artifacts.sh, keeping this project the single source of truth for
+    which runtimes are officially supported.
+
+    SalmonEggCliAllowUnsupportedRuntimeIdentifier exists only so a developer can exercise the packaging
+    and artifact-smoke scripts natively on a host whose RID is not in the matrix. Release jobs must never
+    set it; the value is echoed as a warning so an unsupported build cannot be mistaken for a release one.
+  -->
+  <Target Name="ValidateSalmonEggCliReleaseRuntimeIdentifier"
+          BeforeTargets="Publish"
+          Condition="'$(IsCliReleaseBuild)' == 'true'">
+    <PropertyGroup>
+      <_SalmonEggCliRuntimeIdentifierProbe>;$(SalmonEggCliSupportedRuntimeIdentifiers);</_SalmonEggCliRuntimeIdentifierProbe>
+      <_SalmonEggCliRuntimeIdentifierSupported>false</_SalmonEggCliRuntimeIdentifierSupported>
+      <_SalmonEggCliRuntimeIdentifierSupported Condition="'$(RuntimeIdentifier)' != '' And $(_SalmonEggCliRuntimeIdentifierProbe.Contains(';$(RuntimeIdentifier);'))">true</_SalmonEggCliRuntimeIdentifierSupported>
+    </PropertyGroup>
+    <Error Condition="'$(RuntimeIdentifier)' == ''"
+           Text="CLI release publishing requires an explicit RuntimeIdentifier. Supported values: $(SalmonEggCliSupportedRuntimeIdentifiers)." />
+    <Error Condition="'$(_SalmonEggCliRuntimeIdentifierSupported)' != 'true' And '$(SalmonEggCliAllowUnsupportedRuntimeIdentifier)' != 'true'"
+           Text="Unsupported SalmonEgg CLI release RuntimeIdentifier '$(RuntimeIdentifier)'. Supported values: $(SalmonEggCliSupportedRuntimeIdentifiers)." />
+    <Warning Condition="'$(_SalmonEggCliRuntimeIdentifierSupported)' != 'true'"
+             Text="Publishing SalmonEgg CLI for unsupported RuntimeIdentifier '$(RuntimeIdentifier)'. This output is for local verification only and must not be released." />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SalmonEgg.Application\SalmonEgg.Application.csproj" />
+    <ProjectReference Include="..\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
+    <ProjectReference Include="..\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="MinVer" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageReference Include="System.CommandLine" Version="2.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SalmonEgg.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

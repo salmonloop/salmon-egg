@@ -114,8 +114,7 @@ public partial class ChatViewModel
             var profile = ResolveNewSessionDraftProfile(profileId);
             var cwdResolution = AcpSessionNewCwdResolver.Resolve(
                 cwd,
-                profile,
-                _preferences.AgentRemoteDirectories);
+                profile);
 
             if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
             {
@@ -414,7 +413,13 @@ public partial class ChatViewModel
             if (bindingResult.Status is not BindingUpdateStatus.Success)
             {
                 throw new InvalidOperationException(
-                    $"Failed to promote ACP new-session draft ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
+                    FormatLocalize(
+                        "ChatBinding_PromoteDraftFailedWithStatus",
+                        "Failed to promote ACP new-session draft ({0}): {1}",
+                        bindingResult.Status,
+                        string.IsNullOrWhiteSpace(bindingResult.ErrorMessage)
+                            ? Localize("ChatBinding_UnknownError", "UnknownError")
+                            : bindingResult.ErrorMessage.Trim()));
             }
 
             SetConversationConfigAuthority(CurrentSessionId!, draft.IsConfigAuthoritative);
@@ -955,15 +960,26 @@ public partial class ChatViewModel
             ? null
             : profileId.Trim();
 
-    private static string NormalizeNewSessionDraftError(string? error)
+    private string NormalizeNewSessionDraftError(string? error)
     {
+        // Keep the missing-remote-cwd English sentinel so StartViewModel can compare
+        // expected remote-directory selection against NewSessionDraftErrorMessage.
         if (string.Equals(error, AcpSessionNewCwdResolver.MissingRemoteCwdMessage, StringComparison.Ordinal))
         {
             return AcpSessionNewCwdResolver.MissingRemoteCwdMessage;
         }
 
+        if (string.Equals(error, AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, StringComparison.Ordinal))
+        {
+            return Localize(
+                "NewSessionDraft_InvalidRemoteCwd",
+                AcpSessionNewCwdResolver.InvalidRemoteCwdMessage);
+        }
+
         return string.IsNullOrWhiteSpace(error)
-            ? "Unable to load session configuration. Check the connection and try again."
+            ? Localize(
+                "NewSessionDraft_LoadConfigFailed",
+                "Unable to load session configuration. Check the connection and try again.")
             : error.Trim();
     }
 
@@ -1028,7 +1044,7 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
         }
         catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
         {
@@ -1042,7 +1058,7 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
         }
     }
 

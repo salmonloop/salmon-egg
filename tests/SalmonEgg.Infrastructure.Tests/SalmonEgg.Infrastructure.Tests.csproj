@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
+    <ProjectReference Include="..\SalmonEgg.TestSupport\SalmonEgg.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

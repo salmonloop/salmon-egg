@@ -8,6 +8,8 @@ public sealed record RawGameControllerDiagnostics(
     int ButtonCount,
     int SwitchCount,
     int AxisCount,
+    bool UnlabeledIndexFallbackEnabled,
     IReadOnlyList<string> PressedButtons,
     IReadOnlyList<string> ActiveSwitches,
-    IReadOnlyList<double> Axes);
+    IReadOnlyList<double> Axes,
+    GamepadInputReading Reading);

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
@@ -25,6 +26,7 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -117,7 +119,7 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal("1.0.0", sink.AgentVersion);
         Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
         service.Verify(x => x.InitializeAsync(It.Is<InitializeParams>(p =>
-            p.ProtocolVersion == 1
+            p.ProtocolVersion == AcpProtocolVersion.Default
             && string.Equals(p.ClientInfo.Name, "SalmonEgg", StringComparison.Ordinal)
             && string.Equals(p.ClientInfo.Title, "SalmonEgg", StringComparison.Ordinal)
             && string.Equals(p.ClientInfo.Version, "1.0.0", StringComparison.Ordinal)
@@ -943,7 +945,9 @@ public sealed class AcpChatCoordinatorTests
         var connectionCoordinator = new AcpConnectionCoordinator(
             store,
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
         var transport = new FakeTransportConfiguration();
         var localInnerService = CreateChatService();
         var localAdapter = new AcpChatServiceAdapter(
@@ -1393,7 +1397,9 @@ public sealed class AcpChatCoordinatorTests
             connectionCoordinator: new AcpConnectionCoordinator(
                 Mock.Of<IChatConnectionStore>(),
                 Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-                new StaticMcpResolver([])),
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)),
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
@@ -1435,7 +1441,9 @@ public sealed class AcpChatCoordinatorTests
             connectionCoordinator: new AcpConnectionCoordinator(
                 Mock.Of<IChatConnectionStore>(),
                 Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-                new StaticMcpResolver([])),
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)),
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
@@ -1638,7 +1646,7 @@ public sealed class AcpChatCoordinatorTests
             {
                 Servers =
                 [
-                    new HttpMcpServer("global", "https://global.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("global", "https://global.example.com/mcp"))
                 ]
             }));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
@@ -1678,7 +1686,7 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]))
             ]
         };
         var profile = new ServerConfiguration
@@ -1716,11 +1724,11 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer(
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer(
                     "filesystem",
                     "/usr/bin/mcp",
                     ["--stdio"],
-                    [new McpEnvVariable("ROOT", "/repo")])
+                    [new McpEnvVariable("ROOT", "/repo")]))
             ]
         };
         var profile = new ServerConfiguration
@@ -1759,9 +1767,7 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new McpServerCatalogEntry(
-                    new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]),
-                    enabled: false)
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]), false)
             ]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
@@ -1778,10 +1784,8 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new McpServerCatalogEntry(
-                    new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"]),
-                    enabled: false),
-                new HttpMcpServer("enabled", "https://enabled.example.com/mcp")
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"]), false),
+                McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("enabled", "https://enabled.example.com/mcp"))
             ]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
@@ -1807,14 +1811,19 @@ public sealed class AcpChatCoordinatorTests
         };
         var settings = new McpSettings
         {
-            Servers = [source]
+            Servers = [McpServerCatalogMapper.FromAcpServer(source)]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
         var servers = await provider.GetMcpServersAsync(TestContext.Current.CancellationToken);
-        source.Url = "https://mutated.example.com/mcp";
-        source.Headers![0].Value = "mutated";
-        source.Meta["source"] = "mutated";
+        // ACP wire DTOs are init-only; isolation is verified by NotSame + unchanged captured values
+        // even if the caller retains the original catalog entry reference.
+        _ = source with
+        {
+            Url = "https://mutated.example.com/mcp",
+            Headers = [new McpHttpHeader(source.Headers![0].Name, "mutated")],
+            Meta = new Dictionary<string, object?> { ["source"] = "mutated" }
+        };
 
         var captured = Assert.IsType<HttpMcpServer>(Assert.Single(servers));
         Assert.NotSame(source, captured);
@@ -2032,9 +2041,14 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal("hi", text.Text);
     }
 
+    public static TheoryData<StopReason> NonTerminalStopReasons() => new()
+    {
+        StopReason.Refusal,
+        StopReason.Cancelled,
+    };
+
     [Theory]
-    [InlineData(StopReason.Refusal)]
-    [InlineData(StopReason.Cancelled)]
+    [MemberData(nameof(NonTerminalStopReasons))]
     public async Task DispatchPromptToRemoteSessionAsync_PreservesPromptStopReason(StopReason expected)
     {
         var service = CreateChatService();
@@ -2250,15 +2264,15 @@ public sealed class AcpChatCoordinatorTests
         service
             .Setup(x => x.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .Callback<SessionCancelParams>(parameters => captured = parameters)
-            .ReturnsAsync(new SessionCancelResponse(true));
+            .Returns(Task.CompletedTask);
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.CancelPromptAsync(sink, "User cancelled", TestContext.Current.CancellationToken);
+        await sut.CancelPromptAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("remote-session-9", captured!.SessionId);
-        Assert.Equal("User cancelled", captured.Reason);
+        Assert.Null(captured.Meta);
     }
 
     [Fact]
@@ -2311,11 +2325,11 @@ public sealed class AcpChatCoordinatorTests
         service
             .Setup(x => x.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .Callback<SessionCancelParams>(parameters => captured = parameters)
-            .ReturnsAsync(new SessionCancelResponse(true));
+            .Returns(Task.CompletedTask);
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.CancelPromptAsync(sink, "User cancelled", TestContext.Current.CancellationToken);
+        await sut.CancelPromptAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("remote-fresh", captured!.SessionId);
@@ -2356,6 +2370,46 @@ public sealed class AcpChatCoordinatorTests
         Assert.Null(sink.CurrentChatService);
         Assert.Null(sink.CurrentRemoteSessionId);
         Assert.Equal(1, sink.BindingCommands.ClearCalls);
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_WhenServiceDisconnectThrows_StillCompletesTeardown()
+    {
+        // 断连失败不得半拆协调器状态:sink 替换、绑定清理与连接态复位都必须照常执行,
+        // 否则残留一个指向已死服务的协调器,后续激活全部错乱。
+        var service = CreateChatService();
+        service
+            .Setup(x => x.DisconnectAsync())
+            .ThrowsAsync(new InvalidOperationException("disconnect failure"));
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            CurrentSessionId = "local-session-1",
+            CurrentRemoteSessionId = "remote-session-3"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var resetCalls = 0;
+        connectionCoordinator
+            .Setup(x => x.ResetAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => resetCalls++)
+            .Returns(Task.CompletedTask);
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+
+        await sut.DisconnectAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.Null(sink.CurrentChatService);
+        Assert.Null(sink.CurrentRemoteSessionId);
+        Assert.Equal(1, sink.BindingCommands.ClearCalls);
+        Assert.Equal(1, resetCalls);
     }
 
     [Fact]
@@ -2971,14 +3025,14 @@ public sealed class AcpChatCoordinatorTests
 
         public StaticMcpServerProvider(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> GetMcpServersAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult<IReadOnlyList<McpServer>>(
-                McpServerJsonConverter.CloneServers(_servers));
+                McpServerSnapshots.CloneServers(_servers));
         }
     }
 
@@ -2988,7 +3042,7 @@ public sealed class AcpChatCoordinatorTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -2996,7 +3050,7 @@ public sealed class AcpChatCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }
@@ -3214,6 +3268,19 @@ public sealed class AcpChatCoordinatorTests
             => string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
                 ? ActiveSessionCwd
                 : null;
+
+        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(new AcpRemoteSessionRecoveryFallback(
+                GetSessionCwdOrDefault(conversationId),
+                null));
+
+        public Task ApplyConversationRemoteSessionInfoAsync(
+            string conversationId,
+            AgentSessionInfo sessionInfo,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 
     private sealed class LaggingSelectedProfileSink : IAcpChatCoordinatorSink
@@ -3347,6 +3414,17 @@ public sealed class AcpChatCoordinatorTests
         public string? GetActiveSessionCwdOrDefault() => null;
 
         public string? GetSessionCwdOrDefault(string conversationId) => null;
+
+        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(default(AcpRemoteSessionRecoveryFallback));
+
+        public Task ApplyConversationRemoteSessionInfoAsync(
+            string conversationId,
+            AgentSessionInfo sessionInfo,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {

@@ -20,7 +20,7 @@ public sealed class TransportSupportPolicy : ITransportSupportPolicy
         {
             TransportType.Stdio => _capabilities.SupportsStdioTransport,
             TransportType.WebSocket => true,
-            TransportType.HttpSse => true,
+            TransportType.StreamableHttp => true,
             _ => false
         };
 
@@ -32,7 +32,7 @@ public sealed class TransportSupportPolicy : ITransportSupportPolicy
         {
             TransportType.Stdio when !_capabilities.SupportsStdioTransport =>
                 "Stdio transport requires a desktop process host and is not supported on this platform.",
-            TransportType.WebSocket or TransportType.HttpSse => null,
+            TransportType.WebSocket or TransportType.StreamableHttp => null,
             _ => $"Unsupported transport type: {transport}."
         };
 }

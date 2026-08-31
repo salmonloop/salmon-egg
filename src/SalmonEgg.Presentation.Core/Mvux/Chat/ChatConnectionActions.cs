@@ -8,13 +8,18 @@ public sealed record SetConnectionPhaseAction(
 
 public sealed record SetSelectedProfileIntentAction(string? ProfileId) : ChatConnectionAction;
 
+public sealed record InitializeSelectedProfileIntentAction(string ProfileId) : ChatConnectionAction;
+
 public sealed record SetForegroundTransportProfileAction(string? ProfileId) : ChatConnectionAction;
 
 public sealed record SetConnectionInstanceIdAction(string? ConnectionInstanceId) : ChatConnectionAction;
 
 public sealed record SetConnectionAuthenticationStateAction(
     bool IsRequired,
-    string? HintMessage) : ChatConnectionAction;
+    string? HintMessage,
+    string? HintResourceKey = null,
+    string? HintFallback = null,
+    object[]? HintFormatArgs = null) : ChatConnectionAction;
 
 public sealed record SetNewSessionDraftAction(NewSessionDraftState? Draft) : ChatConnectionAction;
 

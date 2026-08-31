@@ -93,7 +93,19 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
     public bool HasConfiguredProvider => !string.IsNullOrWhiteSpace(_snapshot.Configuration.ProviderId);
 
     public bool CanSync =>
-        IsEnabled && _snapshot.Readiness == CloudProviderReadiness.Ready && !IsBusy;
+        IsEnabled && _snapshot.Readiness == CloudProviderReadiness.Ready && !IsBusy && !HasPendingConflict;
+
+    /// <summary>
+    /// 最近一次失败为内容冲突，且连接仍 Ready：允许用户显式 KeepLocal / ApplyRemote。
+    /// </summary>
+    public bool HasPendingConflict =>
+        !IsBusy &&
+        IsEnabled &&
+        _snapshot.Readiness == CloudProviderReadiness.Ready &&
+        (_snapshot.LastFailure?.Kind == CloudSyncFailureKind.RemoteConflict ||
+         _snapshot.Transfer.Failure?.Kind == CloudSyncFailureKind.RemoteConflict);
+
+    public bool CanResolveConflict => HasPendingConflict;
 
     public bool CanEdit => !IsBusy;
 
@@ -165,7 +177,6 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
             {
                 CloudTransferOutcome.Uploaded => _localizer["DataStorage_CloudSyncUploadedLocal"],
                 CloudTransferOutcome.Restored => _localizer["DataStorage_CloudSyncAppliedRemote"],
-                CloudTransferOutcome.ConflictRemoteApplied => _localizer["DataStorage_CloudSyncAppliedRemoteConflict"],
                 _ => _localizer["DataStorage_CloudSyncLastSucceeded"]
             };
             return string.Format(
@@ -183,11 +194,15 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
         CloudSyncFailureKind.Authentication => _localizer["DataStorage_CloudSyncAuthenticationRejected"],
         CloudSyncFailureKind.Network => _localizer["DataStorage_CloudSyncNetworkUnavailable"],
         CloudSyncFailureKind.Validation => _localizer["DataStorage_CloudSyncValidationFailed"],
-        CloudSyncFailureKind.RemoteConflict => _localizer["DataStorage_CloudSyncConflictFailed"],
+        CloudSyncFailureKind.RemoteConflict => _localizer["DataStorage_CloudSyncConflictNeedsResolution"],
         CloudSyncFailureKind.LocalPackage => _localizer["DataStorage_CloudSyncLocalPackageFailed"],
         CloudSyncFailureKind.Unknown => _localizer["DataStorage_CloudSyncStatusFailed"],
         _ => string.Empty
     };
+
+    public string KeepLocalConflictText => _localizer["DataStorage_CloudSyncKeepLocal"];
+
+    public string ApplyRemoteConflictText => _localizer["DataStorage_CloudSyncApplyRemote"];
 
     public string CredentialStatusText => _draftCredential switch
     {
@@ -458,6 +473,31 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
     private Task SyncNowAsync() => CanSync ? _coordinator.SyncNowAsync() : Task.CompletedTask;
 
     [RelayCommand]
+    private Task KeepLocalConflictAsync() =>
+        CanResolveConflict
+            ? _coordinator.ResolveConflictAsync(CloudSyncConflictResolution.KeepLocal)
+            : Task.CompletedTask;
+
+    [RelayCommand]
+    private async Task ApplyRemoteConflictAsync()
+    {
+        if (!CanResolveConflict)
+        {
+            return;
+        }
+
+        var confirmed = await _ui.ConfirmAsync(
+            _localizer["DataStorage_CloudSyncApplyRemoteTitle"],
+            _localizer["DataStorage_CloudSyncApplyRemoteMessage"],
+            _localizer["DataStorage_CloudSyncApplyRemotePrimary"],
+            _localizer["Common_Cancel"]).ConfigureAwait(true);
+        if (confirmed)
+        {
+            await _coordinator.ResolveConflictAsync(CloudSyncConflictResolution.ApplyRemote).ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
     private Task DisableAsync() => CanDisable ? _coordinator.DisableAsync() : Task.CompletedTask;
 
     [RelayCommand]
@@ -592,6 +632,8 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(HasConfiguredProvider));
         OnPropertyChanged(nameof(CanSync));
+        OnPropertyChanged(nameof(HasPendingConflict));
+        OnPropertyChanged(nameof(CanResolveConflict));
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanDisable));
         OnPropertyChanged(nameof(CanForget));
@@ -602,6 +644,8 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(ShowRemoveAction));
         OnPropertyChanged(nameof(RetryCredentialCheckText));
         OnPropertyChanged(nameof(EditActionText));
+        OnPropertyChanged(nameof(KeepLocalConflictText));
+        OnPropertyChanged(nameof(ApplyRemoteConflictText));
         OnPropertyChanged(nameof(StatusHeadline));
         OnPropertyChanged(nameof(TransferStatusText));
         OnPropertyChanged(nameof(ErrorText));

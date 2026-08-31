@@ -1,5 +1,72 @@
 # SalmonEgg 构建指南
 
+> 本文件是仓库唯一的日常构建与运行指南。先看本页，再按目标平台执行命令；发布和安装包流程见 [`docs/release-guide.md`](docs/release-guide.md)。
+
+## 新成员首次配置
+
+### 先确认目录和 SDK
+
+所有命令都从仓库根目录执行：
+
+```bash
+git clone <repository-url> salmon-egg
+cd salmon-egg
+
+dotnet --version
+dotnet --info
+```
+
+仓库通过 `global.json` 锁定 .NET SDK `10.0.302`，允许同一 feature band 内的 patch 前滚；Uno SDK 锁定为 `6.6.29`。版本不匹配时先安装 .NET 10 SDK，不要手改项目 TFM 或 `global.json`。
+
+### 必需与可选依赖
+
+| 目标 | 首次安装要求 |
+|------|--------------|
+| Desktop / Core | .NET 10 SDK；Linux 还需要下方的原生库 |
+| BrowserWasm | .NET 10 SDK + `wasm-tools` workload |
+| Windows MSIX | Visual Studio 18.8+ 或 Build Tools；MSBuild、C++ 构建工具、Windows SDK `10.0.26100.0`；`signtool` 使用 SDK `10.0.22621.0` |
+| Android | Android workload、Android SDK 和 Java JDK 17+；默认构建不启用 Android |
+| iOS | macOS、匹配的 Xcode 和 iOS workload；默认构建不启用 iOS |
+
+BrowserWasm 首次配置：
+
+```bash
+dotnet workload install wasm-tools
+dotnet workload list
+```
+
+Android/iOS 的完整工具链、Xcode 选择和发布限制见 [`docs/release-guide.md`](docs/release-guide.md)；不要只根据本地能 restore 就宣称移动端发布可用。
+
+### Linux Desktop 原生库
+
+下面是 Debian/Ubuntu 示例包名。不同发行版的包名可能不同，先用发行版包管理器查找对应的 GTK、WebKitGTK 和 Secret Service 包：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libfreetype6 fontconfig libfontconfig1 libgtk-3-0 libx11-6 \
+  xvfb libxtst6 xdg-utils libsecret-tools
+```
+
+需要应用内本地终端 WebView 时，还要安装发行版对应的 WebKitGTK / JavaScriptCore 运行库，例如 Ubuntu 的 `libwebkit2gtk-4.1-0`。
+
+### 第一次构建
+
+```bash
+dotnet restore SalmonEgg.sln
+dotnet build SalmonEgg.sln --configuration Release
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
+```
+
+只想先启动跨平台桌面版：
+
+```bash
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  --framework net10.0-desktop
+```
+
+Windows 原生路径必须用 MSIX 脚本；Linux/macOS 桌面版走 Skia；WASM 必须使用 BrowserWasm 目标。不要用一个目标的成功替代其他平台验证。
+
 ## 快速开始
 
 ### Windows 用户
@@ -34,7 +101,7 @@ run.bat desktop
 ### 1. 环境要求
 
 - **.NET SDK**: 10.0 或更高版本
-  - 推荐版本：10.0.109（允许 patch 前滚）
+  - 推荐版本：10.0.302（允许 patch 前滚）
   - 下载地址: https://dotnet.microsoft.com/download/dotnet/10.0
   
 - **操作系统**:
@@ -59,14 +126,14 @@ Linux 桌面运行时依赖按能力分层（包名以 Debian/Ubuntu 为例）�
 # 检查 .NET SDK 版本
 dotnet --version
 
-# 应该输出 10.0.109 或兼容的 10.0 patch 版本
+# 应该输出 10.0.302 或兼容的 10.0.3xx patch 版本
 ```
 
 ### 3. 克隆代码（如果还没有）
 
 ```bash
 git clone <repository-url>
-cd salmon-acp
+cd salmon-egg
 ```
 
 ### 4. 构建项目
@@ -123,7 +190,7 @@ run.bat
 > 证书复用：`.tools/run-winui3-msix.ps1` 现在会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
 > 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 > 工具链锁定：Windows SDK 10.0.26100.0，signtool 来自 SDK 10.0.22621.0。
-> Workload manifest：CI 应与 `global.json` 中的 .NET SDK patch 保持一致；当前仓库锁定 10.0.109，本地允许最新 patch manifest。
+> Workload manifest：CI 应与 `global.json` 中的 .NET SDK feature band 保持一致；当前仓库锁定 10.0.302，并使用 `rollForward: latestPatch`。所有 GHA 均使用 `setup-dotnet` 官方支持的 `10.0.3xx` 语法，只在同一 feature band 内前滚 patch，避免 workload manifest 与 Xcode 独立漂移。
 > 验证口径：`dotnet build -f net10.0-windows10.0.26100.0` 不是本仓库的权威 WinUI 3 / MSIX 门禁；Windows 原生包请以 `build.bat msix` 或 `.tools/run-winui3-msix.ps1 -SkipInstall` 为准。`dotnet build` 主要用于 Core/Skia/Desktop/Wasm 验证。
 
 #### Linux Headless Desktop
@@ -180,19 +247,79 @@ dotnet test --solution SalmonEgg.sln \
 `tests/SalmonEgg.Presentation.Core.Tests/testconfig.json` 是 Presentation.Core 测试在 MTP 下的并行度事实源；不要再通过 `RunConfiguration.DisableParallelization` 或 VSTest runsettings 参数补偿。
 
 #### Skia Desktop GUI smoke gate
-Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证 XAML 主窗口已经完成 shell 初始内容激活，不把测试探针带入 Release：
+Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证：
+
+1. XAML 主窗口已经完成 shell 初始内容激活；
+2. 通过 portable AppData seed（`SalmonEgg.TestSupport.SkiaDesktopGuiSeedWriter`）恢复的混排 transcript（markdown + tool_call + mode_change + image）已被权威 projection 写入 `MessageHistory`；
+3. 深色主题下，诊断 driver 通过 `MainNavigationViewModel.ActivateSettingsAsync` 进入真实 Data & Storage 页面，让焦点先成功离开、再进入真实 cache-retention `NumberBox` 的原生 `InputBox`，并连续三次只读采集已实现模板的前景、背景、焦点和 `ActualTheme`；每次 WCAG 对比度必须不低于 4.5，且探针不得改变绑定值。
+
+种子只写真实生产文件（`conversations/conversations.v1.json` + `config/app.yaml`），并在临时 AppData 中固定 `theme: Dark`。NumberBox 探针使用独立、环境变量门控的 DEBUG-only driver；页面只在启动 workflow 完成后把 live shell root 交给 driver，不承载导航、负载或断言逻辑，也不创建隐藏控件或测试专用 UI。探针不进入 Release：
 
 ```bash
 scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 ```
 
-Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI、AutomationId 或控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容或应用内 test hook 冒充语义自动化。
+Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI 或完整控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。NumberBox 的 DEBUG probe 不是通用语义自动化替代品：它只为已知模板回归走 authoritative 页面导航，使用生产控件已有的 `AutomationId` 定位真实 NumberBox，并读取已实现视觉树的原生状态。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容、隐藏测试 UI 或返回预设结果的 test hook 冒充语义自动化。
 
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
-- Skia Desktop GUI readiness：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
+- Skia Desktop GUI readiness + seeded transcript projection + focused NumberBox contrast：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness、投影混排 transcript，并在真实 Data & Storage 页面验证深色主题 NumberBox 焦点态；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
+
+#### WASM notification gate
+WASM 原生通知走浏览器 Notification API。该桥接层是纯浏览器交互，用托管单测会变成 stub 掉被测 API 本身，
+所以门禁在真实浏览器里加载**本次构建产出**的模块，并让通知权限真实处于授予/拒绝状态：
+
+```bash
+scripts/gates/run-wasm-notification-gates.sh Release
+```
+
+门禁先断言模块确实进入了 published package（只存在于源码而没打进包，运行时会全部退化成 Failed），
+再用 Playwright 断言托管服务分流依赖的分支：权限字符串、API 缺失时的 `unsupported` 哨兵、per-turn tag
+作为替换键、点击回调把 turn 与其 conversation 报回托管层、以及构造函数抛错时返回 false 而非逸出异常。注意 granted 路径必须用完整 Chromium：
+headless *shell* 构建无论是否授权都把通知权限报成 denied。
+
+#### Linux notification gate
+Linux 原生通知走 freedesktop.org Desktop Notifications 规范，其契约只在 session bus 上可观测：
+「重复同一 turn 必须请求替换而非堆叠」「无通知服务时必须是能力缺失而非失败」。用 mock 的 D-Bus 层做单测
+等于断言我方测试替身，所以该 gate 用真实 session bus 跑真实服务，并断言通知服务实际收到的报文：
+
+```bash
+scripts/gates/run-linux-notification-gates.sh Release
+```
+
+三种情形各跑一遍：无 `DBUS_SESSION_BUS_ADDRESS`、有 session bus 但无通知服务、有通知服务。
+最后一种情形用 `scripts/gates/linux-notification-server-stub.py` 拥有 `org.freedesktop.Notifications`
+并把每次 `Notify` 落成 JSON-lines，gate 据此断言 `replaces_id` 的 per-turn 语义、`-1`（由桌面决定超时）
+以及用于承接点击的 `default` action。前置依赖：`dbus-run-session`、`python3` 以及 python `jeepney` 包。macOS desktop 无托管
+UserNotifications 绑定，仍诚实报告 Unsupported，不在本 gate 覆盖范围。
+
+#### Release artifact contract gates
+
+发布产物的"构建成功"不等于"用户能用"。CLI 早就有真实校验（执行刚构建的可执行文件、安装刚构建的 .deb），
+其余产物此前只有 publish 退出码作为证据。两个新门禁补上这一层，且都能在任意平台跑自检：
+
+```bash
+# WASM publish 输出与 macOS .app bundle 的结构契约
+scripts/gates/run-release-artifact-contract-gate.sh wasm publish/wasm
+scripts/gates/run-release-artifact-contract-gate.sh macos-bundle publish/macos-bundle/SalmonEgg.app
+scripts/gates/run-release-artifact-contract-gate.sh --self-test
+```
+
+```powershell
+# MSIX 包内容契约：identity、已替换的版本号、manifest 声明的每个 shell 资源都真的在包里
+./scripts/gates/run-msix-package-contract-gate.ps1 -Package artifacts/msix/SalmonEgg_1.2.0.0_x64.msix
+./scripts/gates/run-msix-package-contract-gate.ps1 -SelfTest
+```
+
+MSIX gate 针对的是 `SalmonEgg.csproj` 里 Assets ItemGroup 注释描述的那个缺陷：WinUI 3 目标同时落在 Uno
+与 WinAppSDK 两套默认项归属的空隙里，资源项一旦回归，构建照样成功、包照样合法，只是 manifest 声明的
+图标不在包内，Windows 于是回落到通用占位图标。它用 zip + XML 检查实现，不依赖 Windows API，因此规则本身
+可以在 Linux 上排练——`-SelfTest` 会逐一构造这些缺陷并断言每条检查真的拒绝它。
+
+两个 gate 的 `--self-test` / `-SelfTest` 都挂在 `ci-core.yml` 的每次 push / PR 上：真实产物只在 Windows
+或打 tag 时才存在，若不排练失败用例，一个被削弱的检查与一个放行一切的检查无法区分。
 
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：
@@ -201,7 +328,9 @@ Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 A
 scripts/gates/verify-mobile-target-contracts.sh
 ```
 
-该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
+该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源，并通过 `GenerateRestoreGraphFile` 的无 workload surrogate 确认应用级单 TFM 不会污染 Core 子项目、受限平台图不会引入 Desktop process host；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
+
+GHA 的 iOS Simulator job 是有界的 simulator compile / app-bundle gate：restore 与 build 均保持 Release 配置并显式使用 .NET for iOS 官方支持的 `UseInterpreter=true` 与 `TrimMode=copy`，避免把 hosted runner 时间消耗在 app-wide AOT。该 gate 验证本次提交的 iOS target graph、托管代码、XAML/资源与 simulator bundle；它不等同于 device/archive AOT 或签名安装验证，正式 iOS 发布必须另行执行真实 archive/device gate。官方属性说明：https://learn.microsoft.com/dotnet/ios/building-apps/build-properties#useinterpreter 。
 
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
@@ -241,10 +370,115 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - Diagnostics 页焦点边界：确认焦点不会落到隐藏、stale 或 body-only 状态；
 - 设置持久化：通过 UI 切换应用语言并修改外观、数据与存储、快捷键、ACP 和 MCP 服务器状态，验证 shell 重载后的 `x:Uid` 与 singleton ViewModel 文案，并在刷新后从可见设置页确认状态仍存在；
 - ACP / 平台能力边界：保存 ACP WebSocket profile，验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
-- Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键经平台 bridge 进入 Uno 原生焦点与控件激活路径；
+- Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键进入 Diagnostics 的 pressed 槽位与 ActiveInputs 意图事实（`MoveDown` / `Activate`）。原生焦点由键盘/XYFocus 与控件 consumer 拥有；壳层不再对轮询手柄做全局 SendInput / FocusManager 焦点 bridge，避免双路径分发；
 - WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。
 
-它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
+它补充 Windows FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
+
+> Windows FlaUI/UIA3 gate（`scripts/gates/run-gui-smoke-gates.ps1`）目前是**本机门禁**：它需要真实 Windows 交互会话，而本仓库没有注册自托管 Windows runner。`gui-smoke-gates.yml` 里对应的 job 仍然保留接线，但由仓库变量 `WINDOWS_GUI_SELF_HOSTED_RUNNER=true` 显式启用；未启用时不会排队等待一个不存在的 runner。
+
+#### BrowserWasm multi-brand gamepad identity smoke
+
+`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and browser `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`) using both Chrome-style (`Name (… Vendor: … Product: …)`) and Firefox-style (`vvvv-pppp-Name`) formats. Diagnostics must project display name, `VID`/`PID`, controller `family` (`Xbox` / `Sony` / `Nintendo`), face `layout` (Nintendo only for Switch Pro identity), and pressed standard slot names (for example `pressed A` for index 0) plus ActiveInputs intent facts such as `Activate` / `MoveDown`. Face **semantics** remain position-based under `mapping: "standard"` (bottom/east/west/north slots and LT/RT map to Activate/Back/no-op/ToggleVoiceInput/PageUp/PageDown for every brand id); identity is for diagnostics/layout labeling, not a second brand shell path. The multi-brand face/trigger smoke asserts those intents plus pressed slot names and Diagnostics reading `LT`/`RT` unit values for Xbox, DualSense, and Switch Pro ids.
+
+#### Multi-brand gamepad simulation options
+
+To approximate real-device smoke without every physical controller present, prefer layered evidence rather than inventing brand shell patches:
+
+| Layer | Tooling | What it can prove | Limits |
+|-------|---------|-------------------|--------|
+| Core unit matrix | xUnit over `Presentation.Core` mappers / identity / unlabeled policy | PS / Xbox / Nintendo face semantics, Joy-Con exclusion, unlabeled B0–B3 / B6–B7 | Not OS HID label or dual-path exposure |
+| BrowserWasm inject | Playwright + `navigator.getGamepads` override (`wasm-gamepad-boundary-smoke.mjs`) | W3C standard-position intents + Chrome-style `id` → name/VID/PID/layout diagnostics | Browser Gamepad API only; not Windows `Gamepad`/`RawGameController` |
+| Windows synthetic keys | FlaUI `synthetic` GUI backend | Shell routing for VirtualKey-style inject | Not `Windows.Gaming.Input` brand labels |
+| Windows virtual HID | `tests/SalmonEgg.GamepadBridge.Windows` + HIDMaestro (`SALMONEGG_HIDMAESTRO_*`) | Virtual controller appears on the OS input path used by native-device GUI smoke | Default profile is `xbox-360-wired`; other profiles only after confirming installed HIDMaestro profile ids—do not invent ids |
+| Optional second virtual bus | Nefarius **ViGEmBus** + `Nefarius.ViGEm.Client` / Python **vgamepad** | Common Xbox 360 / DualShock 4 style virtual pads on Windows | Does **not** replace DualSense / Switch Pro HID identity evidence; not a substitute for MSIX real-device Diagnostics matrix |
+| Linux host approximation | `scripts/gates/run-linux-gamepad-smoke-gates.sh` | Core multi-brand unit/mapper/Diagnostics VM matrix + BrowserWasm Playwright inject (Xbox / DualSense / Switch Pro ids, standard-position intents, Diagnostics ActiveInputs) on this machine | Not Windows `Gamepad`/`RawGameController`, not HIDMaestro OS-path, not physical MSIX; Desktop remains `NoOpGamepad*` so XTest shell probes are not gamepad evidence |
+| Windows multi-profile virtual HID loop | `scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1` + `scripts/gates/hidmaestro-multiprofile-manifest.txt` | Loops Core-owned multiprofile manifest rows (or `SALMONEGG_HIDMAESTRO_PROFILE_IDS` / `-ProfileIds`) through native-device Diagnostics GUI smoke; family/face keys come from Core `FormatMultiProfileGateManifest` | Requires Windows + HIDMaestro packs; still not physical USB/BT matrix |
+
+Authoritative multi-brand completion still requires current Windows MSIX + Diagnostics capture for physical PS / Xbox / Switch controllers per the validation matrix below.
+
+#### Linux-runnable gamepad smoke
+
+On Linux aarch64/x64 hosts without physical pads or a Windows MSIX environment, run:
+
+```bash
+./scripts/gates/run-linux-gamepad-smoke-gates.sh Debug
+```
+
+That gate covers:
+
+- Core unit classes for HIDMaestro catalog family tokens (confirmed ids only; unconfirmed non-blank ids resolve to `Unknown`, not Xbox), controller identity, dual-path active reading (including standard voice-shortcut-only winning over concurrent raw face) and path-tracker transitions, the shared `GamepadReadingPipeline` poll-frame host plus Diagnostics active-path projector (platform hosts only collect device facts), navigation/shortcut/context intent processors, browser brand semantics, standard-path Sony/Nintendo identity contracts, raw unlabeled face / analog LT-RT policy, multiprofile manifest alignment, and the multi-brand adaptation pipeline;
+- BrowserWasm multi-brand inject via Playwright (`wasm-gamepad-boundary-smoke.mjs`) against the current `net10.0-browserwasm` build.
+
+It does **not** claim Skia Desktop shell input as gamepad evidence: Desktop DI registers `NoOpGamepadInputService` / `NoOpGamepadDiagnosticsService`, so Xvfb/XTest window probes are shell smoke only.
+
+#### Windows multi-profile HIDMaestro runner
+
+On a Windows host with HIDMaestro installed and profile packs present:
+
+```powershell
+$env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
+# optional: subset; default loops all Core ConfirmedProfileIds
+# $env:SALMONEGG_HIDMAESTRO_PROFILE_IDS = "xbox-360-wired,dualsense,switch-pro"
+./scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1 -Configuration Debug
+```
+
+Each profile sets `SALMONEGG_HIDMAESTRO_PROFILE_ID` and re-runs `DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_NativeDeviceBackend_ReflectsVirtualControllerInput` so Diagnostics must project the matching `family` token and semantic face / LT-RT intents on the OS input path.
+
+#### Windows native gamepad bridge
+
+Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
+
+By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) are owned by Core `GamepadHidMaestroProfileCatalog` and currently include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids; profile → family mapping for bridge `info` and ordered physical face-key candidates for semantic `activate`/`back`/`west`/`voice` presses (`GetPhysicalButtonNameCandidates`) come from that catalog. The Windows bridge only resolves the first candidate present on the installed HIDMaestro `HMButton` enum—it must not re-encode brand face tables. Blank/`SALMONEGG_HIDMAESTRO_PROFILE_ID` missing still normalizes to the default confirmed `xbox-360-wired` (family Xbox); any other **unconfirmed non-blank** id maps to family `Unknown` so automation cannot claim Xbox identity evidence by inventing profile strings. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
+
+```powershell
+$env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
+$env:SALMONEGG_HIDMAESTRO_PROFILE_ID = "xbox-360-wired"
+dotnet run --project tests/SalmonEgg.GamepadBridge.Windows/SalmonEgg.GamepadBridge.Windows.csproj -- serve
+```
+
+The bridge protocol accepts `create`, `dispose`, `info` (returns `ok profile=<id> family=Xbox|Sony|Nintendo` for the active `SALMONEGG_HIDMAESTRO_PROFILE_ID`), and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, physical face keys `a`/`b`/`x`/`y` (and PS glyph aliases `cross`/`circle`/`square`/`triangle` when the HIDMaestro `HMButton` enum defines them), app-semantic face keys `activate`/`back`/`west`/`voice` (profile-aware: Xbox A/B/X/Y, DualSense Cross/Circle/Square/Triangle with A/B/X/Y fallback, Switch Pro B/A/Y/X), `lt` / `left-trigger`, `rt` / `right-trigger`, and `release`. Each `press` is sticky until the next `press` or dispose so Diagnostics monitoring can observe the held reading under the app poll interval. Face-button validation should prefer semantic `activate`/`back`/`west`/`voice` presses so DualSense and Switch Pro profiles exercise the correct physical face without Xbox-only a/b/x/y assumptions; still record which physical button each confirmed profile maps to so Activate, Back, Voice Toggle, and the west-face no-op boundary are covered. Triggers are profile-aware: when the active HIDMaestro profile exposes analog `profile.Triggers`, the bridge writes full-press `1.0` on the profile trigger axes plus canonical `Z`/`Rz` and `Rx`/`Ry` so Xbox and DualSense paths both feed `SubmitState`; when the profile has no analog triggers (for example Switch Pro L2/R2 digital clicks), the bridge holds descriptor buttons `6`/`7` instead of misusing Xbox Back/Start semantics. Left projects to `PageUp` and right to `PageDown` when the app threshold is met. The native-device Diagnostics GUI smoke exercises the face matrix and LT/RT page intents on the active HIDMaestro profile (default `xbox-360-wired`) and asserts Diagnostics projects `family Xbox|Sony|Nintendo` matching that profile; re-run with a confirmed DualSense or Switch Pro profile id (`SALMONEGG_HIDMAESTRO_PROFILE_ID`) for multi-brand OS-path evidence.
+
+Do not guess profile ids in automation. Confirm the installed HIDMaestro profile id first, then record the controller family, transport, profile id, and app diagnostics output in the validation notes.
+
+#### Physical multi-brand Diagnostics evidence matrix (required for completion)
+
+Unit tests, BrowserWasm inject, and HIDMaestro multiprofile automation are **not** sufficient to close multi-brand gamepad adaptation. Completion requires Windows **MSIX** Diagnostics captures for each cell below, recorded with build commit, package path, and whether the path was `Gamepad` and/or `RawGameController`.
+
+| Controller | Transport | Path | Face matrix (Activate / Back / west no-op / Voice) | LT / RT | `family` token |
+|------------|-----------|------|-----------------------------------------------------|---------|----------------|
+| Xbox (wired and/or wireless) | USB | Gamepad + Raw if both enumerate | record | record | `Xbox` |
+| Xbox | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Xbox` |
+| DualSense / DualShock | USB | Gamepad + Raw if both enumerate | record | record | `Sony` |
+| DualSense / DualShock | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Sony` |
+| Switch Pro | USB | Gamepad + Raw if both enumerate | record | record | `Nintendo` |
+| Switch Pro | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Nintendo` |
+
+Capture notes must include Diagnostics reading `X {x}, Y {y}; LT {lt}, RT {rt}` (invariant `0.00`), ActiveInputs, pressed details, and must **not** reintroduce shell polled DPad focus bridging.
+
+
+
+Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
+
+- When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading` (`X`/`Y` thumbstick plus `LT`/`RT` unit values).
+- Confirm that standard-path face semantics follow physical labels (Xbox/PS glyphs or Nintendo `Letter*`), not a second brand-specific UI/shell path.
+- The raw-details line that includes `VID`, `PID`, `family` (`Xbox` / `Sony` / `Nintendo` / `Unknown`), `layout`, `unlabeled-index-fallback`, `pressed`, `semantic`, and `reading` (`X`/`Y` plus `LT`/`RT`) whenever raw controllers are present.
+- The standard-details line that includes display name, optional `VID`/`PID`, `family`, `layout`, `labels`, `pressed`, `semantic`, and `reading` whenever standard gamepads are present. `family` is diagnostics identity only and does not invent a second brand shell path. When VID/name identity is missing, Diagnostics may infer `family` from homogeneous face-label tokens (`Cross`/`Circle`/`Square`/`Triangle`, `Letter*`, or `Xbox*`); mixed glyph families stay `Unknown`.
+- Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
+
+Minimum Windows validation matrix:
+
+| Controller | Transport | Required diagnostics evidence |
+| --- | --- | --- |
+| Xbox controller | USB or official wireless path available to Windows | Standard `Gamepad` path if Windows exposes it, or `RawGameController` fallback with `family Xbox` and `layout Standard`; D-pad directions project to `Move*`; A projects to `Activate`; B projects to `Back`; Y projects to `ToggleVoiceInput`; X produces no app semantic action. |
+| DualShock / DualSense | USB and Bluetooth when available | `RawGameController` or `Gamepad` path is acceptable only when diagnostics show `family Sony` plus PS labels or standard semantics; Cross projects to `Activate`; Circle projects to `Back`; Triangle projects to `ToggleVoiceInput`; Square produces no app semantic action. |
+| Switch Pro / Joy-Con | USB and Bluetooth when available | Prefer recording both paths when dual-exposed. `RawGameController` details show Nintendo identity, `family Nintendo`, `VID 057E` or Nintendo/Switch/Joy-Con display name, and `layout Nintendo`. On the standard `Gamepad` path, `labels` must show physical `Letter*` (or Nintendo glyphs) and semantic mapping must follow physical position: physical B/`LetterB` -> `Activate`, physical A/`LetterA` -> `Back`, physical X/`LetterX` -> `ToggleVoiceInput`, physical Y/`LetterY` -> no app action. |
+
+When raw-only controllers report `pressed B0` / `B1` / `B2` / `B3` with no label suffix, known full Xbox (`045E`), Sony (`054C`), and Nintendo (`057E`) families—or matching display-name tokens such as `Xbox`, `DualSense`/`DualShock`/`Dual Sense`/`Dual Shock`, `PS5`/`PS4`/`DS5`/`DS4`, `Nintendo`, `Switch Pro`, Switch `Pro Controller` (excluding Xbox-named strings), and non-single Joy-Con pair/grip/dual names—may still project face semantics from family-specific HID face index maps. Xbox and Nintendo full pads use physical bottom/right/west/north at indexes `0-3` (`Activate` / `Back` / no-op / `ToggleVoiceInput`). Sony DualShock/DualSense HID reports Square/Cross/Circle/Triangle at indexes `0-3`, so Cross (`B1`) is Activate, Circle (`B2`) is Back, Triangle (`B3`) is Voice, and Square (`B0`) is a no-op. Unlabeled digital trigger indexes `B6` / `B7` project to left/right trigger (`PageUp` / `PageDown`) on the same full-gamepad gate. Diagnostics raw lines record `unlabeled-index-fallback on|off` for that gate. Single Joy-Con presentations (`Joy-Con (L/R)`, `JoyCon (L/R)`) are excluded because their HID index map is not the full-gamepad face/trigger layout; pair/grip/dual Joy-Con presentations remain eligible when identity otherwise matches. Prefer labeled evidence (`B0:Cross`, `B0:LetterB`, etc.) when Windows provides `GetButtonLabel` values.
+
+When raw-only Xbox (`045E`) or Sony (`054C`) controllers report analog LT/RT travel without digital trigger labels, Core maps unipolar HID axis slots `4`/`5` (requiring `AxisCount >= 6`) into `LeftTrigger`/`RightTrigger` unit values after button and digital-index projection. Axis samples clamp to `0..1` and merge with any existing digital/labeled trigger evidence using `Math.Max`, so partial analog travel and full digital clicks coexist. Nintendo full pads keep digital L2/R2 (buttons `6`/`7` or labels) and do **not** read slots `4`/`5` as triggers. This is the Core raw-path analog-trigger policy; standard `Gamepad` readings still own the primary Xbox GIP path when both are present.
+
+For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, trigger travel changes `LT`/`RT` on the same reading line, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
 
 #### WebAssembly 持久化策略
 
@@ -442,7 +676,7 @@ dotnet publish \
 3. 运行测试
 4. 打包应用
 
-查看 `.github/workflows/ci.yml` 了解详情。
+查看 `.github/workflows/ci-core.yml`、`.github/workflows/code-quality.yml`、`.github/workflows/platform-build-gates.yml` 和 `.github/workflows/release-packaging.yml` 了解各平台门禁与发布流程。
 
 ## 相关文档
 

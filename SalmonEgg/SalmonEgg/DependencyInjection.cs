@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -7,7 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Client;
-using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Application.Services.Acp;
+using SalmonEgg.Application.Services.AcpSetup;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Interfaces;
@@ -15,7 +17,9 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Domain.Services.AcpSetup;
 using SalmonEgg.Domain.Services.Security;
+using SalmonEgg.Infrastructure.AcpSetup;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Logging;
 using SalmonEgg.Infrastructure.Network;
@@ -39,13 +43,30 @@ using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 using SalmonEgg.Presentation.ViewModels.Start;
 using Serilog;
 using Uno.Extensions.Reactive;
-#if WINDOWS
-using SalmonEgg.Platforms.Windows;
-#elif __WASM__
+using SalmonEgg.Infrastructure.Observability;
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+using SalmonEgg.Infrastructure.Desktop.AcpSetup;
+using SalmonEgg.Infrastructure.Desktop.DependencyInjection;
+#endif
+#if __WASM__
 using SalmonEgg.Platforms.WebAssembly;
+using SalmonEgg.Platforms.WebAssembly.Observability;
+#elif WINDOWS
+using SalmonEgg.Platforms.Windows;
+using SalmonEgg.Platforms.Windows.Observability;
+#elif __ANDROID__
+using SalmonEgg.Platforms.Android;
+using SalmonEgg.Platforms.Mobile.Observability;
+#elif __IOS__
+using SalmonEgg.Platforms.Mobile.Observability;
+using SalmonEgg.Platforms.iOS;
+#else
+using SalmonEgg.Platforms.Desktop;
+using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
 namespace SalmonEgg;
@@ -66,6 +87,7 @@ public static class DependencyInjection
     {
         services.AddLocalization();
         ConfigureLogging(services);
+        ConfigureTelemetry(services);
         RegisterDomainServices(services);
         RegisterInfrastructureServices(services);
         services.AddSingleton<IStringLocalizer<CoreStrings>, UnoCoreStringLocalizer>();
@@ -85,6 +107,66 @@ public static class DependencyInjection
             builder.AddSerilog(logger, dispose: true);
         });
         services.AddSingleton(logger);
+    }
+
+    private static void ConfigureTelemetry(IServiceCollection services)
+    {
+        // 注册平台特定的 Telemetry 导出器工厂
+#if __WASM__
+        services.AddSingleton<ITelemetryExporterFactory, WasmTelemetryExporterFactory>();
+#elif WINDOWS
+        services.AddSingleton<ITelemetryExporterFactory, WinUI3TelemetryExporterFactory>();
+#elif __ANDROID__ || __IOS__
+        services.AddSingleton<ITelemetryExporterFactory, MobileTelemetryExporterFactory>();
+#else
+        services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
+#endif
+
+        // 支撑 Logs 维度的动态 logger provider：DI 里是稳定实例，内部的 OTel logger factory
+        // 由 TelemetryManager 在每次 apply 时替换。单独 build 一个 LoggerProvider 不行——
+        // 它收不到 Microsoft.Extensions.Logging 的写入，会造成"有 provider 但日志不上报"。
+        services.AddSingleton<DynamicTelemetryLoggerProvider>();
+
+        // 必须同时作为 ILoggerProvider 注册，否则上面那个实例不在日志管线里，OTLP Logs 维度
+        // 永远收不到任何业务日志。顺序有硬要求：ConfigureLogging 里的 ClearProviders() 会
+        // RemoveAll<ILoggerProvider>()，因此本注册必须发生在 ConfigureLogging 之后。
+        services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<DynamicTelemetryLoggerProvider>());
+
+        // 以"禁用"为初始配置注册单例：此处禁止读 AppSettings（那是异步 IO，在 DI 工厂或 App
+        // 构造函数里同步阻塞会违反启动副作用所有权约束）。真实配置由 application startup
+        // workflow 异步加载后经 ITelemetryRuntime.ApplyAsync 落地，运行时变更走同一入口。
+        services.AddSingleton<ITelemetryManager>(sp => new TelemetryManager(
+            TelemetrySettings.CreateInactiveBootstrap(),
+            sp.GetRequiredService<ITelemetryExporterFactory>(),
+            sp.GetRequiredService<DynamicTelemetryLoggerProvider>()));
+
+        // app.installation.id 的来源。注册在此处但由 TelemetryRuntime 在 apply 时才异步读取：
+        // DI 工厂与构造函数不得触发真实文件系统副作用（启动副作用所有权约束）。
+        services.AddSingleton<IInstallationIdentityService>(sp => new InstallationIdentityService(
+            sp.GetRequiredService<IAppFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<InstallationIdentityService>>()));
+
+        services.AddSingleton<ITelemetryRuntime>(sp => new TelemetryRuntime(
+            sp.GetRequiredService<ITelemetryManager>(),
+            GetPlatformSamplingDefaults,
+            sp.GetRequiredService<ILogger<TelemetryRuntime>>(),
+            typeof(App).Assembly.GetName().Version?.ToString(),
+            sp.GetRequiredService<IInstallationIdentityService>()));
+
+        // 订阅持久化边界，使任何写入方（设置页保存、云配置恢复）落盘后都立即重建管线。
+        services.AddSingleton<TelemetrySettingsProjection>();
+    }
+
+    private static SamplingSettings GetPlatformSamplingDefaults()
+    {
+#if __WASM__
+        return SamplingSettings.CreateWasmDefaults();
+#elif __ANDROID__ || __IOS__
+        return SamplingSettings.CreateMobileDefaults();
+#else
+        return SamplingSettings.CreateDesktopDefaults();
+#endif
     }
 
     private static LoggingHostCapabilities GetLoggingHostCapabilities()
@@ -115,10 +197,6 @@ public static class DependencyInjection
 
     private static void RegisterDomainServices(IServiceCollection services)
     {
-        // Message Parser and Validator
-        services.AddSingleton<IMessageParser, MessageParser>();
-        services.AddSingleton<IMessageValidator, MessageValidator>();
-
         // Session Manager
         services.AddSingleton<ISessionManager, Infrastructure.Services.SessionManager>();
 
@@ -143,6 +221,44 @@ public static class DependencyInjection
             }
             return new WinUiDispatcher(queue!, logger);
         });
+        // The same platform object both posts notifications and reports taps, because the native handle
+        // is one and the same. Registering one singleton under both contracts keeps that single owner.
+#if WINDOWS
+        services.AddSingleton<WindowsSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
+#elif __ANDROID__
+        services.AddSingleton<AndroidSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
+#elif __IOS__
+        services.AddSingleton<IosSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
+#elif __WASM__
+#pragma warning disable CA1416 // Uno browserwasm target runs in the browser platform surface.
+        services.AddSingleton<WasmSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
+#pragma warning restore CA1416
+#else
+        // One desktop TFM covers Linux and macOS, so the split is a runtime check rather than #if.
+        // macOS has no managed UserNotifications binding here, so it stays honestly unsupported.
+        services.AddSingleton(sp => OperatingSystem.IsLinux()
+            ? (ISystemNotificationService)new LinuxSystemNotificationService(
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>())
+            : new UnsupportedSystemNotificationService());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            (ISystemNotificationActivationSource)sp.GetRequiredService<ISystemNotificationService>());
+#endif
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
         services.AddSingleton<WindowsGamepadInputService>();
@@ -199,7 +315,9 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
         services.AddSingleton<IGamepadContextIntentDispatcher, MainShellGamepadContextIntentDispatcher>();
 
-        // File system persistence -- must be registered before IAppFileStore and ISecureStorage.
+#if __WASM__ || __ANDROID__ || __IOS__
+        // Restricted platforms keep their platform-local storage registrations. Desktop hosts use the
+        // shared composition root below so the CLI and GUI cannot drift into separate backend chains.
 #if __WASM__
         if (OperatingSystem.IsBrowser())
         {
@@ -215,43 +333,42 @@ public static class DependencyInjection
 
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IConfigChangeSignal, ConfigChangeSignal>();
-
-        // App settings (config/app.yaml)
-        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(
+        services.AddSingleton<IConfigurationFileStore>(sp => new FileSystemAppFileStore(
             sp.GetRequiredService<IFileSystemPersistence>(),
             sp.GetRequiredService<IConfigChangeSignal>()));
+        services.AddSingleton<IAppFileStore>(sp => sp.GetRequiredService<IConfigurationFileStore>());
+        services.AddSingleton<IConfigurationFileTransactionStore>(sp =>
+            sp.GetRequiredService<IConfigurationFileStore>());
         services.AddSingleton<PlainTextFileSecureStorage>();
-
-        // Secure Storage
-        // Windows: DPAPI (hardware-bound, user-scoped encryption).
-        // Linux desktop: Secret Service via libsecret's secret-tool.
-        // macOS desktop: Keychain via Security.framework.
-        // Android: AndroidKeyStore-backed AES-GCM with private SharedPreferences ciphertext.
-        // iOS: Keychain generic password item.
-#if WINDOWS
-        services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
-#elif __ANDROID__
+#if __ANDROID__
         services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();
 #elif __IOS__
         services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();
 #elif __WASM__
         services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());
-#else
-        services.AddSingleton<ISecureStorage>(sp =>
-        {
-            var fallback = sp.GetRequiredService<PlainTextFileSecureStorage>();
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ? new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)
-                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)
-                    : fallback;
-        });
 #endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
+        services.AddSingleton<ConfigurationManager>(sp => new ConfigurationManager(
+            sp.GetRequiredService<ISecureStorage>(),
+            sp.GetRequiredService<IConfigurationFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<ConfigurationManager>>()));
+        services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IConfigurationRecoveryService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IServerCredentialService, ServerCredentialService>();
+        services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
+        services.AddSingleton<ConfigurationSecretSnapshotService>();
+        services.AddSingleton<ConfigSyncPackageService>();
+#else
+        // Desktop hosts (GUI and CLI) share one composition root, which already owns
+        // IAppSettingsService together with the secure storage backend it depends on.
+        services.AddSalmonEggDesktopConfiguration();
+#endif
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IAppSupportInfoService>(_ => new AppSupportInfoService(typeof(App).Assembly));
+        services.AddSingleton<IAiContentReportLauncher, AiContentReportLauncher>();
         services.AddSingleton<IConversationStore, ConversationStore>();
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();
@@ -281,8 +398,6 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<AppCultureService>();
         services.AddSingleton<IAppLanguageService, UnoAppLanguageService>();
-        services.AddSingleton<IConfigurationService, ConfigurationManager>();
-        services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();
 #else
@@ -324,9 +439,8 @@ public static class DependencyInjection
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
         services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
         services.AddSingleton<ILogFileCatalog, SalmonEgg.Infrastructure.Services.LogFileCatalog>();
-        services.AddSingleton<ConfigurationSecretSnapshotService>();
-        services.AddSingleton<ConfigSyncPackageService>();
         services.AddSingleton<CloudConfigSyncStateStore>();
+        services.AddSingleton<ConfigContentFingerprint>();
         services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, WebDavCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, S3CloudConfigStorageProvider>();
@@ -342,11 +456,13 @@ public static class DependencyInjection
             new AuthoritativeRemoteSessionRouter(sp.GetRequiredService<IChatStore>()));
         services.AddSingleton<IState<ChatConnectionState>>(sp => State.Value(sp, () => ChatConnectionState.Empty));
         services.AddSingleton<IChatConnectionStore, ChatConnectionStore>();
+        services.AddSingleton<IAcpRemoteSessionRecoveryContextResolver, AcpRemoteSessionRecoveryContextResolver>();
         services.AddSingleton<IAcpConnectionCoordinator>(sp =>
             new AcpConnectionCoordinator(
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<AcpConnectionCoordinator>>(),
-                sp.GetRequiredService<IAcpMcpServerResolver>()));
+                sp.GetRequiredService<IAcpMcpServerResolver>(),
+                sp.GetRequiredService<IAcpRemoteSessionRecoveryContextResolver>()));
         services.AddSingleton(sp =>
             AcpConnectionEvictionOptionsLoader.LoadEnvironmentDefaults(
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger("AcpConnectionEvictionOptionsLoader")));
@@ -368,7 +484,8 @@ public static class DependencyInjection
         services.AddSingleton<IAcpSessionCommandOrchestrator>(sp =>
             new AcpSessionCommandOrchestrator(
                 sp.GetRequiredService<ILogger<AcpSessionCommandOrchestrator>>(),
-                sp.GetRequiredService<IAcpMcpServerResolver>()));
+                sp.GetRequiredService<IAcpMcpServerResolver>(),
+                sp.GetService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
             new SettingsAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
         services.AddSingleton<IAcpMcpServerResolver>(sp =>
@@ -395,6 +512,47 @@ public static class DependencyInjection
                 : new UnsupportedTerminalSessionManager());
 #endif
         services.AddSingleton<IAcpClientFactory, AcpClientFactory>();
+
+        // ACP setup wizard. The catalog is pure data and safe everywhere; every probing, installing and
+        // testing seam gets an unsupported default so platforms without a child-process host report
+        // "undetermined" instead of failing to resolve a service.
+        services.AddSingleton<IAcpAgentCatalog, AcpAgentCatalog>();
+#if __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<IAcpExecutableProbe, UnsupportedAcpExecutableProbe>();
+        services.AddSingleton<IAcpComponentInstaller, UnsupportedAcpComponentInstaller>();
+        services.AddSingleton<IAcpSetupConnectivityTester, UnsupportedAcpSetupConnectivityTester>();
+#else
+        // Widens what the probe can find beyond the PATH this process inherited. A GUI-launched app gets
+        // the session PATH, not the one a shell profile builds, so a version-manager toolchain is
+        // invisible to it and every component would otherwise report as missing. The composition — which
+        // sources this installation can use, and in what order — belongs to AcpSearchPathSources.
+        services.AddSingleton<IAcpExecutableProbe>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
+                ? new DesktopAcpExecutableProbe(AcpSearchPathSources.Create())
+                : new UnsupportedAcpExecutableProbe());
+        services.AddSingleton<IAcpComponentInstaller>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
+                ? new DesktopAcpComponentInstaller(sp.GetRequiredService<IAcpExecutableProbe>())
+                : new UnsupportedAcpComponentInstaller());
+        services.AddSingleton<IAcpSetupHandshakeProbe>(sp =>
+            new StdioAcpSetupHandshakeProbe(
+                sp.GetRequiredService<IStdioTransportFactory>(),
+                transport => sp.GetRequiredService<IAcpClientFactory>().CreateClient(transport)));
+        services.AddSingleton<IAcpSetupConnectivityTester>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
+                ? new DesktopAcpSetupConnectivityTester(sp.GetRequiredService<IAcpSetupHandshakeProbe>())
+                : new UnsupportedAcpSetupConnectivityTester());
+#endif
+        // Transient: the wizard must open on its first step every time, so each navigation gets a fresh
+        // ViewModel instead of one still showing the previous run's saved state.
+        services.AddTransient<AcpSetupWizardViewModel>();
+        services.AddSingleton<AcpSetupWizardOrchestrator>(sp =>
+            new AcpSetupWizardOrchestrator(
+                sp.GetRequiredService<IAcpAgentCatalog>(),
+                sp.GetRequiredService<IAcpExecutableProbe>(),
+                sp.GetRequiredService<IAcpComponentInstaller>(),
+                sp.GetRequiredService<IAcpSetupConnectivityTester>(),
+                sp.GetRequiredService<IConfigurationService>()));
         services.AddSingleton<ChatServiceFactory>(sp =>
         {
             var transportFactory = sp.GetRequiredService<ITransportFactory>();
@@ -428,6 +586,7 @@ public static class DependencyInjection
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
+        services.AddSingleton<IConversationProjectAffinityResolver, ConversationProjectAffinityResolver>();
 #if !__WASM__ && !__ANDROID__ && !__IOS__
         services.AddSingleton<ILocalTerminalCwdResolver, LocalTerminalCwdResolver>();
         services.AddSingleton<ILocalTerminalSessionManager, LocalTerminalSessionManager>();
@@ -460,21 +619,10 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>());
         });
-        services.AddSingleton<IErrorRecoveryService>(sp =>
-        {
-            var pathValidator = sp.GetRequiredService<IPathValidator>();
-            var errorLogger = sp.GetRequiredService<IErrorLogger>();
-            return new ErrorRecoveryService(
-                () => sp.GetRequiredService<ChatViewModel>().CurrentChatService,
-                pathValidator,
-                errorLogger,
-                cancellationToken => sp.GetRequiredService<ChatViewModel>()
-                    .ResolveCurrentMcpServersAsync(cancellationToken));
-        });
-
         services.AddSingleton(sp =>
         {
             var lazyNav = new Lazy<INavigationCoordinator>(() => sp.GetRequiredService<INavigationCoordinator>());
+            var lazyMainNav = new Lazy<MainNavigationViewModel>(() => sp.GetRequiredService<MainNavigationViewModel>());
             return new ConversationCatalogFacade(
                 sp.GetRequiredService<ChatConversationWorkspace>(),
                 sp.GetRequiredService<IConversationActivationCoordinator>(),
@@ -483,7 +631,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<ConversationCatalogPresenter>(),
                 sp.GetRequiredService<ILogger<ConversationCatalogFacade>>(),
                 sp.GetService<IConversationAttentionStore>(),
-                sp.GetService<IConversationPanelCleanup>());
+                sp.GetService<IConversationPanelCleanup>(),
+                lazyMainNav);
         });
         services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<ChatViewModel>(sp =>
@@ -497,9 +646,21 @@ public static class DependencyInjection
             return vm;
         });
         services.AddSingleton<IConversationSessionSwitcher>(sp => sp.GetRequiredService<ChatViewModel>());
+        services.AddSingleton<IChatRuntimeInitialization>(sp => sp.GetRequiredService<ChatViewModel>());
+        services.AddSingleton<IChatRuntimePersistence>(sp => sp.GetRequiredService<ChatViewModel>());
 
         services.AddSingleton<ChatShellViewModel>();
+        // The navigation VM owns session activation; the router only supplies a conversation id.
+        services.AddSingleton<IConversationActivationEntryPoint>(sp =>
+            sp.GetRequiredService<MainNavigationViewModel>());
+        services.AddSingleton<IConversationOpenRouter, ConversationOpenRouter>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
+        // 关闭遮罩必须单例：它订阅 shutdown 进度源，多例会重复起阈值计时。
+        services.AddSingleton<ShellShutdownOverlayViewModel>(sp =>
+            new ShellShutdownOverlayViewModel(
+                sp.GetRequiredService<IApplicationShutdownProgress>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
@@ -540,7 +701,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>(),
-                sp.GetRequiredService<IConversationMutationPipeline>()));
+                sp.GetRequiredService<IConversationMutationPipeline>(),
+                sp.GetRequiredService<IShellNavigationRuntimeState>()));
 
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<INavigationSelectionProjector, NavigationSelectionProjector>();
@@ -576,11 +738,61 @@ public static class DependencyInjection
                 sp.GetRequiredService<IDiscoverSessionsConnectionFacade>(),
                 sp.GetRequiredService<INavigationProjectSelectionStore>(),
                 sp.GetRequiredService<IShellNavigationService>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<NavigationCoordinator>>()));
-        services.AddTransient<IShellStartupNavigationService>(sp =>
+        services.AddSingleton<ISettingsSectionSelectionStore, SettingsSectionSelectionStore>();
+        services.AddSingleton<IShellStartupNavigationService>(sp =>
             new ShellStartupNavigationService(
-                sp.GetRequiredService<INavigationCoordinator>(),
+                sp.GetRequiredService<MainNavigationViewModel>(),
+                sp.GetRequiredService<IShellNavigationRuntimeState>(),
+                sp.GetRequiredService<IActivationTokenShellNavigationService>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<ShellStartupNavigationService>>()));
+        services.AddSingleton<IApplicationStartupWorkflow>(sp =>
+        {
+            // 强制解析：投影只在构造时订阅持久化事件，若无人解析它，"保存后立即生效"就不成立。
+            // 挂在启动 workflow 上是因为该 workflow 必然在启动路径被解析，且遥测首次激活也在
+            // 这里，订阅与激活同时就位。
+            _ = sp.GetRequiredService<TelemetrySettingsProjection>();
+            _ = sp.GetRequiredService<ChatCompletionNotificationCoordinator>();
+            // Starting here rather than in a page keeps notification activation on the same
+            // application-scoped owner as the rest of startup.
+            var notificationActivation = sp.GetRequiredService<NotificationActivationCoordinator>();
+            notificationActivation.Start();
+            return new ApplicationStartupWorkflow(
+                sp.GetRequiredService<IShellStartupNavigationService>(),
+                sp.GetRequiredService<IChatRuntimeInitialization>(),
+                sp.GetRequiredService<IConfigurationRecoveryService>(),
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
+                notificationActivation,
+                sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
+        });
+        services.AddSingleton<ChatCompletionNotificationCoordinator>();
+        services.AddSingleton<NotificationActivationCoordinator>();
+        // 关闭进度：Core 持有事实，读写面分开注册，写入面只给 teardown owner。
+        services.AddSingleton<ApplicationShutdownProgressStore>();
+        services.AddSingleton<IApplicationShutdownProgress>(sp =>
+            sp.GetRequiredService<ApplicationShutdownProgressStore>());
+        services.AddSingleton<IApplicationShutdownProgressSink>(sp =>
+            sp.GetRequiredService<ApplicationShutdownProgressStore>());
+        services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
+            new ApplicationShutdownWorkflow(
+                sp.GetRequiredService<IChatRuntimePersistence>(),
+                sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
+                sp.GetRequiredService<IDiscoverSessionsConnectionFacade>(),
+                sp.GetRequiredService<ITerminalSessionManager>(),
+                sp.GetRequiredService<IApplicationShutdownProgressSink>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
+                sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>(),
+                // 本地 PTY 协调器只在 desktop 注册；其余平台传 null，由 workflow 跳过该段。
+                // 用 GetService 而非 GetRequiredService 表达"可选"，避免为此在各平台注册空实现。
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+                sp.GetService<LocalTerminalPanelCoordinator>()
+#else
+                null
+#endif
+                ));
 
         // Global search
         services.AddSingleton<IGlobalSearchPipeline, DefaultGlobalSearchPipeline>();
@@ -590,7 +802,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<AppPreferencesViewModel>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
-                sp.GetRequiredService<IProjectAffinityResolver>(),
+                sp.GetRequiredService<IConversationProjectAffinityResolver>(),
                 sp.GetRequiredService<IGlobalSearchPipeline>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<ILogger<GlobalSearchViewModel>>(),
@@ -607,7 +819,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IUiDispatcher>(),
                 sp.GetRequiredService<IShellLayoutStore>(),
                 sp.GetRequiredService<IProjectAffinityResolver>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
 
         // Start page orchestrator (Start creates session and submits)
         services.AddSingleton<StartViewModel>(sp =>
@@ -624,23 +837,29 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatLaunchWorkflow>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<IAppLanguageService>()));
+                sp.GetRequiredService<IAppLanguageService>(),
+                sp.GetRequiredService<IUiInteractionService>()));
         services.AddSingleton<IChatLaunchWorkflow>(sp =>
             new ChatLaunchWorkflow(
                 sp.GetRequiredService<IChatLaunchWorkflowChatFacade>(),
                 sp.GetRequiredService<ISessionManager>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<ILogger<ChatLaunchWorkflow>>(),
-                sp.GetRequiredService<ConversationCatalogFacade>()));
+                sp.GetRequiredService<ConversationCatalogFacade>(),
+                sp.GetRequiredService<MainNavigationViewModel>()));
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();
+        services.AddSingleton<IApplicationNotificationSettings>(sp =>
+            sp.GetRequiredService<AppPreferencesViewModel>());
         services.AddSingleton<WindowBackdropService>();
 
         // General settings
         services.AddSingleton<GeneralSettingsViewModel>();
         services.AddTransient<SettingsShellViewModel>(sp =>
-            new SettingsShellViewModel(sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+            new SettingsShellViewModel(
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>()));
 
         // ACP session registry: single source of truth for per-profile connection sessions.
         // Registered as a singleton concrete type first, then aliased to both interfaces
@@ -749,7 +968,9 @@ public static class DependencyInjection
         services.AddSingleton<AboutViewModel>();
 
         // Shell navigation facade (prevents Settings pages from walking the visual tree)
-        services.AddSingleton<IShellNavigationService, ShellNavigationService>();
+        services.AddSingleton<ShellNavigationService>();
+        services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());
+        services.AddSingleton<IActivationTokenShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());
 
         // Navigation state service (Single Source of Truth for IsPaneOpen) - Read-only adapter for SSOT
         services.AddSingleton<INavigationPaneState, ShellLayoutNavigationStateAdapter>();
@@ -776,6 +997,7 @@ public static class DependencyInjection
         services.AddSingleton<ShellLayoutViewModel>();
         services.AddSingleton<AppActivationSignalSource>();
         services.AddSingleton<IApplicationActivationSignalSource>(sp => sp.GetRequiredService<AppActivationSignalSource>());
+        services.AddSingleton<IApplicationVisibilityState>(sp => sp.GetRequiredService<AppActivationSignalSource>());
         services.AddSingleton<WindowMetricsProvider>();
     }
 

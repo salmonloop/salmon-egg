@@ -2,12 +2,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
-using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
@@ -19,11 +19,6 @@ public sealed class NavigationSelectionProjectorTests
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: true);
         var start = new StartNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
-        var project = new ProjectNavItemViewModel(
-            new ProjectDefinition { ProjectId = "project-1", Name = "Demo", RootPath = @"C:\repo\demo" },
-            isSystemProject: false,
-            createSessionAsync: _ => Task.CompletedTask,
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
         var session = new SessionNavItemViewModel(
             sessionId: "session-1",
             projectId: "project-1",
@@ -31,7 +26,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
@@ -39,12 +35,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("project-1", projection.ActiveProjectIds);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
         Assert.False(projection.IsSettingsSelected);
     }
 
@@ -53,11 +46,6 @@ public sealed class NavigationSelectionProjectorTests
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: false);
         var start = new StartNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
-        var project = new ProjectNavItemViewModel(
-            new ProjectDefinition { ProjectId = "project-1", Name = "Demo", RootPath = @"C:\repo\demo" },
-            isSystemProject: false,
-            createSessionAsync: _ => Task.CompletedTask,
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
         var session = new SessionNavItemViewModel(
             sessionId: "session-1",
             projectId: "project-1",
@@ -65,7 +53,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
@@ -73,12 +62,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("project-1", projection.ActiveProjectIds);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
     }
 
     [Fact]
@@ -93,7 +79,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
@@ -101,11 +88,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel>());
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
     }
 
     [Fact]
@@ -122,8 +107,7 @@ public sealed class NavigationSelectionProjectorTests
             start,
             discover,
             settings,
-            new Dictionary<string, SessionNavItemViewModel>(),
-            new Dictionary<string, ProjectNavItemViewModel>());
+            new Dictionary<string, SessionNavItemViewModel>());
 
         Assert.Same(settings, projection.ControlSelectedItem);
         Assert.True(projection.IsSettingsSelected);
@@ -158,33 +142,10 @@ public sealed class NavigationSelectionProjectorTests
 
         public Task<string?> PickFolderAsync() => Task.FromResult<string?>(null);
         public Task ShowInfoAsync(string message) => Task.CompletedTask;
-        public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "确定", string closeButtonText = "取消") => Task.FromResult(false);
+        public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "OK", string closeButtonText = "Cancel") => Task.FromResult(false);
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText) => Task.FromResult<string?>(null);
         public Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(RemoteProjectSelectionViewModel viewModel) => Task.FromResult(RemoteProjectSelectionResult.Cancel);
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;
     }
 
-    private sealed class FakeChatSessionCatalog : IChatSessionCatalog
-    {
-        public bool IsConversationListLoading => false;
-
-        public int ConversationListVersion => 0;
-
-        public event PropertyChangedEventHandler? PropertyChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public string[] GetKnownConversationIds() => [];
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-    }
 }

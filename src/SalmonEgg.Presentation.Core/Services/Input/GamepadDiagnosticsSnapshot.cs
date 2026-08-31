@@ -8,6 +8,8 @@ public sealed record GamepadDiagnosticsSnapshot(
     GamepadInputReading Reading,
     IReadOnlyCollection<GamepadNavigationIntent> ActiveIntents,
     IReadOnlyCollection<GamepadContextIntent> ActiveContextIntents,
+    IReadOnlyCollection<GamepadShortcutIntent> ActiveShortcuts,
+    IReadOnlyList<StandardGamepadDiagnostics> StandardGamepads,
     IReadOnlyList<RawGameControllerDiagnostics> RawControllers)
 {
     public static GamepadDiagnosticsSnapshot Unsupported { get; } = new(
@@ -18,5 +20,7 @@ public sealed record GamepadDiagnosticsSnapshot(
         Reading: default,
         ActiveIntents: [],
         ActiveContextIntents: [],
+        ActiveShortcuts: [],
+        StandardGamepads: [],
         RawControllers: []);
 }

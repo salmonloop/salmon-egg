@@ -20,15 +20,17 @@ public sealed class DataStorageSettingsViewModelTests
     {
         var sessionExport = new Mock<ISessionExportService>();
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsLocalFileExport: false,
             sessionExport: sessionExport,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.ExportCurrentSessionJsonCommand.ExecuteAsync(null);
 
         sessionExport.Verify(service => service.ExportAsync(It.IsAny<SessionExportRequest>(), default), Times.Never);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持导出本地文件。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_LocalFileExportUnsupported"]), Times.Once);
     }
 
     [Fact]
@@ -36,23 +38,123 @@ public sealed class DataStorageSettingsViewModelTests
     {
         var diagnostics = new Mock<IDiagnosticsBundleService>();
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsLocalFileExport: false,
             diagnostics: diagnostics,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
 
         diagnostics.Verify(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()), Times.Never);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持导出本地文件。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_LocalFileExportUnsupported"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearCacheCommand_WhenMaintenanceSucceeds_ShowsLocalizedSuccess()
+    {
+        var maintenance = new Mock<IAppMaintenanceService>();
+        maintenance.Setup(service => service.ClearCacheAsync()).Returns(Task.CompletedTask);
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            maintenance: maintenance,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.ClearCacheCommand.ExecuteAsync(null);
+
+        maintenance.Verify(service => service.ClearCacheAsync(), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["General_ClearCacheSuccess"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearCacheCommand_WhenMaintenanceFails_ShowsLocalizedFailure()
+    {
+        var maintenance = new Mock<IAppMaintenanceService>();
+        maintenance.Setup(service => service.ClearCacheAsync())
+            .ThrowsAsync(new IOException("locked"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            maintenance: maintenance,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.ClearCacheCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["General_ClearCacheFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClearAllLocalDataCommand_WhenMaintenanceFails_ShowsLocalizedFailure()
+    {
+        var maintenance = new Mock<IAppMaintenanceService>();
+        maintenance.Setup(service => service.ClearAllLocalDataAsync())
+            .ThrowsAsync(new UnauthorizedAccessException("denied"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            maintenance: maintenance,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.ClearAllLocalDataCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_ClearAllLocalDataFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExportCurrentSessionJsonCommand_WhenExportThrows_ShowsLocalizedFailure()
+    {
+        var sessionExport = new Mock<ISessionExportService>();
+        sessionExport.Setup(service => service.ExportAsync(It.IsAny<SessionExportRequest>(), default))
+            .ThrowsAsync(new IOException("disk full"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            sessionExport: sessionExport,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.ExportCurrentSessionJsonCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_ExportSessionFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDiagnosticsBundleCommand_WhenBundleThrows_ShowsLocalizedFailure()
+    {
+        var diagnostics = new Mock<IDiagnosticsBundleService>();
+        diagnostics.Setup(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()))
+            .ThrowsAsync(new IOException("zip failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            diagnostics: diagnostics,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_CreateDiagnosticsBundleFailed"]), Times.Once);
     }
 
     private static DataStorageSettingsViewModel CreateViewModel(
         bool supportsLocalFileExport,
         Mock<IDiagnosticsBundleService>? diagnostics = null,
         Mock<ISessionExportService>? sessionExport = null,
-        Mock<IUiInteractionService>? ui = null)
+        Mock<IAppMaintenanceService>? maintenance = null,
+        Mock<IUiInteractionService>? ui = null,
+        TestCoreStringLocalizer? localizer = null)
     {
+        localizer ??= new TestCoreStringLocalizer();
         var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
         var chat = (ChatViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ChatViewModel));
         var capabilities = new Mock<IPlatformCapabilityService>();
@@ -72,14 +174,14 @@ public sealed class DataStorageSettingsViewModelTests
             chat,
             cloudConfig,
             Mock.Of<IAppDataService>(),
-            Mock.Of<IAppMaintenanceService>(),
+            maintenance?.Object ?? Mock.Of<IAppMaintenanceService>(),
             diagnostics?.Object ?? Mock.Of<IDiagnosticsBundleService>(),
             Mock.Of<IPlatformShellService>(),
             capabilities.Object,
             Mock.Of<IStorageLocationService>(),
             sessionExport?.Object ?? Mock.Of<ISessionExportService>(),
             ui?.Object ?? Mock.Of<IUiInteractionService>(),
-            new TestCoreStringLocalizer(),
+            localizer,
             Mock.Of<ILogger<DataStorageSettingsViewModel>>());
     }
 }

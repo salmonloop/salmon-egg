@@ -44,9 +44,6 @@ public sealed class ChatSessionUpdateRouter
             CurrentModeUpdate when isConversationConfigAuthoritative
                 => ChatSessionUpdateRoute.IgnoredHandled("ConfigOptionsAuthoritative"),
             CurrentModeUpdate => ChatSessionUpdateRoute.Applied(_projector.Project(args)),
-            ConfigUpdateUpdate configUpdate => ChatSessionUpdateRoute.Applied(
-                _projector.Project(args),
-                shouldSetConfigAuthoritative: configUpdate.ConfigOptions is not null),
             ConfigOptionUpdate optionUpdate => ChatSessionUpdateRoute.Applied(
                 _projector.Project(args),
                 shouldSetConfigAuthoritative: optionUpdate.ConfigOptions is not null),

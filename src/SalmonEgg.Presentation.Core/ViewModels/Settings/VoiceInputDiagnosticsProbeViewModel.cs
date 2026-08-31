@@ -252,7 +252,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             await RunOnUiAsync(() =>
             {
                 _errorAt = DateTimeOffset.Now;
-                _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
+                _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(
+                    ex.Message,
+                    Localize("VoiceInput_Failed", "Voice input failed."));
                 SetProbeStatus(ProbeStatusKind.FailedWithMessage);
                 ProbeTimelineText = BuildTimelineText();
                 IsRunning = false;
@@ -359,7 +361,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             await RunOnUiAsync(() =>
             {
                 _errorAt = DateTimeOffset.Now;
-                _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Failed to stop voice input.");
+                _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(
+                    ex.Message,
+                    Localize("VoiceInput_StopFailed", "Failed to stop voice input."));
                 SetProbeStatus(ProbeStatusKind.FailedWithMessage);
                 ProbeTimelineText = BuildTimelineText();
                 IsRunning = false;
@@ -629,7 +633,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             {
                 SetSignalFailure(VoiceInputErrorMessageSanitizer.Normalize(
                     ex.Message,
-                    "Signal monitoring failed."));
+                    Localize("VoiceDiagnostics_SignalMonitoringFailed", "Signal monitoring failed.")));
             }).ConfigureAwait(false);
             return;
         }
@@ -723,7 +727,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             {
                 SetSignalFailure(VoiceInputErrorMessageSanitizer.Normalize(
                     ex.Message,
-                    "Signal monitoring failed."));
+                    Localize("VoiceDiagnostics_SignalMonitoringFailed", "Signal monitoring failed.")));
             }).ConfigureAwait(false);
         }
     }
@@ -839,6 +843,14 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         _signalSnapshot = null;
         _signalFailureMessage = null;
         ProjectSignalState();
+    }
+
+    private string Localize(string key, string fallback)
+    {
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private void SetSignalFailure(string failureMessage)

@@ -14,11 +14,8 @@ public sealed class WasmGamepadInputService : IGamepadInputService
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
     private readonly ILogger<WasmGamepadInputService> _logger;
-    private readonly GamepadIntentProcessor _intentProcessor = new();
-    private readonly GamepadShortcutProcessor _shortcutProcessor = new();
-    private readonly GamepadContextIntentProcessor _contextIntentProcessor = new();
+    private readonly GamepadReadingPipeline _pipeline = new();
     private readonly object _sync = new();
-    private readonly GamepadInputPathTracker _inputPathTracker = new();
 
     private DispatcherQueueTimer? _timer;
     private bool _isStarted;
@@ -95,10 +92,7 @@ public sealed class WasmGamepadInputService : IGamepadInputService
                 _timer = null;
             }
 
-            _intentProcessor.Reset();
-            _shortcutProcessor.Reset();
-            _contextIntentProcessor.Reset();
-            _ = _inputPathTracker.Reset();
+            _ = _pipeline.Reset();
             _isStarted = false;
             _logger.LogInformation("WASM gamepad input service stopped.");
         }
@@ -120,40 +114,26 @@ public sealed class WasmGamepadInputService : IGamepadInputService
         var tick = Interlocked.Increment(ref _tickSequence);
         var readings = WasmGamepadSnapshotReader.ReadInputReadings();
 
-        if (!GamepadActiveReadingSelector.TrySelectActiveReading(readings, [], out var selection))
-        {
-            lock (_sync)
-            {
-                _intentProcessor.Reset();
-                _shortcutProcessor.Reset();
-                _contextIntentProcessor.Reset();
-                UpdateInputPath(hasActiveReading: false, GamepadInputPath.None, readings.Count);
-            }
-
-            return;
-        }
-
+        GamepadReadingPipelineFrame frame;
         lock (_sync)
         {
-            UpdateInputPath(hasActiveReading: true, selection.InputPath, readings.Count);
+            frame = _pipeline.ProcessFrame(readings, Array.Empty<GamepadInputReading>(), DateTimeOffset.UtcNow);
+            LogPathTransitionIfNeeded(frame.PathTransition, readings.Count);
+        }
 
-            var raisedIntents = _intentProcessor.Process(selection.Reading, DateTimeOffset.UtcNow);
-            var raisedShortcuts = _shortcutProcessor.Process(selection.Reading);
-            var raisedContextIntents = _contextIntentProcessor.Process(selection.Reading);
-            foreach (var intent in raisedIntents)
-            {
-                EmitIntent(intent, tick);
-            }
+        foreach (var intent in frame.RaisedIntents)
+        {
+            EmitIntent(intent, tick);
+        }
 
-            foreach (var shortcut in raisedShortcuts)
-            {
-                EmitShortcut(shortcut, tick);
-            }
+        foreach (var shortcut in frame.RaisedShortcuts)
+        {
+            EmitShortcut(shortcut, tick);
+        }
 
-            foreach (var intent in raisedContextIntents)
-            {
-                EmitContextIntent(intent, tick);
-            }
+        foreach (var intent in frame.RaisedContextIntents)
+        {
+            EmitContextIntent(intent, tick);
         }
     }
 
@@ -172,9 +152,8 @@ public sealed class WasmGamepadInputService : IGamepadInputService
         ContextIntentRaised?.Invoke(this, intent);
     }
 
-    private void UpdateInputPath(bool hasActiveReading, GamepadInputPath path, int standardGamepadCount)
+    private void LogPathTransitionIfNeeded(GamepadInputPathTransition transition, int standardGamepadCount)
     {
-        var transition = _inputPathTracker.Apply(hasActiveReading, path);
         if (!transition.Changed || transition.Path == GamepadInputPath.None)
         {
             return;

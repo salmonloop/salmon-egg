@@ -7,18 +7,31 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
 {
     private const string BridgePathEnvVar = "SALMONEGG_GUI_GAMEPAD_NATIVE_BRIDGE";
     private const string BridgeTimeoutMsEnvVar = "SALMONEGG_GUI_GAMEPAD_NATIVE_BRIDGE_TIMEOUT_MS";
+    private const string HoldMsEnvVar = "SALMONEGG_GUI_GAMEPAD_NATIVE_HOLD_MS";
+    private static readonly TimeSpan DefaultHold = TimeSpan.FromMilliseconds(500);
 
     private readonly Process _bridgeProcess;
     private readonly int _timeoutMs;
+    private readonly TimeSpan _holdDuration;
+    private readonly object _releaseSync = new();
+    private readonly object _commandSync = new();
+    private CancellationTokenSource? _autoReleaseCts;
     private bool _disposed;
+
+    public string ActiveProfileId { get; private set; } = string.Empty;
+
+    public string ActiveFamily { get; private set; } = string.Empty;
 
     public NativeDeviceGamepadTestInput()
     {
         var bridgePath = GetRequiredBridgePath();
 
         _timeoutMs = TryParseTimeoutMs(Environment.GetEnvironmentVariable(BridgeTimeoutMsEnvVar));
+        _holdDuration = TryParseHold(Environment.GetEnvironmentVariable(HoldMsEnvVar));
         _bridgeProcess = StartBridgeProcess(bridgePath);
         SendCommand("create");
+        var info = SendCommand("info");
+        ParseBridgeInfo(info);
     }
 
     internal static bool IsBridgeConfigured(out string failureReason)
@@ -40,40 +53,27 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         return true;
     }
 
-    public void PressUp()
-    {
-        SendCommand("press dpad-up");
-    }
+    // Face presses use app-semantic bridge commands so DualSense / Switch Pro HIDMaestro
+    // profiles map physical face buttons correctly (not Xbox-only A/B/X/Y field keys).
+    public void PressUp() => HoldThenAutoRelease("dpad-up");
 
-    public void PressDown()
-    {
-        SendCommand("press dpad-down");
-    }
+    public void PressDown() => HoldThenAutoRelease("dpad-down");
 
-    public void PressLeft()
-    {
-        SendCommand("press dpad-left");
-    }
+    public void PressLeft() => HoldThenAutoRelease("dpad-left");
 
-    public void PressRight()
-    {
-        SendCommand("press dpad-right");
-    }
+    public void PressRight() => HoldThenAutoRelease("dpad-right");
 
-    public void PressActivate()
-    {
-        SendCommand("press a");
-    }
+    public void PressActivate() => HoldThenAutoRelease("activate");
 
-    public void PressBack()
-    {
-        SendCommand("press b");
-    }
+    public void PressBack() => HoldThenAutoRelease("back");
 
-    public void PressShortcutVoiceToggle()
-    {
-        SendCommand("press y");
-    }
+    public void PressWestFaceButton() => HoldThenAutoRelease("west");
+
+    public void PressShortcutVoiceToggle() => HoldThenAutoRelease("voice");
+
+    public void PressLeftTrigger() => HoldThenAutoRelease("lt");
+
+    public void PressRightTrigger() => HoldThenAutoRelease("rt");
 
     public void Dispose()
     {
@@ -83,6 +83,7 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         }
 
         _disposed = true;
+        CancelAutoRelease();
 
         try
         {
@@ -108,6 +109,67 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         }
     }
 
+    private void HoldThenAutoRelease(string input)
+    {
+        CancelAutoRelease();
+        SendCommand("press " + input);
+
+        var cts = new CancellationTokenSource();
+        lock (_releaseSync)
+        {
+            _autoReleaseCts = cts;
+        }
+
+        var token = cts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(_holdDuration, token).ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                SendCommand("press release");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+                // Best-effort release; dispose/next press will clear state.
+            }
+        }, token);
+    }
+
+    private void CancelAutoRelease()
+    {
+        CancellationTokenSource? cts;
+        lock (_releaseSync)
+        {
+            cts = _autoReleaseCts;
+            _autoReleaseCts = null;
+        }
+
+        if (cts is null)
+        {
+            return;
+        }
+
+        try
+        {
+            cts.Cancel();
+        }
+        catch
+        {
+        }
+        finally
+        {
+            cts.Dispose();
+        }
+    }
+
     private Process StartBridgeProcess(string bridgePath)
     {
         var process = new Process
@@ -130,49 +192,77 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         return process;
     }
 
-    private void SendCommand(string command)
+    private string SendCommand(string command)
     {
         ThrowIfDisposed();
 
-        if (_bridgeProcess.HasExited)
+        lock (_commandSync)
         {
-            var stderr = _bridgeProcess.StandardError.ReadToEnd();
-            throw new InvalidOperationException(
-                $"The native-device gamepad bridge exited before handling '{command}'."
-                + $"{Environment.NewLine}stderr: {stderr}");
-        }
-
-        _bridgeProcess.StandardInput.WriteLine(command);
-        _bridgeProcess.StandardInput.Flush();
-
-        while (true)
-        {
-            var lineTask = _bridgeProcess.StandardOutput.ReadLineAsync();
-            if (!lineTask.Wait(_timeoutMs))
-            {
-                throw new TimeoutException(
-                    $"The native-device gamepad bridge timed out after {_timeoutMs} ms for '{command}'.");
-            }
-
-            var line = lineTask.Result;
-            if (line is null)
+            if (_bridgeProcess.HasExited)
             {
                 var stderr = _bridgeProcess.StandardError.ReadToEnd();
                 throw new InvalidOperationException(
-                    $"The native-device gamepad bridge closed its output before acknowledging '{command}'."
+                    $"The native-device gamepad bridge exited before handling '{command}'."
                     + $"{Environment.NewLine}stderr: {stderr}");
             }
 
-            if (string.Equals(line, "ok", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
+            _bridgeProcess.StandardInput.WriteLine(command);
+            _bridgeProcess.StandardInput.Flush();
 
-            if (line.StartsWith("error ", StringComparison.OrdinalIgnoreCase))
+            while (true)
             {
-                throw new InvalidOperationException(
-                    $"The native-device gamepad bridge rejected '{command}': {line}");
+                var lineTask = _bridgeProcess.StandardOutput.ReadLineAsync();
+                if (!lineTask.Wait(_timeoutMs))
+                {
+                    throw new TimeoutException(
+                        $"The native-device gamepad bridge timed out after {_timeoutMs} ms for '{command}'.");
+                }
+
+                var line = lineTask.Result;
+                if (line is null)
+                {
+                    var stderr = _bridgeProcess.StandardError.ReadToEnd();
+                    throw new InvalidOperationException(
+                        $"The native-device gamepad bridge closed its output before acknowledging '{command}'."
+                        + $"{Environment.NewLine}stderr: {stderr}");
+                }
+
+                if (line.StartsWith("ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    return line;
+                }
+
+                if (line.StartsWith("error ", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The native-device gamepad bridge rejected '{command}': {line}");
+                }
             }
+        }
+    }
+
+    private void ParseBridgeInfo(string infoLine)
+    {
+        // Expected: ok profile=<id> family=Xbox|Sony|Nintendo
+        ActiveProfileId = string.Empty;
+        ActiveFamily = string.Empty;
+        var parts = infoLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("profile=", StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveProfileId = part["profile=".Length..];
+            }
+            else if (part.StartsWith("family=", StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveFamily = part["family=".Length..];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(ActiveProfileId) || string.IsNullOrWhiteSpace(ActiveFamily))
+        {
+            throw new InvalidOperationException(
+                $"The native-device gamepad bridge returned an incomplete info line: '{infoLine}'.");
         }
     }
 
@@ -185,19 +275,32 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
     {
         return int.TryParse(rawValue, out var parsed) && parsed > 0
             ? parsed
-            : 5000;
+            : 5_000;
+    }
+
+    private static TimeSpan TryParseHold(string? rawValue)
+    {
+        if (int.TryParse(rawValue, out var parsed) && parsed > 0)
+        {
+            return TimeSpan.FromMilliseconds(parsed);
+        }
+
+        return DefaultHold;
     }
 
     private static string GetRequiredBridgePath()
     {
-        var bridgePath = Environment.GetEnvironmentVariable(BridgePathEnvVar)
-            ?? throw new InvalidOperationException(
-                $"The native-device gamepad backend requires {BridgePathEnvVar} to point to a bridge executable.");
+        var bridgePath = Environment.GetEnvironmentVariable(BridgePathEnvVar);
+        if (string.IsNullOrWhiteSpace(bridgePath))
+        {
+            throw new InvalidOperationException(
+                $"Set {BridgePathEnvVar} to the native-device bridge executable to use the native-device gamepad backend.");
+        }
 
         if (!File.Exists(bridgePath))
         {
             throw new FileNotFoundException(
-                $"The native-device gamepad bridge executable was not found: {bridgePath}",
+                $"The native-device bridge executable was not found: {bridgePath}",
                 bridgePath);
         }
 

@@ -1,60 +1,16 @@
-using System.Collections.Generic;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Presentation.Utilities;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
-public sealed class TranscriptProjectionRestoreTokenProjector
+/// <summary>
+/// Stable item-key helper kept under the historical type name for call-site churn control
+/// inside Presentation.Core. New code should prefer <see cref="TranscriptItemKey"/>.
+/// ProjectionEpoch / restore-token projection has been removed entirely.
+/// </summary>
+public static class TranscriptProjectionRestoreTokenProjector
 {
     public static string CreateProjectionItemKey(
         ConversationMessageSnapshot message,
         int projectionIndex)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-
-        if (!string.IsNullOrWhiteSpace(message.Id))
-        {
-            return $"msg:{message.Id}";
-        }
-
-        var contentType = message.ContentType ?? string.Empty;
-        var textContent = message.TextContent ?? string.Empty;
-        return $"idx:{projectionIndex}:{contentType}:{textContent}";
-    }
-
-    public TranscriptProjectionRestoreProjection Project(
-        string conversationId,
-        IReadOnlyList<ConversationMessageSnapshot> transcript,
-        int firstVisibleIndex)
-    {
-        ArgumentNullException.ThrowIfNull(transcript);
-
-        var projectionEpoch = transcript.Count;
-        if (string.IsNullOrWhiteSpace(conversationId)
-            || transcript.Count == 0
-            || firstVisibleIndex < 0
-            || firstVisibleIndex >= transcript.Count)
-        {
-            return new TranscriptProjectionRestoreProjection(
-                Token: null,
-                ProjectionEpoch: projectionEpoch,
-                IsReady: false);
-        }
-
-        var anchor = transcript[firstVisibleIndex];
-        var projectionItemKey = CreateProjectionItemKey(anchor, firstVisibleIndex);
-
-        return new TranscriptProjectionRestoreProjection(
-            Token: new TranscriptProjectionRestoreToken(
-                conversationId,
-                ProjectionEpoch: projectionEpoch,
-                ProjectionItemKey: projectionItemKey),
-            ProjectionEpoch: projectionEpoch,
-            IsReady: true);
-    }
+        => TranscriptItemKey.FromSnapshot(message, projectionIndex);
 }
-
-public readonly record struct TranscriptProjectionRestoreProjection(
-    TranscriptProjectionRestoreToken? Token,
-    long ProjectionEpoch,
-    bool IsReady);

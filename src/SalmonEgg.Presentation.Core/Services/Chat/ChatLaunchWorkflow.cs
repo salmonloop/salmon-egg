@@ -7,6 +7,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -39,6 +40,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
     private readonly IChatLaunchWorkflowChatFacade _chat;
     private readonly ISessionManager _sessionManager;
     private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel? _navigationViewModel;
     private readonly ConversationCatalogFacade? _catalogFacade;
     private readonly ILogger<ChatLaunchWorkflow> _logger;
 
@@ -47,16 +49,18 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         ISessionManager sessionManager,
         INavigationCoordinator navigationCoordinator,
         ILogger<ChatLaunchWorkflow>? logger = null,
-        ConversationCatalogFacade? catalogFacade = null)
+        ConversationCatalogFacade? catalogFacade = null,
+        MainNavigationViewModel? navigationViewModel = null)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _logger = logger ?? NullLogger<ChatLaunchWorkflow>.Instance;
         _catalogFacade = catalogFacade;
+        _navigationViewModel = navigationViewModel;
     }
 
-    public async Task StartSessionAndSendAsync(
+    public async Task<ChatLaunchCompletion> StartSessionAndSendAsync(
         ChatLaunchRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -65,12 +69,21 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         var normalizedPrompt = (request.PromptText ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedPrompt))
         {
-            return;
+            return ChatLaunchCompletion.Incomplete;
+        }
+
+        var cwd = request.Cwd;
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            // A session cannot be established without a working directory (the session manager
+            // rejects an empty one, and a launch with no resolved root is not a transient hiccup
+            // worth retrying — it needs the caller to surface a project picker). Fail the launch
+            // cleanly rather than letting CreateSessionAsync throw ArgumentException on both tries.
+            _logger.LogWarning("Start workflow stopped: no working directory resolved for the launch.");
+            return ChatLaunchCompletion.Failed;
         }
 
         var sessionId = Guid.NewGuid().ToString("N");
-        var cwd = request.Cwd;
-
         try
         {
             await _sessionManager.CreateSessionAsync(sessionId, cwd).ConfigureAwait(true);
@@ -94,7 +107,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         if (!activated)
         {
             _logger.LogWarning("Start workflow stopped: navigation activation failed (SessionId={SessionId})", sessionId);
-            return;
+            return ChatLaunchCompletion.Failed;
         }
 
         var connectionOutcome = await _chat.EnsureConnectedForLaunchAsync(cancellationToken).ConfigureAwait(true);
@@ -105,23 +118,36 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
 
             case ChatLaunchConnectionOutcome.InProgress:
                 _logger.LogInformation("Start workflow paused: connection is still in progress.");
-                return;
+                return ChatLaunchCompletion.Incomplete;
 
             case ChatLaunchConnectionOutcome.RequiresConfiguration:
-                await _navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey).ConfigureAwait(true);
+                // Prefer the navigation VM owner so settings activation failures surface ShowInfo.
+                // Fall back to the coordinator only for lean unit fixtures that omit the VM.
+                if (_navigationViewModel is not null)
+                {
+                    await _navigationViewModel
+                        .ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey)
+                        .ConfigureAwait(true);
+                }
+                else
+                {
+                    await _navigationCoordinator
+                        .ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey)
+                        .ConfigureAwait(true);
+                }
+
                 _chat.ShowTransportConfigPanel = true;
-                return;
+                return ChatLaunchCompletion.Incomplete;
 
             default:
-                return;
+                return ChatLaunchCompletion.Failed;
         }
 
         _chat.PrepareDraftForLaunch(normalizedPrompt);
         await _chat.PromoteNewSessionDraftForLaunchAsync(cancellationToken).ConfigureAwait(true);
-        if (_chat.TrySendPromptForLaunch())
-        {
-            return;
-        }
+        return _chat.TrySendPromptForLaunch()
+            ? ChatLaunchCompletion.PromptDispatched
+            : ChatLaunchCompletion.Failed;
     }
 }
 

@@ -4,7 +4,12 @@ using System.Threading.Tasks;
 
 namespace SalmonEgg.Acp.Client
 {
-    public interface IAcpTransport
+    /// <summary>
+    /// Transport contract for ACP. Holds the process, socket, or HttpClient resources owned exclusively by the
+    /// underlying transport; its lifetime belongs to <see cref="AcpClient"/>, hence it derives from
+    /// <see cref="IDisposable"/>.
+    /// </summary>
+    public interface IAcpTransport : IDisposable
     {
         event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
 
@@ -42,7 +47,14 @@ namespace SalmonEgg.Acp.Client
         StdoutReadFailed,
         StderrReadFailed,
         DisconnectFailed,
-        NotConnected
+        NotConnected,
+
+        /// <summary>
+        /// The peer wrote something to the protocol stream that was never an ACP frame. ACP
+        /// reserves stdout for protocol messages and directs diagnostics to stderr, so this is
+        /// misrouted logging rather than a transport failure — treated like <see cref="AgentStderr"/>.
+        /// </summary>
+        StdoutProtocolViolation
     }
 
     public sealed class AcpTransportErrorEventArgs : EventArgs

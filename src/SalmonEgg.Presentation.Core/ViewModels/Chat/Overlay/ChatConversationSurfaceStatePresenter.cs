@@ -1,11 +1,16 @@
 using System;
+using System.Globalization;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 
 internal static class ChatConversationSurfaceStatePresenter
 {
-    public static ChatConversationSurfaceState Resolve(ChatConversationSurfaceStateInput input)
+    public static ChatConversationSurfaceState Resolve(
+        ChatConversationSurfaceStateInput input,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         var hasVisibleTranscriptContent = input.MessageHistoryCount > 0;
         var isSessionSwitchOverlayVisible =
@@ -23,7 +28,6 @@ internal static class ChatConversationSurfaceStatePresenter
             && !shouldShowHistoryOverlay
             && input.IsHydrating
             && !string.IsNullOrWhiteSpace(input.CurrentSessionId);
-        var shouldShowLayoutLoading = input.IsLayoutLoading && input.IsChatShellVisibleForRemoteUi;
         var isSessionSwitchOverlayBlockingVisibleTranscript =
             (isSessionSwitchPreviewVisible
                 && !MatchesCurrentSession(input.CurrentSessionId, input.SessionSwitchPreviewConversationId))
@@ -42,9 +46,10 @@ internal static class ChatConversationSurfaceStatePresenter
             && (!input.IsSessionActive
                 || !MatchesCurrentSession(input.CurrentSessionId, input.PendingShellActivationConversationId)
                 || !input.IsChatShellVisibleForRemoteUi);
-        var shouldPromoteLayoutLoadingToBlockingPresenter =
-            input.IsLayoutLoading
-            && (isVisibleTranscriptStaleForCurrentSession || isCurrentVisibleConversationSupersededByShellIntent);
+        var shouldBlockCurrentConversationContentForActivation =
+            shouldShowHistoryOverlay
+            || shouldShowProjectedHydrationOverlay
+            || isSessionSwitchOverlayVisible;
 
         var activationOverlayVisible =
             shouldShowConnectionLifecycleOverlay
@@ -62,21 +67,21 @@ internal static class ChatConversationSurfaceStatePresenter
             shouldShowProjectedHydrationOverlay,
             isSessionSwitchOverlayVisible,
             isSessionSwitchPreviewVisible,
-            isShellActivationIntentVisible);
-        var overlayStatusText = ResolveOverlayStatusText(overlayLoadingStage, input.HydrationLoadedMessageCount);
+            isShellActivationIntentVisible,
+            isSessionSwitchOverlayBlockingVisibleTranscript);
+        var overlayStatusText = ResolveOverlayStatusText(overlayLoadingStage, input.HydrationLoadedMessageCount, localizer);
         var shouldShowBlockingLoadingMask =
             (activationOverlayVisible
                 && (!hasVisibleTranscriptContent
+                    || shouldBlockCurrentConversationContentForActivation
                     || isSessionSwitchOverlayBlockingVisibleTranscript
                     || isVisibleTranscriptStaleForCurrentSession
-                    || isCurrentVisibleConversationSupersededByShellIntent))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
+                    || isCurrentVisibleConversationSupersededByShellIntent));
         var shouldShowLoadingOverlayStatusPill =
             activationOverlayVisible && !string.IsNullOrWhiteSpace(overlayStatusText);
         var shouldShowLoadingOverlayPresenter =
-            (activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
-        var isOverlayVisible = activationOverlayVisible || shouldShowLayoutLoading;
+            activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill);
+        var isOverlayVisible = activationOverlayVisible;
         var shouldShowActiveConversationRoot =
             input.IsSessionActive
             && !shouldShowBlockingLoadingMask
@@ -114,8 +119,14 @@ internal static class ChatConversationSurfaceStatePresenter
         bool projectedHydrationOverlayVisible,
         bool sessionSwitchOverlayVisible,
         bool sessionSwitchPreviewVisible,
-        bool shellActivationIntentVisible)
+        bool shellActivationIntentVisible,
+        bool isSessionSwitchOverlayBlockingVisibleTranscript)
     {
+        if (shellActivationIntentVisible || isSessionSwitchOverlayBlockingVisibleTranscript)
+        {
+            return ChatViewModel.LoadingOverlayStage.PreparingSession;
+        }
+
         if (isConnecting && connectionLifecycleOverlayVisible)
         {
             return ChatViewModel.LoadingOverlayStage.Connecting;
@@ -131,7 +142,7 @@ internal static class ChatConversationSurfaceStatePresenter
             return ChatViewModel.LoadingOverlayStage.HydratingHistory;
         }
 
-        if (sessionSwitchOverlayVisible || sessionSwitchPreviewVisible || shellActivationIntentVisible)
+        if (sessionSwitchOverlayVisible || sessionSwitchPreviewVisible)
         {
             return ChatViewModel.LoadingOverlayStage.PreparingSession;
         }
@@ -139,21 +150,69 @@ internal static class ChatConversationSurfaceStatePresenter
         return ChatViewModel.LoadingOverlayStage.None;
     }
 
-    private static string ResolveOverlayStatusText(ChatViewModel.LoadingOverlayStage stage, long hydrationLoadedMessageCount)
+    private static string ResolveOverlayStatusText(
+        ChatViewModel.LoadingOverlayStage stage,
+        long hydrationLoadedMessageCount,
+        IStringLocalizer<CoreStrings>? localizer)
         => stage switch
         {
-            ChatViewModel.LoadingOverlayStage.Connecting => "正在连接助手...",
-            ChatViewModel.LoadingOverlayStage.InitializingProtocol => "正在准备聊天环境...",
-            ChatViewModel.LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(hydrationLoadedMessageCount),
-            ChatViewModel.LoadingOverlayStage.PreparingSession => "正在切换聊天...",
+            ChatViewModel.LoadingOverlayStage.Connecting => Localize(
+                localizer,
+                "ChatLoading_Connecting",
+                "Connecting to assistant..."),
+            ChatViewModel.LoadingOverlayStage.InitializingProtocol => Localize(
+                localizer,
+                "ChatLoading_InitializingProtocol",
+                "Preparing chat environment..."),
+            ChatViewModel.LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(
+                hydrationLoadedMessageCount,
+                localizer),
+            ChatViewModel.LoadingOverlayStage.PreparingSession => Localize(
+                localizer,
+                "ChatLoading_PreparingSession",
+                "Switching chat..."),
             _ => string.Empty
         };
 
-    private static string BuildHydrationStatusText(long loadedCount)
-        => FormatHydrationStatus("正在加载聊天记录", loadedCount);
-
-    private static string FormatHydrationStatus(string baseText, long loadedCount)
+    private static string BuildHydrationStatusText(long loadedCount, IStringLocalizer<CoreStrings>? localizer)
         => loadedCount > 0
-            ? $"{baseText}（已加载 {loadedCount} 条消息）"
-            : $"{baseText}...";
+            ? FormatLocalize(
+                localizer,
+                "ChatLoading_HydratingHistoryWithCount",
+                "Loading chat history ({0} messages loaded)",
+                loadedCount)
+            : Localize(
+                localizer,
+                "ChatLoading_HydratingHistory",
+                "Loading chat history...");
+
+    private static string Localize(IStringLocalizer<CoreStrings>? localizer, string key, string fallback)
+    {
+        if (localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private static string FormatLocalize(
+        IStringLocalizer<CoreStrings>? localizer,
+        string key,
+        string fallback,
+        params object[] arguments)
+    {
+        if (localizer is null)
+        {
+            return string.Format(CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(CultureInfo.CurrentCulture, fallback, arguments)
+            : localized.Value;
+    }
 }

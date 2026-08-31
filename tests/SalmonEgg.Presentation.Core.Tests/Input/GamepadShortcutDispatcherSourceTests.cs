@@ -20,11 +20,16 @@ public sealed class GamepadShortcutDispatcherSourceTests
     [Fact]
     public void WindowsGamepadInputService_MapsYToShortcutEvent_NotNavigationIntent()
     {
-        var code = TestSourceFiles.ReadAllText(
+        var service = TestSourceFiles.ReadAllText(
             @"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
+        var mapper = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsStandardGamepadReadingMapper.cs");
 
-        Assert.Contains("GamepadButtons.Y", code);
-        Assert.Contains("ShortcutRaised", code);
-        Assert.DoesNotContain("GamepadNavigationIntent.ToggleVoiceInput", code);
+        // Platform host raises shortcut events from Core pipeline frames; WGI Y → faceY is shared mapper only.
+        Assert.Contains("WindowsStandardGamepadReadingMapper.GetInputReading", service, StringComparison.Ordinal);
+        Assert.Contains("ShortcutRaised", service, StringComparison.Ordinal);
+        Assert.Contains("faceYPressed: reading.Buttons.HasFlag(GamepadButtons.Y)", mapper, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.ToggleVoiceInput", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.ToggleVoiceInput", mapper, StringComparison.Ordinal);
     }
 }

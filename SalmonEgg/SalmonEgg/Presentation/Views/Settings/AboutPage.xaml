@@ -11,11 +11,54 @@
     Background="Transparent"
     AllowDrop="False">
 
+    <Grid>
+        <!-- Short windows: densify the open-source acknowledgements list MaxHeight so the
+             About surface remains usable without a large reserved block. Comfortable restores
+             the prior 360px max (MinWindowHeight=760, same threshold as Start/Diagnostics). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="OpenSourceHeightStates">
+                <VisualState x:Name="OpenSourceHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="OpenSourceAcknowledgementsList.MaxHeight" Value="220" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="OpenSourceHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="OpenSourceAcknowledgementsList.MaxHeight" Value="360" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!-- Short windows: densify section stack spacing so About remains scannable without
+                 oversized marketing gaps. Comfortable restores Spacing=24 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="AboutHeightStates">
+                <VisualState x:Name="AboutHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AboutContentStack.Padding" Value="0,0,0,16" />
+                        <Setter Target="AboutContentStack.Spacing" Value="14" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="AboutHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AboutContentStack.Padding" Value="0,0,0,32" />
+                        <Setter Target="AboutContentStack.Spacing" Value="24" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="24"
+                <StackPanel x:Name="AboutContentStack"
+                            Spacing="14"
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="About_PageTitle"
@@ -74,6 +117,95 @@
                                     </controls:ResponsiveFormRow.Value>
                                 </controls:ResponsiveFormRow>
                             </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="About_CommunityTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                      RowSpacing="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Uid="About_DiscordTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="About_DiscordDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <Button x:Name="AboutJoinDiscordButton"
+                                            Grid.Row="1"
+                                            x:Uid="About_JoinDiscord"
+                                            AutomationProperties.AutomationId="About.Community.JoinDiscord"
+                                            Command="{x:Bind ViewModel.JoinDiscordCommunityCommand}"
+                                            HorizontalAlignment="Left"/>
+                                </Grid>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                      RowSpacing="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Uid="About_GitHubTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="About_GitHubDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <Button x:Name="AboutOpenGitHubButton"
+                                            Grid.Row="1"
+                                            x:Uid="About_OpenGitHub"
+                                            AutomationProperties.AutomationId="About.Community.OpenGitHub"
+                                            Command="{x:Bind ViewModel.OpenGitHubRepositoryCommand}"
+                                            HorizontalAlignment="Left"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="About_SupportProjectTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                  RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Spacing="4">
+                                    <TextBlock x:Uid="About_KofiTitle"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="About_KofiDescription"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <Button x:Name="AboutOpenKofiButton"
+                                        Grid.Row="1"
+                                        x:Uid="About_OpenKofi"
+                                        AutomationProperties.AutomationId="About.SupportProject.OpenKofi"
+                                        Command="{x:Bind ViewModel.OpenKofiSupportCommand}"
+                                        HorizontalAlignment="Left"/>
+                            </Grid>
                         </Border>
                     </StackPanel>
 
@@ -169,9 +301,10 @@
                                         Margin="16,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
 
-                        <ListView ItemsSource="{x:Bind ViewModel.OpenSourceAcknowledgements, Mode=OneWay}"
+                        <ListView x:Name="OpenSourceAcknowledgementsList"
+                                  ItemsSource="{x:Bind ViewModel.OpenSourceAcknowledgements, Mode=OneWay}"
                                   SelectionMode="None"
-                                  MaxHeight="360"
+                                  MaxHeight="220"
                                   AutomationProperties.AutomationId="About.OpenSourceAcknowledgements">
                             <ListView.Header>
                                 <Grid Padding="0,0,0,8"
@@ -235,4 +368,5 @@
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

@@ -17,15 +17,11 @@ public sealed class AppMaintenanceService : IAppMaintenanceService
 
     public Task ClearCacheAsync()
     {
-        try
+        // Surface top-level failures so settings owners can report success/failure honestly.
+        // Per-entry cleanup remains best-effort inside CleanupCacheAsync.
+        if (Directory.Exists(_paths.CacheRootPath))
         {
-            if (Directory.Exists(_paths.CacheRootPath))
-            {
-                Directory.Delete(_paths.CacheRootPath, recursive: true);
-            }
-        }
-        catch
-        {
+            Directory.Delete(_paths.CacheRootPath, recursive: true);
         }
 
         return Task.CompletedTask;
@@ -33,6 +29,8 @@ public sealed class AppMaintenanceService : IAppMaintenanceService
 
     public Task CleanupCacheAsync(int retentionDays)
     {
+        // Best-effort retention sweep used by boot cleanup: individual file/dir failures must
+        // not abort the sweep or crash launch. Outer IO failures are also swallowed here.
         try
         {
             if (retentionDays <= 0)
@@ -59,6 +57,7 @@ public sealed class AppMaintenanceService : IAppMaintenanceService
                 }
                 catch
                 {
+                    // Best-effort: locked/in-use cache files should not stop retention cleanup.
                 }
             }
 
@@ -75,11 +74,13 @@ public sealed class AppMaintenanceService : IAppMaintenanceService
                 }
                 catch
                 {
+                    // Best-effort empty-dir reclamation.
                 }
             }
         }
         catch
         {
+            // Boot-time cleanup is opportunistic; callers do not surface this to users.
         }
 
         return Task.CompletedTask;
@@ -87,15 +88,10 @@ public sealed class AppMaintenanceService : IAppMaintenanceService
 
     public Task ClearAllLocalDataAsync()
     {
-        try
+        // Surface top-level failures so settings owners can report success/failure honestly.
+        if (Directory.Exists(_paths.AppDataRootPath))
         {
-            if (Directory.Exists(_paths.AppDataRootPath))
-            {
-                Directory.Delete(_paths.AppDataRootPath, recursive: true);
-            }
-        }
-        catch
-        {
+            Directory.Delete(_paths.AppDataRootPath, recursive: true);
         }
 
         return Task.CompletedTask;

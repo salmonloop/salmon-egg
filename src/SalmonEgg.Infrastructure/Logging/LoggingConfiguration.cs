@@ -64,7 +64,10 @@ public static class LoggingConfiguration
             .MinimumLevel.Override("Microsoft", enableDebugMode ? LogEventLevel.Debug : LogEventLevel.Warning)
             .MinimumLevel.Override("System", enableDebugMode ? LogEventLevel.Debug : LogEventLevel.Warning)
             // 添加上下文信息 (Requirement 6.1)
-            .Enrich.FromLogContext();
+            .Enrich.FromLogContext()
+            // 关联 OpenTelemetry trace 上下文：无 Activity 时不写入任何属性，
+            // 因此对未启用 telemetry 的场景无影响。
+            .Enrich.With(new TraceContextEnricher());
 
         if (hostCapabilities.Value.SupportsThreadEnricher)
         {
@@ -78,8 +81,10 @@ public static class LoggingConfiguration
 
         if (hostCapabilities.Value.SupportsConsoleSink)
         {
+            // TraceId 在无 Activity 时不存在，Serilog 对缺失属性渲染为空串，
+            // 因此同一模板对启用/未启用 telemetry 两种情况都安全。
             configuration = configuration.WriteTo.Console(
-                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {TraceId}{NewLine}{Exception}");
         }
 
         if (logPath != null)
@@ -91,7 +96,7 @@ public static class LoggingConfiguration
                 fileSizeLimitBytes: fileSizeLimitBytes, // 默认 10MB 限制 (Requirement 6.5)
                 rollOnFileSizeLimit: true,
                 retainedFileCountLimit: 7,      // 保留 7 天 (Requirement 6.5)
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [Thread:{ThreadId}] {Message:lj}{NewLine}{Exception}");
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [Thread:{ThreadId}] [trace:{TraceId} span:{SpanId}] {Message:lj}{NewLine}{Exception}");
         }
 
         return configuration.CreateLogger();

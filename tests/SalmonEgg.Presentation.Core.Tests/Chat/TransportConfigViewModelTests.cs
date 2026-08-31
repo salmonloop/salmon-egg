@@ -17,7 +17,7 @@ public sealed class TransportConfigViewModelTests
         var result = viewModel.Validate();
 
         Assert.False(result.IsValid);
-        Assert.Equal("Stdio 传输必须指定命令或启动器", result.ErrorMessage);
+        Assert.Equal("Stdio transport requires a command or launcher.", result.ErrorMessage);
     }
 
     [Fact]
@@ -34,5 +34,50 @@ public sealed class TransportConfigViewModelTests
 
         Assert.True(result.IsValid);
         Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_WhenWebSocketUrlMissingScheme_ShouldReject()
+    {
+        var viewModel = new TransportConfigViewModel
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = "http://example.com/message"
+        };
+
+        var result = viewModel.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Equal("WebSocket URL must start with ws:// or wss://.", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_WhenStreamableHttpUrlUsesWsScheme_ShouldReject()
+    {
+        var viewModel = new TransportConfigViewModel
+        {
+            SelectedTransportType = TransportType.StreamableHttp,
+            RemoteUrl = "ws://example.com/sse"
+        };
+
+        var result = viewModel.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Equal("Streamable HTTP URL must start with http:// or https://.", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Validate_WhenRemoteUrlMissing_ShouldReject()
+    {
+        var viewModel = new TransportConfigViewModel
+        {
+            SelectedTransportType = TransportType.WebSocket,
+            RemoteUrl = " "
+        };
+
+        var result = viewModel.Validate();
+
+        Assert.False(result.IsValid);
+        Assert.Equal("Remote transport requires a URL.", result.ErrorMessage);
     }
 }

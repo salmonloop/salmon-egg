@@ -12,7 +12,6 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
 {
     protected readonly INavigationPaneState NavigationState;
     private readonly IUiDispatcher _uiDispatcher;
-    private bool _isLogicallySelected;
 
     public ObservableCollection<MainNavItemViewModel> Children { get; } = new();
 
@@ -26,12 +25,6 @@ public abstract partial class MainNavItemViewModel : ObservableObject, IDisposab
     public bool IsPaneOpen => NavigationState.IsPaneOpen;
 
     public bool IsPaneClosed => !IsPaneOpen;
-
-    public bool IsLogicallySelected
-    {
-        get => _isLogicallySelected;
-        set => SetProperty(ref _isLogicallySelected, value);
-    }
 
     private void OnServicePaneStateChanged(object? sender, EventArgs e)
     {

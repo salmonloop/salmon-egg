@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 
@@ -23,17 +26,20 @@ public sealed class ConfigSyncPackageService
     private readonly ConfigurationSecretSnapshotService _secrets;
     private readonly IConfigChangeSignal _configChangeSignal;
     private readonly IFileSystemPersistence _persistence;
+    private readonly ILogger<ConfigSyncPackageService> _logger;
 
     public ConfigSyncPackageService(
         IAppDataService appData,
         ConfigurationSecretSnapshotService secrets,
         IConfigChangeSignal configChangeSignal,
-        IFileSystemPersistence persistence)
+        IFileSystemPersistence persistence,
+        ILogger<ConfigSyncPackageService> logger)
     {
         _appData = appData ?? throw new ArgumentNullException(nameof(appData));
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
         _configChangeSignal = configChangeSignal ?? throw new ArgumentNullException(nameof(configChangeSignal));
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<byte[]> CreatePackageAsync(bool includeSecrets, CancellationToken cancellationToken = default)
@@ -60,7 +66,8 @@ public sealed class ConfigSyncPackageService
             {
                 CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
                 IncludesSecrets = includeSecrets,
-                Files = files.Select(GetRelativeConfigPath).OrderBy(x => x, StringComparer.Ordinal).ToList()
+                // manifest 是便携包元数据，路径契约与 zip 条目一致（恒定 '/'），不得携带平台分隔符。
+                Files = files.Select(GetRelativeConfigPath).Select(ConfigurationPackagePaths.Normalize).OrderBy(x => x, StringComparer.Ordinal).ToList()
             };
 
             await WriteManifestEntryAsync(archive, manifest, cancellationToken).ConfigureAwait(false);
@@ -79,7 +86,11 @@ public sealed class ConfigSyncPackageService
                     continue;
                 }
 
-                await WriteFileEntryAsync(archive, ConfigEntryPrefix + ToZipPath(GetRelativeConfigPath(path)), path, cancellationToken)
+                await WriteFileEntryAsync(
+                        archive,
+                        ConfigEntryPrefix + ConfigurationPackagePaths.Normalize(GetRelativeConfigPath(path)),
+                        path,
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -106,30 +117,37 @@ public sealed class ConfigSyncPackageService
 
             ValidateArchive(archive);
 
-            if (Directory.Exists(_appData.ConfigRootPath))
+            // 先在同卷 staging 目录完整展开,成功后再整体换入:
+            // 解包中途取消或 IO 失败不得让 config root 停在半删/半写状态。
+            var stagingPath = _appData.ConfigRootPath + ".restore-" + Guid.NewGuid().ToString("N");
+            try
             {
-                Directory.Delete(_appData.ConfigRootPath, recursive: true);
+                foreach (var entry in archive.Entries)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
+                    if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var destination = ResolveEntryPath(stagingPath, relative);
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    using var input = entry.Open();
+                    using var output = File.Create(destination);
+                    await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
+                }
+
+                SwapConfigRoot(stagingPath, backupPath);
             }
-
-            foreach (var entry in archive.Entries)
+            finally
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
-                if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var destination = ResolveConfigPath(relative);
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                using var input = entry.Open();
-                using var output = File.Create(destination);
-                await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
+                TryDeleteDirectory(stagingPath);
             }
 
             var secretsEntry = archive.GetEntry(SecretsEntryName);
@@ -154,6 +172,30 @@ public sealed class ConfigSyncPackageService
         return backupPath;
     }
 
+    /// <summary>
+    /// 冲突 fail-closed 工件：本地 config 快照 + 远端包字节。
+    /// 不修改当前 config，不发 Restored 信号；仅落盘供人工/后续 UI 决策。
+    /// </summary>
+    public async Task<string> PersistConflictArtifactsAsync(
+        byte[] remotePackage,
+        CancellationToken cancellationToken = default)
+    {
+        if (remotePackage is null) throw new ArgumentNullException(nameof(remotePackage));
+
+        var artifactRoot = Path.Combine(_appData.AppDataRootPath, "config-conflict-artifacts");
+        var artifactPath = Path.Combine(artifactRoot, DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff"));
+        Directory.CreateDirectory(artifactPath);
+
+        if (Directory.Exists(_appData.ConfigRootPath))
+        {
+            CopyDirectory(_appData.ConfigRootPath, Path.Combine(artifactPath, "local"));
+        }
+
+        var remotePackagePath = Path.Combine(artifactPath, "remote.package.zip");
+        await File.WriteAllBytesAsync(remotePackagePath, remotePackage, cancellationToken).ConfigureAwait(false);
+        return artifactPath;
+    }
+
     private IEnumerable<string> GetConfigFiles()
     {
         if (!Directory.Exists(_appData.ConfigRootPath))
@@ -163,6 +205,22 @@ public sealed class ConfigSyncPackageService
 
         foreach (var path in Directory.EnumerateFiles(_appData.ConfigRootPath, "*", SearchOption.AllDirectories))
         {
+            var relativePath = Path.GetRelativePath(_appData.ConfigRootPath, path);
+            var topLevelDirectory = relativePath
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            if (string.Equals(topLevelDirectory, "recovery", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // In-flight configuration-file recovery material belongs to this device's interrupted
+            // operation, not to portable configuration content.
+            if (ConfigurationFileTransactionArtifacts.IsArtifact(path))
+            {
+                continue;
+            }
+
             yield return path;
         }
     }
@@ -271,6 +329,9 @@ public sealed class ConfigSyncPackageService
     }
 
     private string ResolveConfigPath(string zipRelativePath)
+        => ResolveEntryPath(_appData.ConfigRootPath, zipRelativePath);
+
+    private static string ResolveEntryPath(string rootPath, string zipRelativePath)
     {
         if (string.IsNullOrWhiteSpace(zipRelativePath))
         {
@@ -283,8 +344,8 @@ public sealed class ConfigSyncPackageService
             throw new InvalidDataException("Cloud config package contains an absolute path.");
         }
 
-        var fullPath = Path.GetFullPath(Path.Combine(_appData.ConfigRootPath, normalized));
-        var root = Path.GetFullPath(_appData.ConfigRootPath);
+        var fullPath = Path.GetFullPath(Path.Combine(rootPath, normalized));
+        var root = Path.GetFullPath(rootPath);
         if (!fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
             !string.Equals(fullPath, root, StringComparison.Ordinal))
         {
@@ -292,6 +353,110 @@ public sealed class ConfigSyncPackageService
         }
 
         return fullPath;
+    }
+
+    private void SwapConfigRoot(string stagingPath, string backupPath)
+    {
+        var configRoot = _appData.ConfigRootPath;
+        if (!Directory.Exists(stagingPath))
+        {
+            // 包内可以不含任何 config 条目,换入等价的空目录以保持原先"删除后重建"的语义。
+            Directory.CreateDirectory(stagingPath);
+        }
+
+        try
+        {
+            // Windows 上被占用/只读的文件常让递归删除中途失败并留下半删目录,
+            // 因此删除与换入必须同处一个回滚保护窗,而不能只保护 Move 的后半窗。
+            if (Directory.Exists(configRoot))
+            {
+                Directory.Delete(configRoot, recursive: true);
+            }
+
+            Directory.Move(stagingPath, configRoot);
+        }
+        catch (Exception swapFailure)
+        {
+            _logger.LogWarning(
+                swapFailure,
+                "Config root swap failed during restore; rolling back from backup. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+                configRoot,
+                backupPath);
+            RollBackConfigRoot(configRoot, backupPath, swapFailure);
+        }
+    }
+
+    [DoesNotReturn]
+    private void RollBackConfigRoot(string configRoot, string backupPath, Exception swapFailure)
+    {
+        try
+        {
+            // 半删残留里往往正是导致换入失败的只读文件;先清属性删残留、再从 backup 整拷,
+            // 保证回滚后 config root 与 backup 完全一致,而不是新旧混合状态。
+            DeleteDirectoryClearingReadOnly(configRoot);
+            if (Directory.Exists(backupPath))
+            {
+                CopyDirectory(backupPath, configRoot);
+            }
+        }
+        catch (Exception rollbackFailure)
+        {
+            _logger.LogError(
+                rollbackFailure,
+                "Config root rollback failed after a failed swap; restore manually from backup. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+                configRoot,
+                backupPath);
+
+            // 回滚失败不得吞掉/顶替原始换入异常:两者都进 AggregateException,
+            // 消息携带 backup 路径供用户手动恢复。
+            throw new AggregateException(
+                $"Config restore failed and rolling back the config root also failed. Restore it manually from the backup at '{backupPath}'.",
+                swapFailure,
+                rollbackFailure);
+        }
+
+        _logger.LogWarning(
+            "Config root rolled back from backup after a failed swap; local config is preserved. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+            configRoot,
+            backupPath);
+
+        // 回滚成功:本地配置未损,原样重抛原始异常(保留类型与堆栈)表达"恢复操作失败"。
+        ExceptionDispatchInfo.Capture(swapFailure).Throw();
+    }
+
+    private static void DeleteDirectoryClearingReadOnly(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(directory, FileAttributes.Directory);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        Directory.Delete(path, recursive: true);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // 残留 staging 目录只是垃圾,不影响正确性,不因清理失败掩盖真实异常。
+        }
     }
 
     private string GetRelativeConfigPath(string path)
@@ -304,6 +469,4 @@ public sealed class ConfigSyncPackageService
 
         return relative;
     }
-
-    private static string ToZipPath(string relativePath) => relativePath.Replace(Path.DirectorySeparatorChar, '/');
 }

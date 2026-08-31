@@ -96,9 +96,26 @@ public sealed class DiscoverSessionsPageXamlTests
 
         // Assert
         Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.Name, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.TransportDisplayName, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.Transport, Mode=OneWay, Converter={StaticResource TransportTypeLocalizationConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TransportTypeLocalizationConverter", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TransportDisplayName", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.ProfilesViewModel.SelectedProfile.Name", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.ProfilesViewModel.SelectedProfile.TransportDisplayName", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_ProfileGlyph_IsConverterDriven_NotDomainUiMember()
+    {
+        // 传输图标是 Presentation 关注点:模板须经 TransportTypeGlyphConverter 从 Transport 投影,
+        // 不得绑定已从 Domain 移除的 UI 成员 TransportGlyph(Core 层禁 UI 概念)。
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("TransportTypeGlyphConverter", xaml, StringComparison.Ordinal);
+        Assert.Contains(
+            "Glyph=\"{x:Bind Transport, Converter={StaticResource TransportTypeGlyphConverter}}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Glyph=\"{x:Bind TransportGlyph}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -120,6 +137,42 @@ public sealed class DiscoverSessionsPageXamlTests
         Assert.Contains("var wasAlreadySelected = ReferenceEquals(ViewModel.SelectedProfile, profile);", codeBehind, StringComparison.Ordinal);
         Assert.Contains("if (wasAlreadySelected && ViewModel.OpenProfileDetailsCommand.CanExecute(null))", codeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.SelectedProfile = profile;", codeBehind, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
+    public void DiscoverSessionsPage_ImplementsPrimaryContentFocusTargetForGamepadEntryFromMainNav()
+    {
+        var codeBehind = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml.cs");
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("IPrimaryContentFocusTarget", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("public bool TryFocusPrimaryContentTarget()", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("SessionsList.Focus(FocusState.Keyboard)", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("ProfilesList.Focus(FocusState.Keyboard)", codeBehind, StringComparison.Ordinal);
+        // Keep native list engagement; do not invent a synthetic focus host.
+        Assert.DoesNotContain("ComposerFocusHost", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"DiscoverSessions.ProfilesList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"DiscoverSessions.SessionsList\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_SessionRowsDensifyOnShortWindowHeights()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("x:Name=\"SessionListHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionListHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionListHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionsList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DiscoverSessionItemStyleCompact", xaml, StringComparison.Ordinal);
+        Assert.Contains("DiscoverSessionItemStyleComfortable", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"80\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"104\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemContainerStyle=\"{StaticResource DiscoverSessionItemStyleCompact}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
     }
 
     private static string LoadFile(string relativePath)

@@ -15,20 +15,36 @@ public sealed partial class QuickSuggestionViewModel : ObservableObject
     private string _subtitle = string.Empty;
 
     [ObservableProperty]
+    private string _categoryLabel = string.Empty;
+
+    [ObservableProperty]
     private string _prompt = string.Empty;
 
     [ObservableProperty]
     private string _automationId = string.Empty;
 
-    public IRelayCommand ActionCommand { get; }
+    [ObservableProperty]
+    private bool _isInformational;
 
-    public QuickSuggestionViewModel(string automationId, string icon, string title, string subtitle, string prompt, IRelayCommand actionCommand)
+    public IAsyncRelayCommand<QuickSuggestionViewModel> ActionCommand { get; }
+
+    public QuickSuggestionViewModel(
+        string automationId,
+        string icon,
+        string title,
+        string subtitle,
+        string categoryLabel,
+        string prompt,
+        IAsyncRelayCommand<QuickSuggestionViewModel> actionCommand,
+        bool isInformational = false)
     {
         AutomationId = automationId;
         Icon = icon;
         Title = title;
         Subtitle = subtitle;
+        CategoryLabel = categoryLabel;
         Prompt = prompt;
-        ActionCommand = actionCommand;
+        ActionCommand = actionCommand ?? throw new System.ArgumentNullException(nameof(actionCommand));
+        IsInformational = isInformational;
     }
 }

@@ -15,17 +15,15 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
 
     private readonly ILogger<WindowsGamepadInputService> _logger;
     private readonly WindowsRawGameControllerMapper _rawMapper;
-    private readonly GamepadIntentProcessor _intentProcessor = new();
-    private readonly GamepadShortcutProcessor _shortcutProcessor = new();
-    private readonly GamepadContextIntentProcessor _contextIntentProcessor = new();
+    private readonly GamepadReadingPipeline _pipeline = new();
     private readonly object _sync = new();
     private readonly List<Gamepad> _connectedGamepads = new();
     private readonly List<RawGameController> _connectedRawControllers = new();
+    private readonly Dictionary<Gamepad, WindowsStandardGamepadIdentity> _standardGamepadIdentities = new();
 
     private DispatcherQueueTimer? _timer;
     private bool _isStarted;
     private bool _isDisposed;
-    private readonly GamepadInputPathTracker _inputPathTracker = new();
     private long _tickSequence;
 
     public WindowsGamepadInputService(
@@ -67,9 +65,11 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             }
 
             _connectedGamepads.Clear();
+            _standardGamepadIdentities.Clear();
             foreach (var gamepad in Gamepad.Gamepads)
             {
                 _connectedGamepads.Add(gamepad);
+                CacheStandardGamepadIdentity(gamepad);
             }
 
             foreach (var controller in RawGameController.RawGameControllers)
@@ -126,13 +126,11 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
                 _timer = null;
             }
 
-            _intentProcessor.Reset();
-            _shortcutProcessor.Reset();
-            _contextIntentProcessor.Reset();
+            _ = _pipeline.Reset();
             _connectedGamepads.Clear();
+            _standardGamepadIdentities.Clear();
             _connectedRawControllers.Clear();
             _isStarted = false;
-            _ = _inputPathTracker.Reset();
             _logger.LogInformation("Gamepad input service stopped.");
         }
     }
@@ -155,6 +153,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             if (!_connectedGamepads.Contains(gamepad))
             {
                 _connectedGamepads.Add(gamepad);
+                CacheStandardGamepadIdentity(gamepad);
                 _logger.LogInformation(
                     "Gamepad added. StandardGamepadCount={StandardGamepadCount}.",
                     _connectedGamepads.Count);
@@ -171,6 +170,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         {
             if (_connectedGamepads.Remove(gamepad))
             {
+                _standardGamepadIdentities.Remove(gamepad);
                 _logger.LogInformation(
                     "Gamepad removed. StandardGamepadCount={StandardGamepadCount}.",
                     _connectedGamepads.Count);
@@ -184,70 +184,50 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private void OnTick(DispatcherQueueTimer sender, object args)
     {
         var tick = Interlocked.Increment(ref _tickSequence);
-        if (!TryGetActiveReading(out var reading))
-        {
-            int standardGamepadCount;
-            int rawGameControllerCount;
-            lock (_sync)
-            {
-                standardGamepadCount = _connectedGamepads.Count;
-                rawGameControllerCount = _connectedRawControllers.Count;
-            }
-
-            lock (_sync)
-            {
-                _intentProcessor.Reset();
-                _shortcutProcessor.Reset();
-                _contextIntentProcessor.Reset();
-                UpdateInputPath(
-                    hasActiveReading: false,
-                    path: GamepadInputPath.None,
-                    standardGamepadCount: standardGamepadCount,
-                    rawGameControllerCount: rawGameControllerCount);
-            }
-
-            return;
-        }
-
-        lock (_sync)
-        {
-            var raisedIntents = _intentProcessor.Process(reading, DateTimeOffset.UtcNow);
-            var raisedShortcuts = _shortcutProcessor.Process(reading);
-            var raisedContextIntents = _contextIntentProcessor.Process(reading);
-            foreach (var intent in raisedIntents)
-            {
-                EmitIntent(intent, tick);
-            }
-
-            foreach (var shortcut in raisedShortcuts)
-            {
-                EmitShortcut(shortcut, tick);
-            }
-
-            foreach (var intent in raisedContextIntents)
-            {
-                EmitContextIntent(intent, tick);
-            }
-        }
-    }
-
-    private bool TryGetActiveReading(out GamepadInputReading reading)
-    {
         Gamepad[] gamepads;
+        WindowsStandardGamepadIdentity[] identities;
         RawGameController[] rawControllers;
         lock (_sync)
         {
             gamepads = _connectedGamepads.ToArray();
+            identities = new WindowsStandardGamepadIdentity[gamepads.Length];
+            for (var i = 0; i < gamepads.Length; i++)
+            {
+                identities[i] = GetOrCacheStandardGamepadIdentity(gamepads[i]);
+            }
+
             rawControllers = _connectedRawControllers.ToArray();
         }
 
-        var gamepadReadings = Array.ConvertAll(gamepads, static gamepad => GetInputReading(gamepad.GetCurrentReading()));
-        var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
-        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(gamepadReadings, rawReadings, out var selection);
+        var gamepadReadings = new GamepadInputReading[gamepads.Length];
+        for (var i = 0; i < gamepads.Length; i++)
+        {
+            gamepadReadings[i] = WindowsStandardGamepadReadingMapper.GetInputReading(gamepads[i], identities[i]);
+        }
 
-        UpdateInputPath(selected, selection.InputPath, gamepads.Length, rawControllers.Length);
-        reading = selection.Reading;
-        return selected;
+        var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
+
+        GamepadReadingPipelineFrame frame;
+        lock (_sync)
+        {
+            frame = _pipeline.ProcessFrame(gamepadReadings, rawReadings, DateTimeOffset.UtcNow);
+            LogPathTransitionIfNeeded(frame.PathTransition, gamepads.Length, rawControllers.Length);
+        }
+
+        foreach (var intent in frame.RaisedIntents)
+        {
+            EmitIntent(intent, tick);
+        }
+
+        foreach (var shortcut in frame.RaisedShortcuts)
+        {
+            EmitShortcut(shortcut, tick);
+        }
+
+        foreach (var intent in frame.RaisedContextIntents)
+        {
+            EmitContextIntent(intent, tick);
+        }
     }
 
     private void OnRawGameControllerAdded(object? sender, RawGameController controller)
@@ -283,20 +263,19 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         _logger.LogDebug("Raw game controller remove event ignored for unknown device.");
     }
 
-    private static GamepadInputReading GetInputReading(GamepadReading reading)
+    private void CacheStandardGamepadIdentity(Gamepad gamepad)
+        => _standardGamepadIdentities[gamepad] = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
+
+    private WindowsStandardGamepadIdentity GetOrCacheStandardGamepadIdentity(Gamepad gamepad)
     {
-        return StandardGamepadInputReadingMapper.GetInputReading(
-            moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
-            moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
-            moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
-            moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            activate: reading.Buttons.HasFlag(GamepadButtons.A),
-            back: reading.Buttons.HasFlag(GamepadButtons.B),
-            shortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
-            leftTrigger: reading.LeftTrigger,
-            rightTrigger: reading.RightTrigger,
-            thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY);
+        if (_standardGamepadIdentities.TryGetValue(gamepad, out var identity))
+        {
+            return identity;
+        }
+
+        identity = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
+        _standardGamepadIdentities[gamepad] = identity;
+        return identity;
     }
 
     private void EmitIntent(GamepadNavigationIntent intent, long tick)
@@ -314,21 +293,18 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         ContextIntentRaised?.Invoke(this, intent);
     }
 
-    private void UpdateInputPath(bool hasActiveReading, GamepadInputPath path, int standardGamepadCount, int rawGameControllerCount)
+    private void LogPathTransitionIfNeeded(
+        GamepadInputPathTransition transition,
+        int standardGamepadCount,
+        int rawGameControllerCount)
     {
-        var transition = _inputPathTracker.Apply(hasActiveReading, path);
-        if (!transition.Changed)
-        {
-            return;
-        }
-
-        if (transition.Path == GamepadInputPath.None)
+        if (!transition.Changed || transition.Path == GamepadInputPath.None)
         {
             return;
         }
 
         _logger.LogInformation(
-            "Gamepad input path is using {InputPath}. KnownStandardGamepads={KnownStandardGamepadCount} KnownRawGameControllers={RawGameControllerCount}.",
+            "Gamepad input path is using {InputPath}. KnownStandardGamepads={KnownStandardGamepadCount}. KnownRawControllers={KnownRawControllerCount}.",
             transition.Path,
             standardGamepadCount,
             rawGameControllerCount);

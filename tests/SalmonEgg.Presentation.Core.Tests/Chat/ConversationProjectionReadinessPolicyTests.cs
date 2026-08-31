@@ -185,4 +185,57 @@ public sealed class ConversationProjectionReadinessPolicyTests
 
         Assert.True(result);
     }
+
+    [Fact]
+    public void HasDurableProjectedConversationContent_WhenTranscriptIsThinkingOnly_ReturnsFalse()
+    {
+        var content = new ConversationContentSlice(
+            ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "think-1",
+                    Timestamp = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "thinking",
+                    TextContent = "ephemeral thought"
+                }),
+            ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            false);
+
+        Assert.True(ConversationProjectionReadinessPolicy.HasProjectedConversationContent(content));
+        Assert.False(ConversationProjectionReadinessPolicy.HasDurableProjectedConversationContent(content));
+        Assert.Equal(0, ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(content.Transcript));
+    }
+
+    [Fact]
+    public void HasDurableProjectedConversationContent_WhenShowPlanPanelOnly_ReturnsFalse()
+    {
+        var content = new ConversationContentSlice(
+            ImmutableList<ConversationMessageSnapshot>.Empty,
+            ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            true);
+
+        Assert.True(ConversationProjectionReadinessPolicy.HasProjectedConversationContent(content));
+        Assert.False(ConversationProjectionReadinessPolicy.HasDurableProjectedConversationContent(content));
+    }
+
+    [Fact]
+    public void HasDurableProjectedConversationContent_WhenTranscriptHasVisibleText_ReturnsTrue()
+    {
+        var content = new ConversationContentSlice(
+            ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "m-1",
+                    Timestamp = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "visible message"
+                }),
+            ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+            false);
+
+        Assert.True(ConversationProjectionReadinessPolicy.HasDurableProjectedConversationContent(content));
+        Assert.Equal(1, ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(content.Transcript));
+    }
 }

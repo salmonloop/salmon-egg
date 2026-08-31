@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Infrastructure.Services
 {
@@ -122,11 +123,11 @@ namespace SalmonEgg.Infrastructure.Services
             private readonly StringBuilder _output = new();
             private readonly TaskCompletionSource<TerminalWaitForExitResponse> _exitCompletion =
                 new(TaskCreationOptions.RunContinuationsAsynchronously);
-            private readonly int? _outputByteLimit;
+            private readonly ulong? _outputByteLimit;
             private bool _truncated;
             private bool _disposed;
 
-            private TerminalSession(Process process, int? outputByteLimit)
+            private TerminalSession(Process process, ulong? outputByteLimit)
             {
                 _process = process;
                 _outputByteLimit = outputByteLimit;
@@ -237,7 +238,9 @@ namespace SalmonEgg.Infrastructure.Services
 
                 try
                 {
-                    _process.Kill();
+                    // entireProcessTree 与 StdioTransport 同理:agent 请求的命令常经 shell /
+                    // 启动器执行,真正干活的进程是孙进程。只杀直接子进程会把它留给 init。
+                    _process.Kill(entireProcessTree: true);
                 }
                 catch (InvalidOperationException)
                 {
@@ -257,8 +260,10 @@ namespace SalmonEgg.Infrastructure.Services
                 {
                     if (!_process.HasExited)
                     {
-                        _process.Kill();
-                        _process.WaitForExit();
+                        // 不 WaitForExit:本方法在进程退出路径上被调用,而 WaitForExit() 无超时,
+                        // 一个不肯死的子进程就能把关闭无限期挂住(issue #126)。与
+                        // StdioTransport.Dispose 同契约——同步发出终止信号,不等待收尸。
+                        _process.Kill(entireProcessTree: true);
                     }
                 }
                 catch
@@ -289,7 +294,8 @@ namespace SalmonEgg.Infrastructure.Services
                     return;
                 }
 
-                while (_output.Length > 0 && Encoding.UTF8.GetByteCount(_output.ToString()) > _outputByteLimit.Value)
+                while (_output.Length > 0
+                       && (ulong)Encoding.UTF8.GetByteCount(_output.ToString()) > _outputByteLimit.Value)
                 {
                     _output.Remove(0, 1);
                     _truncated = true;
@@ -332,11 +338,11 @@ namespace SalmonEgg.Infrastructure.Services
                 };
             }
 
-            private int? SafeGetExitCode()
+            private uint? SafeGetExitCode()
             {
                 try
                 {
-                    return _process.ExitCode;
+                    return unchecked((uint)_process.ExitCode);
                 }
                 catch
                 {

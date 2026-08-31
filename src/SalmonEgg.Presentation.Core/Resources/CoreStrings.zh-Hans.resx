@@ -24,8 +24,26 @@
   <data name="Nav_LoadingSessions" xml:space="preserve">
     <value>加载中…</value>
   </data>
+  <data name="Nav_ShowSessionsListFailed" xml:space="preserve">
+    <value>无法打开会话列表，请稍后重试。</value>
+  </data>
+  <data name="Start_SessionLaunchFailed" xml:space="preserve">
+    <value>无法启动会话，请稍后重试。</value>
+  </data>
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>未归类</value>
+  </data>
+  <data name="Nav_RelativeJustNow" xml:space="preserve">
+    <value>刚刚</value>
+  </data>
+  <data name="Nav_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} 分钟</value>
+  </data>
+  <data name="Nav_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} 小时</value>
+  </data>
+  <data name="Nav_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} 天</value>
   </data>
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>模式尚未就绪</value>
@@ -181,6 +199,88 @@
   <data name="ChatTurnFailure_DismissAction" xml:space="preserve">
     <value>关闭失败详情</value>
   </data>
+  <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
+    <value>复制失败详情失败，请稍后重试。</value>
+  </data>
+  <data name="ChatOperation_CreateSessionFailed" xml:space="preserve">
+    <value>创建会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModeFailed" xml:space="preserve">
+    <value>切换模式失败：{0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModelFailed" xml:space="preserve">
+    <value>切换模型失败：{0}</value>
+  </data>
+  <data name="ChatOperation_CancelSessionFailed" xml:space="preserve">
+    <value>取消会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_DisconnectFailed" xml:space="preserve">
+    <value>断开连接失败：{0}</value>
+  </data>
+  <data name="ChatOperation_LoadSessionNoActiveConversation" xml:space="preserve">
+    <value>加载会话失败：当前没有选中的会话。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingActiveBinding" xml:space="preserve">
+    <value>加载会话失败：当前会话没有可用的远程会话绑定。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingProfileBinding" xml:space="preserve">
+    <value>加载会话失败：已绑定配置文件的会话没有可用的远程会话绑定。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionChatServiceNotReady" xml:space="preserve">
+    <value>加载会话失败：ACP 聊天服务未连接且未初始化。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionRecoveryCapabilityMissing" xml:space="preserve">
+    <value>加载会话失败：已连接的 ACP 代理未声明稳定 ACP v1 历史恢复所需的 session/load 能力。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionMissingBoundProfile" xml:space="preserve">
+    <value>加载会话失败：远程会话未绑定 ACP 配置文件。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionProfileNotResolved" xml:space="preserve">
+    <value>加载会话失败：无法解析已绑定的 ACP 配置文件。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionRemoteConnectionNotReady" xml:space="preserve">
+    <value>加载会话失败：ACP 配置文件连接未就绪。</value>
+  </data>
+  <data name="ChatOperation_LoadSessionFailed" xml:space="preserve">
+    <value>加载会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_ReconnectSessionFailed" xml:space="preserve">
+    <value>重新连接会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_SwitchSessionFailed" xml:space="preserve">
+    <value>切换会话失败：{0}</value>
+  </data>
+  <data name="ChatLoading_Connecting" xml:space="preserve">
+    <value>正在连接助手...</value>
+  </data>
+  <data name="ChatLoading_InitializingProtocol" xml:space="preserve">
+    <value>正在准备聊天环境...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistory" xml:space="preserve">
+    <value>正在加载聊天记录...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistoryWithCount" xml:space="preserve">
+    <value>正在加载聊天记录（已加载 {0} 条消息）</value>
+  </data>
+  <data name="ChatLoading_PreparingSession" xml:space="preserve">
+    <value>正在切换会话...</value>
+  </data>
+
+  <data name="ShutdownOverlay_PersistingState" xml:space="preserve">
+    <value>正在保存会话记录...</value>
+  </data>
+  <data name="ShutdownOverlay_ClosingChildProcesses" xml:space="preserve">
+    <value>正在关闭 agent 进程...</value>
+  </data>
+  <data name="ShutdownOverlay_Generic" xml:space="preserve">
+    <value>正在关闭...</value>
+  </data>
+  <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
+    <value>无法打开迷你窗口。请确认应用以 MSIX 包方式运行。</value>
+  </data>
+  <data name="ChatMiniWindow_ReturnFailed" xml:space="preserve">
+    <value>无法返回主窗口。</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>新建会话</value>
   </data>
@@ -222,6 +322,12 @@
   </data>
   <data name="Discover_ErrorListCapabilityMissing" xml:space="preserve">
     <value>当前 Agent 未声明 session/list 能力。</value>
+  </data>
+  <data name="Discover_ErrorLoadSessionCapabilityMissing" xml:space="preserve">
+    <value>当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。</value>
+  </data>
+  <data name="Discover_ErrorSessionImportActivationFailed" xml:space="preserve">
+    <value>加载并导入会话失败，请检查连接状态。</value>
   </data>
   <data name="Discover_UntitledSession" xml:space="preserve">
     <value>未命名会话</value>
@@ -315,11 +421,50 @@
   <data name="About_ReportAiContentBodyPrompt" xml:space="preserve">
     <value>请在此描述 Salmon Egg 中显示的不当 AI 生成内容。</value>
   </data>
+  <data name="Chat_ReportAiContentConfirmTitle" xml:space="preserve">
+    <value>举报 AI 内容</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmMessage" xml:space="preserve">
+    <value>将打开邮件应用，并带上所选 AI 内容的举报草稿。是否继续？</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmPrimary" xml:space="preserve">
+    <value>打开邮件</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmClose" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="Chat_ReportAiContentExcerptLabel" xml:space="preserve">
+    <value>相关内容：</value>
+  </data>
+  <data name="About_AcknowledgementVersionFallback" xml:space="preserve">
+    <value>版本未列出</value>
+  </data>
+  <data name="About_AcknowledgementLicenseFallback" xml:space="preserve">
+    <value>许可证未列出</value>
+  </data>
+  <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
+    <value>来源未列出</value>
+  </data>
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>当前平台暂不支持打开本地文件或目录。</value>
   </data>
+  <data name="About_DiscordOpenFailed" xml:space="preserve">
+    <value>无法打开 Discord 邀请链接，请检查默认浏览器后重试。</value>
+  </data>
+  <data name="About_GitHubOpenFailed" xml:space="preserve">
+    <value>无法打开 GitHub 页面，请检查默认浏览器后重试。</value>
+  </data>
+  <data name="About_KofiOpenFailed" xml:space="preserve">
+    <value>无法打开 Ko-fi 页面，请检查默认浏览器后重试。</value>
+  </data>
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>当前平台暂不支持导出本地文件。</value>
+  </data>
+  <data name="DataStorage_ExportSessionFailed" xml:space="preserve">
+    <value>导出当前会话失败，请稍后重试。</value>
+  </data>
+  <data name="DataStorage_CreateDiagnosticsBundleFailed" xml:space="preserve">
+    <value>创建诊断包失败，请稍后重试。</value>
   </data>
   <data name="About_MissingDocumentMessage" xml:space="preserve">
     <value>未找到{0}文件。</value>
@@ -333,6 +478,126 @@
   <!-- Settings: Diagnostics -->
   <data name="Diagnostics_NoLogFileFound" xml:space="preserve">
     <value>未找到日志文件。</value>
+  </data>
+  <data name="Diagnostics_LogSnippetCopied" xml:space="preserve">
+    <value>已复制最近日志片段。</value>
+  </data>
+  <data name="Diagnostics_CopyLogSnippetFailed" xml:space="preserve">
+    <value>复制最近日志片段失败，请稍后重试。</value>
+  </data>
+  <data name="AgentProfileEditor_ValidationFailedFormat" xml:space="preserve">
+    <value>验证失败：{0}</value>
+  </data>
+  <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
+    <value>保存配置失败：{0}</value>
+  </data>
+  <data name="AgentProfileEditor_LoadFailedFormat" xml:space="preserve">
+    <value>无法读取配置：{0}</value>
+  </data>
+  <data name="AgentProfileEditor_RetryLoad" xml:space="preserve">
+    <value>重试</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeSystem" xml:space="preserve">
+    <value>使用系统代理</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeNone" xml:space="preserve">
+    <value>不使用代理</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeCustom" xml:space="preserve">
+    <value>自定义代理</value>
+  </data>
+  <data name="AgentProfileEditor_CurrentConnectionSavedNoticeMessage" xml:space="preserve">
+    <value>配置已保存。当前连接仍使用旧配置，重新连接后生效。</value>
+  </data>
+  <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
+    <value>刷新 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpSetup_Install_Failed" xml:space="preserve">
+    <value>安装失败。</value>
+  </data>
+  <data name="AcpSetup_Adapter_ToolchainMissing" xml:space="preserve">
+    <value>需要先安装 {0} 才能安装此适配器。安装完成后请重新检测。</value>
+  </data>
+  <data name="AcpSetup_Agent_ToolchainMissingHint" xml:space="preserve">
+    <value>需要 {0} 才能自动安装。</value>
+  </data>
+  <data name="AcpSetup_Install_ToolchainMissing" xml:space="preserve">
+    <value>需要先安装 {0} 才能自动安装此组件。安装完成后请重新检测。</value>
+  </data>
+  <data name="AcpSetup_Stage_Validation" xml:space="preserve">
+    <value>参数校验</value>
+  </data>
+  <data name="AcpSetup_Stage_CommandResolution" xml:space="preserve">
+    <value>命令解析</value>
+  </data>
+  <data name="AcpSetup_Stage_AdapterStartup" xml:space="preserve">
+    <value>适配器启动</value>
+  </data>
+  <data name="AcpSetup_Stage_Handshake" xml:space="preserve">
+    <value>协议握手</value>
+  </data>
+  <data name="AcpSetup_Stage_Completed" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="AcpSetup_Step_Position" xml:space="preserve">
+    <value>第 {0} 步，共 {1} 步</value>
+  </data>
+  <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
+    <value>找不到启动命令。请确认 Agent 运行时已安装并在 PATH 中，然后重新检测。</value>
+  </data>
+  <data name="AcpSetup_Remediation_AdapterStartup" xml:space="preserve">
+    <value>适配器无法启动。请查看安装输出中的错误详情，确认适配器与该 Agent 兼容。</value>
+  </data>
+  <data name="AcpSetup_Remediation_Handshake" xml:space="preserve">
+    <value>连接已建立但握手失败。请确认该 Agent 支持 ACP 协议，并检查启动参数是否正确。</value>
+  </data>
+  <data name="AcpSetup_Agent_ClaudeCode_Description" xml:space="preserve">
+    <value>Anthropic 的终端编码 Agent（Claude Code CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Codex_Description" xml:space="preserve">
+    <value>OpenAI 的终端编码 Agent（Codex CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Gemini_Description" xml:space="preserve">
+    <value>Google 的终端编码 Agent（Gemini CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_GitHubCopilot_Description" xml:space="preserve">
+    <value>GitHub Copilot 命令行编码 Agent。</value>
+  </data>
+  <data name="AcpSetup_Agent_QwenCode_Description" xml:space="preserve">
+    <value>阿里云通义千问的终端编码 Agent（Qwen Code）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Cline_Description" xml:space="preserve">
+    <value>Cline 终端编码 Agent。</value>
+  </data>
+  <data name="AcpSetup_Agent_Auggie_Description" xml:space="preserve">
+    <value>Augment Code 的终端编码 Agent（Auggie）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Goose_Description" xml:space="preserve">
+    <value>Block 的开源编码 Agent（Goose）。</value>
+  </data>
+  <data name="AcpSetup_Parameter_Model_Description" xml:space="preserve">
+    <value>模型名称，例如 sonnet、opus 或具体模型标识。留空则使用 Agent 默认模型。</value>
+  </data>
+  <data name="AcpSetup_Validation_MissingRequiredValue" xml:space="preserve">
+    <value>此参数为必填项，请填写后再继续。</value>
+  </data>
+  <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
+    <value>取值不在允许范围内，请从列表中选择。</value>
+  </data>
+  <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
+    <value>删除 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_SaveFailed" xml:space="preserve">
+    <value>保存 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_ConnectFailed" xml:space="preserve">
+    <value>连接 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_DisconnectFailed" xml:space="preserve">
+    <value>断开 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_ReconnectFailed" xml:space="preserve">
+    <value>重新连接 Agent 配置失败，请稍后重试。</value>
   </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>未启动</value>
@@ -390,6 +655,15 @@
   </data>
   <data name="GamepadDiagnostics_ConnectionWireless" xml:space="preserve">
     <value>无线</value>
+  </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutStandard" xml:space="preserve">
+    <value>标准</value>
+  </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutNintendo" xml:space="preserve">
+    <value>Nintendo</value>
+  </data>
+  <data name="GamepadDiagnostics_StandardGamepadsNone" xml:space="preserve">
+    <value>未检测到标准 Gamepad</value>
   </data>
   <data name="VoiceDiagnostics_PendingRefresh" xml:space="preserve">
     <value>等待刷新</value>
@@ -543,6 +817,12 @@
   <data name="Shortcuts_ConflictSeparator" xml:space="preserve">
     <value>，</value>
   </data>
+  <data name="ShortcutAction_NewSession" xml:space="preserve">
+    <value>新建会话</value>
+  </data>
+  <data name="ShortcutAction_Search" xml:space="preserve">
+    <value>搜索</value>
+  </data>
 
   <!-- Settings: ACP connection -->
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">
@@ -566,8 +846,8 @@
   <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
     <value>WebSocket</value>
   </data>
-  <data name="AcpConnection_TransportHttpSse" xml:space="preserve">
-    <value>HTTP SSE</value>
+  <data name="AcpConnection_TransportStreamableHttp" xml:space="preserve">
+    <value>Streamable HTTP</value>
   </data>
   <data name="AcpConnection_HydrationStrictReplayName" xml:space="preserve">
     <value>严格回放</value>
@@ -623,14 +903,23 @@
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
     <value>请填写远程项目的绝对路径后再保存。</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseTitle" xml:space="preserve">
-    <value>分析代码库</value>
+  <data name="StartSuggestion_ReportGuidanceTitle" xml:space="preserve">
+    <value>举报 AI 内容</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseSubtitle" xml:space="preserve">
-    <value>深入理解项目架构与逻辑</value>
+  <data name="StartSuggestion_ReportGuidanceSubtitle" xml:space="preserve">
+    <value>右键消息或在“关于”中举报</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebasePrompt" xml:space="preserve">
-    <value>请帮我分析一下当前代码库的架构和核心逻辑。</value>
+  <data name="StartSuggestion_ReportGuidanceDetail" xml:space="preserve">
+    <value>如果 AI 生成的内容有问题，可以右键该条消息选择“举报”，也可以在“设置 &gt; 关于”页面中举报。这张提示卡本身只是说明，不会发送举报。</value>
+  </data>
+  <data name="StartSuggestion_ReportGuidanceLabel" xml:space="preserve">
+    <value>提示</value>
+  </data>
+  <data name="StartSuggestion_QuickLaunchLabel" xml:space="preserve">
+    <value>快速开始</value>
+  </data>
+  <data name="AiContentReport_OpenFailed" xml:space="preserve">
+    <value>无法打开邮件应用。请确认已配置邮件应用后重试。</value>
   </data>
   <data name="StartSuggestion_RecommendTasksTitle" xml:space="preserve">
     <value>推荐开发任务</value>
@@ -767,7 +1056,6 @@
   <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>尚未同步</value></data>
   <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>已上传本地配置</value></data>
   <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>已应用云端配置</value></data>
-  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>已应用云端配置，并保留本地备份</value></data>
   <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>成功</value></data>
   <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>上次同步：{0} · {1:g}</value></data>
   <data name="DataStorage_CloudSyncSavedConnectionContext" xml:space="preserve"><value>已保留 {0} 连接设置</value></data>
@@ -794,6 +1082,12 @@
   <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>云服务拒绝了登录信息。请更新后重试。</value></data>
   <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>无法连接云服务。请检查网络后重试。</value></data>
   <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>无法解决云端配置冲突。本地配置未被替换。</value></data>
+  <data name="DataStorage_CloudSyncConflictNeedsResolution" xml:space="preserve"><value>本地与云端配置都已变更。请选择保留本地并上传，或采用云端覆盖本地。本地配置尚未被替换。</value></data>
+  <data name="DataStorage_CloudSyncKeepLocal" xml:space="preserve"><value>保留本地并上传</value></data>
+  <data name="DataStorage_CloudSyncApplyRemote" xml:space="preserve"><value>采用云端配置</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteTitle" xml:space="preserve"><value>采用云端配置？</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteMessage" xml:space="preserve"><value>这将用云端配置覆盖本机当前配置。覆盖前会自动备份本机配置。</value></data>
+  <data name="DataStorage_CloudSyncApplyRemotePrimary" xml:space="preserve"><value>采用云端</value></data>
   <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>无法创建或应用配置同步包。</value></data>
   <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>此版本未配置 OneDrive。请选择其他云服务。</value></data>
   <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>移除此设备上的 {0} 同步设置？</value></data>
@@ -802,4 +1096,191 @@
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>移除本机设置</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>已保存的云同步配置无效。请编辑连接并检查必填项。</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>该远程项目已不存在。</value></data>
+  <data name="AddProject_InvalidSelection" xml:space="preserve"><value>所选项目无效，请重新选择文件夹或远程目录。</value></data>
+  <data name="General_ClearCacheTitle" xml:space="preserve">
+    <value>清除缓存</value>
+  </data>
+  <data name="General_ClearCacheMessage" xml:space="preserve">
+    <value>这将删除本地缓存文件夹中的所有文件。</value>
+  </data>
+  <data name="General_ClearCachePrimary" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="General_ClearCacheSuccess" xml:space="preserve">
+    <value>本地缓存已清除。</value>
+  </data>
+  <data name="General_ClearCacheFailed" xml:space="preserve">
+    <value>清除缓存失败，请稍后重试。</value>
+  </data>
+  <data name="General_LaunchOnStartupFailed" xml:space="preserve">
+    <value>无法更新开机启动设置，请稍后重试。</value>
+  </data>
+  <data name="General_LanguageApplyFailed" xml:space="preserve">
+    <value>无法切换语言，请稍后重试。</value>
+  </data>
+  <data name="General_AppSettingsSaveFailed" xml:space="preserve">
+    <value>保存应用设置失败，请稍后重试。</value>
+  </data>
+  <data name="General_AppSettingsLoadFailed" xml:space="preserve">
+    <value>加载应用设置失败，请稍后重试。</value>
+  </data>
+  <data name="SessionActivation_FailedGeneric" xml:space="preserve">
+    <value>无法打开该会话，请稍后重试。</value>
+  </data>
+  <data name="SessionActivation_ConversationSelectionFailed" xml:space="preserve">
+    <value>无法打开该会话，请稍后重试。</value>
+  </data>
+  <data name="SessionActivation_ChatShellNavigationFailed" xml:space="preserve">
+    <value>无法打开会话聊天页，请稍后重试。</value>
+  </data>
+  <data name="Navigation_OpenSettingsFailed" xml:space="preserve">
+    <value>无法打开设置，请稍后重试。</value>
+  </data>
+  <data name="Navigation_OpenStartFailed" xml:space="preserve">
+    <value>无法打开开始页，请稍后重试。</value>
+  </data>
+  <data name="Navigation_OpenDiscoverSessionsFailed" xml:space="preserve">
+    <value>无法打开发现会话，请稍后重试。</value>
+  </data>
+  <data name="Navigation_OpenSessionFailed" xml:space="preserve">
+    <value>无法打开该会话，请稍后重试。</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
+    <value>已清除全部本地数据。</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataFailed" xml:space="preserve">
+    <value>清除全部本地数据失败，请稍后重试。</value>
+  </data>
+  <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
+    <value>归档会话</value>
+  </data>
+  <data name="Nav_ArchiveSessionMessage" xml:space="preserve">
+    <value>要归档会话“{0}”吗？</value>
+  </data>
+  <data name="Nav_ArchiveSessionPrimary" xml:space="preserve">
+    <value>归档</value>
+  </data>
+  <data name="Nav_ArchiveSessionFailed" xml:space="preserve">
+    <value>归档会话失败，请稍后重试。</value>
+  </data>
+  <data name="Nav_CopySessionIdFailed" xml:space="preserve">
+    <value>复制会话 ID 失败，请稍后重试。</value>
+  </data>
+  <data name="AskUser_SubmitUnavailable" xml:space="preserve">
+    <value>当前无法提交回答。</value>
+  </data>
+  <data name="AskUser_AnswerAllRequired" xml:space="preserve">
+    <value>请先回答所有问题再提交。</value>
+  </data>
+  <data name="AskUser_SubmitFailed" xml:space="preserve">
+    <value>提交回答失败，请重试。</value>
+  </data>
+  <data name="AskUser_MultipleChoice" xml:space="preserve">
+    <value>多选</value>
+  </data>
+  <data name="AskUser_SingleChoice" xml:space="preserve">
+    <value>单选</value>
+  </data>
+  <data name="VoiceInput_PermissionCheckFailed" xml:space="preserve">
+    <value>语音输入权限检查失败。</value>
+  </data>
+  <data name="VoiceInput_Failed" xml:space="preserve">
+    <value>语音输入失败。</value>
+  </data>
+  <data name="VoiceInput_FailedWithDetail" xml:space="preserve">
+    <value>语音输入失败：{0}</value>
+  </data>
+  <data name="VoiceInput_StopFailed" xml:space="preserve">
+    <value>停止语音输入失败。</value>
+  </data>
+  <data name="VoiceInput_StopFailedWithDetail" xml:space="preserve">
+    <value>停止语音输入失败：{0}</value>
+  </data>
+  <data name="ChatAuth_Required" xml:space="preserve">
+    <value>助手需要先完成身份验证才能继续响应。</value>
+  </data>
+  <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
+    <value>身份验证失败：{0}</value>
+  </data>
+  <data name="ChatPrompt_CancelFailed" xml:space="preserve">
+    <value>取消失败。</value>
+  </data>
+  <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
+    <value>信号监测失败。</value>
+  </data>
+  <data name="NewSessionDraft_LoadConfigFailed" xml:space="preserve">
+    <value>无法加载会话配置。请检查连接后重试。</value>
+  </data>
+  <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
+    <value>远程工作目录必须是绝对路径。</value>
+  </data>
+  <data name="ChatBinding_UpdateFailedWithStatus" xml:space="preserve">
+    <value>更新会话绑定失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_BindNewFailedWithStatus" xml:space="preserve">
+    <value>绑定新会话失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_PromoteDraftFailedWithStatus" xml:space="preserve">
+    <value>提升新建会话草稿失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_UnknownError" xml:space="preserve">
+    <value>未知错误</value>
+  </data>
+  <data name="ChatService_NotInitialized" xml:space="preserve">
+    <value>聊天服务尚未初始化</value>
+  </data>
+  <data name="ChatConversation_ActivateLocalFailed" xml:space="preserve">
+    <value>在应用会话响应之前激活本地会话失败。</value>
+  </data>
+  <data name="ChatSession_NoActiveLocalConversation" xml:space="preserve">
+    <value>没有可用于创建 ACP 会话的活动本地会话。</value>
+  </data>
+  <data name="ChatBinding_NoActiveLocalConversation" xml:space="preserve">
+    <value>没有活动的本地会话，无法更新远程绑定。</value>
+  </data>
+  <data name="ChatService_NotConnectedInitialized" xml:space="preserve">
+    <value>ACP 聊天服务未连接或未完成初始化。</value>
+  </data>
+  <data name="ChatProjectAffinity_OverrideMessage" xml:space="preserve">
+    <value>已应用本地项目覆盖，可随时清除。</value>
+  </data>
+  <data name="ChatProjectAffinity_NeedsMappingMessage" xml:space="preserve">
+    <value>此远程会话尚未匹配本地项目，请手动纠正。</value>
+  </data>
+  <data name="ChatProjectAffinity_UnclassifiedMessage" xml:space="preserve">
+    <value>此会话尚未归类，可手动纠正。</value>
+  </data>
+  <data name="AgentProfileEditor_NewConfigurationName" xml:space="preserve">
+    <value>新配置</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholder" xml:space="preserve">
+    <value>[图片]</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholderWithMime" xml:space="preserve">
+    <value>[图片: {0}]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholder" xml:space="preserve">
+    <value>[音频]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholderWithMime" xml:space="preserve">
+    <value>[音频: {0}]</value>
+  </data>
+  <data name="McpSettings_DefaultServerName" xml:space="preserve">
+    <value>新 MCP 服务器</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedTitle" xml:space="preserve">
+    <value>任务完成</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
+    <value>智能体已完成回复。</value>
+  </data>
+  <data name="SystemNotification_OpenAction" xml:space="preserve">
+    <value>打开</value>
+  </data>
+  <data name="SystemNotification_ChannelName" xml:space="preserve">
+    <value>智能体任务完成</value>
+  </data>
+  <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
+    <value>系统通知权限未授予。</value>
+  </data>
 </root>

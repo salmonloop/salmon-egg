@@ -1,0 +1,89 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.AcpSetup;
+
+namespace SalmonEgg.Domain.Services.AcpSetup;
+
+/// <summary>
+/// Inspects the local machine for the executables and packages an ACP component needs. Platform PATH
+/// rules and package-manager invocations live behind this seam so wizard orchestration stays
+/// platform-agnostic.
+/// </summary>
+public interface IAcpExecutableProbe
+{
+    /// <summary>
+    /// True when this platform can start child processes. When false, callers must report
+    /// <c>Undetermined</c> rather than claiming a component is missing.
+    /// </summary>
+    bool SupportsProcessProbing { get; }
+
+    /// <summary>
+    /// Resolves <paramref name="command"/> to an absolute path, or null when it is not on PATH.
+    /// </summary>
+    /// <remarks>
+    /// Returns the first match, the way a shell would. Callers that need to know a second install exists
+    /// use <see cref="ResolveExecutableCandidatesAsync"/>; callers that only need something runnable
+    /// (installers, version reads) stay on this.
+    /// </remarks>
+    Task<string?> ResolveExecutablePathAsync(string command, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Discards anything this probe cached about where executables live, so the next resolution looks at
+    /// the machine again.
+    /// </summary>
+    /// <remarks>
+    /// Exposed because the wizard's own advice creates the stale state: it tells a user to install a
+    /// toolchain and then detect again, and a probe that answered from before the install reports the
+    /// toolchain still missing. Only the caller knows that the machine may have changed between two probes,
+    /// so the decision to re-look belongs here rather than to a heuristic inside an implementation.
+    ///
+    /// Idempotent, and a no-op on a probe that caches nothing.
+    /// </remarks>
+    void InvalidateSearchPaths();
+
+    /// <summary>
+    /// Resolves every distinct executable <paramref name="command"/> matches, in PATH precedence order.
+    /// </summary>
+    /// <remarks>
+    /// The first entry is what <see cref="ResolveExecutablePathAsync"/> returns and what a shell would
+    /// run; later entries are shadowed installs the user may have meant instead. Distinct means distinct
+    /// target: a PATH that lists one directory several times, or symlinks pointing at one file, yield one
+    /// candidate rather than several identical ones.
+    ///
+    /// Empty when the command resolves to nothing, so callers treat "not found" the same as they do for
+    /// the single-path overload.
+    /// </remarks>
+    Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="command"/> with <paramref name="versionArguments"/> and returns the first
+    /// non-empty output line, or null when the command could not be run or printed nothing.
+    /// </summary>
+    Task<string?> ReadVersionAsync(
+        string command,
+        IReadOnlyList<string> versionArguments,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks whether <paramref name="packageId"/> is installed globally for
+    /// <paramref name="distribution"/>, and where.
+    /// </summary>
+    /// <param name="packageManager">
+    /// The package-manager commands to try, in order — see <see cref="AcpPackageManagerCandidates"/>.
+    /// Supplied by the caller rather than chosen here, because which manager is the right one depends on
+    /// which toolchain the user selected, and only the caller knows that.
+    /// </param>
+    /// <remarks>
+    /// Answers where rather than only whether, because a package manager answers for one toolchain: the
+    /// location is what lets the wizard say which one it asked. An unanswerable query reports unknown,
+    /// which callers must not read as absent.
+    /// </remarks>
+    Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
+        AcpDistributionKind distribution,
+        string packageId,
+        AcpPackageManagerCandidates packageManager,
+        CancellationToken cancellationToken = default);
+}

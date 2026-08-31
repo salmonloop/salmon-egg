@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -9,7 +10,6 @@ using System.Threading.Tasks;
 using Serilog;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Utilities;
 
 namespace SalmonEgg.Infrastructure.Transport
 {
@@ -27,12 +27,19 @@ namespace SalmonEgg.Infrastructure.Transport
         private StreamReader? _stderr;
         private CancellationTokenSource? _readCts;
         private static readonly TimeSpan StartupObservationTimeout = TimeSpan.FromMilliseconds(500);
-        private readonly string _command;
-        private readonly string[] _args;
+        private static readonly IReadOnlyDictionary<string, string> EmptyEnvironment =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly LauncherInvocation _invocation;
         private readonly Encoding _encoding;
         private readonly string _workingDirectory;
+        private readonly IReadOnlyDictionary<string, string> _environment;
         private bool _disposed;
         private readonly object _lock = new();
+
+        // Serializes writes to the single stdin StreamWriter. A StreamWriter forbids concurrent
+        // async writes (throws ThrowAsyncIOInProgress); multiple in-flight ACP requests (e.g. a
+        // session/list and a session/load racing on the shared client) would otherwise overlap.
+        private readonly SemaphoreSlim _sendGate = new(1, 1);
 
         /// <summary>
         /// 消息接收事件。
@@ -55,34 +62,47 @@ namespace SalmonEgg.Infrastructure.Transport
         /// <param name="command">Agent 可执行文件的命令</param>
         /// <param name="args">命令行参数</param>
         /// <param name="encoding">字符编码</param>
+        /// <param name="environment">
+        /// 附加到子进程环境的变量。叠加在继承环境之上，null 或空表示不修改环境。
+        /// </param>
         public StdioTransport(
             string command,
             string[]? args = null,
-            Encoding? encoding = null)
+            Encoding? encoding = null,
+            IReadOnlyDictionary<string, string>? environment = null)
         {
-            // 去除命令和参数中的首尾空格（避免意外输入导致找不到文件）
-            string trimmedCommand = (command ?? string.Empty).Trim();
-            string[] trimmedArgs = args?.Select(a => a.Trim()).ToArray() ?? Array.Empty<string>();
-
-            // 解析命令并处理 .cmd/.bat 脚本
-            string resolvedCommand = PathResolver.ResolveCommand(trimmedCommand);
-
-            // 如果是 .cmd 或 .bat 文件，需要通过 cmd.exe 执行
-            if (resolvedCommand.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) ||
-                resolvedCommand.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
-            {
-                _command = "cmd.exe";
-                _args = new[] { "/c", resolvedCommand }.Concat(trimmedArgs).ToArray();
-                _workingDirectory = ResolveWorkingDirectory(resolvedCommand);
-            }
-            else
-            {
-                _command = resolvedCommand;
-                _args = trimmedArgs;
-                _workingDirectory = ResolveWorkingDirectory(resolvedCommand);
-            }
+            // 命令解析、.cmd/.bat 包装与启动器目录上 PATH 都由 LauncherInvocation 统一负责，
+            // 使 ACP 向导的探测/安装与本传输走同一套规则。
+            _invocation = LauncherInvocation.Create(command, args);
+            _workingDirectory = ResolveWorkingDirectory(_invocation.ResolvedCommand);
 
             _encoding = NormalizeTransportEncoding(encoding ?? Encoding.UTF8);
+            _environment = NormalizeEnvironment(environment);
+        }
+
+        /// <summary>
+        /// 复制并去掉空名条目，使传输持有自己的不可变副本，避免调用方后续修改影响已建连的进程。
+        /// </summary>
+        private static IReadOnlyDictionary<string, string> NormalizeEnvironment(
+            IReadOnlyDictionary<string, string>? environment)
+        {
+            if (environment is null || environment.Count == 0)
+            {
+                return EmptyEnvironment;
+            }
+
+            var normalized = new Dictionary<string, string>(environment.Count, StringComparer.Ordinal);
+            foreach (var entry in environment)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key))
+                {
+                    continue;
+                }
+
+                normalized[entry.Key.Trim()] = entry.Value ?? string.Empty;
+            }
+
+            return normalized;
         }
 
         private static Encoding NormalizeTransportEncoding(Encoding encoding)
@@ -112,62 +132,87 @@ namespace SalmonEgg.Infrastructure.Transport
                 return true;
             }
 
+            // Held locally until Start() succeeds; see the publication comment below.
+            Process? starting = null;
+
             try
             {
                 _readCts = new CancellationTokenSource();
 
                 var processInfo = CreateProcessStartInfo();
 
-                _process = new Process { StartInfo = processInfo };
-                _process.EnableRaisingEvents = true;
-                _process.Exited += OnProcessExited;
+                starting = new Process { StartInfo = processInfo };
+                starting.EnableRaisingEvents = true;
+                starting.Exited += OnProcessExited;
 
-                _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
+                _logger.Information("[StdioTransport.Connect] Starting process. Command={Command} ArgsCount={ArgsCount}", _invocation.FileName, processInfo.ArgumentList.Count);
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
                 {
                     lock (_lock)
                     {
-                        _process.Start();
-                        _logger.Information("[StdioTransport.Connect] 进程已启动 PID={Pid}", _process.Id);
+                        starting.Start();
+
+                        // Published only once Start() has returned. Teardown reads this field to decide
+                        // it owns a child that needs reaping, so the field has to mean exactly that: a
+                        // Process whose Start() threw owns no child, and reading HasExited on it throws
+                        // InvalidOperationException("No process is associated with this object") — from
+                        // a pattern match that sits outside the try guarding the kill, so it escapes
+                        // Dispose entirely. Publishing after the start makes "field is set" equal to
+                        // "a child exists" by construction, which is what lets both kill sites stay
+                        // free of defensive checks.
+                        _process = starting;
+                        _logger.Information("[StdioTransport.Connect] Process started. PID={Pid}", starting.Id);
                     }
                 }, cancellationToken).ConfigureAwait(false);
 
-                _stdin = _process.StandardInput;
-                _stdout = _process.StandardOutput;
-                _stderr = _process.StandardError;
+                // Everything below works off the local, not the field: teardown clears _process when it
+                // takes ownership, so a disconnect arriving mid-connect would otherwise turn these into
+                // a NullReferenceException. Reading the local can still throw once teardown has
+                // disposed the Process, which the catch below reports as a failed start — the right
+                // answer for a connect that raced a disconnect.
+                _stdin = starting.StandardInput;
+                _stdout = starting.StandardOutput;
+                _stderr = starting.StandardError;
+
+                // 读循环必须在启动观察窗之前开始消费两条管道:
+                // 子进程启动即写满 stdout/stderr 管道缓冲时会阻塞在写端,
+                // 既无法继续启动也无法退出,观察窗判定与快速失败诊断都会失真。
+                _ = ReadLoopAsync(_readCts.Token);
+                _ = ReadErrorLoopAsync(_readCts.Token);
 
                 await Task.Delay(StartupObservationTimeout, cancellationToken).ConfigureAwait(false);
 
-                if (!_process.HasExited)
+                if (!starting.HasExited)
                 {
-                    _logger.Information("[StdioTransport.Connect] 启动读取循环");
-
-                    // 启动读取循环
-                    _ = ReadLoopAsync(_readCts.Token);
-                    _ = ReadErrorLoopAsync(_readCts.Token);
-
                     IsConnected = true;
 
-                    _logger.Information("[StdioTransport.Connect] 连接成功，PID={Pid}", _process.Id);
+                    _logger.Information("[StdioTransport.Connect] Connected. PID={Pid}", starting.Id);
                     return true;
                 }
                 else
                 {
-                    _logger.Warning("[StdioTransport.Connect] 进程已退出，退出码={ExitCode}", _process.ExitCode);
-                    await DrainExitedProcessErrorAsync().ConfigureAwait(false);
+                    _logger.Warning("[StdioTransport.Connect] Process exited. ExitCode={ExitCode}", starting.ExitCode);
                     OnErrorOccurred(new TransportErrorEventArgs(
-                        $"进程启动后立即退出，退出码={_process.ExitCode}",
+                        $"Process exited immediately after start. ExitCode={starting.ExitCode}",
                         kind: TransportErrorKind.ProcessStartFailed));
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.Connect] 启动失败");
+                // If Start() failed before publication, teardown cannot see this Process and nothing
+                // else will release it. Once it has been published, teardown owns the child and can
+                // clear _process before this catch runs; a second Dispose() of the handle is harmless.
+                if (_process is null)
+                {
+                    starting?.Dispose();
+                }
+
+                _logger.Error(ex, "[StdioTransport.Connect] Start failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"无法启动进程：{ex.Message}",
+                    $"Unable to start process: {ex.Message}",
                     ex,
                     TransportErrorKind.ProcessStartFailed));
                 return false;
@@ -178,7 +223,6 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             var processInfo = new ProcessStartInfo
             {
-                FileName = _command,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -190,61 +234,64 @@ namespace SalmonEgg.Infrastructure.Transport
                 WorkingDirectory = _workingDirectory
             };
 
-            foreach (var argument in _args)
+            // Applied after construction so configured values win over the inherited environment.
+            foreach (var entry in _environment)
             {
-                processInfo.ArgumentList.Add(argument);
+                processInfo.Environment[entry.Key] = entry.Value;
             }
+
+            // Last, so the launcher's own directory extends whatever PATH the configured environment
+            // settled on rather than the inherited one it may have replaced.
+            _invocation.ApplyTo(processInfo);
 
             return processInfo;
         }
 
         /// <summary>
-        /// 断开与 Agent 的连接。
+        /// 断开与 Agent 的连接。状态声明在锁内完成,kill/等待/释放等阻塞 IO 移出锁,
+        /// 避免持锁做进程 IO 与 Send/Connect 路径互相卡死。
         /// </summary>
         public async Task<bool> DisconnectAsync()
         {
-            lock (_lock)
+            if (!TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr))
             {
-                if (!IsConnected)
-                {
-                    return true;
-                }
-                try
-                {
-                    // 取消读取操作
-                    _readCts?.Cancel();
-                    // 关闭标准输入
-                    _stdin?.Flush();
-                    _stdin?.Close();
-                    _stdin?.Dispose();
-                    // 等待进程退出
-                    if (_process != null && !_process.HasExited)
-                    {
-                        try
-                        {
-                            _process.Kill();
-                            _process.WaitForExit();
-                        }
-                        catch
-                        {
-                            // 如果进程无法终止，继续执行
-                        }
-                    }
-                    _stdout?.Dispose();
-                    _stderr?.Dispose();
-                    _process?.Dispose();
+                return true;
+            }
 
-                    IsConnected = false;
-                    return true;
-                }
-                catch (Exception ex)
+            try
+            {
+                CloseStandardInput(stdin);
+                if (process is { HasExited: false })
                 {
-                    OnErrorOccurred(new TransportErrorEventArgs(
-                        $"断开连接时出错：{ex.Message}",
-                        ex,
-                        TransportErrorKind.DisconnectFailed));
-                    return false;
+                    try
+                    {
+                        // entireProcessTree, because the child is often not the agent. A Windows agent
+                        // installed via npm resolves to a .CMD (see StdioCommandResolver's PATHEXT
+                        // default) and is launched through cmd.exe /c, which makes the real agent a
+                        // grandchild; killing only the direct child leaves it running and holding the
+                        // session's resources. Measured with a shell wrapping a long sleep: the plain
+                        // overload leaves one of two processes alive, this one reaps both.
+                        process.Kill(entireProcessTree: true);
+                        await process.WaitForExitAsync().ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // 如果进程无法终止，继续执行
+                    }
                 }
+
+                stdout?.Dispose();
+                stderr?.Dispose();
+                process?.Dispose();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"Error while disconnecting: {ex.Message}",
+                    ex,
+                    TransportErrorKind.DisconnectFailed));
+                return false;
             }
         }
 
@@ -256,9 +303,9 @@ namespace SalmonEgg.Infrastructure.Transport
             // 检查连接状态（不使用锁，避免死锁）
             if (!IsConnected || _stdin == null)
             {
-                _logger.Warning("[StdioTransport.SendMessage] 失败：未连接或 _stdin 为 null");
+                _logger.Warning("[StdioTransport.SendMessage] Failed: not connected or _stdin is null");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    "传输未连接",
+                    "Transport is not connected",
                     kind: TransportErrorKind.NotConnected));
                 return false;
             }
@@ -266,9 +313,9 @@ namespace SalmonEgg.Infrastructure.Transport
             // 检查进程是否已退出
             if (_process != null && _process.HasExited)
             {
-                _logger.Error("[StdioTransport.SendMessage] 失败：进程已退出，退出码={ExitCode}", _process.ExitCode);
+                _logger.Error("[StdioTransport.SendMessage] Failed: process exited. ExitCode={ExitCode}", _process.ExitCode);
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"Agent 进程已退出，退出码={_process.ExitCode}",
+                    $"Agent process exited. ExitCode={_process.ExitCode}",
                     kind: TransportErrorKind.ProcessExited));
                 IsConnected = false;
                 return false;
@@ -276,28 +323,65 @@ namespace SalmonEgg.Infrastructure.Transport
 
             try
             {
-                _logger.Information("[StdioTransport.SendMessage] 发送消息，Length={Length}", message.Length);
+                await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Raced with Dispose: the transport is gone. Treat as not connected.
+                return false;
+            }
+
+            try
+            {
+                _logger.Information("[StdioTransport.SendMessage] Sending message. Length={Length}", message.Length);
 
                 // 发送消息后添加换行符
-                await _stdin.WriteAsync(message + Environment.NewLine).ConfigureAwait(false);
-                _logger.Debug("[StdioTransport.SendMessage] 已写入 stdin，正在 Flush...");
+                await _stdin.WriteAsync((message + Environment.NewLine).AsMemory(), cancellationToken).ConfigureAwait(false);
+                _logger.Debug("[StdioTransport.SendMessage] Wrote stdin; flushing...");
 
-                await _stdin.FlushAsync().ConfigureAwait(false);
-                _logger.Debug("[StdioTransport.SendMessage] Flush 完成");
+                await _stdin.FlushAsync(cancellationToken).ConfigureAwait(false);
+                _logger.Debug("[StdioTransport.SendMessage] Flush completed");
 
                 return true;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Caller-initiated cancellation is not a transport fault; do not tear the pipe down.
+                throw;
+            }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.SendMessage] 发送失败");
+                _logger.Error(ex, "[StdioTransport.SendMessage] Send failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"发送消息失败：{ex.Message}",
+                    $"Failed to send message: {ex.Message}",
                     ex,
                     TransportErrorKind.SendFailed));
-                IsConnected = false;
+
+                // Only a genuinely broken pipe / dead process is a permanent disconnect. A transient
+                // write conflict (e.g. InvalidOperationException from an overlapping write) is
+                // recoverable and must not zombify the transport or cancel all in-flight requests.
+                if (IsFatalSendFailure(ex))
+                {
+                    IsConnected = false;
+                }
+
                 return false;
             }
+            finally
+            {
+                // Guard against a Dispose that raced in while this send held the gate.
+                try { _sendGate.Release(); }
+                catch (ObjectDisposedException) { }
+            }
         }
+
+        // A send fault is fatal only when the underlying pipe/process is actually gone. IO errors and
+        // a confirmed process exit are terminal; everything else (notably InvalidOperationException from
+        // a transient stream-in-use overlap) is recoverable and leaves the connection intact.
+        private bool IsFatalSendFailure(Exception ex)
+            => ex is IOException
+               || ex is ObjectDisposedException
+               || (_process is { HasExited: true });
 
         /// <summary>
         /// 读取输出循环。
@@ -306,42 +390,73 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             try
             {
-                _logger.Information("[StdioTransport.ReadLoop] 启动读取循环，PID={Pid}", _process?.Id);
+                _logger.Information("[StdioTransport.ReadLoop] Starting. PID={Pid}", _process?.Id);
                 int lineCount = 0;
-                // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
-                while (!cancellationToken.IsCancellationRequested && _stdout != null)
+
+                // Captured once: teardown clears _stdout when it takes ownership, so re-reading the
+                // field each iteration would race — the null check could pass and the field be
+                // cleared before the read. The loop ends on cancellation or end of stream instead.
+                var stdout = _stdout;
+                if (stdout is null)
                 {
-                    var line = await _stdout.ReadLineAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    // Pass the token: the parameterless overload cannot be interrupted, so a
+                    // deliberate teardown disposes the reader out from under a parked read and
+                    // surfaces IOException("Operation canceled") — an OS errno message that reads
+                    // like a fault and was reported as StdoutReadFailed. With the token the parked
+                    // read throws OperationCanceledException instead, which the catch below already
+                    // treats as the expected end of a teardown.
+                    var line = await stdout.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null)
                     {
-                        _logger.Warning("[StdioTransport.ReadLoop] ReadLine 返回 null，流可能已结束");
+                        _logger.Warning("[StdioTransport.ReadLoop] ReadLine returned null; stream may have ended");
                         break;
                     }
                     lineCount++;
-                    _logger.Debug("[StdioTransport.ReadLoop] 收到第{Count}行，Length={Length}", lineCount, line.Length);
+                    _logger.Debug("[StdioTransport.ReadLoop] Received line {Count}. Length={Length}", lineCount, line.Length);
 
-                    if (!string.IsNullOrWhiteSpace(line))
+                    switch (ClassifyStdoutLine(line, out var frame))
                     {
-                        _logger.Debug("[StdioTransport.ReadLoop] 触发 OnMessageReceived，Line={Count}, Length={Length}", lineCount, line.Length);
-                        OnMessageReceived(new MessageReceivedEventArgs(line));
-                    }
-                    else
-                    {
-                        _logger.Debug("[StdioTransport.ReadLoop] 忽略空行");
+                        case StdoutFrameKind.Frame:
+                            _logger.Debug("[StdioTransport.ReadLoop] Raising OnMessageReceived. Line={Count}, Length={Length}", lineCount, frame.Length);
+                            OnMessageReceived(new MessageReceivedEventArgs(frame));
+                            break;
+
+                        case StdoutFrameKind.Diagnostic:
+                            // Warning (not Debug) so the offending content is visible at the default
+                            // log level; without it every cause reduces to the same parser message.
+                            var described = AcpFrame.Describe(line);
+                            _logger.Warning(
+                                "[StdioTransport.ReadLoop] Ignoring non-ACP stdout line {Count}. The agent must write diagnostics to stderr. Content={Content}",
+                                lineCount,
+                                described);
+                            OnErrorOccurred(new TransportErrorEventArgs(
+                                $"Agent wrote non-ACP output to stdout: {described}",
+                                kind: TransportErrorKind.StdoutProtocolViolation));
+                            break;
+
+                        default:
+                            _logger.Debug("[StdioTransport.ReadLoop] Ignoring empty line");
+                            break;
                     }
                 }
-                _logger.Warning("[StdioTransport.ReadLoop] 读取循环结束 - 共读取{Count}行，取消={Cancelled}",
+                _logger.Warning("[StdioTransport.ReadLoop] Ended after {Count} lines. Cancelled={Cancelled}",
                     lineCount, cancellationToken.IsCancellationRequested);
             }
             catch (OperationCanceledException)
             {
-                _logger.Verbose("[StdioTransport.ReadLoop] 读取循环被取消");
+                _logger.Verbose("[StdioTransport.ReadLoop] Cancelled");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.ReadLoop] 读取循环出错");
+                _logger.Error(ex, "[StdioTransport.ReadLoop] Failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"读取输出失败：{ex.Message}",
+                    $"Failed to read process output: {ex.Message}",
                     ex,
                     TransportErrorKind.StdoutReadFailed));
             }
@@ -354,36 +469,90 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             try
             {
-                _logger.Information("[StdioTransport.ReadError] 启动错误读取循环，PID={Pid}", _process?.Id);
+                _logger.Information("[StdioTransport.ReadError] Starting. PID={Pid}", _process?.Id);
 
-                while (!cancellationToken.IsCancellationRequested && _stderr != null)
+                // Captured once, for the same reason as the stdout loop.
+                var stderr = _stderr;
+                if (stderr is null)
                 {
-                    var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
+                    return;
+                }
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    // Token-aware for the same reason as the stdout loop: a deliberate teardown must
+                    // end this read via cancellation, not via a disposed-stream IOException.
+                    var line = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null) break;
-                    _logger.Verbose("[StdioTransport.ReadError] 收到 stderr 行，Length={Length}", line.Length);
+                    _logger.Verbose("[StdioTransport.ReadError] Received stderr line. Length={Length}", line.Length);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Warning("[StdioTransport.ReadError] 进程 stderr 非空，Length={Length}", line.Length);
+                        _logger.Warning("[StdioTransport.ReadError] Non-empty process stderr. Length={Length}", line.Length);
                         OnErrorOccurred(new TransportErrorEventArgs(
-                            $"进程错误：{line}",
+                            $"Process error: {line}",
                             kind: TransportErrorKind.AgentStderr));
                     }
                 }
-                _logger.Warning("[StdioTransport.ReadError] 错误读取循环结束");
+                _logger.Warning("[StdioTransport.ReadError] Ended");
             }
             catch (OperationCanceledException)
             {
-                _logger.Verbose("[StdioTransport.ReadError] 错误读取循环被取消");
+                _logger.Verbose("[StdioTransport.ReadError] Cancelled");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.ReadError] 错误读取循环出错");
+                _logger.Error(ex, "[StdioTransport.ReadError] Failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"读取错误流失败：{ex.Message}",
+                    $"Failed to read process error stream: {ex.Message}",
                     ex,
                     TransportErrorKind.StderrReadFailed));
             }
+        }
+
+        /// <summary>
+        /// How a raw stdout line should be treated by the read loop.
+        /// </summary>
+        internal enum StdoutFrameKind
+        {
+            /// <summary>Nothing to dispatch (blank, or a lone byte order mark).</summary>
+            Blank,
+
+            /// <summary>Looks like an ACP frame; hand it to the JSON-RPC layer.</summary>
+            Frame,
+
+            /// <summary>
+            /// Never looked like an ACP frame. Per ACP the agent MUST NOT write this to stdout,
+            /// so it is agent diagnostics on the wrong stream rather than a protocol error.
+            /// </summary>
+            Diagnostic
+        }
+
+        /// <summary>
+        /// Classifies one raw stdout line and, for frames, returns the text to dispatch.
+        /// </summary>
+        /// <remarks>
+        /// The frame test itself lives in <see cref="AcpFrame"/> so every transport shares one
+        /// definition; what is stdio-specific is the third outcome. Only here is there a stderr to
+        /// contrast with, so only here can a non-frame be attributed to the agent writing
+        /// diagnostics to the stream ACP reserves for the protocol.
+        /// </remarks>
+        internal static StdoutFrameKind ClassifyStdoutLine(string? line, out string frame)
+        {
+            frame = string.Empty;
+
+            if (AcpFrame.IsBlank(line))
+            {
+                return StdoutFrameKind.Blank;
+            }
+
+            if (!AcpFrame.LooksLikeFrame(line))
+            {
+                return StdoutFrameKind.Diagnostic;
+            }
+
+            frame = AcpFrame.StripByteOrderMark(line!);
+            return StdoutFrameKind.Frame;
         }
 
         internal static string ResolveWorkingDirectory(string resolvedCommand, string? currentDirectory = null)
@@ -406,9 +575,16 @@ namespace SalmonEgg.Infrastructure.Transport
                 return Path.GetFullPath(candidate!);
             }
 
+            // Fallback candidates are resolved without side effects. The constructor
+            // must not create directories (AGENTS.md cache/persistence boundary:
+            // ctors/getters/VM-init/DI may not trigger real FS writes); an absent
+            // candidate simply falls through to the next existing one. The app's
+            // own LocalAppData/SalmonEgg root is created lazily by the services that
+            // actually own it (StorageLocationService / LoggingConfiguration etc.),
+            // not by transport construction.
             foreach (var fallback in GetFallbackWorkingDirectoryCandidates())
             {
-                if (IsSafeWorkingDirectory(fallback, ensureExists: true))
+                if (IsSafeWorkingDirectory(fallback))
                 {
                     return Path.GetFullPath(fallback);
                 }
@@ -417,7 +593,7 @@ namespace SalmonEgg.Infrastructure.Transport
             return Path.GetTempPath();
         }
 
-        private static bool IsSafeWorkingDirectory(string? path, bool ensureExists = false)
+        private static bool IsSafeWorkingDirectory(string? path)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -430,11 +606,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 if (IsWindowsAppsPath(fullPath))
                 {
                     return false;
-                }
-
-                if (ensureExists)
-                {
-                    Directory.CreateDirectory(fullPath);
                 }
 
                 if (!Directory.Exists(fullPath))
@@ -479,42 +650,39 @@ namespace SalmonEgg.Infrastructure.Transport
             ];
         }
 
-        private async Task DrainExitedProcessErrorAsync()
-        {
-            if (_stderr == null)
-            {
-                return;
-            }
-
-            while (true)
-            {
-                var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
-
-                _logger.Warning("[StdioTransport.Connect] 进程快速退出 stderr 非空，Length={Length}", line.Length);
-                OnErrorOccurred(new TransportErrorEventArgs(
-                    $"进程错误：{line}",
-                    kind: TransportErrorKind.AgentStderr));
-            }
-        }
+        /// <summary>
+        /// True once teardown has begun. <see cref="TryBeginTeardown"/> cancels the read token
+        /// before killing the process, so this distinguishes "we ended this" from "it died on us"
+        /// without introducing a second piece of state to keep in sync.
+        /// </summary>
+        /// <remarks>
+        /// Reads <see cref="CancellationTokenSource.IsCancellationRequested"/> rather than
+        /// <c>Token</c>: the former keeps returning the last state after the source is disposed,
+        /// whereas the latter throws <see cref="ObjectDisposedException"/>. Teardown disposes the
+        /// source, and the process-exit callback can arrive around that.
+        /// </remarks>
+        private bool IsTearingDown => _readCts?.IsCancellationRequested ?? false;
 
         /// <summary>
-        /// 进程退出事件处理。
+        /// 进程退出事件处理。不取消读循环:让其自然读到 EOF,
+        /// 否则崩溃前最后写入的 stdout/stderr(通常是失败原因)会被截断。
         /// </summary>
         private void OnProcessExited(object? sender, EventArgs e)
         {
             IsConnected = false;
-            _readCts?.Cancel();
+
+            // We kill the agent during teardown, so reporting its exit as an error there blames the
+            // agent for something we did — and it reaches the user, because a deliberate disconnect
+            // happens while listeners are still attached. An exit we did not ask for is still a
+            // fault and still reported.
+            if (IsTearingDown)
+            {
+                _logger.Information("[StdioTransport.ProcessExited] Agent process exited during teardown");
+                return;
+            }
+
             OnErrorOccurred(new TransportErrorEventArgs(
-                "Agent 进程已退出",
+                "Agent process exited",
                 kind: TransportErrorKind.ProcessExited));
         }
 
@@ -535,7 +703,8 @@ namespace SalmonEgg.Infrastructure.Transport
         }
 
         /// <summary>
-        /// 释放资源。
+        /// 释放资源。Dispose 是同步契约:同步终止进程并释放句柄,不 fire-and-forget
+        /// 在途异步断开;需要优雅等待退出的调用方应先 await <see cref="DisconnectAsync"/>。
         /// </summary>
         public void Dispose()
         {
@@ -545,8 +714,106 @@ namespace SalmonEgg.Infrastructure.Transport
             }
 
             _disposed = true;
-            _ = DisconnectAsync();
+            var began = TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr);
+
+            // Before the kill below, never after: killing first fires Process.Exited while
+            // IsTearingDown still reads false, which reports an exit we are in the middle of causing.
+            // TryBeginTeardown above already cancels on every path that returns true, so this is
+            // belt-and-braces rather than the sole mechanism — kept unconditional so that the ordering
+            // Dispose depends on cannot be broken by a later change to that method's gate, which is
+            // how the spurious exit report got introduced the first time.
+            _readCts?.Cancel();
+
+            CloseStandardInput(stdin);
+
+            // `began` now means "we took ownership and are the one reaping", which holds even when
+            // IsConnected was never set — a connect that started the child and then failed or was
+            // cancelled inside the startup observation window leaves it alive, and neither
+            // process.Dispose() nor the GC terminates it (there is no finalizer;
+            // GC.SuppressFinalize below). Whoever tears down second gets nulls and skips this.
+            if (began && process is { HasExited: false })
+            {
+                try
+                {
+                    // entireProcessTree for the same reason as DisconnectAsync: the agent is a
+                    // grandchild whenever a launcher sits in between.
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // 进程可能已在退出途中。
+                }
+            }
+
+            stdout?.Dispose();
+            stderr?.Dispose();
+            process?.Dispose();
+
+            // Safe to release once cancellation has been signalled above: the loops hold the token by
+            // value, and a captured token whose source is disposed still reports cancellation
+            // correctly. The field is deliberately neither nulled nor reassigned — IsTearingDown
+            // reads IsCancellationRequested off it, which keeps returning the last state after
+            // disposal but would read false if the field were cleared, silently restoring the
+            // spurious "Agent process exited" this class reports for an exit it caused itself.
+            _readCts?.Dispose();
+
+            _sendGate.Dispose();
             GC.SuppressFinalize(this);
+        }
+
+        private bool TryBeginTeardown(
+            out Process? process,
+            out StreamWriter? stdin,
+            out StreamReader? stdout,
+            out StreamReader? stderr)
+        {
+            lock (_lock)
+            {
+                process = _process;
+                stdin = _stdin;
+                stdout = _stdout;
+                stderr = _stderr;
+
+                // Hand over ownership: the caller now reaps and disposes these, so clear the fields.
+                // Whoever arrives second gets nulls and does nothing, which is what makes teardown
+                // single-shot without a separate "already torn down" flag to keep in sync. Reading
+                // HasExited on an already-disposed Process throws, so the second caller must not see
+                // it at all.
+                //
+                // Deliberately keyed on having something to tear down rather than on IsConnected: a
+                // connect that started the child and then failed or was cancelled inside the startup
+                // observation window never set IsConnected, and gating on it there left the child
+                // alive with nobody to reap it.
+                //
+                // _readCts is NOT cleared — IsTearingDown reads IsCancellationRequested off it.
+                _process = null;
+                _stdin = null;
+                _stdout = null;
+                _stderr = null;
+
+                if (process is null)
+                {
+                    return false;
+                }
+
+                IsConnected = false;
+                _readCts?.Cancel();
+                return true;
+            }
+        }
+
+        private static void CloseStandardInput(StreamWriter? stdin)
+        {
+            try
+            {
+                stdin?.Flush();
+                stdin?.Close();
+                stdin?.Dispose();
+            }
+            catch
+            {
+                // teardown 阶段管道可能已断,关闭失败无碍。
+            }
         }
     }
 }

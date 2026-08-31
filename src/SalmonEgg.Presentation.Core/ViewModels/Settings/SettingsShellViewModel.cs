@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Localization;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
@@ -26,15 +27,19 @@ public sealed class SettingsShellSectionViewModel
 public sealed partial class SettingsShellViewModel : ObservableObject
 {
     private readonly IReadOnlyDictionary<string, SettingsShellSectionViewModel> _sectionsByKey;
+    private readonly ISettingsSectionSelectionStore _selectionStore;
     private SettingsShellSectionViewModel _selectedSection;
 
-    public SettingsShellViewModel(IStringLocalizer<CoreStrings> localizer)
+    public SettingsShellViewModel(
+        IStringLocalizer<CoreStrings> localizer,
+        ISettingsSectionSelectionStore selectionStore)
     {
         ArgumentNullException.ThrowIfNull(localizer);
+        _selectionStore = selectionStore ?? throw new ArgumentNullException(nameof(selectionStore));
 
         Sections = CreateSections(localizer);
         _sectionsByKey = BuildSectionIndex(Sections);
-        _selectedSection = _sectionsByKey[SettingsSectionCatalog.DefaultSection.Key];
+        _selectedSection = ResolveSection(_selectionStore.CurrentSectionKey);
     }
 
     public IReadOnlyList<SettingsShellSectionViewModel> Sections { get; }
@@ -53,14 +58,15 @@ public sealed partial class SettingsShellViewModel : ObservableObject
 
     public SettingsShellSectionViewModel SelectSection(string? key)
     {
-        if (string.IsNullOrWhiteSpace(key) || !_sectionsByKey.TryGetValue(key, out var section))
-        {
-            section = _sectionsByKey[SettingsSectionCatalog.DefaultSection.Key];
-        }
-
+        var section = ResolveSection(_selectionStore.Select(key));
         SelectedSection = section;
         return section;
     }
+
+    private SettingsShellSectionViewModel ResolveSection(string? key)
+        => !string.IsNullOrWhiteSpace(key) && _sectionsByKey.TryGetValue(key, out var section)
+            ? section
+            : _sectionsByKey[SettingsSectionCatalog.DefaultSection.Key];
 
     private static SettingsShellSectionViewModel CreateSection(string key, LocalizedString title, string automationId)
         => new(key, title.Value, automationId);
