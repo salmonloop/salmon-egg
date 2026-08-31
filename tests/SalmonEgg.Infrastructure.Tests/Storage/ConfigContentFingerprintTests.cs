@@ -95,6 +95,36 @@ public sealed class ConfigContentFingerprintTests : IDisposable
             _fingerprint.ComputeFromPackage(late, includeSecrets: false));
     }
 
+    [Fact]
+    public void ComputeFromPackage_VerificationVerdictChangesFingerprint()
+    {
+        const string profileWithoutVerdict = """
+            schema_version: 4
+            id: verification-fingerprint-001
+            name: Verification Fingerprint
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            """;
+        var unknown = CreatePackageWithConfigFile("servers/verification-fingerprint-001.yaml", profileWithoutVerdict);
+        var unverified = CreatePackageWithConfigFile(
+            "servers/verification-fingerprint-001.yaml",
+            profileWithoutVerdict + Environment.NewLine + "verification: unverified" + Environment.NewLine);
+        var verified = CreatePackageWithConfigFile(
+            "servers/verification-fingerprint-001.yaml",
+            profileWithoutVerdict + Environment.NewLine +
+            "verification: verified" + Environment.NewLine +
+            "verified_at_utc: 2026-08-30T12:15:30.0000000+00:00" + Environment.NewLine);
+
+        var unknownFingerprint = _fingerprint.ComputeFromPackage(unknown, includeSecrets: false);
+        var unverifiedFingerprint = _fingerprint.ComputeFromPackage(unverified, includeSecrets: false);
+        var verifiedFingerprint = _fingerprint.ComputeFromPackage(verified, includeSecrets: false);
+
+        Assert.NotEqual(unknownFingerprint, unverifiedFingerprint);
+        Assert.NotEqual(unknownFingerprint, verifiedFingerprint);
+        Assert.NotEqual(unverifiedFingerprint, verifiedFingerprint);
+    }
+
     private static byte[] CreatePackageWithManifestTime(string appYamlBody, DateTimeOffset createdAtUtc)
     {
         using var stream = new MemoryStream();
@@ -103,6 +133,17 @@ public sealed class ConfigContentFingerprintTests : IDisposable
             var manifest = $$"""{"schemaVersion":1,"appId":"SalmonEgg","createdAtUtc":"{{createdAtUtc:O}}","files":["app.yaml"]}""";
             WriteEntry(archive, "manifest.json", manifest);
             WriteEntry(archive, "files/config/app.yaml", $"schema_version: 2{Environment.NewLine}{appYamlBody}{Environment.NewLine}");
+        }
+
+        return stream.ToArray();
+    }
+
+    private static byte[] CreatePackageWithConfigFile(string relativePath, string content)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteEntry(archive, $"files/config/{relativePath}", content);
         }
 
         return stream.ToArray();

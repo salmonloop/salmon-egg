@@ -16,7 +16,7 @@ namespace SalmonEgg.Infrastructure.Tests.Storage;
 ///
 /// Bumping a version deliberately means updating the number here in the same commit, and adding a
 /// load test for the previous version's files: purely additive keys need no migration (see
-/// <c>ConfigurationManagerTests.LoadConfigurationAsync_WithSchemaVersion2File_HydratesEmptyEnvironmentWithoutMigration</c>),
+/// <c>ConfigurationManagerTests.LoadConfigurationAsync_WithSchemaVersion3File_DefaultsVerificationToUnknown</c>),
 /// while a rename or a semantic change does.
 /// </remarks>
 public sealed class ConfigSchemaVersionContractTests
@@ -24,7 +24,7 @@ public sealed class ConfigSchemaVersionContractTests
     [Fact]
     public void ServerConfigurationSchemaVersion_IsPinnedToTheCurrentContract()
     {
-        Assert.Equal(3, ConfigurationManager.CurrentServerConfigurationSchemaVersion);
+        Assert.Equal(4, ConfigurationManager.CurrentServerConfigurationSchemaVersion);
     }
 
     [Fact]

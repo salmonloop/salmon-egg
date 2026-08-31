@@ -70,6 +70,19 @@ namespace SalmonEgg.Domain.Models
         /// </summary>
         public int ConnectionTimeout { get; set; } = AcpConnectionTimeoutPolicy.DefaultSeconds;
 
+        /// <summary>
+        /// 该配置是否通过过端到端连通性测试。
+        /// </summary>
+        /// <remarks>
+        /// 默认 <see cref="ProfileVerification.Unknown"/>：只有明确记录过判定的写入方才会改动它，
+        /// 因此 CLI、配置编辑器与本状态出现之前写下的 profile 都不会被回溯标记。
+        ///
+        /// 极性是有意如此——"已验证"是需要显式写入的正面事实。若某天旧版本客户端丢弃了这个字段，
+        /// profile 退化为 <see cref="ProfileVerificationState.Unknown"/>，最坏结果是少一句提醒；
+        /// 反向的布尔设计则会让未验证配置凭空自称已验证。
+        /// </remarks>
+        public ProfileVerification Verification { get; set; } = ProfileVerification.Unknown;
+
         public string EndpointDisplay
         {
             get

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -20,7 +21,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 public sealed class ConfigurationManager : IConfigurationService, IConfigurationRecoveryService
 {
     /// <summary>本程序写入 server 配置时使用的 schema 版本。</summary>
-    public const int CurrentServerConfigurationSchemaVersion = 3;
+    public const int CurrentServerConfigurationSchemaVersion = 4;
 
     private const int CurrentSchemaVersion = CurrentServerConfigurationSchemaVersion;
 
@@ -575,6 +576,8 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             StdioArguments = config.StdioArguments?.ToList() ?? new List<string>(),
             StdioEnvironment = ToYamlStdioEnvironment(config.StdioEnvironment),
             ConnectionTimeoutSeconds = config.ConnectionTimeout,
+            Verification = VerificationToString(config.Verification.State),
+            VerifiedAtUtc = config.Verification.VerifiedAtUtc?.ToString("O", CultureInfo.InvariantCulture),
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = new ProxyYamlV1
             {
@@ -596,7 +599,8 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             StdioArguments = yamlModel.StdioArguments ?? new List<string>(),
             StdioEnvironment = CloneStdioEnvironment(yamlModel.StdioEnvironment),
             Transport = TransportFromString(yamlModel.Transport),
-            ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds)
+            ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds),
+            Verification = VerificationFromYaml(yamlModel.Verification, yamlModel.VerifiedAtUtc)
         };
 
         var proxyMode = ProxyModeFromYaml(yamlModel.Proxy);
@@ -767,6 +771,60 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             _ when proxy.Enabled => ProxyMode.Custom,
             _ => ProxyConfig.DefaultMode
         };
+    }
+
+    /// <summary>
+    /// Projects a verification verdict onto its on-disk token, or null when there is no verdict to write.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ProfileVerificationState.Unknown"/> maps to null rather than to an <c>unknown</c>
+    /// token so <c>OmitNull</c> drops the key: absence on disk and "no verdict recorded" are the same
+    /// statement, and writing one for every untested profile would add a redundant business-content key
+    /// to the cloud-sync fingerprint. A schema_version 3 file still advances to version 4 when saved.
+    /// </remarks>
+    private static string? VerificationToString(ProfileVerificationState state) =>
+        state switch
+        {
+            ProfileVerificationState.Verified => "verified",
+            ProfileVerificationState.Unverified => "unverified",
+            _ => null
+        };
+
+    /// <summary>
+    /// Reads a verification verdict, resolving anything it cannot fully substantiate to
+    /// <see cref="ProfileVerification.Unknown"/>.
+    /// </summary>
+    /// <remarks>
+    /// Permissive in the same direction as <see cref="TransportFromString"/>: an unrecognized token from
+    /// a newer build falls back instead of making the profile unreadable. The fallback is
+    /// <see cref="ProfileVerification.Unknown"/> rather than
+    /// <see cref="ProfileVerification.Unverified"/> because a token we do not understand is not a
+    /// verdict, and treating it as one would warn about a profile that may well have passed.
+    ///
+    /// <c>verified</c> additionally needs a parseable timestamp. The domain type cannot represent a pass
+    /// without one, and honouring a hand-edited <c>verification: verified</c> with no evidence would let
+    /// a profile claim it was proven at a moment nobody can name.
+    /// </remarks>
+    private static ProfileVerification VerificationFromYaml(string? state, string? verifiedAtUtc)
+    {
+        var token = (state ?? string.Empty).Trim().ToLowerInvariant();
+        if (token == "unverified")
+        {
+            return ProfileVerification.Unverified;
+        }
+
+        if (token != "verified")
+        {
+            return ProfileVerification.Unknown;
+        }
+
+        return DateTimeOffset.TryParse(
+            verifiedAtUtc,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var passedAt)
+            ? ProfileVerification.Verified(passedAt)
+            : ProfileVerification.Unknown;
     }
 
     private string GetServerYamlPath(string id)
