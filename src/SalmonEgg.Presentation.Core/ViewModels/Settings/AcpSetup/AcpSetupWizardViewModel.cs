@@ -36,18 +36,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly ILogger<AcpSetupWizardViewModel> _logger;
+    private readonly TimeProvider _timeProvider;
     private bool _suppressAdapterSelectionProbe;
 
     public AcpSetupWizardViewModel(
         AcpSetupWizardOrchestrator orchestrator,
         IUiDispatcher uiDispatcher,
         ILogger<AcpSetupWizardViewModel> logger,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        TimeProvider? timeProvider = null)
     {
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _localizer = localizer;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         foreach (var agent in _orchestrator.Agents)
         {
@@ -92,21 +95,26 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(GoBackCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SkipTestCommand))]
     [NotifyPropertyChangedFor(nameof(IsOnAgentSelection))]
     [NotifyPropertyChangedFor(nameof(IsOnComponentSetup))]
     [NotifyPropertyChangedFor(nameof(IsOnParameters))]
     [NotifyPropertyChangedFor(nameof(IsOnTest))]
     [NotifyPropertyChangedFor(nameof(IsOnSave))]
+    [NotifyPropertyChangedFor(nameof(IsSkipTestVisible))]
     [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpSetupWizardStep _step = AcpSetupWizardStep.AgentSelection;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(GoBackCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAgentsCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(TestCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SkipTestCommand))]
     // Cancel is the one command enabled *by* being busy, so it tracks the same flag in the opposite
     // direction rather than needing a signal of its own.
     [NotifyCanExecuteChangedFor(nameof(CancelOperationCommand))]
@@ -114,6 +122,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
+    [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpSetupAgentRowViewModel? _selectedAgent;
 
     [ObservableProperty]
@@ -127,6 +136,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
+    [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpAdapterDescriptor? _selectedAdapter;
 
     /// <summary>
@@ -139,6 +149,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         AdapterProbe = null;
         AdapterToolchain = null;
         TestResult = null;
+        Verification = ProfileVerification.Unknown;
         Parameters.Clear();
         LaunchCommandPreview = string.Empty;
         AdapterCustomCommand = string.Empty;
@@ -169,6 +180,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
+    [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpComponentProbeResult? _adapterProbe;
 
     /// <summary>
@@ -203,6 +215,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     public bool HasAdapterCustomCommand => !string.IsNullOrWhiteSpace(AdapterCustomCommand);
 
+    partial void OnAdapterCustomCommandChanged(string value)
+    {
+        TestResult = null;
+        Verification = ProfileVerification.Unknown;
+        RefreshLaunchCommandPreview();
+    }
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private string _profileName = string.Empty;
@@ -212,13 +231,28 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(HasTestResult))]
-    [NotifyPropertyChangedFor(nameof(IsTestSuccessful))]
     [NotifyPropertyChangedFor(nameof(IsTestFailed))]
     [NotifyPropertyChangedFor(nameof(TestFailureStageText))]
     [NotifyPropertyChangedFor(nameof(TestRemediationText))]
     [NotifyPropertyChangedFor(nameof(TestErrorDetail))]
     [NotifyPropertyChangedFor(nameof(HasTestErrorDetail))]
     private AcpSetupTestResult? _testResult;
+
+    /// <summary>
+    /// Authoritative verification verdict for the draft currently on screen.
+    /// </summary>
+    /// <remarks>
+    /// This is deliberately one value rather than a successful-test flag beside a skipped-test flag. A
+    /// draft can have only one verdict, and every plan-changing preparation resets it to
+    /// <see cref="ProfileVerification.Unknown"/> before the user can save again.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SkipTestCommand))]
+    [NotifyPropertyChangedFor(nameof(IsTestSuccessful))]
+    [NotifyPropertyChangedFor(nameof(IsSkipTestVisible))]
+    private ProfileVerification _verification = ProfileVerification.Unknown;
 
     /// <summary>Single-line rendering of the command the wizard will save, for user review.</summary>
     [ObservableProperty]
@@ -252,14 +286,14 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     public bool IsOnSave => Step == AcpSetupWizardStep.Save;
 
-    /// <summary>Human-readable step position ("Step 2 of 5"), so the walk's place is always stated.</summary>
+    /// <summary>
+    /// Human-readable position among the steps that apply to the current draft.
+    /// </summary>
     public string StepPositionText => FormatLocalize(
         "AcpSetup_Step_Position",
         "Step {0} of {1}",
-        (int)Step + 1,
-        TotalSteps);
-
-    private const int TotalSteps = 5;
+        GetApplicableStepPosition(),
+        GetApplicableStepCount());
 
     public bool HasSavedProfile => SavedProfile is not null;
 
@@ -356,7 +390,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     public bool HasTestResult => TestResult is not null;
 
-    public bool IsTestSuccessful => TestResult?.IsSuccess == true;
+    public bool IsTestSuccessful => Verification.IsVerified;
+
+    /// <summary>True while the optional test may still be deliberately skipped.</summary>
+    public bool IsSkipTestVisible => IsOnTest && !IsTestSuccessful;
 
     /// <summary>True when the last test failed. Distinct from HasTestResult, which is also
     /// true on success — the failure banner must not open on a passing test.</summary>
@@ -431,7 +468,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 var probe = await _orchestrator
                     .DetectComponentAsync(row.Agent.Runtime, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
-                await _uiDispatcher.EnqueueAsync(() => row.Runtime = probe).ConfigureAwait(false);
+                await _uiDispatcher
+                    .EnqueueAsync(() =>
+                    {
+                        row.Runtime = probe;
+                        OnPropertyChanged(nameof(StepPositionText));
+                    })
+                    .ConfigureAwait(false);
             },
             CancellationToken.None);
     }
@@ -534,6 +577,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                     {
                         row.Runtime = probe;
                         row.RuntimeToolchain = toolchain;
+                        OnPropertyChanged(nameof(StepPositionText));
                         ReportInstallFailure(install);
                     })
                     .ConfigureAwait(false);
@@ -605,6 +649,12 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             return;
         }
 
+        // A previous passing result belongs to the previous test run. Clear its verdict before starting
+        // another attempt so cancellation, failure, or an exception can never leave stale proof attached to
+        // the draft.
+        TestResult = null;
+        Verification = ProfileVerification.Unknown;
+
         await RunOperationAsync(
             async token =>
             {
@@ -613,6 +663,9 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                     .EnqueueAsync(() =>
                     {
                         TestResult = result;
+                        Verification = result.IsSuccess
+                            ? ProfileVerification.Verified(_timeProvider.GetUtcNow())
+                            : ProfileVerification.Unknown;
                         ApplyValidationMessages(result);
                     })
                     .ConfigureAwait(false);
@@ -622,11 +675,37 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     private bool CanTest() => !IsBusy && SelectedAdapter is not null;
 
+    /// <summary>
+    /// Deliberately accepts an untested draft and moves to naming it. This is distinct from automatic step
+    /// folding: folding omits a step that has no work, while this command records a user decision with a
+    /// durable <see cref="ProfileVerification.Unverified"/> verdict.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSkipTest))]
+    private void SkipTest()
+    {
+        if (!CanSkipTest())
+        {
+            return;
+        }
+
+        Verification = ProfileVerification.Unverified;
+        PrepareSave();
+        Step = AcpSetupWizardStep.Save;
+    }
+
+    private bool CanSkipTest()
+        => !IsBusy
+            && IsOnTest
+            && !IsTestSuccessful
+            && SelectedAgent is not null
+            && SelectedAdapter is not null;
+
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
-        // RelayCommand invocation does not consult CanExecute, so the rule is restated here: a
-        // profile that never passed the test must not reach the connection list looking verified.
+        // RelayCommand invocation does not consult CanExecute, so the rule is restated here. The draft must
+        // carry either a passing test verdict or the explicit decision made by SkipTest; Unknown is never a
+        // saveable answer.
         if (!CanSave())
         {
             return;
@@ -647,13 +726,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Saving requires a successful test. The issue's acceptance criteria put the test before the save,
-    /// and a profile saved without one would appear in the connection list as if it had been verified.
-    /// </summary>
+    /// <summary>Saving requires an explicit verification verdict and the dedicated save step.</summary>
     private bool CanSave()
         => !IsBusy
-            && IsTestSuccessful
+            && IsOnSave
+            && Verification.State != ProfileVerificationState.Unknown
             && SelectedAdapter is not null
             && !string.IsNullOrWhiteSpace(ProfileName);
 
@@ -662,16 +739,33 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanGoNext))]
     private async Task GoNextAsync(CancellationToken cancellationToken)
     {
+        // AsyncRelayCommand can still be invoked directly while CanExecute is false. Keep the transition
+        // guard inside the handler so a missing runtime/adapter cannot be bypassed by a stale binding.
+        if (!CanGoNext())
+        {
+            return;
+        }
+
         switch (Step)
         {
             case AcpSetupWizardStep.AgentSelection:
                 PrepareComponentSetup();
-                Step = AcpSetupWizardStep.ComponentSetup;
                 await DetectAdapterAsync(cancellationToken).ConfigureAwait(false);
+
+                // Detection is preparation, not presentation. Only a conclusively no-op component step is
+                // folded; a missing, undetermined, failed, or cancelled probe remains visible and keeps the
+                // same blocking rule as an ordinary visit to that step.
+                if (IsStepApplicable(AcpSetupWizardStep.ComponentSetup)
+                    || !CanAdvanceFromComponentSetup())
+                {
+                    Step = AcpSetupWizardStep.ComponentSetup;
+                    break;
+                }
+
+                AdvancePastComponentSetup();
                 break;
             case AcpSetupWizardStep.ComponentSetup:
-                PrepareParameters();
-                Step = AcpSetupWizardStep.Parameters;
+                AdvancePastComponentSetup();
                 break;
             case AcpSetupWizardStep.Parameters:
                 if (!TryPrepareTest())
@@ -694,30 +788,145 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private bool CanGoNext() => !IsBusy && Step switch
     {
         AcpSetupWizardStep.AgentSelection => SelectedAgent is not null,
-        // Only a probe that positively found nothing blocks the walk; "undetermined" does not.
-        AcpSetupWizardStep.ComponentSetup =>
-            SelectedAdapter is not null
-                && SelectedAgent?.IsMissing != true
-                && AdapterProbe is not null
-                && !IsAdapterMissing,
+        AcpSetupWizardStep.ComponentSetup => CanAdvanceFromComponentSetup(),
         AcpSetupWizardStep.Parameters => true,
         AcpSetupWizardStep.Test => IsTestSuccessful,
         _ => false
     };
 
+    /// <summary>
+    /// The component gate shared by a rendered visit and an automatically folded visit. Keeping one gate is
+    /// what prevents folding from becoming a second, weaker route around a missing runtime or adapter.
+    /// </summary>
+    private bool CanAdvanceFromComponentSetup()
+        => SelectedAdapter is not null
+            && SelectedAgent?.IsMissing != true
+            && AdapterProbe is not null
+            && !IsAdapterMissing;
+
+    private void AdvancePastComponentSetup()
+    {
+        PrepareParameters();
+        if (IsStepApplicable(AcpSetupWizardStep.Parameters))
+        {
+            Step = AcpSetupWizardStep.Parameters;
+            return;
+        }
+
+        // A hidden Parameters step still owns default-value projection and validation. Preparing it above
+        // keeps the launch plan identical to the one produced when the same template has a visible form.
+        if (TryPrepareTest())
+        {
+            Step = AcpSetupWizardStep.Test;
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private void GoBack()
     {
-        if (Step == AcpSetupWizardStep.AgentSelection)
+        var previous = FindPreviousApplicableStep();
+        if (IsBusy || previous is null)
         {
             return;
         }
 
-        Step = (AcpSetupWizardStep)((int)Step - 1);
+        Step = previous.Value;
         ErrorMessage = string.Empty;
     }
 
-    private bool CanGoBack() => Step != AcpSetupWizardStep.AgentSelection;
+    private bool CanGoBack() => !IsBusy && FindPreviousApplicableStep() is not null;
+
+    /// <summary>
+    /// Returns whether a step has user-visible work for the current draft. No skipped-step collection is
+    /// stored: applicability is derived from the authoritative catalog, selection, and probe facts every
+    /// time, so changing an adapter cannot leave stale navigation state behind.
+    /// </summary>
+    private bool IsStepApplicable(AcpSetupWizardStep step) => step switch
+    {
+        AcpSetupWizardStep.ComponentSetup => IsComponentSetupApplicable(),
+        AcpSetupWizardStep.Parameters => IsParametersStepApplicable(),
+        _ => true
+    };
+
+    private bool IsComponentSetupApplicable()
+    {
+        var agentRow = SelectedAgent;
+        if (agentRow is null || agentRow.IsMissing)
+        {
+            return true;
+        }
+
+        var agent = agentRow.Agent;
+        var adapter = SelectedAdapter ?? agent.ResolveRecommendedAdapter();
+        if (adapter is null || agent.Adapters.Count != 1)
+        {
+            // Selecting among alternatives is work even when the recommended adapter itself is built in.
+            return true;
+        }
+
+        if (SelectedAdapter is null)
+        {
+            // Before entering the walk, the catalog can already prove that a sole built-in adapter needs no
+            // setup. External adapters wait for their probe, whose result may carry actionable diagnostics.
+            return adapter.Component.Distribution != AcpDistributionKind.BuiltIn;
+        }
+
+        // Once prepared, only a positive BuiltIn verdict is safe to fold. Null/Undetermined remains visible;
+        // "could not tell" is not the same fact as "nothing to do".
+        return AdapterProbe?.Availability != AcpComponentAvailability.BuiltIn;
+    }
+
+    private bool IsParametersStepApplicable()
+    {
+        var adapter = SelectedAdapter ?? SelectedAgent?.Agent.ResolveRecommendedAdapter();
+        // Before an agent is selected, keep the complete five-step shape. Once selected, the launch
+        // template itself is authoritative about whether a form exists.
+        return adapter is null || adapter.LaunchTemplate.Parameters.Count > 0;
+    }
+
+    private AcpSetupWizardStep? FindPreviousApplicableStep()
+    {
+        for (var value = (int)Step - 1; value >= (int)AcpSetupWizardStep.AgentSelection; value--)
+        {
+            var candidate = (AcpSetupWizardStep)value;
+            if (IsStepApplicable(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private int GetApplicableStepPosition()
+    {
+        var position = 0;
+        for (var value = (int)AcpSetupWizardStep.AgentSelection; value <= (int)Step; value++)
+        {
+            if (IsStepApplicable((AcpSetupWizardStep)value))
+            {
+                position++;
+            }
+        }
+
+        return Math.Max(position, 1);
+    }
+
+    private int GetApplicableStepCount()
+    {
+        var count = 0;
+        for (var value = (int)AcpSetupWizardStep.AgentSelection;
+             value <= (int)AcpSetupWizardStep.Save;
+             value++)
+        {
+            if (IsStepApplicable((AcpSetupWizardStep)value))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     // ── Step preparation ────────────────────────────────────────────────────
 
@@ -753,6 +962,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     {
         Parameters.Clear();
         TestResult = null;
+        Verification = ProfileVerification.Unknown;
         var template = SelectedAdapter?.LaunchTemplate;
         if (template is null)
         {
@@ -763,7 +973,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         foreach (var definition in template.Parameters)
         {
             Parameters.Add(
-                new AcpSetupParameterRowViewModel(definition, RefreshLaunchCommandPreview, _localizer));
+                new AcpSetupParameterRowViewModel(definition, OnParameterValueChanged, _localizer));
         }
 
         RefreshLaunchCommandPreview();
@@ -789,6 +999,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         }
 
         TestResult = null;
+        Verification = ProfileVerification.Unknown;
         RefreshLaunchCommandPreview();
         return true;
     }
@@ -799,6 +1010,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         {
             ProfileName = SelectedAgent.DisplayName;
         }
+    }
+
+    private void OnParameterValueChanged()
+    {
+        TestResult = null;
+        Verification = ProfileVerification.Unknown;
+        RefreshLaunchCommandPreview();
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -856,7 +1074,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             Adapter = adapter,
             ParameterValues = CollectParameterValues(),
             CommandOverrides = CollectCommandOverrides(),
-            ProfileName = string.IsNullOrWhiteSpace(ProfileName) ? agent.DisplayName : ProfileName.Trim()
+            ProfileName = string.IsNullOrWhiteSpace(ProfileName) ? agent.DisplayName : ProfileName.Trim(),
+            Verification = Verification
         };
     }
 
@@ -931,6 +1150,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 row.Runtime = state.Runtime;
             }
         }
+
+        OnPropertyChanged(nameof(StepPositionText));
     }
 
     private void ApplyViolations(IReadOnlyList<AcpSetupParameterViolation> violations)

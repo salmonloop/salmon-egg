@@ -409,7 +409,8 @@ internal static class AcpSetupWizardFixtures
         IAcpSetupConnectivityTester connectivityTester,
         IConfigurationService configurationService,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        TimeProvider? timeProvider = null)
         => new(
             new AcpSetupWizardOrchestrator(
                 catalog,
@@ -422,7 +423,8 @@ internal static class AcpSetupWizardFixtures
             // what the real WinUI one does: every marshalled write lands later, on another thread.
             uiDispatcher ?? new ImmediateUiDispatcher(),
             NullLogger<AcpSetupWizardViewModel>.Instance,
-            localizer);
+            localizer,
+            timeProvider);
 
     /// <summary>The healthy-machine answer most tests walk against.</summary>
     public static class WellKnownResults
