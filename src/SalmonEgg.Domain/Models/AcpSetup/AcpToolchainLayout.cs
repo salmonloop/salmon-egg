@@ -126,8 +126,43 @@ public sealed class AcpToolchainLayout
         // npm's own global prefix on Windows, which its installer does not always add to PATH.
         Create(AcpToolchainLayoutRoot.WindowsRoamingAppData, "npm"),
 
+        // Toolchains this app installed. Scanned like any other so an install the wizard performed is
+        // found by the same mechanism as one the user performed, rather than through a parallel lookup.
+        // Two shapes because the archives differ: the POSIX tarballs put executables in a bin/
+        // subdirectory, the Windows zip puts node.exe and npm.cmd at the version root. A layout naming a
+        // directory that is not there contributes nothing, so declaring both costs nothing.
+        Create(AcpToolchainLayoutRoot.SalmonEggToolchains, "node", VersionWildcard, "bin"),
+        Create(AcpToolchainLayoutRoot.SalmonEggToolchains, "node", VersionWildcard),
+
+        // uv, installed by the same wizard. One entry rather than two because uv's archives put uv and uvx
+        // at their root on every platform, so there is no bin/ variant to cover.
+        //
+        // This must exist for the same reason the node entries do, and its absence would be the defect this
+        // whole list was extended to fix: an install the wizard performed itself would be invisible to the
+        // scan that runs immediately afterwards, so the wizard would report the toolchain still missing.
+        Create(AcpToolchainLayoutRoot.SalmonEggToolchains, "uv", VersionWildcard),
+
         // Homebrew, whose prefix differs by architecture and is absent from a Finder-launched PATH.
         Create(AcpToolchainLayoutRoot.Absolute, "/opt/homebrew/bin"),
-        Create(AcpToolchainLayoutRoot.Absolute, "/usr/local/bin")
+        Create(AcpToolchainLayoutRoot.Absolute, "/usr/local/bin"),
+
+        // Homebrew's keg-only layout, which it uses when a formula must not be linked into the prefix
+        // above. A node installed this way is absent from both /opt/homebrew/bin and /usr/local/bin.
+        Create(AcpToolchainLayoutRoot.Absolute, "/opt/homebrew/opt/node/bin"),
+        Create(AcpToolchainLayoutRoot.Absolute, "/usr/local/opt/node/bin"),
+
+        // Where the vendors' own installers land, which no version manager owns.
+        //
+        // These come last deliberately. A version manager's directory outranks them because that is what
+        // the user's shell resolves first, and a system-wide install is typically the older one — so
+        // leading with it would make the wizard's first candidate disagree with their terminal.
+        //
+        // They are nonetheless required, not optional: Node's official Windows MSI installs into program
+        // files and a Linux distribution package installs into /usr/bin, and neither appears anywhere
+        // above. On Windows the scan is the only widening available at all — there is no profile-built
+        // PATH to capture there — so a user who installed Node the officially documented way and pressed
+        // "detect again" was told it was still missing, with nothing they could do about it.
+        Create(AcpToolchainLayoutRoot.WindowsProgramFiles, "nodejs"),
+        Create(AcpToolchainLayoutRoot.Absolute, "/usr/bin")
     };
 }

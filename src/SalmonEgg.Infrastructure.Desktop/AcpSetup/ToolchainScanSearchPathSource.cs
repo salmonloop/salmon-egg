@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Domain.Services.AcpSetup;
+using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 
@@ -25,6 +26,15 @@ namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 /// </remarks>
 public sealed class ToolchainScanSearchPathSource : IAcpSearchPathSource
 {
+    /// <summary>
+    /// Directory under the app data root that holds installed toolchains.
+    /// </summary>
+    /// <remarks>
+    /// Shared with the toolchain installer, which writes here. A second spelling would let the scan look
+    /// somewhere the installer never writes, so an install would succeed and stay undiscoverable.
+    /// </remarks>
+    internal const string ToolchainsDirectoryName = "toolchains";
+
     private readonly IReadOnlyList<AcpToolchainLayout> _layouts;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -139,6 +149,21 @@ public sealed class ToolchainScanSearchPathSource : IAcpSearchPathSource
 
                 var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                 return string.IsNullOrEmpty(appData) ? null : appData;
+
+            case AcpToolchainLayoutRoot.WindowsProgramFiles:
+                if (!OperatingSystem.IsWindows())
+                {
+                    return null;
+                }
+
+                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                return string.IsNullOrEmpty(programFiles) ? null : programFiles;
+
+            case AcpToolchainLayoutRoot.SalmonEggToolchains:
+                // Resolved here rather than in the domain for the same reason the platform roots are:
+                // where app data lives is an infrastructure decision. Kept identical to what the
+                // toolchain installer writes, so an install is discovered by this scan.
+                return Path.Combine(SalmonEggPaths.GetAppDataRootPath(), ToolchainsDirectoryName);
 
             case AcpToolchainLayoutRoot.Absolute:
                 return string.Empty;
