@@ -21,8 +21,10 @@ JSON-RPC envelopes, message parser/validator, and all JsonConverters are assembl
 
 The live client runtime defaults to stable ACP v1 (`AcpProtocolVersion.Default`). ACP v2 is
 still an upstream Draft, so the SDK retains explicit v2 wire DTO and serializer coverage for
-development without negotiating v2 in live connections. `AcpProtocolVersion.Latest` denotes
-the highest modeled wire version; it does not mean that the live client lifecycle is complete.
+development without negotiating v2 in live connections. `AcpProtocolVersion.HighestModeled`
+denotes the highest modeled wire version; it does not mean that the live client lifecycle is
+complete, and initializing a client with it throws. `AcpProtocolVersion.Latest` is the obsolete
+former name of `HighestModeled` and is kept only so 1.0.0 consumers still compile.
 
 Do not enable live v2 connections until prompt acknowledgement/state updates, versioned update
 variants, permission subjects, config-option wire shapes, and JSON-RPC batches are implemented
