@@ -18,13 +18,13 @@ namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 /// </remarks>
 internal static class PrintEnvironmentCommandFactory
 {
-    /// <summary>The option that selects environment printing. Must match the CLI's own spelling.</summary>
+    /// <summary>The option that selects environment printing.</summary>
     /// <remarks>
-    /// Held as a constant rather than referenced from the CLI assembly, because the two are separate
-    /// executables that meet only across a process boundary and neither references the other. A test pins
-    /// the two spellings together so they cannot drift apart silently.
+    /// Taken from <see cref="DesktopPrintEnvironment"/>, which is the side that answers the option, so the
+    /// two cannot disagree. It was previously a second literal kept in step by a test comparing the two
+    /// constants — a check that they had not drifted yet, rather than a structure in which they cannot.
     /// </remarks>
-    internal const string OptionName = "--printenv";
+    internal const string OptionName = DesktopPrintEnvironment.OptionName;
 
     /// <summary>
     /// Returns a factory turning a marker into the command that runs
