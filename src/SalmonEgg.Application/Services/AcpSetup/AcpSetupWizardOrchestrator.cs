@@ -19,21 +19,29 @@ public sealed class AcpSetupWizardOrchestrator
     private readonly IAcpAgentCatalog _catalog;
     private readonly AcpComponentDetector _detector;
     private readonly IAcpComponentInstaller _installer;
+    private readonly IAcpToolchainInstaller? _toolchainInstaller;
     private readonly IAcpSetupConnectivityTester _connectivityTester;
     private readonly IConfigurationService _configurationService;
 
+    /// <param name="toolchainInstaller">
+    /// Installs a missing toolchain. Optional so a caller that only detects and tests need not supply one;
+    /// null reports <see cref="SupportsToolchainInstall"/> as false, which is the same answer a platform
+    /// without an installer gives, so the wizard has one condition to check rather than two.
+    /// </param>
     public AcpSetupWizardOrchestrator(
         IAcpAgentCatalog catalog,
         IAcpExecutableProbe probe,
         IAcpComponentInstaller installer,
         IAcpSetupConnectivityTester connectivityTester,
-        IConfigurationService configurationService)
+        IConfigurationService configurationService,
+        IAcpToolchainInstaller? toolchainInstaller = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _detector = new AcpComponentDetector(probe ?? throw new ArgumentNullException(nameof(probe)));
         _installer = installer ?? throw new ArgumentNullException(nameof(installer));
         _connectivityTester = connectivityTester ?? throw new ArgumentNullException(nameof(connectivityTester));
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _toolchainInstaller = toolchainInstaller;
     }
 
     /// <summary>
@@ -44,6 +52,17 @@ public sealed class AcpSetupWizardOrchestrator
     /// <see cref="DetectToolchainAsync"/>'s answer, and a caller offering a one-click install needs both.
     /// </remarks>
     public bool SupportsAutomaticInstall => _installer.SupportsAutomaticInstall;
+
+    /// <summary>
+    /// True when this platform can install a missing toolchain itself.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="SupportsAutomaticInstall"/>, which is about running a package manager that
+    /// already exists. The two are independent: a platform can run npm and still have no way to obtain Node.
+    /// Whether a <em>particular</em> toolchain has a published source is
+    /// <see cref="AcpToolchainRequirement.HasAutomaticInstallPath"/>'s answer.
+    /// </remarks>
+    public bool SupportsToolchainInstall => _toolchainInstaller?.SupportsAutomaticInstall == true;
 
     public IReadOnlyList<AcpAgentDescriptor> Agents => _catalog.Agents;
 
@@ -134,6 +153,59 @@ public sealed class AcpSetupWizardOrchestrator
 
         var probe = await _detector
             .DetectAsync(component, overrides, cancellationToken)
+            .ConfigureAwait(false);
+        return (install, probe);
+    }
+
+    /// <summary>
+    /// Installs the toolchain a component needs and re-probes that toolchain, so callers see verified
+    /// availability rather than trusting a downloader's success report.
+    /// </summary>
+    /// <remarks>
+    /// The install is requested in terms of a component because that is what the wizard has selected; the
+    /// component determines whether it needs Node at all. A component with no toolchain is a programming
+    /// error here — the UI must not surface a toolchain button for it — so it fails clearly rather than
+    /// pretending an empty install succeeded.
+    /// </remarks>
+    public async Task<(AcpToolchainInstallResult Install, AcpToolchainProbeResult? Probe)> InstallToolchainAsync(
+        AcpComponentDescriptor component,
+        Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+
+        if (component.RequiredToolchain is not { } requirement)
+        {
+            throw new InvalidOperationException(
+                $"Component '{component.Id}' does not declare a required toolchain.");
+        }
+
+        var installer = _toolchainInstaller;
+        if (installer is null)
+        {
+            return (
+                AcpToolchainInstallResult.Failure(
+                    requirement,
+                    "Automatic toolchain installation is unavailable on this platform."),
+                await _detector
+                    .DetectToolchainAsync(component, overrides, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
+        var install = await installer
+            .InstallAsync(requirement, onOutput, cancellationToken)
+            .ConfigureAwait(false);
+
+        // This must sit between install and probe. A first toolchain install creates an entire version/bin
+        // directory that did not exist when the detector cached its search paths; asking the detector again
+        // without invalidating gives a stale "missing" even though the installer just succeeded. The
+        // accompanying test drives an installer that creates that directory and reverse-verifies that
+        // removing this one call makes the outcome red.
+        _detector.InvalidateSearchPaths();
+
+        var probe = await _detector
+            .DetectToolchainAsync(component, overrides, cancellationToken)
             .ConfigureAwait(false);
         return (install, probe);
     }

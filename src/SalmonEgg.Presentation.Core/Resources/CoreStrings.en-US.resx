@@ -1277,4 +1277,13 @@ Create the corresponding Markdown file in:
   <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
     <value>System notification permission was not granted.</value>
   </data>
+  <data name="AcpSetup_Toolchain_PathRegistrationFailed" xml:space="preserve">
+    <value>The toolchain was installed, but PATH could not be updated. New terminals may need manual PATH configuration.</value>
+  </data>
+  <data name="AcpSetup_Toolchain_UnsupportedPlatform" xml:space="preserve">
+    <value>This platform has no automatic install for that toolchain. Use the documentation link to install it manually.</value>
+  </data>
+  <data name="AcpSetup_Toolchain_DownloadFailed" xml:space="preserve">
+    <value>The toolchain could not be downloaded and verified. Check your connection, or use the documentation link to install it manually.</value>
+  </data>
 </root>

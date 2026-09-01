@@ -790,7 +790,7 @@
     <value>安装文档</value>
   </data>
   <data name="AcpSetup_InstallToolchainDocs.Content" xml:space="preserve">
-    <value>安装工具链</value>
+    <value>查看安装说明</value>
   </data>
   <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
     <value>启动参数</value>
@@ -1731,5 +1731,8 @@
   </data>
   <data name="MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>停止语音输入</value>
+  </data>
+  <data name="AcpSetup_InstallToolchain.Content" xml:space="preserve">
+    <value>安装工具链</value>
   </data>
 </root>

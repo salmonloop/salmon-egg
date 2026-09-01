@@ -155,6 +155,13 @@
                                                             Click="OnInstallAgentRowClick"
                                                             AutomationProperties.AutomationId="AcpSetup.Agents.InstallRow"
                                                             Visibility="{x:Bind CanInstallHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <Button x:Name="InstallAgentToolchainInlineButton"
+                                                            x:Uid="AcpSetup_InstallToolchain"
+                                                            Style="{StaticResource AccentButtonStyle}"
+                                                            Tag="{x:Bind}"
+                                                            Click="OnInstallAgentToolchainRowClick"
+                                                            AutomationProperties.AutomationId="AcpSetup.Agents.InstallToolchain"
+                                                            Visibility="{x:Bind CanInstallToolchainHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <!-- Distribution the wizard never automates (a
                                                          prebuilt binary): the agent's own install page is
                                                          the right destination. -->
@@ -264,6 +271,12 @@
                                      toolchain already disables it. A disabled button explains
                                      nothing on its own, so the way forward is offered beside it:
                                      the toolchain's own documentation, named in the text below. -->
+                                <Button x:Name="AcpSetupInstallToolchainButton"
+                                        x:Uid="AcpSetup_InstallToolchain"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        AutomationProperties.AutomationId="AcpSetup.Adapter.InstallToolchain"
+                                        Command="{x:Bind ViewModel.InstallToolchainCommand}"
+                                        Visibility="{x:Bind ViewModel.IsAdapterToolchainInstallable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <HyperlinkButton x:Name="AcpSetupAdapterToolchainDocsButton"
                                                  x:Uid="AcpSetup_InstallToolchainDocs"
                                                  NavigateUri="{x:Bind ViewModel.AdapterToolchainDocumentation, Mode=OneWay}"

@@ -520,6 +520,7 @@ public static class DependencyInjection
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<IAcpExecutableProbe, UnsupportedAcpExecutableProbe>();
         services.AddSingleton<IAcpComponentInstaller, UnsupportedAcpComponentInstaller>();
+        services.AddSingleton<IAcpToolchainInstaller, UnsupportedAcpToolchainInstaller>();
         services.AddSingleton<IAcpSetupConnectivityTester, UnsupportedAcpSetupConnectivityTester>();
 #else
         // Widens what the probe can find beyond the PATH this process inherited. A GUI-launched app gets
@@ -534,6 +535,10 @@ public static class DependencyInjection
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
                 ? new DesktopAcpComponentInstaller(sp.GetRequiredService<IAcpExecutableProbe>())
                 : new UnsupportedAcpComponentInstaller());
+        services.AddSingleton<IAcpToolchainInstaller>(sp =>
+            sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
+                ? new DesktopAcpToolchainInstaller()
+                : new UnsupportedAcpToolchainInstaller());
         services.AddSingleton<IAcpSetupHandshakeProbe>(sp =>
             new StdioAcpSetupHandshakeProbe(
                 sp.GetRequiredService<IStdioTransportFactory>(),
@@ -552,7 +557,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpExecutableProbe>(),
                 sp.GetRequiredService<IAcpComponentInstaller>(),
                 sp.GetRequiredService<IAcpSetupConnectivityTester>(),
-                sp.GetRequiredService<IConfigurationService>()));
+                sp.GetRequiredService<IConfigurationService>(),
+                sp.GetRequiredService<IAcpToolchainInstaller>()));
         services.AddSingleton<ChatServiceFactory>(sp =>
         {
             var transportFactory = sp.GetRequiredService<ITransportFactory>();

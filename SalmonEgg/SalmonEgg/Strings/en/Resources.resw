@@ -1837,4 +1837,7 @@
   <data name="MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Stop voice input</value>
   </data>
+  <data name="AcpSetup_InstallToolchain.Content" xml:space="preserve">
+    <value>Install toolchain</value>
+  </data>
 </root>

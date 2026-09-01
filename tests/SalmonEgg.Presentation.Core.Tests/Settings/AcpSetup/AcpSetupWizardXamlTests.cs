@@ -11,9 +11,44 @@ public sealed class AcpSetupWizardXamlTests
     private const string WizardPath = "SalmonEgg/SalmonEgg/Presentation/Views/Settings/AcpSetupWizardPage.xaml";
 
     [Fact]
-    public void Navigation_ExposesSecondarySkipAndAnnouncesDynamicStepPosition()
+    public void ToolchainMissingStates_OfferARealInstallActionAndManualFallback()
     {
         var document = XDocument.Parse(LoadXaml(WizardPath));
+
+        var adapter = FindByName(document, "AcpSetupInstallToolchainButton");
+        Assert.Equal("AcpSetup_InstallToolchain", AttributeByLocalName(adapter, "Uid"));
+        Assert.Equal("{StaticResource AccentButtonStyle}", adapter.Attribute("Style")?.Value);
+        Assert.Equal("{x:Bind ViewModel.InstallToolchainCommand}", adapter.Attribute("Command")?.Value);
+        Assert.Equal("AcpSetup.Adapter.InstallToolchain", adapter.Attribute("AutomationProperties.AutomationId")?.Value);
+        Assert.Equal(
+            "{x:Bind ViewModel.IsAdapterToolchainInstallable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            adapter.Attribute("Visibility")?.Value);
+
+        var row = FindByName(document, "InstallAgentToolchainInlineButton");
+        Assert.Equal("AcpSetup_InstallToolchain", AttributeByLocalName(row, "Uid"));
+        Assert.Equal("AcpSetup.Agents.InstallToolchain", row.Attribute("AutomationProperties.AutomationId")?.Value);
+        Assert.Equal(
+            "{x:Bind CanInstallToolchainHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            row.Attribute("Visibility")?.Value);
+        Assert.Equal("OnInstallAgentToolchainRowClick", row.Attribute("Click")?.Value);
+
+        foreach (var resourceFile in new[]
+                 {
+                     "SalmonEgg/SalmonEgg/Strings/zh-Hans/Resources.resw",
+                     "SalmonEgg/SalmonEgg/Strings/en/Resources.resw",
+                     "SalmonEgg/SalmonEgg/Strings/en-US/Resources.resw"
+                 })
+        {
+            var resources = XDocument.Parse(LoadText(resourceFile));
+            var install = resources.Descendants("data")
+                .Single(data => (string?)data.Attribute("name") == "AcpSetup_InstallToolchain.Content")
+                .Element("value")?.Value;
+            Assert.False(string.IsNullOrWhiteSpace(install), $"{resourceFile} must name the install action.");
+        }
+    }
+    [Fact]
+    public void Navigation_ExposesSecondarySkipAndAnnouncesDynamicStepPosition()
+    {        var document = XDocument.Parse(LoadXaml(WizardPath));
 
         var skip = FindByName(document, "AcpSetupSkipTestButton");
         Assert.Equal("AcpSetup_SkipTest", AttributeByLocalName(skip, "Uid"));
