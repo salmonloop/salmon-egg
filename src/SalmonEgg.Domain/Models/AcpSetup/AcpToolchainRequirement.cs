@@ -22,10 +22,11 @@ namespace SalmonEgg.Domain.Models.AcpSetup;
 /// </remarks>
 public sealed class AcpToolchainRequirement
 {
-    private AcpToolchainRequirement(string displayName, Uri documentation)
+    private AcpToolchainRequirement(string displayName, Uri documentation, bool hasAutomaticInstallPath)
     {
         DisplayName = displayName;
         Documentation = documentation;
+        HasAutomaticInstallPath = hasAutomaticInstallPath;
     }
 
     /// <summary>Human-facing toolchain name. A vendor product name, so it is not localized.</summary>
@@ -33,6 +34,21 @@ public sealed class AcpToolchainRequirement
 
     /// <summary>Where the user is sent to install the toolchain themselves.</summary>
     public Uri Documentation { get; }
+
+    /// <summary>
+    /// True when the app publishes an automatic install path for this toolchain.
+    /// </summary>
+    /// <remarks>
+    /// A statement about this app's own capability, not about the machine — deliberately the same
+    /// distinction <see cref="AcpComponentDescriptor.HasAutomaticInstallPath"/> draws. Whether the toolchain
+    /// is already here is a probe's answer, and whether this platform can run an installer at all is
+    /// <see cref="Services.AcpSetup.IAcpToolchainInstaller.SupportsAutomaticInstall"/>'s; offering the user
+    /// a button needs all three, so callers combine them rather than reading this alone.
+    ///
+    /// <see cref="Documentation"/> stays meaningful either way: it is the fallback when an install fails,
+    /// and the only route for a toolchain with no automatic path.
+    /// </remarks>
+    public bool HasAutomaticInstallPath { get; }
 
     /// <summary>
     /// The toolchain <paramref name="distribution"/> needs, or null when it needs none.
@@ -60,10 +76,17 @@ public sealed class AcpToolchainRequirement
     /// </remarks>
     public static AcpToolchainRequirement Node { get; } = new(
         "Node.js",
-        new Uri("https://nodejs.org/en/download"));
+        new Uri("https://nodejs.org/en/download"),
+        hasAutomaticInstallPath: true);
 
     /// <summary>The uv toolchain, which supplies both <c>uv</c> and <c>uvx</c>.</summary>
+    /// <remarks>
+    /// Named without a minimum version, for the same reason <see cref="Node"/> is: each tool declares its own
+    /// <c>requires-python</c> and uv constraints, so a version asserted here could not stay true for every
+    /// component. The install source pins which uv build the wizard fetches.
+    /// </remarks>
     public static AcpToolchainRequirement Uv { get; } = new(
         "uv",
-        new Uri("https://docs.astral.sh/uv/getting-started/installation/"));
+        new Uri("https://docs.astral.sh/uv/getting-started/installation/"),
+        hasAutomaticInstallPath: true);
 }
