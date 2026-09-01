@@ -122,6 +122,21 @@ namespace SalmonEgg.Acp.Protocol
             SessionUpdate? update = null;
             if (root.TryGetProperty("update", out var updateElement) && updateElement.ValueKind == JsonValueKind.Object)
             {
+                // state_update carries a second discriminator ("state") flattened alongside
+                // "sessionUpdate". STJ polymorphism resolves exactly one discriminator per hierarchy, so
+                // this variant is handled here instead of through a JsonDerivedType registration.
+                if (updateElement.TryGetProperty("sessionUpdate", out var stateKind)
+                    && stateKind.ValueKind == JsonValueKind.String
+                    && stateKind.ValueEquals(StateSessionUpdateWireFormat.Discriminator))
+                {
+                    return new SessionUpdateParams
+                    {
+                        SessionId = sessionId,
+                        Update = StateSessionUpdateWireFormat.Read(updateElement, options),
+                        Meta = AcpMetaJson.Read(root)
+                    };
+                }
+
                 update = updateElement.Deserialize(
                     (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
                 if (update is not null
@@ -148,13 +163,111 @@ namespace SalmonEgg.Acp.Protocol
         {
             writer.WriteStartObject();
             writer.WriteString("sessionId", value.SessionId);
-            if (value.Update is not null)
+            if (value.Update is StateSessionUpdate stateUpdate)
+            {
+                writer.WritePropertyName("update");
+                StateSessionUpdateWireFormat.Write(writer, stateUpdate, options);
+            }
+            else if (value.Update is not null)
             {
                 writer.WritePropertyName("update");
                 JsonSerializer.Serialize(
                     writer,
                     value.Update,
                     (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
+            }
+
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
+    }
+
+    /// <summary>
+    /// V2 <c>state_update</c>: the Agent's foreground-work state changed. In v2 this - not the
+    /// <c>session/prompt</c> response - is what ends a turn, via
+    /// <see cref="IdleSessionState"/> carrying a stop reason.
+    /// </summary>
+    /// <remarks>
+    /// The inner <c>state</c> discriminator and its payload are siblings of the outer
+    /// <c>sessionUpdate</c> discriminator on the wire. STJ polymorphism cannot express a second
+    /// discriminator at the same level, so <see cref="State"/> is written and read flattened by
+    /// the containing <see cref="SessionUpdateParamsJsonConverter"/> rather than as a nested object:
+    /// STJ rejects a JsonConverter on a type participating in a polymorphic hierarchy
+    /// (DerivedConverterDoesNotSupportMetadata), so the flattening cannot live on this type.
+    /// </remarks>
+    public sealed record StateSessionUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// The reported foreground-work state. Required by the protocol.
+        /// </summary>
+        [JsonIgnore]
+        public SessionState State { get; init; } = null!;
+
+        /// <summary>
+        /// Creates an empty update.
+        /// </summary>
+        public StateSessionUpdate()
+        {
+        }
+
+        /// <summary>
+        /// Creates an update reporting the given state.
+        /// </summary>
+        /// <param name="state">The reported foreground-work state.</param>
+        public StateSessionUpdate(SessionState state)
+        {
+            State = state ?? throw new ArgumentNullException(nameof(state));
+        }
+    }
+
+    /// <summary>
+    /// Flattens <see cref="StateSessionUpdate.State"/> into the update object, so <c>state</c> and its
+    /// payload sit alongside the <c>sessionUpdate</c> discriminator as the protocol requires.
+    /// </summary>
+    /// <remarks>
+    /// This lives beside the params converter rather than on <see cref="StateSessionUpdate"/> because
+    /// STJ refuses a <c>JsonConverter</c> on a type inside a polymorphic hierarchy: the discriminator
+    /// is written by the hierarchy's own contract, and a derived converter would have to reproduce that
+    /// metadata itself.
+    /// </remarks>
+    internal static class StateSessionUpdateWireFormat
+    {
+        internal const string Discriminator = "state_update";
+
+        internal static StateSessionUpdate Read(JsonElement root, JsonSerializerOptions options)
+        {
+            var state = JsonSerializer.Deserialize(
+                root.GetRawText(),
+                (JsonTypeInfo<SessionState>)options.GetTypeInfo(typeof(SessionState)));
+
+            return new StateSessionUpdate
+            {
+                State = state!,
+                Meta = AcpMetaJson.Read(root)
+            };
+        }
+
+        internal static void Write(
+            Utf8JsonWriter writer,
+            StateSessionUpdate value,
+            JsonSerializerOptions options)
+        {
+            if (value.State is null)
+            {
+                throw new JsonException("ACP state_update requires a state.");
+            }
+
+            // Serialize the inner state to an element and splice its members in flat: handing the state
+            // converter this writer directly would open a nested object instead.
+            var element = JsonSerializer.SerializeToElement(
+                value.State,
+                (JsonTypeInfo<SessionState>)options.GetTypeInfo(typeof(SessionState)));
+
+            writer.WriteStartObject();
+            writer.WriteString("sessionUpdate", Discriminator);
+            foreach (var property in element.EnumerateObject())
+            {
+                property.WriteTo(writer);
             }
 
             AcpMetaJson.Write(writer, value.Meta);

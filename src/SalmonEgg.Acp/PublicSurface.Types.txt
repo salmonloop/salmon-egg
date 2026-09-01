@@ -89,6 +89,7 @@ SalmonEgg.Acp.Protocol.CustomElicitationRequest
 SalmonEgg.Acp.Protocol.CustomElicitationResponse
 SalmonEgg.Acp.Protocol.CustomMultiSelectItems
 SalmonEgg.Acp.Protocol.CustomPropertySchema
+SalmonEgg.Acp.Protocol.CustomSessionState
 SalmonEgg.Acp.Protocol.ElicitationAcceptContent
 SalmonEgg.Acp.Protocol.ElicitationAcceptResponse
 SalmonEgg.Acp.Protocol.ElicitationActions
@@ -107,6 +108,7 @@ SalmonEgg.Acp.Protocol.EnumOption
 SalmonEgg.Acp.Protocol.EnvVariable
 SalmonEgg.Acp.Protocol.FormElicitationRequest
 SalmonEgg.Acp.Protocol.FsCapability
+SalmonEgg.Acp.Protocol.IdleSessionState
 SalmonEgg.Acp.Protocol.InitializeParams
 SalmonEgg.Acp.Protocol.InitializeResponse
 SalmonEgg.Acp.Protocol.IntegerPropertySchema
@@ -124,6 +126,8 @@ SalmonEgg.Acp.Protocol.PlanUpdate
 SalmonEgg.Acp.Protocol.PromptCapabilities
 SalmonEgg.Acp.Protocol.ProtocolPathRules
 SalmonEgg.Acp.Protocol.ReadTextFileResult
+SalmonEgg.Acp.Protocol.RequiresActionSessionState
+SalmonEgg.Acp.Protocol.RunningSessionState
 SalmonEgg.Acp.Protocol.SessionAdditionalDirectoriesCapabilities
 SalmonEgg.Acp.Protocol.SessionCancelParams
 SalmonEgg.Acp.Protocol.SessionCapabilities
@@ -154,8 +158,11 @@ SalmonEgg.Acp.Protocol.SessionSetConfigOptionParams
 SalmonEgg.Acp.Protocol.SessionSetConfigOptionResponse
 SalmonEgg.Acp.Protocol.SessionSetModeParams
 SalmonEgg.Acp.Protocol.SessionSetModeResponse
+SalmonEgg.Acp.Protocol.SessionState
+SalmonEgg.Acp.Protocol.SessionStateKind
 SalmonEgg.Acp.Protocol.SessionUpdate
 SalmonEgg.Acp.Protocol.SessionUpdateParams
+SalmonEgg.Acp.Protocol.StateSessionUpdate
 SalmonEgg.Acp.Protocol.StopReason
 SalmonEgg.Acp.Protocol.StringFormat
 SalmonEgg.Acp.Protocol.StringMultiSelectItems
