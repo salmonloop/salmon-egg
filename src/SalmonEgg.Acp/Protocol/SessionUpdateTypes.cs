@@ -67,6 +67,9 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     [JsonDerivedType(typeof(SessionInfoUpdate), "session_info_update")]
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
+    [JsonDerivedType(typeof(AgentWholeMessageUpdate), "agent_message")]
+    [JsonDerivedType(typeof(UserWholeMessageUpdate), "user_message")]
+    [JsonDerivedType(typeof(AgentWholeThoughtUpdate), "agent_thought")]
     public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
@@ -139,6 +142,17 @@ namespace SalmonEgg.Acp.Protocol
 
                 update = updateElement.Deserialize(
                     (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
+
+                // JsonIgnore keeps HasContent off the wire, which also means STJ never populates it.
+                // Without this the three-state contract would be a lie: every whole-message update
+                // would look like "content absent", so a null content could not be told from no change.
+                if (update is WholeMessageUpdate wholeMessage)
+                {
+                    update = wholeMessage with
+                    {
+                        HasContent = updateElement.TryGetProperty("content", out _)
+                    };
+                }
                 if (update is not null
                     && update.GetType() == typeof(SessionUpdate)
                     && updateElement.TryGetProperty("sessionUpdate", out var kindElement))
@@ -273,6 +287,71 @@ namespace SalmonEgg.Acp.Protocol
             AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
+    }
+
+    /// <summary>
+    /// Base contract for the v2 whole-message upsert updates, which carry a complete message rather
+    /// than one streamed fragment.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These do not replace the v1 <c>*_chunk</c> updates: v2 keeps both families, so an Agent may
+    /// stream fragments, send whole messages, or mix the two within one session.
+    /// </para>
+    /// <para>
+    /// <c>content</c> is three-state and each state is a distinct instruction. Absent leaves the
+    /// message unchanged, <c>null</c> clears it, and an array replaces the whole array - including
+    /// content accumulated from earlier chunks with the same message id. Collapsing absent and
+    /// <c>null</c> together would turn "no change" into "erase the message", so
+    /// <see cref="HasContent"/> reports presence separately from the value.
+    /// </para>
+    /// </remarks>
+    public abstract record WholeMessageUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// The message this update addresses. Required by the protocol on every whole-message update;
+        /// it is what identifies the message being upserted.
+        /// </summary>
+        [JsonPropertyName("messageId")]
+        public string MessageId { get; init; } = string.Empty;
+
+        /// <summary>
+        /// The complete content of the message, or <c>null</c> to clear it. Check
+        /// <see cref="HasContent"/> to tell "clear" apart from "leave unchanged".
+        /// </summary>
+        [JsonPropertyName("content")]
+        public List<ContentBlock>? Content { get; init; }
+
+        /// <summary>
+        /// Whether <c>content</c> was present on the wire. <c>false</c> means leave the existing content
+        /// unchanged; <c>true</c> with a <c>null</c> <see cref="Content"/> means clear it.
+        /// </summary>
+        [JsonIgnore]
+        public bool HasContent { get; init; }
+    }
+
+    /// <summary>
+    /// V2 <c>agent_message</c>: a complete agent message, replacing whatever content that message id
+    /// currently holds.
+    /// </summary>
+    public sealed record AgentWholeMessageUpdate : WholeMessageUpdate
+    {
+    }
+
+    /// <summary>
+    /// V2 <c>user_message</c>: where the user's prompt was inserted into session history. In v2 the
+    /// Agent must report this after accepting a prompt, and it is the source of truth for the
+    /// agent-owned message id.
+    /// </summary>
+    public sealed record UserWholeMessageUpdate : WholeMessageUpdate
+    {
+    }
+
+    /// <summary>
+    /// V2 <c>agent_thought</c>: a complete agent reasoning message.
+    /// </summary>
+    public sealed record AgentWholeThoughtUpdate : WholeMessageUpdate
+    {
     }
 
     public abstract record ContentChunkUpdate : SessionUpdate
