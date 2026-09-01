@@ -963,20 +963,25 @@ namespace SalmonEgg.Acp.Client
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[requestIdStr] = tcs;
-            var dispatched = false;
+            var requestWriteStarted = false;
             var retainPendingRequest = false;
 
             try
             {
                 var json = _parser.SerializeMessage(request);
                 ClearLastTransportError();
+                cancellationToken.ThrowIfCancellationRequested();
+                // Once the transport call begins, a pipe/socket implementation may have written
+                // some or all of the frame before observing its token. Treat it as potentially
+                // delivered for cancellation purposes: skipping $/cancel_request here would leave
+                // a peer running an operation the caller has already abandoned.
+                requestWriteStarted = true;
                 var sent = await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
                 if (!sent)
                 {
                     throw new InvalidOperationException(CreateTransportSendFailureMessage(request.Method));
                 }
 
-                dispatched = true;
                 using var cancellationRegistration = cancellationToken.Register(
                     static state => ((TaskCompletionSource<JsonRpcResponse>)state!).TrySetCanceled(),
                     tcs);
@@ -1005,7 +1010,7 @@ namespace SalmonEgg.Acp.Client
                 // for the original request (possibly -32800), and OnMessageReceived owns removing
                 // that correlation entry. Do not use the caller's already-cancelled token here —
                 // cancelling a request must itself reach the peer.
-                if (dispatched && AcpRequestId.TryFromEnvelopeId(request.Id, out var requestId))
+                if (requestWriteStarted && AcpRequestId.TryFromEnvelopeId(request.Id, out var requestId))
                 {
                     retainPendingRequest = true;
                     await SendCancelRequestNotificationAsync(requestId).ConfigureAwait(false);
