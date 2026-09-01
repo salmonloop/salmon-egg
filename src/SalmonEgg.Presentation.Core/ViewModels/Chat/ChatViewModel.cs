@@ -2008,9 +2008,32 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)
         => ApplyCurrentStoreProjectionAsync(activationVersion, CancellationToken.None);
 
+    /// <summary>
+    /// Projects the current store state onto the bindable surface.
+    /// The projection is guarded by a token linking the caller token with the store-subscription
+    /// lifetime token (<see cref="_storeStateCts"/>), which is cancelled on <see cref="Dispose"/>.
+    /// Lifetime cancellation means "this ViewModel is gone, so the projection is moot" — a normal
+    /// terminal condition, not a fault — and therefore completes quietly. Caller-owned cancellation
+    /// still surfaces as <see cref="OperationCanceledException"/>, because the caller that supplied
+    /// the token owns its observation.
+    /// </summary>
     private async Task ApplyCurrentStoreProjectionAsync(
         long? activationVersion,
         CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await ApplyCurrentStoreProjectionCoreAsync(activationVersion, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Store-subscription lifetime ended (ViewModel disposed); nothing left to project.
+        }
+    }
+
+    private async Task ApplyCurrentStoreProjectionCoreAsync(
+        long? activationVersion,
+        CancellationToken cancellationToken)
     {
         var storeProjectionToken = _storeStateCts?.Token ?? CancellationToken.None;
         using var linkedProjectionCts = cancellationToken.CanBeCanceled && storeProjectionToken.CanBeCanceled
