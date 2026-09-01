@@ -188,6 +188,7 @@ namespace SalmonEgg.Acp.Tool
             return type switch
             {
                 "content" => ReadContent(root, options),
+                "diff" when StructuredDiffWireFormat.IsStructured(root) => StructuredDiffWireFormat.Read(root),
                 "diff" => ReadDiff(root, options),
                 "terminal" => ReadTerminal(root, options),
                 // Unknown or missing discriminator: keep the raw payload for forward passthrough and let the Agent
@@ -214,6 +215,9 @@ namespace SalmonEgg.Acp.Tool
 
                     AcpMetaJson.Write(writer, content.Meta);
                     writer.WriteEndObject();
+                    break;
+                case StructuredDiff structuredDiff:
+                    StructuredDiffWireFormat.Write(writer, structuredDiff);
                     break;
                 case DiffToolCallContent diff:
                     writer.WriteStartObject();
