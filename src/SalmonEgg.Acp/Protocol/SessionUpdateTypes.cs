@@ -73,6 +73,7 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(TerminalSessionUpdate), "terminal_update")]
     [JsonDerivedType(typeof(TerminalOutputChunkSessionUpdate), "terminal_output_chunk")]
     [JsonDerivedType(typeof(ToolCallContentChunkUpdate), "tool_call_content_chunk")]
+    [JsonDerivedType(typeof(V2PlanUpdate), "plan_update")]
     public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
@@ -146,9 +147,6 @@ namespace SalmonEgg.Acp.Protocol
                 update = updateElement.Deserialize(
                     (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
 
-                // JsonIgnore keeps HasContent off the wire, which also means STJ never populates it.
-                // Without this the three-state contract would be a lie: every whole-message update
-                // would look like "content absent", so a null content could not be told from no change.
                 // JsonIgnore keeps the presence flags off the wire, which also means STJ never populates
                 // them. Without this the patch contracts would be a lie: every optional field would read
                 // as absent, so an explicit null could not be told from "leave unchanged".
