@@ -600,6 +600,17 @@ public sealed partial class StartViewModel : ObservableObject
         }
 
         ClearStartLaunchFailure();
+        var cwdResolution = ResolveLaunchCwdResolution();
+        if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
+        {
+            // Surface the resolver's own reason (for example "select a remote directory") instead of
+            // the generic retry message: a launch with no resolvable root never succeeds on retry.
+            SetStartLaunchFailure(
+                ResolveLaunchCwdFailureResourceKey(cwdResolution.ErrorMessage),
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+            return;
+        }
+
         IsStarting = true;
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
         var promptDispatched = false;
@@ -610,7 +621,7 @@ public sealed partial class StartViewModel : ObservableObject
                     new ChatLaunchRequest(
                         promptText,
                         NormalizeProjectSelectionValue(SelectedStartProjectId),
-                        ResolveDefaultCwd()))
+                        cwdResolution.Cwd))
                 .ConfigureAwait(true);
             switch (completion)
             {
@@ -966,18 +977,22 @@ public sealed partial class StartViewModel : ObservableObject
         QueueEnsureNewSessionDraft();
     }
 
-    private string? ResolveDefaultCwd()
+    // Launch and draft must agree on the working directory, so both go through
+    // AcpSessionNewCwdResolver: it owns the transport-aware fallback (stdio defaults to the
+    // user profile directory, remote transports require an explicitly selected directory).
+    // Resolving the launch cwd any other way reintroduces the divergence where the draft
+    // succeeded via the fallback but the launch failed on a null cwd for Unclassified.
+    private AcpSessionNewCwdResolution ResolveLaunchCwdResolution()
     {
-        var selectedOption = ResolveSelectedProjectOption();
-        if (!string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
-        {
-            return selectedOption.RemoteCwd;
-        }
-
-        var selectedRoot = _projectPreferences.TryGetProjectCwd(SelectedStartProjectId);
+        var requestedCwd = ResolvePreviewCwd();
         _ = _nav.ConsumePendingProjectRootPath();
-        return SessionCwdResolver.Resolve(selectedRoot, null);
+        return AcpSessionNewCwdResolver.Resolve(requestedCwd, Chat.SelectedAcpProfile);
     }
+
+    private static string ResolveLaunchCwdFailureResourceKey(string? errorMessage)
+        => string.Equals(errorMessage, AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, StringComparison.Ordinal)
+            ? "NewSessionDraft_InvalidRemoteCwd"
+            : "NewSessionDraft_MissingRemoteCwd";
 
     private void RefreshStartProjectOptions()
     {

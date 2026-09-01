@@ -161,6 +161,7 @@ public sealed class CoreStringResourceTests
     [InlineData("VoiceDiagnostics_SignalMonitoringFailed")]
     [InlineData("NewSessionDraft_LoadConfigFailed")]
     [InlineData("NewSessionDraft_InvalidRemoteCwd")]
+    [InlineData("NewSessionDraft_MissingRemoteCwd")]
     [InlineData("ChatBinding_UpdateFailedWithStatus")]
     [InlineData("ChatBinding_BindNewFailedWithStatus")]
     [InlineData("ChatBinding_PromoteDraftFailedWithStatus")]

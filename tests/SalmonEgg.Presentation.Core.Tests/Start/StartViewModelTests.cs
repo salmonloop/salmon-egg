@@ -92,6 +92,7 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
 
             startViewModel.StartPrompt = "  hello  ";
@@ -136,6 +137,7 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
 
             startViewModel.StartPrompt = "hello";
@@ -144,7 +146,12 @@ public sealed class StartViewModelTests
 
             Assert.NotNull(capturedRequest);
             Assert.Equal(NavigationProjectIds.Unclassified, capturedRequest!.ProjectId);
-            Assert.Null(capturedRequest.Cwd);
+            // The persisted remote path must not leak into a local launch; the local launch instead
+            // gets the stdio transport's own fallback root.
+            Assert.NotEqual("/remote/workspace", capturedRequest.Cwd);
+            Assert.Equal(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                capturedRequest.Cwd);
         }
         finally
         {
@@ -168,6 +175,7 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
 
             startViewModel.StartPrompt = "hello";
@@ -360,6 +368,214 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartSession_WhenUnclassifiedOnStdioProfile_LaunchesWithTransportFallbackCwd()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            SelectStdioProfile(chat);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var requests = new List<ChatLaunchRequest>();
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ChatLaunchRequest, CancellationToken>((request, _) => requests.Add(request))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.SelectedStartProjectId = NavigationProjectIds.Unclassified;
+            startViewModel.StartPrompt = "hello";
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            var request = Assert.Single(requests);
+            Assert.Equal(NavigationProjectIds.Unclassified, request.ProjectId);
+            Assert.Equal(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                request.Cwd);
+            Assert.False(startViewModel.HasStartSessionDraftError);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSession_WhenRemoteProfileHasNoSelectedDirectory_ReportsMissingCwdWithoutInvokingWorkflow()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.StartPrompt = "hello";
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            // The project selector already blocks submit for a remote profile with no selected
+            // directory, so the launch must never reach the workflow with an unresolved cwd.
+            Assert.True(startViewModel.StartProjectSelectorProjection.IsSubmitBlocked);
+            Assert.False(startViewModel.CanStartSessionAndSendUi);
+            workflow.Verify(
+                w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+            Assert.Equal("hello", startViewModel.StartPrompt);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSession_WhenRemoteDirectoryPathIsRelative_ReportsResolverReasonWithoutInvokingWorkflow()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            // A configured-but-relative remote path passes the selector (the directory is selected)
+            // yet fails the protocol rule, so it is the case that must reach the launch guard.
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-relative",
+                DisplayName = "Relative",
+                RemotePath = "agent/worktree"
+            });
+
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Remote Agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.SelectedStartProjectId = "remote-directory:dir-relative";
+            startViewModel.StartPrompt = "hello";
+            await WaitForConditionAsync(() => startViewModel.CanStartSessionAndSendUi);
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            workflow.Verify(
+                w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal(
+                AcpSessionNewCwdResolver.InvalidRemoteCwdMessage,
+                startViewModel.StartSessionDraftErrorMessage);
+            Assert.Equal("hello", startViewModel.StartPrompt);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSession_WhenLocalProjectSelected_LaunchesWithConfiguredProjectRoot()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.Projects.Add(new ProjectDefinition
+            {
+                ProjectId = "project-alpha",
+                Name = "Alpha",
+                RootPath = @"C:\Repo\Alpha"
+            });
+
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            SelectStdioProfile(chat);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var requests = new List<ChatLaunchRequest>();
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ChatLaunchRequest, CancellationToken>((request, _) => requests.Add(request))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.SelectedStartProjectId = "project-alpha";
+            startViewModel.StartPrompt = "hello";
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            var request = Assert.Single(requests);
+            Assert.Equal("project-alpha", request.ProjectId);
+            Assert.Equal(@"C:\Repo\Alpha", request.Cwd);
+            Assert.False(startViewModel.HasStartSessionDraftError);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task LanguageChanged_ReprojectsOpenStartLaunchFailureMessage()
     {
         var originalContext = SynchronizationContext.Current;
@@ -369,6 +585,9 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            // A resolvable cwd is a precondition for reaching the workflow, so this test needs a
+            // stdio profile: it asserts the workflow-failure message, not the cwd guard.
+            SelectStdioProfile(chat);
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var languageService = new Mock<IAppLanguageService>();
             var languagePrefix = "zh";
@@ -2861,6 +3080,7 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2909,6 +3129,7 @@ public sealed class StartViewModelTests
                 workflow.Object,
                 loggerMock.Object,
                 localizer: new TestCoreStringLocalizer());
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2958,6 +3179,7 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object,
                 localizer: new TestCoreStringLocalizer());
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2998,6 +3220,7 @@ public sealed class StartViewModelTests
                 nav,
                 workflow.Object,
                 localizer: new TestCoreStringLocalizer());
+            SelectStdioProfile(chat);
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -3423,6 +3646,22 @@ public sealed class StartViewModelTests
                 It.IsAny<AcpConnectionContext>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    // A launch needs a resolvable cwd, and AcpSessionNewCwdResolver derives the fallback from the
+    // selected profile's transport. Tests that expect to reach IChatLaunchWorkflow therefore need a
+    // selected profile; without one the resolver treats the launch as remote and requires a
+    // directory, which is what the remote-specific tests assert instead.
+    private static void SelectStdioProfile(ChatViewModelHarness chat, string profileId = "profile-1")
+    {
+        chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+        {
+            Id = profileId,
+            Name = "Local Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        });
+        chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[^1];
     }
 
     private static async Task MakeStartDraftReadyAsync(
