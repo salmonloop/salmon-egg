@@ -51,6 +51,8 @@ SalmonEgg.Acp.Protocol.AgentInfo
 SalmonEgg.Acp.Protocol.AgentMessageUpdate
 SalmonEgg.Acp.Protocol.AgentSessionInfo
 SalmonEgg.Acp.Protocol.AgentThoughtUpdate
+SalmonEgg.Acp.Protocol.AgentWholeMessageUpdate
+SalmonEgg.Acp.Protocol.AgentWholeThoughtUpdate
 SalmonEgg.Acp.Protocol.AskUserContract
 SalmonEgg.Acp.Protocol.AskUserOption
 SalmonEgg.Acp.Protocol.AskUserQuestion
@@ -149,6 +151,8 @@ SalmonEgg.Acp.Protocol.ToolCallUpdate
 SalmonEgg.Acp.Protocol.UsageCost
 SalmonEgg.Acp.Protocol.UsageUpdate
 SalmonEgg.Acp.Protocol.UserMessageUpdate
+SalmonEgg.Acp.Protocol.UserWholeMessageUpdate
+SalmonEgg.Acp.Protocol.WholeMessageUpdate
 SalmonEgg.Acp.Serialization.AcpJsonContext
 SalmonEgg.Acp.Tool.ContentToolCallContent
 SalmonEgg.Acp.Tool.CustomToolCallContent
