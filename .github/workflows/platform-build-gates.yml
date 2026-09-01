@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
@@ -121,7 +121,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
@@ -195,7 +195,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
@@ -263,7 +263,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
