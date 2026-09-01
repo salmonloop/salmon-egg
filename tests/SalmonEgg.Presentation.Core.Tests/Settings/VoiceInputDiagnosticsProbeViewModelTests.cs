@@ -291,28 +291,32 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
     public async Task StartProbeAsync_WhenActivationArrivesBeforeDeniedFlowSettles_RetriesAfterProbeBecomesIdle()
     {
         var activationSource = new FakeApplicationActivationSignalSource();
-        var dispatcher = new BufferedActionUiDispatcher();
+        var authorizationHelpEntered = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completeAuthorizationHelp = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var service = new FakeVoiceInputService
         {
             PermissionResult = new VoiceInputPermissionResult(
                 VoiceInputPermissionStatus.Denied,
                 "Enable speech access",
-                RequiresAuthorization: true)
+                RequiresAuthorization: true),
+            OnAuthorizationHelpRequestedAsync = async cancellationToken =>
+            {
+                authorizationHelpEntered.TrySetResult(null);
+                return await completeAuthorizationHelp.Task.WaitAsync(cancellationToken);
+            }
         };
-        service.OnAuthorizationHelpRequested = () =>
-        {
-            dispatcher.BufferNextAction();
-        };
-        var viewModel = CreateViewModel(service, dispatcher: dispatcher, activationSource: activationSource);
+        var viewModel = CreateViewModel(service, activationSource: activationSource);
 
-        await viewModel.StartProbeCommand.ExecuteAsync(null);
+        var initialStart = viewModel.StartProbeCommand.ExecuteAsync(null);
+        await authorizationHelpEntered.Task;
 
         Assert.Equal(1, service.AuthorizationHelpRequestCount);
         Assert.True(viewModel.IsRunning);
 
         service.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
-        dispatcher.FlushBufferedActions();
+        completeAuthorizationHelp.TrySetResult(true);
+        await initialStart;
 
         await WaitForConditionAsync(() => Task.FromResult(
             service.StartCount == 2
@@ -376,102 +380,48 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
     private sealed class TrackingUiDispatcher : IUiDispatcher
     {
-        public bool IsExecutingCallback { get; private set; }
+        private readonly AsyncLocal<int> _callbackDepth = new();
+
+        public bool IsExecutingCallback => _callbackDepth.Value > 0;
 
         public bool HasThreadAccess => false;
 
         public void Enqueue(Action action)
-        {
-            IsExecutingCallback = true;
-            try
-            {
-                action();
-            }
-            finally
-            {
-                IsExecutingCallback = false;
-            }
-        }
+            => Execute(action);
 
         public Task EnqueueAsync(Action action)
         {
-            IsExecutingCallback = true;
-            try
-            {
-                action();
-            }
-            finally
-            {
-                IsExecutingCallback = false;
-            }
-
+            Execute(action);
             return Task.CompletedTask;
         }
 
-        public Task EnqueueAsync(Func<Task> action)
+        public async Task EnqueueAsync(Func<Task> action)
         {
-            IsExecutingCallback = true;
-            try
-            {
-                return AwaitAndResetAsync(action);
-            }
-            catch
-            {
-                IsExecutingCallback = false;
-                throw;
-            }
-        }
-
-        private async Task AwaitAndResetAsync(Func<Task> action)
-        {
+            var previousDepth = _callbackDepth.Value;
+            _callbackDepth.Value = previousDepth + 1;
             try
             {
                 await action();
             }
             finally
             {
-                IsExecutingCallback = false;
+                _callbackDepth.Value = previousDepth;
             }
         }
-    }
 
-    private sealed class BufferedActionUiDispatcher : IUiDispatcher
-    {
-        private Action? _bufferedAction;
-        private bool _bufferNextAction;
-
-        public bool HasThreadAccess => false;
-
-        public void BufferNextAction()
-            => _bufferNextAction = true;
-
-        public void FlushBufferedActions()
+        private void Execute(Action action)
         {
-            var action = _bufferedAction;
-            _bufferedAction = null;
-            action?.Invoke();
-        }
-
-        public void Enqueue(Action action)
-        {
-            EnqueueAsync(action).GetAwaiter().GetResult();
-        }
-
-        public Task EnqueueAsync(Action action)
-        {
-            if (_bufferNextAction)
+            var previousDepth = _callbackDepth.Value;
+            _callbackDepth.Value = previousDepth + 1;
+            try
             {
-                _bufferNextAction = false;
-                _bufferedAction = action;
-                return Task.CompletedTask;
+                action();
             }
-
-            action();
-            return Task.CompletedTask;
+            finally
+            {
+                _callbackDepth.Value = previousDepth;
+            }
         }
-
-        public Task EnqueueAsync(Func<Task> action)
-            => action();
     }
 
     private sealed class FakeVoiceInputService : IVoiceInputService
@@ -493,6 +443,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         public bool WasStartCancellationRequestedWhenStopCalled { get; private set; }
 
         public Action? OnAuthorizationHelpRequested { get; set; }
+
+        public Func<CancellationToken, Task<bool>>? OnAuthorizationHelpRequestedAsync { get; set; }
 
         public VoiceInputSessionOptions? LastOptions { get; private set; }
 
@@ -530,6 +482,11 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         public Task<bool> TryRequestAuthorizationHelpAsync(CancellationToken cancellationToken = default)
         {
             AuthorizationHelpRequestCount++;
+            if (OnAuthorizationHelpRequestedAsync is not null)
+            {
+                return OnAuthorizationHelpRequestedAsync(cancellationToken);
+            }
+
             OnAuthorizationHelpRequested?.Invoke();
             return Task.FromResult(true);
         }
