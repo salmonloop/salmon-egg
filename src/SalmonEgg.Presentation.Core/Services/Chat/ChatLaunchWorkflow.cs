@@ -75,10 +75,10 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         var cwd = request.Cwd;
         if (string.IsNullOrWhiteSpace(cwd))
         {
-            // A session cannot be established without a working directory (the session manager
-            // rejects an empty one, and a launch with no resolved root is not a transient hiccup
-            // worth retrying — it needs the caller to surface a project picker). Fail the launch
-            // cleanly rather than letting CreateSessionAsync throw ArgumentException on both tries.
+            // Defense in depth: callers resolve the cwd through AcpSessionNewCwdResolver and reject
+            // an unresolved one with the resolver's own reason before reaching here. This guard only
+            // keeps the public contract honest for a caller that skips that step, since the session
+            // manager rejects an empty cwd and retrying cannot make a root appear.
             _logger.LogWarning("Start workflow stopped: no working directory resolved for the launch.");
             return ChatLaunchCompletion.Failed;
         }

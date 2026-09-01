@@ -1214,6 +1214,9 @@
   <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
     <value>远程工作目录必须是绝对路径。</value>
   </data>
+  <data name="NewSessionDraft_MissingRemoteCwd" xml:space="preserve">
+    <value>请先选择一个远程目录，然后再创建远程会话。</value>
+  </data>
   <data name="ChatBinding_UpdateFailedWithStatus" xml:space="preserve">
     <value>更新会话绑定失败（{0}）：{1}</value>
   </data>

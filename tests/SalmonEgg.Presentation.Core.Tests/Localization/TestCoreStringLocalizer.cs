@@ -93,6 +93,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["VoiceDiagnostics_SignalMonitoringFailed"] = "Signal monitoring failed.",
         ["NewSessionDraft_LoadConfigFailed"] = "Unable to load session configuration. Check the connection and try again.",
         ["NewSessionDraft_InvalidRemoteCwd"] = "The remote working directory must be an absolute path.",
+        ["NewSessionDraft_MissingRemoteCwd"] = "Select a remote directory before creating a remote session.",
         ["ChatBinding_UpdateFailedWithStatus"] = "Failed to update conversation binding ({0}): {1}",
         ["ChatBinding_BindNewFailedWithStatus"] = "Failed to bind new conversation ({0}): {1}",
         ["ChatBinding_PromoteDraftFailedWithStatus"] = "Failed to promote ACP new-session draft ({0}): {1}",

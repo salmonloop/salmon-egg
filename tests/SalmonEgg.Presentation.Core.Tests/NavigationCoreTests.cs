@@ -359,6 +359,26 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void StartLaunch_ResolvesCwdThroughTheTransportAwareResolverOnly()
+    {
+        var root = FindRepoRoot();
+        var legacySessionResolver = Path.Combine(
+            root,
+            NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\ViewModels\Navigation\SessionCwdResolver.cs"));
+        var startViewModel = LoadFile(@"src\SalmonEgg.Presentation.Core\ViewModels\Start\StartViewModel.cs");
+
+        // The launch cwd has exactly one owner: AcpSessionNewCwdResolver, which the new-session
+        // draft already uses. A second resolver made the draft succeed via the stdio fallback while
+        // the launch failed on a null cwd for Unclassified.
+        Assert.False(File.Exists(legacySessionResolver));
+        Assert.DoesNotContain("SessionCwdResolver.Resolve(", startViewModel, StringComparison.Ordinal);
+        Assert.Contains(
+            "AcpSessionNewCwdResolver.Resolve(requestedCwd, Chat.SelectedAcpProfile)",
+            startViewModel,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DependencyInjection_AcpEvictionOptions_DoesNotLoadAppSettingsInSingletonFactory()
     {
         var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
