@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
 
@@ -50,6 +51,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Response for the <c>session/prompt</c> method.
     /// The Agent's reply to a prompt request, carrying only the stop reason.
     /// </summary>
+    [JsonConverter(typeof(SessionPromptResponseJsonConverter))]
     public sealed record SessionPromptResponse : AcpProtocolObject
     {
         /// <summary>
@@ -57,6 +59,14 @@ namespace SalmonEgg.Acp.Protocol
         /// </summary>
         [JsonPropertyName("stopReason")]
         public StopReason StopReason { get; init; } = StopReason.EndTurn;
+
+        /// <summary>
+        /// Whether the v1 terminal <c>stopReason</c> was present on the wire. V2 prompt responses are
+        /// bare acknowledgements, so this is false for their empty result and callers must wait for an
+        /// idle state_update instead of treating the default value as completion.
+        /// </summary>
+        [JsonIgnore]
+        public bool HasStopReason { get; init; }
 
         /// <summary>
         /// Protocol extension field (<c>_meta</c>).
@@ -75,6 +85,32 @@ namespace SalmonEgg.Acp.Protocol
         public SessionPromptResponse(StopReason stopReason)
         {
             StopReason = stopReason;
+        }
+    }
+
+    internal sealed class SessionPromptResponseJsonConverter : JsonConverter<SessionPromptResponse>
+    {
+        public override SessionPromptResponse? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) throw new JsonException("ACP session/prompt response must be an object.");
+            var has = root.TryGetProperty("stopReason", out var reason) && reason.ValueKind == JsonValueKind.String;
+            return new SessionPromptResponse
+            {
+                StopReason = has ? new StopReason(reason.GetString() ?? string.Empty) : StopReason.EndTurn,
+                HasStopReason = has,
+                Meta = AcpMetaJson.Read(root)
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, SessionPromptResponse value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            if (AcpProtocolWriteContext.Current == AcpProtocolVersion.V1)
+                writer.WriteString("stopReason", value.StopReason.Value);
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
         }
     }
 }
