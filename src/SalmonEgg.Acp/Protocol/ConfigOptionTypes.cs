@@ -103,7 +103,9 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
 
         return new ConfigOption
         {
-            Id = ReadRequiredString(root, "id"),
+            // v1 calls this id; v2 renamed it configId. Reading accepts both versions, while writing
+            // branches on the negotiated context so neither peer sees the other's field.
+            Id = ReadRequiredString(root, "configId", "id"),
             Name = ReadRequiredString(root, "name"),
             Description = ReadOptionalString(root, "description"),
             Category = ReadOptionalString(root, "category"),
@@ -119,7 +121,9 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
     public override void Write(Utf8JsonWriter writer, ConfigOption value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        writer.WriteString("id", value.Id);
+        writer.WriteString(
+            AcpProtocolWriteContext.Current == AcpProtocolVersion.V2 ? "configId" : "id",
+            value.Id);
         writer.WriteString("name", value.Name);
         WriteOptionalString(writer, "description", value.Description, options);
         WriteOptionalString(writer, "category", value.Category, options);
@@ -230,15 +234,18 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             Meta = AcpMetaJson.Read(element)
         };
 
-    private static string ReadRequiredString(JsonElement root, string propertyName)
+    private static string ReadRequiredString(JsonElement root, params string[] propertyNames)
     {
-        if (!root.TryGetProperty(propertyName, out var property)
-            || property.ValueKind != JsonValueKind.String)
+        foreach (var propertyName in propertyNames)
         {
-            throw new JsonException($"ACP session config option requires string property '{propertyName}'.");
+            if (root.TryGetProperty(propertyName, out var property)
+                && property.ValueKind == JsonValueKind.String)
+            {
+                return property.GetString() ?? string.Empty;
+            }
         }
 
-        return property.GetString() ?? string.Empty;
+        throw new JsonException($"ACP session config option requires string property '{propertyNames[0]}'.");
     }
 
     private static string? ReadOptionalString(JsonElement root, string propertyName)
