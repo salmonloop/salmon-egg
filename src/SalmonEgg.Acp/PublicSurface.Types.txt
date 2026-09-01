@@ -45,6 +45,8 @@ SalmonEgg.Acp.Plan.PlanEntryStatus
 SalmonEgg.Acp.Protocol.AcpMetaJson
 SalmonEgg.Acp.Protocol.AcpProtocolObject
 SalmonEgg.Acp.Protocol.AcpProtocolVersion
+SalmonEgg.Acp.Protocol.AcpRequestId
+SalmonEgg.Acp.Protocol.AcpRequestIdKind
 SalmonEgg.Acp.Protocol.AgentAuthCapabilities
 SalmonEgg.Acp.Protocol.AgentCapabilities
 SalmonEgg.Acp.Protocol.AgentInfo
@@ -65,6 +67,7 @@ SalmonEgg.Acp.Protocol.AvailableCommand
 SalmonEgg.Acp.Protocol.AvailableCommandInput
 SalmonEgg.Acp.Protocol.AvailableCommandsUpdate
 SalmonEgg.Acp.Protocol.BooleanConfigOptionCapabilities
+SalmonEgg.Acp.Protocol.CancelRequestParams
 SalmonEgg.Acp.Protocol.ClientCapabilities
 SalmonEgg.Acp.Protocol.ClientCapabilityDefaults
 SalmonEgg.Acp.Protocol.ClientCapabilityMetadata
