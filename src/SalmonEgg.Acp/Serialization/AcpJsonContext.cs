@@ -85,6 +85,8 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(SessionSetConfigOptionParams))]
 [JsonSerializable(typeof(SessionSetConfigOptionResponse))]
 [JsonSerializable(typeof(SessionCancelParams))]
+[JsonSerializable(typeof(CancelRequestParams))]
+[JsonSerializable(typeof(AcpRequestId))]
 [JsonSerializable(typeof(AuthenticateParams))]
 [JsonSerializable(typeof(AuthenticateResponse))]
 [JsonSerializable(typeof(LogoutParams))]
