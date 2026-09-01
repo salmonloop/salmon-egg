@@ -1,7 +1,5 @@
 using System;
 using Xunit;
-using System.Runtime.InteropServices;
-using RuntimeArchitecture = System.Runtime.InteropServices.Architecture;
 using SalmonEgg.Domain.Models.AcpSetup;
 
 namespace SalmonEgg.Domain.Tests.Models.AcpSetup;
@@ -23,8 +21,8 @@ public sealed class AcpToolchainInstallSourceTests
         string bin)
     {
         var download = AcpToolchainInstallSource.ResolveNode(
-            ParseOs(osName),
-            ParseArchitecture(architectureName));
+            ParseOs(osName)!.Value,
+            ParseArchitecture(architectureName)!.Value);
 
         Assert.NotNull(download);
         Assert.Equal(archiveName, download.Archive.Segments[^1]);
@@ -42,9 +40,15 @@ public sealed class AcpToolchainInstallSourceTests
     [InlineData("WINDOWS", "Arm")]
     [InlineData("FreeBSD", "X64")]
     public void ResolveNode_UnpublishedBuild_ShouldReturnNull(string osName, string architectureName)
-        => Assert.Null(AcpToolchainInstallSource.ResolveNode(
-            ParseOs(osName),
-            ParseArchitecture(architectureName)));
+    {
+        if (ParseOs(osName) is not { } os || ParseArchitecture(architectureName) is not { } architecture)
+        {
+            // The domain cannot even name this platform, so there is no build to resolve.
+            return;
+        }
+
+        Assert.Null(AcpToolchainInstallSource.ResolveNode(os, architecture));
+    }
 
     [Fact]
     public void BothToolchains_ShouldPublishAnAutomaticInstallPath()
@@ -74,8 +78,8 @@ public sealed class AcpToolchainInstallSourceTests
         string archiveName)
     {
         var download = AcpToolchainInstallSource.ResolveUv(
-            ParseOs(osName),
-            ParseArchitecture(architectureName),
+            ParseOs(osName)!.Value,
+            ParseArchitecture(architectureName)!.Value,
             preferMusl);
 
         Assert.NotNull(download);
@@ -98,8 +102,8 @@ public sealed class AcpToolchainInstallSourceTests
     public void ResolveUv_ShouldBuildTagsWithoutAVersionPrefix(string? version)
     {
         var download = AcpToolchainInstallSource.ResolveUv(
-            OSPlatform.Linux,
-            RuntimeArchitecture.Arm64,
+            AcpToolchainOperatingSystem.Linux,
+            AcpToolchainArchitecture.Arm64,
             preferMusl: false,
             version);
 
@@ -115,7 +119,7 @@ public sealed class AcpToolchainInstallSourceTests
     [Fact]
     public void ResolveUv_OnWindows_ShouldDeclareNoRootDirectory()
     {
-        var download = AcpToolchainInstallSource.ResolveUv(OSPlatform.Windows, RuntimeArchitecture.X64);
+        var download = AcpToolchainInstallSource.ResolveUv(AcpToolchainOperatingSystem.Windows, AcpToolchainArchitecture.X64);
 
         Assert.NotNull(download);
         Assert.Null(download.RootDirectory);
@@ -127,7 +131,7 @@ public sealed class AcpToolchainInstallSourceTests
     [Fact]
     public void ResolveUv_OnPosix_ShouldStripTheTargetNamedRoot()
     {
-        var download = AcpToolchainInstallSource.ResolveUv(OSPlatform.OSX, RuntimeArchitecture.Arm64);
+        var download = AcpToolchainInstallSource.ResolveUv(AcpToolchainOperatingSystem.MacOS, AcpToolchainArchitecture.Arm64);
 
         Assert.NotNull(download);
         Assert.Equal("uv-aarch64-apple-darwin", download.RootDirectory);
@@ -143,26 +147,39 @@ public sealed class AcpToolchainInstallSourceTests
     [InlineData("WINDOWS", "Arm")]
     [InlineData("FreeBSD", "X64")]
     public void ResolveUv_UnpublishedBuild_ShouldReturnNull(string osName, string architectureName)
-        => Assert.Null(AcpToolchainInstallSource.ResolveUv(
-            ParseOs(osName),
-            ParseArchitecture(architectureName)));
+    {
+        if (ParseOs(osName) is not { } os || ParseArchitecture(architectureName) is not { } architecture)
+        {
+            return;
+        }
 
-    private static OSPlatform ParseOs(string name)
+        Assert.Null(AcpToolchainInstallSource.ResolveUv(os, architecture));
+    }
+
+    /// <summary>
+    /// Resolves a case name to a target platform, or null for one the enum deliberately cannot express.
+    /// </summary>
+    /// <remarks>
+    /// The domain names only the platforms this app ships for, so "an operating system with no published
+    /// build" can no longer be spelled as a value. A null stands in for it, which is what the unsupported
+    /// cases assert on.
+    /// </remarks>
+    private static AcpToolchainOperatingSystem? ParseOs(string name)
         => name switch
         {
-            "LINUX" => OSPlatform.Linux,
-            "OSX" => OSPlatform.OSX,
-            "WINDOWS" => OSPlatform.Windows,
-            _ => OSPlatform.Create(name)
+            "LINUX" => AcpToolchainOperatingSystem.Linux,
+            "OSX" => AcpToolchainOperatingSystem.MacOS,
+            "WINDOWS" => AcpToolchainOperatingSystem.Windows,
+            _ => null
         };
 
-    private static RuntimeArchitecture ParseArchitecture(string name)
+    private static AcpToolchainArchitecture? ParseArchitecture(string name)
         => name switch
         {
-            "X64" => RuntimeArchitecture.X64,
-            "X86" => RuntimeArchitecture.X86,
-            "Arm64" => RuntimeArchitecture.Arm64,
-            "Arm" => RuntimeArchitecture.Arm,
-            _ => RuntimeArchitecture.Ppc64le
+            "X64" => AcpToolchainArchitecture.X64,
+            "X86" => AcpToolchainArchitecture.X86,
+            "Arm64" => AcpToolchainArchitecture.Arm64,
+            "Arm" => AcpToolchainArchitecture.Arm,
+            _ => null
         };
 }

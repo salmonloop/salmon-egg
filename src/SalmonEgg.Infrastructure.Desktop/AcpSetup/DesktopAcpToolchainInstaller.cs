@@ -202,7 +202,10 @@ public sealed class DesktopAcpToolchainInstaller : IAcpToolchainInstaller
     private static AcpToolchainDownload? ResolvePublishedDownload(AcpToolchainRequirement requirement)
     {
         var platform = ResolveCurrentPlatform();
-        var architecture = RuntimeInformation.OSArchitecture;
+        if (ResolveCurrentArchitecture() is not { } architecture)
+        {
+            return null;
+        }
 
         if (ReferenceEquals(requirement, AcpToolchainRequirement.Node))
         {
@@ -229,15 +232,42 @@ public sealed class DesktopAcpToolchainInstaller : IAcpToolchainInstaller
     private static bool PrefersMuslBuild()
         => RuntimeInformation.RuntimeIdentifier.Contains("musl", StringComparison.OrdinalIgnoreCase);
 
-    private static OSPlatform ResolveCurrentPlatform()
+    /// <summary>
+    /// This host's operating system, as the toolchain sources name it.
+    /// </summary>
+    /// <remarks>
+    /// Inspecting the host belongs here rather than in the domain, which selects a build for a target it is
+    /// told about. Keeping the question on this side is what lets the resolvers be exercised for every
+    /// platform from one test process.
+    /// </remarks>
+    private static AcpToolchainOperatingSystem ResolveCurrentPlatform()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return OSPlatform.Windows;
+            return AcpToolchainOperatingSystem.Windows;
         }
 
-        return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? OSPlatform.OSX : OSPlatform.Linux;
+        return RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? AcpToolchainOperatingSystem.MacOS
+            : AcpToolchainOperatingSystem.Linux;
     }
+
+    /// <summary>
+    /// This host's architecture, or null when no supported toolchain targets it.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than a nearest guess: a build for the wrong architecture extracts cleanly and then fails
+    /// to exec, which would surface as a corrupt download instead of as an unsupported platform.
+    /// </remarks>
+    private static AcpToolchainArchitecture? ResolveCurrentArchitecture()
+        => RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.X64 => AcpToolchainArchitecture.X64,
+            Architecture.Arm64 => AcpToolchainArchitecture.Arm64,
+            Architecture.X86 => AcpToolchainArchitecture.X86,
+            Architecture.Arm => AcpToolchainArchitecture.Arm,
+            _ => null
+        };
 
     private static string ResolveToolchainDirectoryName(AcpToolchainRequirement requirement)
         => ReferenceEquals(requirement, AcpToolchainRequirement.Node) ? "node" : "uv";

@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 
 namespace SalmonEgg.Domain.Models.AcpSetup;
 
@@ -52,8 +51,8 @@ public static class AcpToolchainInstallSource
     /// <paramref name="architecture"/>, or null when that pair has no supported automatic install.
     /// </summary>
     public static AcpToolchainDownload? ResolveNode(
-        OSPlatform operatingSystem,
-        Architecture architecture,
+        AcpToolchainOperatingSystem operatingSystem,
+        AcpToolchainArchitecture architecture,
         string? version = null)
     {
         var effectiveVersion = string.IsNullOrWhiteSpace(version) ? NodeVersion : version.Trim();
@@ -69,13 +68,13 @@ public static class AcpToolchainInstallSource
 
         var (platform, architectureSegment) = build;
 
-        var archiveFormat = operatingSystem == OSPlatform.Windows
+        var archiveFormat = operatingSystem == AcpToolchainOperatingSystem.Windows
             ? AcpArchiveFormat.Zip
             : AcpArchiveFormat.TarGzip;
         var extension = archiveFormat == AcpArchiveFormat.Zip ? "zip" : "tar.gz";
         var archiveName = $"node-{effectiveVersion}-{platform}-{architectureSegment}.{extension}";
         var rootDirectory = $"node-{effectiveVersion}-{platform}-{architectureSegment}";
-        var isWindows = operatingSystem == OSPlatform.Windows;
+        var isWindows = operatingSystem == AcpToolchainOperatingSystem.Windows;
 
         return new AcpToolchainDownload
         {
@@ -110,8 +109,8 @@ public static class AcpToolchainInstallSource
     /// on a musl host unpacks perfectly and then fails to exec.
     /// </remarks>
     public static AcpToolchainDownload? ResolveUv(
-        OSPlatform operatingSystem,
-        Architecture architecture,
+        AcpToolchainOperatingSystem operatingSystem,
+        AcpToolchainArchitecture architecture,
         bool preferMusl = false,
         string? version = null)
     {
@@ -126,7 +125,7 @@ public static class AcpToolchainInstallSource
             return null;
         }
 
-        var isWindows = operatingSystem == OSPlatform.Windows;
+        var isWindows = operatingSystem == AcpToolchainOperatingSystem.Windows;
         var archiveFormat = isWindows ? AcpArchiveFormat.Zip : AcpArchiveFormat.TarGzip;
         var archiveName = isWindows ? $"uv-{target}.zip" : $"uv-{target}.tar.gz";
         var archive = new Uri(
@@ -167,48 +166,48 @@ public static class AcpToolchainInstallSource
     /// and Windows-on-arm is served by its own native archive rather than by emulation.
     /// </remarks>
     private static string? ResolveUvTarget(
-        OSPlatform operatingSystem,
-        Architecture architecture,
+        AcpToolchainOperatingSystem operatingSystem,
+        AcpToolchainArchitecture architecture,
         bool preferMusl)
     {
-        if (operatingSystem == OSPlatform.Linux)
+        if (operatingSystem == AcpToolchainOperatingSystem.Linux)
         {
             return architecture switch
             {
-                Architecture.X64 => preferMusl
+                AcpToolchainArchitecture.X64 => preferMusl
                     ? "x86_64-unknown-linux-musl"
                     : "x86_64-unknown-linux-gnu",
-                Architecture.Arm64 => preferMusl
+                AcpToolchainArchitecture.Arm64 => preferMusl
                     ? "aarch64-unknown-linux-musl"
                     : "aarch64-unknown-linux-gnu",
-                Architecture.X86 => preferMusl
+                AcpToolchainArchitecture.X86 => preferMusl
                     ? "i686-unknown-linux-musl"
                     : "i686-unknown-linux-gnu",
                 // 32-bit ARM names its ABI in the triple, and the hard-float spelling differs per libc.
-                Architecture.Arm => preferMusl
+                AcpToolchainArchitecture.Arm => preferMusl
                     ? "armv7-unknown-linux-musleabihf"
                     : "armv7-unknown-linux-gnueabihf",
                 _ => null
             };
         }
 
-        if (operatingSystem == OSPlatform.OSX)
+        if (operatingSystem == AcpToolchainOperatingSystem.MacOS)
         {
             return architecture switch
             {
-                Architecture.X64 => "x86_64-apple-darwin",
-                Architecture.Arm64 => "aarch64-apple-darwin",
+                AcpToolchainArchitecture.X64 => "x86_64-apple-darwin",
+                AcpToolchainArchitecture.Arm64 => "aarch64-apple-darwin",
                 _ => null
             };
         }
 
-        if (operatingSystem == OSPlatform.Windows)
+        if (operatingSystem == AcpToolchainOperatingSystem.Windows)
         {
             return architecture switch
             {
-                Architecture.X64 => "x86_64-pc-windows-msvc",
-                Architecture.Arm64 => "aarch64-pc-windows-msvc",
-                Architecture.X86 => "i686-pc-windows-msvc",
+                AcpToolchainArchitecture.X64 => "x86_64-pc-windows-msvc",
+                AcpToolchainArchitecture.Arm64 => "aarch64-pc-windows-msvc",
+                AcpToolchainArchitecture.X86 => "i686-pc-windows-msvc",
                 _ => null
             };
         }
@@ -230,39 +229,39 @@ public static class AcpToolchainInstallSource
     /// Deliberately narrower than everything Node publishes. linux-ppc64le, linux-s390x and the musl
     /// variants exist but are not offered: this app has no test coverage on them, and a musl host needs the
     /// musl archive rather than the glibc one — a distinction this type cannot make from
-    /// <see cref="Architecture"/> alone, and getting it wrong yields a binary that unpacks and then refuses
+    /// the architecture alone, and getting it wrong yields a binary that unpacks and then refuses
     /// to exec.
     /// </remarks>
-    private static (string Platform, string Architecture)? ResolveNodeBuild(
-        OSPlatform operatingSystem,
-        Architecture architecture)
+    private static (string Platform, string ArchitectureSegment)? ResolveNodeBuild(
+        AcpToolchainOperatingSystem operatingSystem,
+        AcpToolchainArchitecture architecture)
     {
-        if (operatingSystem == OSPlatform.Linux)
+        if (operatingSystem == AcpToolchainOperatingSystem.Linux)
         {
             return architecture switch
             {
-                Architecture.X64 => ("linux", "x64"),
-                Architecture.Arm64 => ("linux", "arm64"),
+                AcpToolchainArchitecture.X64 => ("linux", "x64"),
+                AcpToolchainArchitecture.Arm64 => ("linux", "arm64"),
                 _ => null
             };
         }
 
-        if (operatingSystem == OSPlatform.OSX)
+        if (operatingSystem == AcpToolchainOperatingSystem.MacOS)
         {
             return architecture switch
             {
-                Architecture.X64 => ("darwin", "x64"),
-                Architecture.Arm64 => ("darwin", "arm64"),
+                AcpToolchainArchitecture.X64 => ("darwin", "x64"),
+                AcpToolchainArchitecture.Arm64 => ("darwin", "arm64"),
                 _ => null
             };
         }
 
-        if (operatingSystem == OSPlatform.Windows)
+        if (operatingSystem == AcpToolchainOperatingSystem.Windows)
         {
             return architecture switch
             {
-                Architecture.X64 => ("win", "x64"),
-                Architecture.Arm64 => ("win", "arm64"),
+                AcpToolchainArchitecture.X64 => ("win", "x64"),
+                AcpToolchainArchitecture.Arm64 => ("win", "arm64"),
                 _ => null
             };
         }
