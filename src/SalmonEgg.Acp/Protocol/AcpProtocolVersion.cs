@@ -48,7 +48,31 @@ namespace SalmonEgg.Acp.Protocol
             + "still a draft that a live client refuses to negotiate. Use AcpProtocolVersion.Default "
             + "for live connections.";
 
+        /// <summary>
+        /// The single protocol version a live client actually serves. ACP negotiates one version per
+        /// connection and both sides then "act according to its specification", so a client is
+        /// compliant while supporting exactly one version: this constant is that version, and it is
+        /// the authority both the initialize gate and the post-negotiation check answer to.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="HighestModeled"/> on purpose. Wire contracts are modeled ahead of
+        /// the runtime so draft shapes can be developed and asserted, and <see cref="IsSupported"/>
+        /// stays true for those modeled versions because a parser must keep reading them. Serving a
+        /// version is the stronger claim, and only this constant makes it.
+        /// </remarks>
+        public const int RuntimeServed = V1;
+
+        /// <summary>
+        /// Whether the SDK models the wire contracts of a version. Modeling is not serving: see
+        /// <see cref="RuntimeServed"/> for the version a live connection will actually run.
+        /// </summary>
         public static bool IsSupported(int version)
             => version is V1 or V2;
+
+        /// <summary>
+        /// Whether a live client will run this version end to end.
+        /// </summary>
+        public static bool IsRuntimeServed(int version)
+            => version == RuntimeServed;
     }
 }

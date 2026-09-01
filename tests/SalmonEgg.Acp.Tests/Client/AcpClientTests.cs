@@ -513,6 +513,16 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public void AcpProtocolVersion_RuntimeServed_IsTheStableDefaultAndNotTheModeledCeiling()
+        {
+            Assert.Equal(AcpProtocolVersion.V1, AcpProtocolVersion.RuntimeServed);
+            Assert.Equal(AcpProtocolVersion.Default, AcpProtocolVersion.RuntimeServed);
+            Assert.NotEqual(AcpProtocolVersion.HighestModeled, AcpProtocolVersion.RuntimeServed);
+            Assert.True(AcpProtocolVersion.IsRuntimeServed(AcpProtocolVersion.V1));
+            Assert.False(AcpProtocolVersion.IsRuntimeServed(AcpProtocolVersion.V2));
+        }
+
+        [Fact]
         public async Task InitializeAsync_WhenDisconnectedBeforeResponse_CancelsPendingInitialize()
         {
             var parser = new MessageParser();
@@ -788,6 +798,13 @@ namespace SalmonEgg.Acp.Tests.Client
                 ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
+            Assert.False(client.IsInitialized);
+
+            // The Agent answered v2, which the SDK models the wire contracts for. Rejecting it therefore
+            // has to rest on "this runtime does not serve v2", not on "the SDK cannot parse v2" - the
+            // latter is false and would let a future modeled version through.
+            Assert.True(AcpProtocolVersion.IsSupported(AcpProtocolVersion.V2));
+            Assert.False(AcpProtocolVersion.IsRuntimeServed(AcpProtocolVersion.V2));
         }
 
         [Fact]
