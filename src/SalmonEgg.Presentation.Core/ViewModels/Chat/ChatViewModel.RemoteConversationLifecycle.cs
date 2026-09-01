@@ -610,6 +610,24 @@ public partial class ChatViewModel
         }
         catch (Exception ex)
         {
+            if (AcpErrorClassifier.IsRequestCancelled(ex))
+            {
+                // A peer's -32800 is the terminal acknowledgement of cancellation, not a load
+                // fault. Release the temporary buffering lease but preserve the existing runtime
+                // projection and avoid publishing a failure callout that would outlive the action.
+                Logger.LogInformation(
+                    ex,
+                    "Remote hydration was cancelled by the peer. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    binding.RemoteSessionId);
+                ReleaseBufferedUpdatesAfterInterruptedHydration(
+                    adapter,
+                    hydrationAttemptId,
+                    ownsRecoveryLease,
+                    "RemoteHydrationPeerCancelled");
+                return false;
+            }
+
             if (IsActivationContextStale(activationVersion, cancellationToken))
             {
                 Logger.LogInformation(
@@ -1760,6 +1778,13 @@ public partial class ChatViewModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || _disposed)
         {
+        }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(
+                ex,
+                "Remote WebSocket recovery was cancelled by the peer. ConversationId={ConversationId}",
+                conversationId);
         }
         catch (Exception ex)
         {
