@@ -76,8 +76,10 @@ SalmonEgg.Acp.Protocol.ConfigOptionUpdate
 SalmonEgg.Acp.Protocol.ConfigOptionValue
 SalmonEgg.Acp.Protocol.ContentChunkUpdate
 SalmonEgg.Acp.Protocol.CurrentModeUpdate
+SalmonEgg.Acp.Protocol.CustomSessionState
 SalmonEgg.Acp.Protocol.EnvVariable
 SalmonEgg.Acp.Protocol.FsCapability
+SalmonEgg.Acp.Protocol.IdleSessionState
 SalmonEgg.Acp.Protocol.InitializeParams
 SalmonEgg.Acp.Protocol.InitializeResponse
 SalmonEgg.Acp.Protocol.LogoutCapabilities
@@ -91,6 +93,8 @@ SalmonEgg.Acp.Protocol.PlanUpdate
 SalmonEgg.Acp.Protocol.PromptCapabilities
 SalmonEgg.Acp.Protocol.ProtocolPathRules
 SalmonEgg.Acp.Protocol.ReadTextFileResult
+SalmonEgg.Acp.Protocol.RequiresActionSessionState
+SalmonEgg.Acp.Protocol.RunningSessionState
 SalmonEgg.Acp.Protocol.SessionAdditionalDirectoriesCapabilities
 SalmonEgg.Acp.Protocol.SessionCancelParams
 SalmonEgg.Acp.Protocol.SessionCapabilities
@@ -121,8 +125,11 @@ SalmonEgg.Acp.Protocol.SessionSetConfigOptionParams
 SalmonEgg.Acp.Protocol.SessionSetConfigOptionResponse
 SalmonEgg.Acp.Protocol.SessionSetModeParams
 SalmonEgg.Acp.Protocol.SessionSetModeResponse
+SalmonEgg.Acp.Protocol.SessionState
+SalmonEgg.Acp.Protocol.SessionStateKind
 SalmonEgg.Acp.Protocol.SessionUpdate
 SalmonEgg.Acp.Protocol.SessionUpdateParams
+SalmonEgg.Acp.Protocol.StateSessionUpdate
 SalmonEgg.Acp.Protocol.StopReason
 SalmonEgg.Acp.Protocol.TerminalCreateRequest
 SalmonEgg.Acp.Protocol.TerminalCreateResponse
