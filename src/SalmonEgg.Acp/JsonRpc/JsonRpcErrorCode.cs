@@ -41,6 +41,23 @@ namespace SalmonEgg.Acp.JsonRpc
 
         #endregion
 
+        #region JSON-RPC reserved codes outside the standard band
+
+        /// <summary>
+        /// -32800: Request cancelled
+        /// The method's execution was aborted, either because the caller sent
+        /// <c>$/cancel_request</c> or because of resource constraints or shutdown.
+        /// </summary>
+        /// <remarks>
+        /// Lives in the JSON-RPC reserved range (-32768 to -32000) but outside the standard
+        /// -32700..-32603 band, so it is neither a standard code nor an ACP extension code. Kept as
+        /// its own category rather than widening either band, which would silently reclassify every
+        /// unassigned code in between.
+        /// </remarks>
+        public const int Cancelled = -32800;
+
+        #endregion
+
         #region ACP extension error codes
 
         /// <summary>
@@ -108,6 +125,22 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
+        /// Determines whether an error code reports a cancelled request.
+        /// </summary>
+        /// <param name="code">The error code.</param>
+        /// <returns>true if the code is <see cref="Cancelled"/>.</returns>
+        /// <remarks>
+        /// A single code rather than a band, and deliberately not folded into
+        /// <see cref="IsStandardErrorCode"/> or <see cref="IsAcpErrorCode"/>: -32800 sits between
+        /// them, so extending either range to reach it would also swallow codes neither
+        /// specification has assigned.
+        /// </remarks>
+        public static bool IsCancelledErrorCode(int code)
+        {
+            return code == Cancelled;
+        }
+
+        /// <summary>
         /// Gets the standard error message for an error code.
         /// </summary>
         /// <param name="code">The error code.</param>
@@ -121,6 +154,7 @@ namespace SalmonEgg.Acp.JsonRpc
                 MethodNotFound => "Method not found",
                 InvalidParams => "Invalid params",
                 InternalError => "Internal error",
+                Cancelled => "Request cancelled",
                 PermissionDenied => "Permission denied",
                 ResourceNotFound => "Resource not found",
                 MethodNotAllowed => "Method not allowed",
