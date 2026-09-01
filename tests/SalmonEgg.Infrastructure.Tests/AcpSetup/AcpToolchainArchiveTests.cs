@@ -4,6 +4,7 @@ using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Infrastructure.Desktop.AcpSetup;
@@ -116,6 +117,65 @@ public sealed class AcpToolchainArchiveTests : IDisposable
     public void StripRoot_DeclaredRoot_ShouldRemoveOnlyTheLeadingDirectory()
         => Assert.Equal("bin/node", AcpToolchainArchive.StripRoot("node-v24/bin/node", "node-v24"));
 
+    /// <summary>
+    /// A crafted archive can declare a symlink and then a regular file at the same name: without a guard the
+    /// file's write would follow the link and land outside the destination.
+    /// </summary>
+    [Fact]
+    public async Task ExtractAsync_FileEntryOnASymlinkTheArchiveCreated_ShouldRefuseAndLeaveTheTargetUntouched()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symbolic links are created only on POSIX.");
+        var victim = Path.Combine(_root, "victim.txt");
+        File.WriteAllText(victim, "SAFE");
+        var archive = CreateMaliciousTar(victim, directoryLink: false);
+        var destination = Path.Combine(_root, "destination");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(
+            () => AcpToolchainArchive.ExtractAsync(archive, destination, RootlessTarDownload(), TestContext.Current.CancellationToken));
+
+        Assert.Contains("symbolic link", exception.Message);
+        Assert.Equal("SAFE", File.ReadAllText(victim));
+    }
+
+    /// <summary>
+    /// The same escape through a symlinked parent directory: the entry's own name is innocent, but the write
+    /// is redirected through the link's destination.
+    /// </summary>
+    [Fact]
+    public async Task ExtractAsync_FileEntryUnderASymlinkedDirectory_ShouldRefuseAndLeaveTheTargetUntouched()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symbolic links are created only on POSIX.");
+        var victimDirectory = Path.Combine(_root, "victim-dir");
+        Directory.CreateDirectory(victimDirectory);
+        var archive = CreateMaliciousTar(victimDirectory, directoryLink: true);
+        var destination = Path.Combine(_root, "destination");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(
+            () => AcpToolchainArchive.ExtractAsync(archive, destination, RootlessTarDownload(), TestContext.Current.CancellationToken));
+
+        Assert.Contains("symbolic link", exception.Message);
+        Assert.False(File.Exists(Path.Combine(victimDirectory, "child")));
+    }
+
+    /// <summary>
+    /// A hard link resolves its source before copying, so a source outside the destination would import
+    /// outside content into the install tree. It is refused rather than resolved.
+    /// </summary>
+    [Fact]
+    public async Task ExtractAsync_HardLinkPointingOutsideTheDestination_ShouldRefuse()
+    {
+        var victim = Path.Combine(_root, "victim.txt");
+        File.WriteAllText(victim, "SAFE");
+        var archive = CreateTarWithEscapingHardLink(victim);
+        var destination = Path.Combine(_root, "destination");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(
+            () => AcpToolchainArchive.ExtractAsync(archive, destination, RootlessTarDownload(), TestContext.Current.CancellationToken));
+
+        Assert.Contains("outside the destination", exception.Message);
+        Assert.False(File.Exists(Path.Combine(destination, "stolen")));
+    }
+
     private string CreateNodeStyleArchive()
     {
         var source = Path.Combine(_root, "source", "node-v24", "bin");
@@ -169,6 +229,60 @@ public sealed class AcpToolchainArchiveTests : IDisposable
         VerifyExecutables = new[] { "uv", "uvx" },
         VerifyCommand = "uv",
         VerifyArguments = new[] { "--version" }
+    };
+
+    /// <summary>
+    /// Builds a tar no filesystem could hold: a symlink entry followed by a write at (or under) the link's
+    /// name. Hand-assembled through <see cref="TarWriter"/> because creating it on disk first would already
+    /// perform the escape the guard exists to refuse.
+    /// </summary>
+    private string CreateMaliciousTar(string victim, bool directoryLink)
+    {
+        var archive = Path.Combine(_root, directoryLink ? "dir-link-escape.tar.gz" : "file-link-escape.tar.gz");
+        using var file = File.Create(archive);
+        using var gzip = new GZipStream(file, CompressionLevel.Fastest);
+        using var writer = new TarWriter(gzip);
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, directoryLink ? "out" : "escape")
+        {
+            LinkName = victim
+        });
+        WriteTarFileEntry(writer, directoryLink ? "out/child" : "escape", "PWNED");
+        return archive;
+    }
+
+    /// <summary>A hard-link entry whose source is an absolute path outside the destination.</summary>
+    private string CreateTarWithEscapingHardLink(string victim)
+    {
+        var archive = Path.Combine(_root, "hardlink-escape.tar.gz");
+        using var file = File.Create(archive);
+        using var gzip = new GZipStream(file, CompressionLevel.Fastest);
+        using var writer = new TarWriter(gzip);
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.HardLink, "stolen") { LinkName = victim });
+        return archive;
+    }
+
+    private static void WriteTarFileEntry(TarWriter writer, string name, string contents)
+    {
+        var entry = new PaxTarEntry(TarEntryType.RegularFile, name)
+        {
+            DataStream = new MemoryStream(Encoding.UTF8.GetBytes(contents))
+        };
+        writer.WriteEntry(entry);
+    }
+
+    /// <summary>A tar-gzip download model with no declared root, as the malicious archives are flat.</summary>
+    private static AcpToolchainDownload RootlessTarDownload() => new()
+    {
+        Archive = new Uri("https://example.invalid/malicious.tar.gz"),
+        Checksum = new Uri("https://example.invalid/malicious.tar.gz.sha256"),
+        ChecksumFormat = AcpChecksumFormat.SingleHash,
+        ArchiveFormat = AcpArchiveFormat.TarGzip,
+        RootDirectory = null,
+        BinSubdirectory = "bin",
+        VerifyExecutables = new[] { "node" },
+        VerifyCommand = "node"
     };
 
     private static AcpToolchainDownload Download() => new()

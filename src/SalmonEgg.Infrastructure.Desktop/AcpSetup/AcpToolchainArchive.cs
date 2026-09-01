@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
@@ -66,6 +67,11 @@ internal static class AcpToolchainArchive
         await using var gzip = new GZipStream(file, CompressionMode.Decompress);
         await using var reader = new TarReader(gzip);
 
+        // Every symbolic link inside the destination was created by this extraction — the destination is a
+        // fresh staging directory — so tracking them here is a complete picture of the tree's links.
+        var createdLinks = new HashSet<string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
         while (await reader.GetNextEntryAsync(copyData: false, cancellationToken).ConfigureAwait(false)
                is { } entry)
         {
@@ -80,6 +86,16 @@ internal static class AcpToolchainArchive
                     $"Archive entry '{entry.Name}' resolves outside the destination directory.");
             }
 
+            // Checked before any filesystem write of any entry kind: a parent that is a link would redirect
+            // even a directory creation, not just a file write.
+            EnsureWriteDoesNotTraverseLink(createdLinks, destination, target);
+
+            if (entry.EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink)
+            {
+                CreateLink(destination, createdLinks, target, entry.LinkName, entry.EntryType);
+                continue;
+            }
+
             if (entry.EntryType == TarEntryType.Directory)
             {
                 Directory.CreateDirectory(target);
@@ -87,16 +103,6 @@ internal static class AcpToolchainArchive
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-
-            // Links are recreated rather than extracted. TarEntry.ExtractToFile refuses a link entry
-            // outright ("Entry type 'SymbolicLink' not supported for extraction"), and Node's POSIX archive
-            // reaches this branch for npm and npx — so without this the whole install fails on the two
-            // launchers the wizard actually needs.
-            if (entry.EntryType is TarEntryType.SymbolicLink or TarEntryType.HardLink)
-            {
-                CreateLink(target, entry.LinkName, entry.EntryType);
-                continue;
-            }
 
             // ExtractToFile applies the entry's mode, which is what preserves the execute bit.
             await entry.ExtractToFileAsync(target, overwrite: true, cancellationToken).ConfigureAwait(false);
@@ -160,14 +166,23 @@ internal static class AcpToolchainArchive
     /// there instead would give it a different <c>__dirname</c> and break its own module resolution. Keeping
     /// it a link is what makes the extracted tree identical to a vendor-installed one.
     ///
-    /// The link target is deliberately not validated against the destination. It is written, not followed,
-    /// so it grants no write access outside the tree; and these archives use relative targets that only
-    /// resolve correctly once the whole tree is in place, which is not yet true while extracting.
+    /// The symbolic link's target is deliberately not validated against the destination. It is written, not
+    /// followed, so it grants no write access outside the tree — later entries that try to write through it
+    /// are refused by <see cref="EnsureWriteDoesNotTraverseLink"/>, which is why the link must be recorded
+    /// in <paramref name="createdLinks"/> here; and these archives use relative targets that only resolve
+    /// correctly once the whole tree is in place, which is not yet true while extracting.
     ///
     /// A hard link is created as a hard link when the source is already extracted — tar orders it that way —
-    /// and copied otherwise, since a hard link to a file that does not exist yet cannot be made.
+    /// and copied otherwise, since a hard link to a file that does not exist yet cannot be made. The copy
+    /// reads the resolved source, so a source outside the destination would import outside content into the
+    /// install: it is rejected rather than resolved.
     /// </remarks>
-    private static void CreateLink(string target, string? linkName, TarEntryType entryType)
+    private static void CreateLink(
+        string destination,
+        HashSet<string> createdLinks,
+        string target,
+        string? linkName,
+        TarEntryType entryType)
     {
         if (string.IsNullOrEmpty(linkName))
         {
@@ -183,14 +198,74 @@ internal static class AcpToolchainArchive
         if (entryType == TarEntryType.SymbolicLink)
         {
             File.CreateSymbolicLink(target, linkName);
+            createdLinks.Add(Path.GetFullPath(target));
             return;
         }
 
         var directory = Path.GetDirectoryName(target)!;
         var source = Path.GetFullPath(Path.Combine(directory, linkName));
+        var root = Path.GetFullPath(destination);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        if (!source.StartsWith(
+                rootWithSeparator,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Archive hard-link entry '{Path.GetFileName(target)}' points outside the destination directory.");
+        }
+
         if (File.Exists(source))
         {
             File.Copy(source, target, overwrite: true);
+        }
+    }
+
+    /// <summary>
+    /// Throws when <paramref name="target"/> or any parent directory on its way down from
+    /// <paramref name="destination"/> is a symbolic link the archive created earlier in this extraction.
+    /// </summary>
+    /// <remarks>
+    /// Resolving the entry's own name is not enough: a crafted archive can declare
+    /// <c>escape → /somewhere/outside</c> and then a regular file named <c>escape</c>, and the extractor's
+    /// write would follow the link and land outside the tree. The same holds for a symlinked parent —
+    /// <c>out → outside</c> then a file at <c>out/child</c> — which would redirect the write even though
+    /// the entry's own name is innocent. A digest attests to the archive's bytes, not to their safety, so
+    /// the shape itself is refused rather than trusted.
+    ///
+    /// Only links this extraction created are consulted, which is sound because the destination is a fresh
+    /// staging directory: every symlink in it came from an earlier entry of the same archive. Vendor
+    /// archives are unaffected — Node's links (<c>bin/npm</c>, <c>bin/npx</c>) are leaves that no later
+    /// entry names as a path component.
+    /// </remarks>
+    private static void EnsureWriteDoesNotTraverseLink(
+        HashSet<string> createdLinks,
+        string destination,
+        string target)
+    {
+        var current = Path.GetFullPath(destination);
+        var relative = Path.GetRelativePath(current, Path.GetFullPath(target));
+        if (relative is "." or "")
+        {
+            return;
+        }
+
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            if (segment.Length == 0)
+            {
+                continue;
+            }
+
+            current = Path.Combine(current, segment);
+            if (createdLinks.Contains(current))
+            {
+                throw new InvalidDataException(
+                    $"Archive entry '{Path.GetFileName(target)}' would be written through a symbolic link "
+                    + "the archive itself created.");
+            }
         }
     }
 
