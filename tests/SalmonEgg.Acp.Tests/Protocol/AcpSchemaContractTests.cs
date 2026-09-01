@@ -10,6 +10,50 @@ namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class AcpSchemaContractTests
 {
+    [Theory]
+    [InlineData("terminal", false)]
+    [InlineData("_vendor_x", false)]
+    [InlineData("future_thing", false)]
+    [InlineData("agent", true)]
+    public void AuthMethod_PreservesUnusableDiscriminatorVerbatim_WhileRefusingToUseIt(
+        string wireType,
+        bool expectedEligible)
+    {
+        var json = $$"""
+            { "id": "m", "name": "M", "type": "{{wireType}}" }
+            """;
+
+        var method = JsonSerializer.Deserialize(json, AcpJsonContext.Default.AuthMethodDefinition);
+
+        Assert.NotNull(method);
+        // Refusing to pass a method to authenticate must not degrade into rejecting or rewriting it:
+        // the raw discriminator stays intact so the agent, not this client, owns forward compatibility.
+        Assert.Equal(wireType, method!.Type);
+        Assert.Equal(wireType, method.ResolvedType);
+        Assert.Equal(expectedEligible, method.SupportsAuthenticateRequest);
+
+        var replay = JsonSerializer.Serialize(method, AcpJsonContext.Default.AuthMethodDefinition);
+        using var document = JsonDocument.Parse(replay);
+        Assert.Equal(wireType, document.RootElement.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void AuthMethod_WhenTypeIsAbsent_ResolvesToAgentWithoutSynthesizingTheField()
+    {
+        var method = JsonSerializer.Deserialize(
+            """{ "id": "m", "name": "M" }""",
+            AcpJsonContext.Default.AuthMethodDefinition);
+
+        Assert.NotNull(method);
+        Assert.Null(method!.Type);
+        Assert.Equal(AuthMethodDefinition.AgentType, method.ResolvedType);
+        Assert.True(method.SupportsAuthenticateRequest);
+
+        var replay = JsonSerializer.Serialize(method, AcpJsonContext.Default.AuthMethodDefinition);
+        using var document = JsonDocument.Parse(replay);
+        Assert.False(document.RootElement.TryGetProperty("type", out _));
+    }
+
     [Fact]
     public void SourceGeneratedContext_RoundTripsMetaAcrossRepresentativeOfficialTypes()
     {

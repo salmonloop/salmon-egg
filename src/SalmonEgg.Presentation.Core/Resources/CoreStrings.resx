@@ -1202,6 +1202,9 @@
   <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
     <value>Authentication failed: {0}</value>
   </data>
+  <data name="ChatAuth_UnsupportedMethodType" xml:space="preserve">
+    <value>The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect.</value>
+  </data>
   <data name="ChatPrompt_CancelFailed" xml:space="preserve">
     <value>Cancellation failed.</value>
   </data>

@@ -22,7 +22,39 @@ namespace SalmonEgg.Acp.Protocol
 
         public string Name { get; init; } = string.Empty;
 
+        /// <summary>
+        /// Discriminator for the ACP <c>AuthMethod</c> union. Absent means <see cref="AgentType"/>.
+        /// </summary>
         public string? Type { get; init; }
+
+        /// <summary>
+        /// Discriminator value for methods the agent handles itself through <c>authenticate</c>.
+        /// </summary>
+        public const string AgentType = "agent";
+
+        /// <summary>
+        /// Discriminator value for methods the client must run as a separate interactive process.
+        /// </summary>
+        public const string TerminalType = "terminal";
+
+        /// <summary>
+        /// The effective discriminator, applying the ACP default: a method with no <c>type</c>
+        /// is treated as <see cref="AgentType"/>.
+        /// </summary>
+        public string ResolvedType => string.IsNullOrWhiteSpace(Type) ? AgentType : Type;
+
+        /// <summary>
+        /// Whether this method may be passed to <c>authenticate</c>.
+        /// </summary>
+        /// <remarks>
+        /// Only <see cref="AgentType"/> (explicit or defaulted) qualifies. The ACP schema states that a
+        /// client MUST NOT pass an <c>AuthMethodTerminal</c> to <c>authenticate</c>, and every other
+        /// discriminator denotes a flow whose semantics this client does not implement; both are refused
+        /// so that an unrecognized or non-compliant advertisement cannot reach the wire. The comparison is
+        /// ordinal because the discriminator is a fixed wire literal, so any variant spelling is unknown.
+        /// </remarks>
+        public bool SupportsAuthenticateRequest
+            => string.Equals(ResolvedType, AgentType, StringComparison.Ordinal);
 
         [JsonPropertyName("description")]
         public string? Description { get; init; }

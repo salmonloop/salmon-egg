@@ -1202,6 +1202,9 @@
   <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
     <value>身份验证失败：{0}</value>
   </data>
+  <data name="ChatAuth_UnsupportedMethodType" xml:space="preserve">
+    <value>助手仅提供本应用无法执行的登录方式。请改用助手自带的命令行工具登录，然后重新连接。</value>
+  </data>
   <data name="ChatPrompt_CancelFailed" xml:space="preserve">
     <value>取消失败。</value>
   </data>
