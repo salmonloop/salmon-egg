@@ -206,8 +206,11 @@ namespace SalmonEgg.Acp.Client
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(@params);
+            // A modeled version is not a served version: the SDK carries draft v2 wire contracts so they
+            // can be developed and asserted, while this runtime runs exactly one version end to end.
+            // Ask the single authority rather than spelling out which version that is here.
             if (AcpProtocolVersion.IsSupported(@params.ProtocolVersion)
-                && @params.ProtocolVersion != AcpProtocolVersion.V1)
+                && !AcpProtocolVersion.IsRuntimeServed(@params.ProtocolVersion))
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
@@ -261,7 +264,13 @@ namespace SalmonEgg.Acp.Client
             var serverVersion = initializeResponse.ProtocolVersion;
             var clientVersion = @params.ProtocolVersion;
 
-            if (!AcpProtocolVersion.IsSupported(serverVersion) || serverVersion > clientVersion)
+            // ACP lets the Agent answer with an older version than requested, and requires the Client to
+            // close the connection when it does not support what the Agent chose. Being able to parse a
+            // version is not the same as being able to run it, so the downgrade target must be one this
+            // runtime actually serves; otherwise the connection would proceed under a version whose
+            // lifecycle is unimplemented. serverVersion > clientVersion stays rejected separately: an
+            // Agent must never answer above what the Client asked for.
+            if (!AcpProtocolVersion.IsRuntimeServed(serverVersion) || serverVersion > clientVersion)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
