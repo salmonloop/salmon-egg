@@ -1283,4 +1283,13 @@
   <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
     <value>System notification permission was not granted.</value>
   </data>
+  <data name="AcpSetup_Toolchain_PathRegistrationFailed" xml:space="preserve">
+    <value>工具链已安装，但未能更新 PATH。新开的终端可能需要手动配置 PATH。</value>
+  </data>
+  <data name="AcpSetup_Toolchain_UnsupportedPlatform" xml:space="preserve">
+    <value>当前平台没有该工具链的自动安装方式。请使用文档链接手动安装。</value>
+  </data>
+  <data name="AcpSetup_Toolchain_DownloadFailed" xml:space="preserve">
+    <value>工具链下载或校验失败。请检查网络连接，或使用文档链接手动安装。</value>
+  </data>
 </root>

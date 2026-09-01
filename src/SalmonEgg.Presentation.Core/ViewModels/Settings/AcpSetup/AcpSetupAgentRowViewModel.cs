@@ -111,6 +111,7 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanInstallHere))]
     [NotifyPropertyChangedFor(nameof(IsToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(CanInstallToolchainHere))]
     [NotifyPropertyChangedFor(nameof(MissingToolchainName))]
     [NotifyPropertyChangedFor(nameof(ToolchainMissingHint))]
     [NotifyPropertyChangedFor(nameof(ToolchainDocumentation))]
@@ -139,6 +140,18 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     /// </remarks>
     public bool IsToolchainMissing
         => HasAutomaticInstallPath && RuntimeToolchain?.IsMissing == true;
+
+    /// <summary>
+    /// True when the wizard could install the absent toolchain for this row.
+    /// </summary>
+    /// <remarks>
+    /// Narrower than <see cref="IsToolchainMissing"/>: a toolchain can be missing and still have no
+    /// published source, which is the state that must keep showing documentation rather than a button that
+    /// could only fail. The platform's own capability is the wizard's to check, not the row's, so this is
+    /// combined with it at the install site.
+    /// </remarks>
+    public bool CanInstallToolchainHere
+        => IsToolchainMissing && RuntimeToolchain!.Requirement.HasAutomaticInstallPath;
 
     /// <summary>Name of the absent toolchain, empty when none is absent. A vendor name, not localized.</summary>
     public string MissingToolchainName
@@ -253,6 +266,14 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     public event Action<AcpSetupAgentRowViewModel>? InstallRequested;
 
     public void RequestInstall() => InstallRequested?.Invoke(this);
+
+    /// <summary>
+    /// Raised when the user asks this row's missing toolchain to be installed. The owning wizard subscribes
+    /// because it owns the busy flag, output panel, and error surface. Null when nobody is listening.
+    /// </summary>
+    public event Action<AcpSetupAgentRowViewModel>? InstallToolchainRequested;
+
+    public void RequestToolchainInstall() => InstallToolchainRequested?.Invoke(this);
 
     /// <summary>
     /// Raised when the user asks for this row to be probed again, after supplying a custom path.

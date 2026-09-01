@@ -56,6 +56,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         {
             var row = new AcpSetupAgentRowViewModel(agent, _localizer);
             row.InstallRequested += InstallAgentRow;
+            row.InstallToolchainRequested += InstallAgentToolchain;
             row.VerifyRequested += VerifyAgentRow;
             Agents.Add(row);
         }
@@ -110,6 +111,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(GoBackCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallToolchainCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAgentsCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(TestCommand))]
@@ -128,11 +130,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallToolchainCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
     [NotifyPropertyChangedFor(nameof(AdapterProbeCommand))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
     // Read by IsAdapterToolchainMissing for the component's install path.
     [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainInstallable))]
     [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
@@ -177,6 +181,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     // IsAdapterToolchainMissing is gated on IsAdapterMissing, so it changes with the component probe as
     // well as with the toolchain probe. Both notify lists must raise it or the surface it gates goes stale.
     [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainInstallable))]
     [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
@@ -193,7 +198,9 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallToolchainCommand))]
     [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainInstallable))]
     [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
     [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
@@ -325,6 +332,20 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// <summary>Documentation for the adapter's absent toolchain, null when none is absent.</summary>
     public Uri? AdapterToolchainDocumentation
         => IsAdapterToolchainMissing ? AdapterToolchain!.Requirement.Documentation : null;
+
+    /// <summary>
+    /// True when the wizard can offer to install the adapter's absent toolchain itself.
+    /// </summary>
+    /// <remarks>
+    /// Three conditions, and each rules out a different wrong offer: the toolchain must actually be missing,
+    /// this app must publish a source for that particular toolchain, and this platform must be able to run
+    /// an installer. A toolchain with no source keeps the documentation link — the state that made the whole
+    /// step a dead end before, since the wizard's advice was to leave and come back.
+    /// </remarks>
+    public bool IsAdapterToolchainInstallable
+        => IsAdapterToolchainMissing
+            && AdapterToolchain!.Requirement.HasAutomaticInstallPath
+            && _orchestrator.SupportsToolchainInstall;
 
     /// <summary>
     /// Localized sentence naming the toolchain the adapter install needs, empty when it is present.
@@ -584,6 +605,70 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             },
             CancellationToken.None);
     }
+
+    /// <summary>
+    /// Installs the missing package-manager toolchain for one agent row. Like component installation, this
+    /// starts from the row's event because an ItemTemplate action has no command parameter of its own.
+    /// </summary>
+    private void InstallAgentToolchain(AcpSetupAgentRowViewModel row)
+    {
+        if (IsBusy || !row.CanInstallToolchainHere || !_orchestrator.SupportsToolchainInstall)
+        {
+            return;
+        }
+
+        ResetInstallOutput();
+        _ = RunOperationAsync(
+            async token =>
+            {
+                var overrides = CollectCommandOverrides();
+                var (install, toolchain) = await _orchestrator
+                    .InstallToolchainAsync(row.Agent.Runtime, AppendInstallOutput, overrides, token)
+                    .ConfigureAwait(false);
+
+                await _uiDispatcher.EnqueueAsync(() =>
+                {
+                    row.RuntimeToolchain = toolchain;
+                    ReportToolchainInstallFailure(install);
+                }).ConfigureAwait(false);
+            },
+            CancellationToken.None);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanInstallToolchain))]
+    private async Task InstallToolchainAsync(CancellationToken cancellationToken)
+    {
+        var adapter = SelectedAdapter;
+        if (adapter is null)
+        {
+            return;
+        }
+
+        ResetInstallOutput();
+        await RunOperationAsync(
+            async token =>
+            {
+                var overrides = CollectCommandOverrides();
+                var (install, toolchain) = await _orchestrator
+                    .InstallToolchainAsync(adapter.Component, AppendInstallOutput, overrides, token)
+                    .ConfigureAwait(false);
+
+                await _uiDispatcher.EnqueueAsync(() =>
+                {
+                    // A ComboBox change can land while the downloader is running; never apply an old
+                    // adapter's result to the newly selected one.
+                    if (ReferenceEquals(SelectedAdapter, adapter))
+                    {
+                        AdapterToolchain = toolchain;
+                        ReportToolchainInstallFailure(install);
+                    }
+                }).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool CanInstallToolchain()
+        => !IsBusy && IsAdapterToolchainInstallable;
 
     [RelayCommand(CanExecute = nameof(CanInstallAdapter))]
     private async Task InstallAdapterAsync(CancellationToken cancellationToken)
@@ -1232,6 +1317,29 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasInstallOutput));
     }
 
+    private void ReportToolchainInstallFailure(AcpToolchainInstallResult install)
+    {
+        if (!install.IsSuccess)
+        {
+            ErrorMessage = !string.IsNullOrEmpty(install.RemediationKey)
+                ? Localize(
+                    install.RemediationKey!,
+                    "Could not install the required toolchain. Use the documentation link to install it manually.")
+                : install.ErrorDetail ?? Localize(InstallFailedKey, "Installation failed.");
+            return;
+        }
+
+        // PATH registration makes future terminals convenient, but it does not decide whether Node is
+        // installed — the just-completed re-probe does. Tell the user about this partial result without
+        // turning a working setup into an error state.
+        if (install.PathRegistration == AcpPathRegistration.Failed)
+        {
+            ErrorMessage = Localize(
+                ToolchainPathRegistrationFailedKey,
+                "The toolchain was installed, but PATH could not be updated. New terminals may need manual PATH configuration.");
+        }
+    }
+
     /// <summary>
     /// Surfaces a failed install, preferring localized advice over the platform layer's raw detail.
     /// </summary>
@@ -1349,6 +1457,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         => CoreStringResolver.ResolveFormat(_localizer, key, fallbackFormat, arguments);
 
     private const string InstallFailedKey = "AcpSetup_Install_Failed";
+
+    private const string ToolchainPathRegistrationFailedKey = "AcpSetup_Toolchain_PathRegistrationFailed";
 
     private const string AdapterToolchainMissingKey = "AcpSetup_Adapter_ToolchainMissing";
 
