@@ -89,6 +89,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["VoiceInput_StopFailedWithDetail"] = "Failed to stop voice input: {0}",
         ["ChatAuth_Required"] = "The agent requires authentication before it can respond.",
         ["ChatAuth_FailedWithDetail"] = "Authentication failed: {0}",
+        ["ChatAuth_UnsupportedMethodType"] = "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect.",
         ["ChatPrompt_CancelFailed"] = "Cancellation failed.",
         ["VoiceDiagnostics_SignalMonitoringFailed"] = "Signal monitoring failed.",
         ["NewSessionDraft_LoadConfigFailed"] = "Unable to load session configuration. Check the connection and try again.",

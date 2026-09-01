@@ -2065,7 +2065,13 @@ public partial class ChatViewModel
                     detail),
                 ResourceKey: "ChatAuth_FailedWithDetail",
                 Fallback: "Authentication failed: {0}",
-                FormatArgs: [detail]));
+                FormatArgs: [detail]),
+            unsupportedMethodTypeFallback: new AuthenticationHintPresentation(
+                Localize(
+                    "ChatAuth_UnsupportedMethodType",
+                    "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect."),
+                ResourceKey: "ChatAuth_UnsupportedMethodType",
+                Fallback: "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect."));
 
     private Task AddMessageToHistoryAsync(string? conversationId, ContentBlock content, bool isOutgoing)
     {
