@@ -1138,7 +1138,7 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteStartObject();
             writer.WriteString("methodId", authMethod.Id);
             writer.WriteString("name", authMethod.Name);
-            writer.WriteString("type", string.IsNullOrWhiteSpace(authMethod.Type) ? "agent" : authMethod.Type);
+            writer.WriteString("type", authMethod.ResolvedType);
             if (!string.IsNullOrWhiteSpace(authMethod.Description))
             {
                 writer.WriteString("description", authMethod.Description);

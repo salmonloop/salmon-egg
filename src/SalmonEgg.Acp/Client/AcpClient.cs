@@ -716,6 +716,25 @@ namespace SalmonEgg.Acp.Client
                     "Agent does not advertise authentication methods");
             }
 
+            // The ACP schema requires methodId to name a method advertised during initialize, and forbids
+            // passing an AuthMethodTerminal to authenticate. Enforce both here so a non-compliant
+            // advertisement or a caller that skipped discrimination cannot put a forbidden id on the wire.
+            var advertised = _authMethods?
+                .FirstOrDefault(method => string.Equals(method.Id, @params.MethodId, StringComparison.Ordinal));
+            if (advertised is null)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.InvalidParams,
+                    $"Authentication method '{@params.MethodId}' was not advertised by the agent");
+            }
+
+            if (!advertised.SupportsAuthenticateRequest)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.MethodNotAllowed,
+                    $"Authentication method '{@params.MethodId}' has type '{advertised.ResolvedType}', which must not be passed to authenticate");
+            }
+
             var methodName = _protocolVersion == AcpProtocolVersion.V2 ? "auth/login" : "authenticate";
 
             var request = new JsonRpcRequest(

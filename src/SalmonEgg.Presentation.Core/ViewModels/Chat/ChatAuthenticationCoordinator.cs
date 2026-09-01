@@ -104,7 +104,8 @@ public sealed class ChatAuthenticationCoordinator
         Action<string> showTransientNotificationToast,
         CancellationToken cancellationToken,
         AuthenticationHintPresentation? requiredFallback = null,
-        Func<string, AuthenticationHintPresentation>? formatAuthenticationFailed = null)
+        Func<string, AuthenticationHintPresentation>? formatAuthenticationFailed = null,
+        AuthenticationHintPresentation? unsupportedMethodTypeFallback = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
@@ -116,13 +117,24 @@ public sealed class ChatAuthenticationCoordinator
         }
 
         var method = GetPrimaryAuthMethod();
-        if (method == null || string.IsNullOrWhiteSpace(method.Id))
+        if (method == null)
         {
+            // Fail closed: the agent may have advertised methods we are forbidden or unable to use.
+            // Report that as its own state instead of substituting an ineligible method.
+            var ineligible = GetMethodsIneligibleForAuthenticate();
+            if (ineligible.Count > 0)
+            {
+                logger.LogWarning(
+                    "Agent advertised no authentication method that may be passed to authenticate. ineligibleTypes={IneligibleTypes}",
+                    string.Join(", ", ineligible.Select(static candidate => candidate.ResolvedType)));
+            }
+
             MarkAuthenticationRequired(
                 coordinator,
                 logger,
                 showTransientNotificationToast,
-                method,
+                method: null,
+                messageOverride: ineligible.Count > 0 ? unsupportedMethodTypeFallback : null,
                 requiredFallback: requiredFallback);
             return false;
         }
@@ -173,8 +185,29 @@ public sealed class ChatAuthenticationCoordinator
     public static bool IsAuthenticationRequiredError(Exception ex)
         => ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
 
+    /// <summary>
+    /// Picks the first advertised method that may legally be passed to <c>authenticate</c>.
+    /// </summary>
+    /// <remarks>
+    /// A method is eligible only when it carries an id and its ACP <c>AuthMethod</c> discriminator resolves
+    /// to <see cref="AuthMethodDefinition.AgentType"/>. Terminal methods are excluded because the ACP schema
+    /// states a client MUST NOT pass them to <c>authenticate</c>; unrecognized discriminators are excluded
+    /// because their flow is undefined for this client. Ineligible methods must not be substituted for an
+    /// eligible one, so this returns null rather than degrading to the first entry.
+    /// </remarks>
     private AuthMethodDefinition? GetPrimaryAuthMethod()
-        => _advertisedAuthMethods?.FirstOrDefault(static method => !string.IsNullOrWhiteSpace(method.Id));
+        => _advertisedAuthMethods?.FirstOrDefault(static method =>
+            !string.IsNullOrWhiteSpace(method.Id) && method.SupportsAuthenticateRequest);
+
+    /// <summary>
+    /// Advertised methods carrying an id that this client must not pass to <c>authenticate</c>.
+    /// </summary>
+    private IReadOnlyList<AuthMethodDefinition> GetMethodsIneligibleForAuthenticate()
+        => _advertisedAuthMethods?
+            .Where(static method =>
+                !string.IsNullOrWhiteSpace(method.Id) && !method.SupportsAuthenticateRequest)
+            .ToArray()
+            ?? [];
 
     private static string? ResolveDisplayedAgentName(AgentInfo? agentInfo)
     {
