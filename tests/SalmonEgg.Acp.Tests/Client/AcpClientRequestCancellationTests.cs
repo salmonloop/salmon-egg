@@ -114,6 +114,33 @@ public sealed class AcpClientRequestCancellationTests
     }
 
     [Fact]
+    public async Task RequestWriteInProgress_WhenCallerCancels_SendsCancelRequestBecauseThePeerMayAlreadyHaveTheFrame()
+    {
+        using var client = await CreateInitializedClientAsync();
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>(async (message, token) =>
+            {
+                _sent.Enqueue(message); // Represents bytes accepted by the real pipe/socket.
+                writeStarted.TrySetResult();
+                await releaseWrite.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                return true;
+            });
+        using var cancellation = new CancellationTokenSource();
+
+        var pending = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+        await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await cancellation.CancelAsync();
+        releaseWrite.TrySetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        await WaitForSentNotificationAsync(CancelRequestParams.Method);
+    }
+
+    [Fact]
     public async Task UndispatchedRequest_WhenCancelledBeforeTheSendSucceeds_SendsNoCancelRequest()
     {
         // Nothing reached the peer, so there is no request for it to cancel.
