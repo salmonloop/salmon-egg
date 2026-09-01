@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
@@ -247,10 +248,31 @@ public sealed class AcpJsonContextTests
     }
 
     [Fact]
-    public void AcpProtocolVersion_DefaultAndLatest_ExposeStableAndHighestModeledVersions()
+    public void AcpProtocolVersion_DefaultAndHighestModeled_ExposeStableAndDraftVersions()
     {
         Assert.Equal(AcpProtocolVersion.V1, AcpProtocolVersion.Default);
-        Assert.Equal(AcpProtocolVersion.V2, AcpProtocolVersion.Latest);
+        Assert.Equal(AcpProtocolVersion.V2, AcpProtocolVersion.HighestModeled);
+    }
+
+    // "Latest" shipped in SalmonEgg.Acp 1.0.0, so package validation forbids removing it: the rename
+    // has to keep the old constant as an obsolete alias. Reading it through reflection rather than
+    // source keeps this assertion from tripping the SDK's warnings-as-errors on CS0618.
+    [Fact]
+    public void AcpProtocolVersion_Latest_IsObsoleteAliasOfHighestModeled()
+    {
+        var latest = typeof(AcpProtocolVersion).GetField(
+            "Latest",
+            BindingFlags.Public | BindingFlags.Static);
+
+        Assert.NotNull(latest);
+        Assert.Equal(AcpProtocolVersion.HighestModeled, Assert.IsType<int>(latest!.GetRawConstantValue()));
+
+        var obsolete = latest.GetCustomAttribute<ObsoleteAttribute>();
+        Assert.NotNull(obsolete);
+        Assert.False(obsolete!.IsError);
+        Assert.Equal(AcpProtocolVersion.LatestRenamedMessage, obsolete.Message);
+        Assert.Contains(nameof(AcpProtocolVersion.HighestModeled), obsolete.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(AcpProtocolVersion.Default), obsolete.Message, StringComparison.Ordinal);
     }
 
     [Fact]
