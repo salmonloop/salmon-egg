@@ -48,7 +48,8 @@ public sealed class AcpSetupWizardXamlTests
     }
     [Fact]
     public void Navigation_ExposesSecondarySkipAndAnnouncesDynamicStepPosition()
-    {        var document = XDocument.Parse(LoadXaml(WizardPath));
+    {
+        var document = XDocument.Parse(LoadXaml(WizardPath));
 
         var skip = FindByName(document, "AcpSetupSkipTestButton");
         Assert.Equal("AcpSetup_SkipTest", AttributeByLocalName(skip, "Uid"));
