@@ -98,6 +98,99 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task AuthenticateAsync_WhenMethodIsTerminalType_ThrowsWithoutSendingRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                authMethods:
+                [
+                    new AuthMethodDefinition
+                    {
+                        Id = "terminal-login",
+                        Name = "Terminal login",
+                        Type = AuthMethodDefinition.TerminalType
+                    }
+                ]);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.AuthenticateAsync(new AuthenticateParams("terminal-login"), TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("authenticate"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Theory]
+        [InlineData("_vendor_x")]
+        [InlineData("future_thing")]
+        public async Task AuthenticateAsync_WhenMethodTypeIsUnknown_ThrowsWithoutSendingRequest(string methodType)
+        {
+            var client = await CreateInitializedClientAsync(
+                authMethods:
+                [
+                    new AuthMethodDefinition
+                    {
+                        Id = "vendor-login",
+                        Name = "Vendor login",
+                        Type = methodType
+                    }
+                ]);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.AuthenticateAsync(new AuthenticateParams("vendor-login"), TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("authenticate"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task AuthenticateAsync_WhenMethodTypeIsAbsent_SendsRequestBecauseAgentIsTheDefault()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                authMethods:
+                [
+                    new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }
+                ]);
+
+            SetupJsonRpcResponse(
+                "authenticate",
+                ElementFromJson("{}"),
+                parser,
+                onSend: sentMessages.Enqueue);
+
+            var result = await client.AuthenticateAsync(
+                new AuthenticateParams("agent-login"),
+                TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            var request = parser.ParseRequest(Assert.Single(sentMessages));
+            Assert.Equal("authenticate", request.Method);
+            Assert.Equal("agent-login", request.Params!.Value.GetProperty("methodId").GetString());
+        }
+
+        [Fact]
+        public async Task AuthenticateAsync_WhenMethodIdWasNotAdvertised_ThrowsWithoutSendingRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                authMethods:
+                [
+                    new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }
+                ]);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.AuthenticateAsync(new AuthenticateParams("not-advertised"), TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("authenticate"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task LogoutAsync_WhenAgentDoesNotSupportLogout_ThrowsWithoutSendingRequest()
         {
             var client = await CreateInitializedClientAsync();

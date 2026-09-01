@@ -157,6 +157,7 @@ public sealed class CoreStringResourceTests
     [InlineData("VoiceInput_StopFailedWithDetail")]
     [InlineData("ChatAuth_Required")]
     [InlineData("ChatAuth_FailedWithDetail")]
+    [InlineData("ChatAuth_UnsupportedMethodType")]
     [InlineData("ChatPrompt_CancelFailed")]
     [InlineData("VoiceDiagnostics_SignalMonitoringFailed")]
     [InlineData("NewSessionDraft_LoadConfigFailed")]
