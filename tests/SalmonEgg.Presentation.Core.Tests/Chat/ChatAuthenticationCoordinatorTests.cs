@@ -74,6 +74,208 @@ public sealed class ChatAuthenticationCoordinatorTests
     }
 
     [Fact]
+    public async Task TryAuthenticateAsync_WhenOnlyMethodIsTerminalType_DoesNotCallAuthenticate()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(
+            new AuthMethodDefinition
+            {
+                Id = "terminal-login",
+                Name = "Terminal login",
+                Type = AuthMethodDefinition.TerminalType
+            }));
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        var notifications = new List<string>();
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            unsupportedMethodTypeFallback: UnsupportedMethodTypeHint);
+
+        Assert.False(result);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        Assert.Equal(["无法使用的登录方式"], notifications);
+        connectionCoordinator.Verify(coordinator => coordinator.SetAuthenticationRequiredAsync(
+            "无法使用的登录方式",
+            "ChatAuth_UnsupportedMethodType",
+            "Unsupported sign-in method",
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("_vendor_x")]
+    [InlineData("future_thing")]
+    public async Task TryAuthenticateAsync_WhenOnlyMethodTypeIsUnknown_DoesNotCallAuthenticate(string methodType)
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(
+            new AuthMethodDefinition
+            {
+                Id = "vendor-login",
+                Name = "Vendor login",
+                Type = methodType
+            }));
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        var notifications = new List<string>();
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            unsupportedMethodTypeFallback: UnsupportedMethodTypeHint);
+
+        Assert.False(result);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        Assert.Equal(["无法使用的登录方式"], notifications);
+    }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenMethodTypeIsAbsent_TreatsItAsAgentAndAuthenticates()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(
+            new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }));
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        service
+            .Setup(chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuthenticateResponse());
+        var notifications = new List<string>();
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            unsupportedMethodTypeFallback: UnsupportedMethodTypeHint);
+
+        Assert.True(result);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.Is<AuthenticateParams>(p => p.MethodId == "agent-login"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenTypeIsExplicitlyAgent_Authenticates()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(
+            new AuthMethodDefinition
+            {
+                Id = "agent-login",
+                Name = "Agent login",
+                Type = AuthMethodDefinition.AgentType
+            }));
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        service
+            .Setup(chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuthenticateResponse());
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            _ => { },
+            CancellationToken.None);
+
+        Assert.True(result);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.Is<AuthenticateParams>(p => p.MethodId == "agent-login"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenTerminalMethodPrecedesAgentMethod_SkipsTerminalAndUsesAgent()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(
+            new AuthMethodDefinition
+            {
+                Id = "terminal-login",
+                Name = "Terminal login",
+                Type = AuthMethodDefinition.TerminalType
+            },
+            new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }));
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        service
+            .Setup(chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuthenticateResponse());
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            _ => { },
+            CancellationToken.None);
+
+        Assert.True(result);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.Is<AuthenticateParams>(p => p.MethodId == "agent-login"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenAgentAdvertisesNothing_UsesRequiredFallbackNotUnsupportedHint()
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        var connectionCoordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        var notifications = new List<string>();
+
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            requiredFallback: new AuthenticationHintPresentation(
+                "需要认证",
+                ResourceKey: "ChatAuth_Required",
+                Fallback: "Authentication required"),
+            unsupportedMethodTypeFallback: UnsupportedMethodTypeHint);
+
+        Assert.False(result);
+        Assert.Equal(["需要认证"], notifications);
+    }
+
+    [Fact]
     public async Task TryAuthenticateAsync_WhenAuthenticateSucceeds_ClearsRequirement()
     {
         var sut = new ChatAuthenticationCoordinator();
@@ -215,5 +417,33 @@ public sealed class ChatAuthenticationCoordinatorTests
                 && arguments.Length == 1
                 && string.Equals(arguments[0] as string, "denied", StringComparison.Ordinal)),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static readonly AuthenticationHintPresentation UnsupportedMethodTypeHint = new(
+        "无法使用的登录方式",
+        ResourceKey: "ChatAuth_UnsupportedMethodType",
+        Fallback: "Unsupported sign-in method");
+
+    private static InitializeResponse CreateInitializeResponse(params AuthMethodDefinition[] authMethods)
+        => new()
+        {
+            ProtocolVersion = 1,
+            AgentInfo = new AgentInfo("agent", "1.0.0"),
+            AgentCapabilities = new AgentCapabilities(),
+            AuthMethods = [.. authMethods]
+        };
+
+    private static Mock<IAcpConnectionCoordinator> CreateConnectionCoordinator()
+    {
+        var coordinator = new Mock<IAcpConnectionCoordinator>();
+        coordinator
+            .Setup(instance => instance.SetAuthenticationRequiredAsync(
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<object[]?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        return coordinator;
     }
 }
