@@ -951,8 +951,7 @@ public sealed class NavigationCoreTests
         Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
     }
 
-
-        [Fact]
+    [Fact]
     public void ChatViewCodeBehind_DelegatesUserDetachIntentToViewportController()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
