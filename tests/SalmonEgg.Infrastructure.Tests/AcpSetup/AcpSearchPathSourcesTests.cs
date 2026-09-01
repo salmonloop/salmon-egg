@@ -50,11 +50,13 @@ public sealed class AcpSearchPathSourcesTests : IDisposable
     }
 
     /// <summary>
-    /// Without the CLI there is nothing that implements the printing mode, so the scan alone widens the
-    /// search rather than the wizard losing the widening altogether.
+    /// An explicitly absent provider leaves the scan as the only widening. The normal composition does
+    /// not take this branch: it falls back to the running desktop app, which implements the mode itself.
+    /// Keeping this injection seam matters because it proves a missing provider degrades to the scan
+    /// rather than making construction fail.
     /// </summary>
     [Fact]
-    public void Create_WithoutCli_ShouldStillProvideTheDiskScan()
+    public void Create_WithExplicitlyAbsentProvider_ShouldStillProvideTheDiskScan()
     {
         var sources = AcpSearchPathSources.Create(() => null);
 
@@ -62,11 +64,11 @@ public sealed class AcpSearchPathSourcesTests : IDisposable
     }
 
     /// <summary>
-    /// A CLI path that does not exist is treated as absent. Building a command around it would produce a
-    /// shell failure indistinguishable from a user's broken rc file.
+    /// A provider path that does not exist is treated as absent. Building a command around it would
+    /// produce a shell failure indistinguishable from a user's broken rc file.
     /// </summary>
     [Fact]
-    public void Create_WithMissingCliPath_ShouldStillProvideTheDiskScan()
+    public void Create_WithMissingProviderPath_ShouldStillProvideTheDiskScan()
     {
         var sources = AcpSearchPathSources.Create(() => Path.Combine(_root, "not-installed"));
 
@@ -84,13 +86,43 @@ public sealed class AcpSearchPathSourcesTests : IDisposable
             source => source is ToolchainScanSearchPathSource);
 
     /// <summary>
-    /// The option name is duplicated across a process boundary — the desktop app does not reference the
-    /// CLI — so this pins the two spellings together. If they drift, the capture silently stops working:
-    /// the shell runs the CLI, the CLI does not recognize the argument, and the probe reports nothing.
+    /// The factory and the writer share one constant now, so the protocol cannot drift merely because a
+    /// second executable was added. This pins its externally observed spelling.
     /// </summary>
     [Fact]
-    public void PrintEnvironmentOptionName_ShouldMatchTheCliSpelling()
+    public void PrintEnvironmentOptionName_ShouldBeStable()
         => Assert.Equal("--printenv", PrintEnvironmentCommandFactory.OptionName);
+
+    /// <summary>
+    /// A desktop-only install still has an executable that answers the printing protocol: this process.
+    /// Without that fallback nvm users lose the only source that can report their activated version.
+    /// </summary>
+    [Fact]
+    public void ResolvePrintEnvironmentExecutable_ShouldFallBackToAnExistingProcess()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows is deliberately not captured.");
+
+        var executable = AcpSearchPathSources.ResolvePrintEnvironmentExecutable();
+
+        Assert.False(string.IsNullOrWhiteSpace(executable));
+        Assert.True(File.Exists(executable));
+    }
+
+    /// <summary>
+    /// The normal composition includes the login shell source even without the separately packaged CLI,
+    /// because the desktop process can answer --printenv itself.
+    /// </summary>
+    [Fact]
+    public void Create_DefaultComposition_ShouldIncludeShellSourceOffWindows()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows is deliberately not captured.");
+
+        var sources = AcpSearchPathSources.Create();
+
+        Assert.Equal(2, sources.Count);
+        Assert.IsType<LoginShellSearchPathSource>(sources[0]);
+        Assert.IsType<ToolchainScanSearchPathSource>(sources[1]);
+    }
 
     /// <summary>
     /// The command quotes every path, because a shell parses the whole string and paths routinely contain

@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Cli.Hosting;
+namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 
 /// <summary>
-/// Source-generated serializer for the environment payload printed by <see cref="CliPrintEnvironment"/>.
+/// Source-generated serializer for the environment payload printed by
+/// <see cref="DesktopPrintEnvironment"/>.
 /// </summary>
 /// <remarks>
 /// Not indented: the payload is machine-read from a pipe, and keeping it on one line means a shell that
@@ -15,6 +16,6 @@ namespace SalmonEgg.Cli.Hosting;
 /// </remarks>
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified)]
 [JsonSerializable(typeof(Dictionary<string, string>))]
-internal partial class CliPrintEnvironmentJson : JsonSerializerContext
+internal partial class DesktopPrintEnvironmentJson : JsonSerializerContext
 {
 }
