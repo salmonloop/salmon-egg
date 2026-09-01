@@ -930,7 +930,7 @@ public partial class ChatViewModel
         // rapid session switching, not a real failure. Log it at Information and stop before surfacing
         // any user-facing failure, so these do not masquerade as [ERR] "Switching session failed".
         var superseded = !_conversationActivationOutcomePublisher.CanPublish(activationVersion);
-        var canceled = ex is OperationCanceledException;
+        var canceled = ex is OperationCanceledException || AcpErrorClassifier.IsRequestCancelled(ex);
         if (superseded || canceled)
         {
             Logger.LogInformation(
