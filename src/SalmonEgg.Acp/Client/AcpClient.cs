@@ -963,6 +963,8 @@ namespace SalmonEgg.Acp.Client
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[requestIdStr] = tcs;
+            var dispatched = false;
+            var retainPendingRequest = false;
 
             try
             {
@@ -974,6 +976,7 @@ namespace SalmonEgg.Acp.Client
                     throw new InvalidOperationException(CreateTransportSendFailureMessage(request.Method));
                 }
 
+                dispatched = true;
                 using var cancellationRegistration = cancellationToken.Register(
                     static state => ((TaskCompletionSource<JsonRpcResponse>)state!).TrySetCanceled(),
                     tcs);
@@ -996,6 +999,18 @@ namespace SalmonEgg.Acp.Client
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 AcpActivitySources.MarkCancelled(activity);
+
+                // A caller can abandon its own await immediately, but the matching response still
+                // belongs in _pendingRequests: ACP requires the peer to send a terminal response
+                // for the original request (possibly -32800), and OnMessageReceived owns removing
+                // that correlation entry. Do not use the caller's already-cancelled token here —
+                // cancelling a request must itself reach the peer.
+                if (dispatched && AcpRequestId.TryFromEnvelopeId(request.Id, out var requestId))
+                {
+                    retainPendingRequest = true;
+                    await SendCancelRequestNotificationAsync(requestId).ConfigureAwait(false);
+                }
+
                 throw new OperationCanceledException(cancellationToken);
             }
             catch (TaskCanceledException ex)
@@ -1019,7 +1034,55 @@ namespace SalmonEgg.Acp.Client
             }
             finally
             {
-                _pendingRequests.TryRemove(requestIdStr, out _);
+                if (!retainPendingRequest)
+                {
+                    _pendingRequests.TryRemove(requestIdStr, out _);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sends the protocol-level <c>$/cancel_request</c> notification for an already dispatched
+        /// outbound request.
+        /// </summary>
+        /// <remarks>
+        /// This is deliberately best-effort: ACP permits a peer to ignore <c>$/</c> notifications,
+        /// so a failed cancellation notification must not turn a caller's cancellation into a second
+        /// user-facing error. The original request remains pending until its terminal response or a
+        /// disconnect resolves it.
+        /// </remarks>
+        private async Task SendCancelRequestNotificationAsync(AcpRequestId requestId)
+        {
+            if (!_transport.IsConnected)
+            {
+                return;
+            }
+
+            try
+            {
+                var notification = new JsonRpcNotification(
+                    CancelRequestParams.Method,
+                    ToElement(
+                        new CancelRequestParams(requestId),
+                        AcpJsonContext.Default.CancelRequestParams));
+                var sent = await _transport.SendMessageAsync(_parser.SerializeMessage(notification)).ConfigureAwait(false);
+                if (!sent)
+                {
+                    _logger.Log(
+                        AcpClientLogLevel.Warning,
+                        "CANCEL_REQUEST_SEND_FAILED",
+                        $"Failed to send $/cancel_request for request {requestId}.",
+                        nameof(SendCancelRequestNotificationAsync));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "CANCEL_REQUEST_SEND_FAILED",
+                    $"Failed to send $/cancel_request for request {requestId}: {ex.Message}",
+                    nameof(SendCancelRequestNotificationAsync),
+                    ex);
             }
         }
 
@@ -1110,9 +1173,21 @@ namespace SalmonEgg.Acp.Client
                 {
                     var responseIdStr = response.Id?.ToString() ?? string.Empty;
                     // Match the pending request.
-                    if (_pendingRequests.TryRemove(responseIdStr, out var tcs))
+                    if (_pendingRequests.TryRemove(responseIdStr, out var tcs)
+                        && !tcs.TrySetResult(response))
                     {
-                        tcs.TrySetResult(response);
+                        // The entry was still correlated, so the only thing that can already have
+                        // completed it is the caller's own cancellation: this is the terminal
+                        // response ACP requires the peer to send for a cancelled request (a partial
+                        // result, or -32800). Nobody is awaiting it, so record the outcome and let
+                        // the removal above close the correlation rather than dropping it silently.
+                        _logger.Log(
+                            AcpClientLogLevel.Information,
+                            "CANCELLED_REQUEST_SETTLED",
+                            response.IsError
+                                ? $"Cancelled request {responseIdStr} was settled by the peer with error {response.Error!.Code} ({JsonRpcErrorCode.GetErrorMessage(response.Error.Code)})."
+                                : $"Cancelled request {responseIdStr} was settled by the peer with a result.",
+                            nameof(OnMessageReceived));
                     }
                 }
 
