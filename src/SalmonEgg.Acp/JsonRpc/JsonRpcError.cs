@@ -116,5 +116,19 @@ namespace SalmonEgg.Acp.JsonRpc
         {
             return JsonRpcErrorCode.IsAcpErrorCode(Code);
         }
+
+        /// <summary>
+        /// Determines whether this error reports a cancelled request (<c>-32800</c>), the terminal
+        /// response a peer sends for a request cancelled via <c>$/cancel_request</c>.
+        /// </summary>
+        /// <returns><c>true</c> if the error code is <see cref="JsonRpcErrorCode.Cancelled"/>.</returns>
+        /// <remarks>
+        /// Neither <see cref="IsStandardError"/> nor <see cref="IsAcpError"/> covers this code; see
+        /// <see cref="JsonRpcErrorCode.IsCancelledErrorCode"/> for why it is its own category.
+        /// </remarks>
+        public bool IsCancelled()
+        {
+            return JsonRpcErrorCode.IsCancelledErrorCode(Code);
+        }
     }
 }
