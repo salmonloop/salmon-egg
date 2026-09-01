@@ -20,7 +20,7 @@ public class TelemetryManagerTests
             ServiceName = "Test"
         };
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(settings, factory);
+        using var manager = new TelemetryManager(settings, factory);
 
         // Act & Assert
         var exception = Record.Exception(() => manager.Reconfigure(settings));
@@ -42,7 +42,7 @@ public class TelemetryManagerTests
             Sampling = SamplingSettings.CreateDesktopDefaults()
         };
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(settings, factory);
+        using var manager = new TelemetryManager(settings, factory);
 
         // Act
         manager.Reconfigure(settings);
@@ -59,7 +59,7 @@ public class TelemetryManagerTests
         // Arrange
         var settings = new TelemetrySettings { Enabled = false, ServiceName = "Test" };
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(settings, factory);
+        using var manager = new TelemetryManager(settings, factory);
 
         // Act & Assert
         var exception = Record.Exception(() => manager.Shutdown());
@@ -97,7 +97,7 @@ public class TelemetryManagerTests
     {
         // 容器以"未激活"配置构造 manager，真实配置随后 apply——这就是启动装配的唯一形态。
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
+        using var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
         Assert.False(manager.IsEnabled);
 
         manager.Reconfigure(CreateEnabledSettings("http://localhost:4318"));
@@ -111,7 +111,7 @@ public class TelemetryManagerTests
     public void Reconfigure_ToDisabled_TearsDownWithoutRebuilding()
     {
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
+        using var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
         manager.Reconfigure(CreateEnabledSettings("http://localhost:4318"));
 
         manager.Reconfigure(new TelemetrySettings { Enabled = false, ServiceName = "Test" });
@@ -139,7 +139,7 @@ public class TelemetryManagerTests
         // 直接测 DynamicTelemetryLoggerProvider 覆盖不到 manager 到它之间的这条接线。
         var factory = new TestTelemetryExporterFactory();
         using var loggerProvider = new DynamicTelemetryLoggerProvider(factory);
-        var manager = new TelemetryManager(
+        using var manager = new TelemetryManager(
             TelemetrySettings.CreateInactiveBootstrap(),
             factory,
             loggerProvider);
@@ -158,7 +158,7 @@ public class TelemetryManagerTests
         // 用户关掉开关后不得再为 Logs 维度装配导出器，否则日志仍会外发。
         var factory = new TestTelemetryExporterFactory();
         using var loggerProvider = new DynamicTelemetryLoggerProvider(factory);
-        var manager = new TelemetryManager(
+        using var manager = new TelemetryManager(
             TelemetrySettings.CreateInactiveBootstrap(),
             factory,
             loggerProvider);
@@ -176,7 +176,7 @@ public class TelemetryManagerTests
         // 否则用户"关了再开"会得到一个静默失效的遥测管线。
         var factory = new TestTelemetryExporterFactory();
         using var loggerProvider = new DynamicTelemetryLoggerProvider(factory);
-        var manager = new TelemetryManager(
+        using var manager = new TelemetryManager(
             TelemetrySettings.CreateInactiveBootstrap(),
             factory,
             loggerProvider);
@@ -202,7 +202,7 @@ public class TelemetryManagerTests
     public void Reconfigure_WhenReplacementBuildFails_KeepsCurrentPipelineAndAllowsRetry()
     {
         var factory = new TestTelemetryExporterFactory();
-        var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
+        using var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
         manager.Reconfigure(CreateEnabledSettings("http://first.example.com:4318"));
         var originalTracer = manager.TracerProvider;
         var originalMeter = manager.MeterProvider;
