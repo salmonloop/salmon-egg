@@ -8290,6 +8290,53 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_WhenPeerSettlesWithCancelledError_ProjectsCancelledTurnWithoutFailure()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var commands = new Mock<IAcpConnectionCommands>(MockBehavior.Strict);
+        commands.Setup(x => x.EnsureRemoteSessionAsync(
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AcpRemoteSessionResult("remote-1", new SessionNewResponse("remote-1"), false));
+        commands.Setup(x => x.DispatchPromptToRemoteSessionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<Func<CancellationToken, Task<bool>>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, string?, IAcpChatCoordinatorSink, Func<CancellationToken, Task<bool>>, CancellationToken>(
+                async (_, _, _, sink, _, cancellationToken) =>
+                {
+                    await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
+                    throw new AcpException(JsonRpcErrorCode.Cancelled, "Request cancelled");
+                });
+
+        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        var viewModel = fixture.ViewModel;
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object, TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+        });
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+        await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "cancelled by peer");
+
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
+        syncContext.RunAll();
+
+        var state = await fixture.GetStateAsync();
+        Assert.Equal(ChatTurnPhase.Cancelled, state.ActiveTurn!.Phase);
+        Assert.True(string.IsNullOrWhiteSpace(state.ActiveTurn.FailureMessage));
+        Assert.False(viewModel.IsTurnFailureVisible);
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.TurnFailureMessage));
+        Assert.True(string.IsNullOrWhiteSpace(viewModel.ErrorMessage));
+        Assert.False(viewModel.ShowTransientNotification);
+    }
+
+    [Fact]
     public async Task CancelPromptCommand_WhenSubmitIsCancelledBeforeDispatch_DoesNotSendPrompt()
     {
         var syncContext = new QueueingSynchronizationContext();

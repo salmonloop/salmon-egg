@@ -84,6 +84,10 @@ public partial class ChatViewModel
             await BindLocalConversationToRemoteSessionAsync(localConversationId, response.SessionId).ConfigureAwait(false);
             await ApplyCreatedSessionProjectionAsync(localConversationId, response).ConfigureAwait(true);
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(ex, "Create session was cancelled by the peer");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to create session");
@@ -142,6 +146,13 @@ public partial class ChatViewModel
         catch (OperationCanceledException)
         {
             // User-cancelled; keep input cleared.
+            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            // The peer settled the prompt with JSON-RPC -32800. ACP cancellation is terminal but
+            // not a user-actionable failure, so it follows the same state path as caller-token
+            // cancellation rather than leaving a persistent failure callout.
             await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -1413,6 +1424,11 @@ public partial class ChatViewModel
                     mode.ModeId).ConfigureAwait(true);
             }
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(ex, "Mode switch was cancelled by the peer");
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+        }
         catch (Exception ex) when (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
         {
             // The remote session no longer exists on the agent side.
@@ -1500,6 +1516,11 @@ public partial class ChatViewModel
                 activeBinding.RemoteSessionId!,
                 modelValue).ConfigureAwait(true);
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(ex, "Model switch was cancelled by the peer");
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch model");
@@ -1559,6 +1580,10 @@ public partial class ChatViewModel
                 await _chatService.CancelSessionAsync(cancelParams);
             }
         }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(ex, "Session cancellation was acknowledged as cancelled by the peer");
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to cancel session");
@@ -1602,6 +1627,10 @@ public partial class ChatViewModel
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
             _panelStateCoordinator.ClearAskUserRequests();
             PendingAskUserRequest = null;
+        }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            Logger.LogInformation(ex, "Disconnect was cancelled by the peer");
         }
         catch (Exception ex)
         {

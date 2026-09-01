@@ -6,6 +6,9 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 
 public static class AcpErrorClassifier
 {
+    public static bool IsRequestCancelled(Exception ex) =>
+        ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.Cancelled;
+
     public static bool IsAuthenticationRequired(Exception ex) =>
         ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
 

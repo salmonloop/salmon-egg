@@ -7,6 +7,23 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 public sealed class AcpErrorClassifierTests
 {
+    [Fact]
+    public void IsRequestCancelled_WhenCancelledErrorCode_ReturnsTrue()
+    {
+        var ex = new AcpException(JsonRpcErrorCode.Cancelled, "Request cancelled");
+
+        Assert.True(AcpErrorClassifier.IsRequestCancelled(ex));
+    }
+
+    [Theory]
+    [InlineData(JsonRpcErrorCode.InternalError)]
+    [InlineData(JsonRpcErrorCode.PermissionDenied)]
+    [InlineData(JsonRpcErrorCode.ResourceNotFound)]
+    public void IsRequestCancelled_WhenErrorIsNotCancelled_ReturnsFalse(int errorCode)
+    {
+        Assert.False(AcpErrorClassifier.IsRequestCancelled(new AcpException(errorCode, "not cancelled")));
+    }
+
     [Theory]
     [InlineData(JsonRpcErrorCode.ResourceNotFound)]
     public void IsRemoteSessionNotFound_WhenKnownErrorCodes_ReturnsTrue(int errorCode)
