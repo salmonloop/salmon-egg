@@ -613,6 +613,92 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ChatModeSelection_WhenViewModelIsDisposedMidFlight_DoesNotEscapeCancellationToTheThreadPool()
+    {
+        // Regression: SelectChatModeDisplayCommand dispatches SetModeCommand as fire-and-forget,
+        // so AsyncRelayCommand rethrows any fault on the thread pool (async void). Disposing the
+        // ViewModel while the failure-recovery projection is still queued used to surface the
+        // store-subscription lifetime cancellation as an unhandled TaskCanceledException, which
+        // aborts the whole test host (SIGABRT) instead of failing a single test.
+        var escaped = new List<Exception>();
+        var previousContext = SynchronizationContext.Current;
+        var syncContext = new QueueingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(new EscapedExceptionRecordingSynchronizationContext(escaped));
+        try
+        {
+            var fixture = CreateViewModel(syncContext, localizer: new TestCoreStringLocalizer());
+            var viewModel = fixture.ViewModel;
+            var chatService = CreateConnectedChatService();
+            chatService
+                .Setup(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
+                .ThrowsAsync(new InvalidOperationException("mode-denied"));
+            viewModel.ReplaceChatService(chatService.Object);
+
+            await fixture.UpdateStateAsync(state => state with
+            {
+                HydratedConversationId = "conv-1",
+                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                    .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+                ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                    .Add("conv-1", new ConversationSessionStateSlice(
+                        ImmutableList.Create(
+                            new ConversationModeOptionSnapshot
+                            {
+                                ModeId = "code",
+                                ModeName = "Code",
+                                Description = string.Empty
+                            },
+                            new ConversationModeOptionSnapshot
+                            {
+                                ModeId = "ask",
+                                ModeName = "Ask",
+                                Description = string.Empty
+                            }),
+                        SelectedModeId: "code",
+                        ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                        ShowConfigOptionsPanel: false,
+                        AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                        SessionInfo: null,
+                        Usage: null))
+            });
+            SetCurrentSessionId(viewModel, "conv-1");
+            SetCurrentRemoteSessionId(viewModel, "remote-1");
+            viewModel.IsConnected = true;
+            viewModel.IsSessionActive = true;
+            await fixture.ApplyCurrentStoreProjectionAsync();
+            syncContext.RunAll();
+
+            var ask = viewModel.ChatModeSelectorItems.Single(item => item.SemanticValue == "ask");
+            viewModel.SelectChatModeDisplayCommand.Execute(ask);
+
+            // Pump until the remote failure is published, which leaves the recovery projection
+            // parked on the UI queue while the store-subscription token is still alive.
+            await WaitForConditionAsync(() =>
+            {
+                syncContext.RunAll();
+                return Task.FromResult(viewModel.HasConversationOperationFailure);
+            });
+            await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
+
+            await fixture.DisposeAsync();
+            syncContext.RunAll();
+
+            var modeCommandTask = viewModel.SetModeCommand.ExecutionTask;
+            if (modeCommandTask is not null)
+            {
+                await WaitForConditionAsync(() => Task.FromResult(modeCommandTask.IsCompleted));
+            }
+
+            Assert.False(modeCommandTask?.IsFaulted);
+            Assert.Empty(escaped);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    [Fact]
     public async Task LanguageChanged_WhenAuthenticationHintIsHeld_ReprojectsLocalizedMessage()
     {
         // Arrange
@@ -5170,6 +5256,47 @@ public partial class ChatViewModelTests
         runtimeState.IsSessionActivationInProgress = false;
 
         Assert.True(projectedAvailability[^1]);
+    }
+
+    /// <summary>
+    /// Stands in for the app's real dispatcher context so that anything an <c>async void</c>
+    /// continuation rethrows (notably <see cref="CommunityToolkit.Mvvm.Input.AsyncRelayCommand"/>'s
+    /// fire-and-forget rethrow) is recorded instead of tearing down the test host.
+    /// </summary>
+    private sealed class EscapedExceptionRecordingSynchronizationContext : SynchronizationContext
+    {
+        private readonly List<Exception> _escaped;
+
+        public EscapedExceptionRecordingSynchronizationContext(List<Exception> escaped)
+            => _escaped = escaped;
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            ArgumentNullException.ThrowIfNull(d);
+
+            ThreadPool.UnsafeQueueUserWorkItem(
+                _ =>
+                {
+                    try
+                    {
+                        d(state);
+                    }
+                    catch (Exception ex)
+                    {
+                        lock (_escaped)
+                        {
+                            _escaped.Add(ex);
+                        }
+                    }
+                },
+                null);
+        }
+
+        public override void Send(SendOrPostCallback d, object? state)
+        {
+            ArgumentNullException.ThrowIfNull(d);
+            d(state);
+        }
     }
 
     private sealed class QueueingSynchronizationContext : SynchronizationContext, IUiDispatcher
