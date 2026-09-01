@@ -70,6 +70,9 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(AgentWholeMessageUpdate), "agent_message")]
     [JsonDerivedType(typeof(UserWholeMessageUpdate), "user_message")]
     [JsonDerivedType(typeof(AgentWholeThoughtUpdate), "agent_thought")]
+    [JsonDerivedType(typeof(TerminalSessionUpdate), "terminal_update")]
+    [JsonDerivedType(typeof(TerminalOutputChunkSessionUpdate), "terminal_output_chunk")]
+    [JsonDerivedType(typeof(ToolCallContentChunkUpdate), "tool_call_content_chunk")]
     public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
@@ -146,13 +149,24 @@ namespace SalmonEgg.Acp.Protocol
                 // JsonIgnore keeps HasContent off the wire, which also means STJ never populates it.
                 // Without this the three-state contract would be a lie: every whole-message update
                 // would look like "content absent", so a null content could not be told from no change.
-                if (update is WholeMessageUpdate wholeMessage)
+                // JsonIgnore keeps the presence flags off the wire, which also means STJ never populates
+                // them. Without this the patch contracts would be a lie: every optional field would read
+                // as absent, so an explicit null could not be told from "leave unchanged".
+                update = update switch
                 {
-                    update = wholeMessage with
+                    WholeMessageUpdate wholeMessage => wholeMessage with
                     {
                         HasContent = updateElement.TryGetProperty("content", out _)
-                    };
-                }
+                    },
+                    TerminalSessionUpdate terminal => terminal with
+                    {
+                        HasCommand = updateElement.TryGetProperty("command", out _),
+                        HasCwd = updateElement.TryGetProperty("cwd", out _),
+                        HasOutput = updateElement.TryGetProperty("output", out _),
+                        HasExitStatus = updateElement.TryGetProperty("exitStatus", out _)
+                    },
+                    _ => update
+                };
                 if (update is not null
                     && update.GetType() == typeof(SessionUpdate)
                     && updateElement.TryGetProperty("sessionUpdate", out var kindElement))
@@ -287,6 +301,29 @@ namespace SalmonEgg.Acp.Protocol
             AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
+    }
+
+    /// <summary>
+    /// V2 <c>tool_call_content_chunk</c>: one content item appended to a tool call already in flight.
+    /// </summary>
+    /// <remarks>
+    /// Appends rather than replaces, which is what makes streaming tool output possible in v2: a
+    /// <c>tool_call_update</c> carrying <c>content</c> replaces the whole array, so streaming through it
+    /// would require resending everything produced so far on every fragment.
+    /// </remarks>
+    public sealed record ToolCallContentChunkUpdate : SessionUpdate
+    {
+        /// <summary>
+        /// The tool call this content belongs to. Required by the protocol.
+        /// </summary>
+        [JsonPropertyName("toolCallId")]
+        public string ToolCallId { get; init; } = string.Empty;
+
+        /// <summary>
+        /// The single content item to append. Required by the protocol.
+        /// </summary>
+        [JsonPropertyName("content")]
+        public ToolCallContent? Content { get; init; }
     }
 
     /// <summary>
