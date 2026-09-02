@@ -56,7 +56,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(TerminalAuthCapabilities))]
 [JsonSerializable(typeof(ToolCallPermissionSubject))]
 [JsonSerializable(typeof(CommandPermissionSubject))]
-[JsonSerializable(typeof(SalmonEgg.Acp.Protocol.SessionState))]
+[JsonSerializable(typeof(SalmonEgg.Acp.Protocol.SessionWorkState))]
 [JsonSerializable(typeof(StateSessionUpdate))]
 [JsonSerializable(typeof(AgentWholeMessageUpdate))]
 [JsonSerializable(typeof(UserWholeMessageUpdate))]

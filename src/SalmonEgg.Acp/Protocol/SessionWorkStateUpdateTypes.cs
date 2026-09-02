@@ -12,7 +12,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <para>
     /// This is the v2 replacement for v1's terminal <c>session/prompt</c> response: in v2 the prompt
     /// response is a bare acknowledgement, and a turn ends when the Agent reports
-    /// <see cref="SessionStateKind.Idle"/> carrying the <see cref="IdleSessionState.StopReason"/>.
+    /// <see cref="SessionWorkStateKind.Idle"/> carrying the <see cref="IdleSessionWorkState.StopReason"/>.
     /// </para>
     /// <para>
     /// The wire form is doubly flattened. <c>state</c> and the payload fields are siblings of the
@@ -26,9 +26,15 @@ namespace SalmonEgg.Acp.Protocol
     /// <c>_</c> are reserved for future ACP variants, so a client must preserve rather than reject
     /// them.
     /// </para>
+    /// <para>
+    /// Named for the work it describes rather than the bare <c>SessionState</c> the schema field
+    /// suggests: <c>SalmonEgg.Domain.Models.Session.SessionState</c> is an unrelated lifecycle enum,
+    /// and the two namespaces are imported together across the chat layer. A shared short name there
+    /// is an ambiguous reference, not a stylistic preference.
+    /// </para>
     /// </remarks>
-    [JsonConverter(typeof(SessionStateJsonConverter))]
-    public abstract record SessionState : AcpProtocolObject
+    [JsonConverter(typeof(SessionWorkStateJsonConverter))]
+    public abstract record SessionWorkState : AcpProtocolObject
     {
         /// <summary>
         /// The raw <c>state</c> wire value.
@@ -39,7 +45,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Well-known <c>state</c> discriminator values.
     /// </summary>
-    public static class SessionStateKind
+    public static class SessionWorkStateKind
     {
         /// <summary>Foreground work is in progress.</summary>
         public const string Running = "running";
@@ -54,19 +60,19 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Foreground work is in progress. The Agent must send this when foreground work starts or resumes.
     /// </summary>
-    public sealed record RunningSessionState : SessionState
+    public sealed record RunningSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
-        public override string State => SessionStateKind.Running;
+        public override string State => SessionWorkStateKind.Running;
     }
 
     /// <summary>
     /// The Agent is ready to process a new prompt. This is the v2 end-of-turn signal.
     /// </summary>
-    public sealed record IdleSessionState : SessionState
+    public sealed record IdleSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
-        public override string State => SessionStateKind.Idle;
+        public override string State => SessionWorkStateKind.Idle;
 
         /// <summary>
         /// Why foreground work stopped. Omitted and <c>null</c> both mean the Agent is not reporting a
@@ -79,17 +85,17 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Foreground work is blocked on user action, such as an outstanding permission request.
     /// </summary>
-    public sealed record RequiresActionSessionState : SessionState
+    public sealed record RequiresActionSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
-        public override string State => SessionStateKind.RequiresAction;
+        public override string State => SessionWorkStateKind.RequiresAction;
     }
 
     /// <summary>
     /// Forward-compatibility carrier for a <c>state</c> value this SDK does not model, preserving the
     /// payload verbatim so it round-trips instead of being downgraded by the client.
     /// </summary>
-    public sealed record CustomSessionState : SessionState
+    public sealed record CustomSessionWorkState : SessionWorkState
     {
         private readonly string _state = string.Empty;
 
@@ -105,7 +111,7 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// Creates an empty carrier.
         /// </summary>
-        public CustomSessionState()
+        public CustomSessionWorkState()
         {
         }
 
@@ -114,7 +120,7 @@ namespace SalmonEgg.Acp.Protocol
         /// </summary>
         /// <param name="state">The raw <c>state</c> wire value.</param>
         /// <param name="rawPayload">The complete object as received.</param>
-        public CustomSessionState(string state, JsonElement rawPayload)
+        public CustomSessionWorkState(string state, JsonElement rawPayload)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
             RawPayload = rawPayload;
@@ -132,7 +138,7 @@ namespace SalmonEgg.Acp.Protocol
     /// emitting one under a v1 write context would put a field on the wire that a v1 Agent has no
     /// contract for. Throwing is the only outcome that cannot silently corrupt a v1 conversation.
     /// </remarks>
-    internal sealed class SessionStateJsonConverter : JsonConverter<SessionState>
+    internal sealed class SessionWorkStateJsonConverter : JsonConverter<SessionWorkState>
     {
         internal const string V2OnlyMessage =
             "ACP session/update state_update is only available in protocolVersion 2.";
@@ -140,7 +146,7 @@ namespace SalmonEgg.Acp.Protocol
         internal const string MissingStateMessage =
             "ACP state_update requires a string 'state' discriminator.";
 
-        public override SessionState? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override SessionWorkState? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
@@ -160,14 +166,14 @@ namespace SalmonEgg.Acp.Protocol
 
             return state switch
             {
-                SessionStateKind.Running => new RunningSessionState { Meta = meta },
-                SessionStateKind.Idle => new IdleSessionState
+                SessionWorkStateKind.Running => new RunningSessionWorkState { Meta = meta },
+                SessionWorkStateKind.Idle => new IdleSessionWorkState
                 {
                     StopReason = ReadStopReason(root),
                     Meta = meta
                 },
-                SessionStateKind.RequiresAction => new RequiresActionSessionState { Meta = meta },
-                _ => new CustomSessionState(state, root.Clone()) { Meta = meta }
+                SessionWorkStateKind.RequiresAction => new RequiresActionSessionWorkState { Meta = meta },
+                _ => new CustomSessionWorkState(state, root.Clone()) { Meta = meta }
             };
         }
 
@@ -186,7 +192,7 @@ namespace SalmonEgg.Acp.Protocol
             return value is null ? null : new StopReason(value);
         }
 
-        public override void Write(Utf8JsonWriter writer, SessionState value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, SessionWorkState value, JsonSerializerOptions options)
         {
             ArgumentNullException.ThrowIfNull(value);
 
@@ -195,7 +201,7 @@ namespace SalmonEgg.Acp.Protocol
                 throw new JsonException(V2OnlyMessage);
             }
 
-            if (value is CustomSessionState custom && custom.RawPayload.ValueKind == JsonValueKind.Object)
+            if (value is CustomSessionWorkState custom && custom.RawPayload.ValueKind == JsonValueKind.Object)
             {
                 // Byte-for-byte passthrough of an unmodeled state, matching McpServer and
                 // CustomToolCallContent: reserializing field by field would reorder and drop.
@@ -206,7 +212,7 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteStartObject();
             writer.WriteString("state", value.State);
 
-            if (value is IdleSessionState idle && idle.StopReason is { } stopReason)
+            if (value is IdleSessionWorkState idle && idle.StopReason is { } stopReason)
             {
                 writer.WriteString("stopReason", stopReason.Value);
             }
