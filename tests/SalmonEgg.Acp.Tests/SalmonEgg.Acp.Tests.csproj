@@ -7,6 +7,11 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Contract tests are the only place the v2 draft surface is exercised on purpose, so the
+         draft marker (AcpDraftProtocol.DiagnosticId) is silenced here rather than suppressed at
+         ~90 call sites. DraftProtocolSurfaceTests asserts this entry stays in step with the
+         constant: dropping it turns the analyzer build gate red instead of failing quietly. -->
+    <NoWarn>$(NoWarn);SEACP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -10,6 +11,7 @@ namespace SalmonEgg.Acp.Protocol;
 /// describe the request itself, while a subject lets the Client show what operation is affected.
 /// </summary>
 [JsonConverter(typeof(RequestPermissionSubjectJsonConverter))]
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public abstract record RequestPermissionSubject : AcpProtocolObject
 {
     /// <summary>The raw <c>type</c> discriminator.</summary>
@@ -17,6 +19,7 @@ public abstract record RequestPermissionSubject : AcpProtocolObject
 }
 
 /// <summary>A permission subject referring to a tool-call upsert.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record ToolCallPermissionSubject : RequestPermissionSubject
 {
     /// <inheritdoc />
@@ -28,6 +31,7 @@ public sealed record ToolCallPermissionSubject : RequestPermissionSubject
 }
 
 /// <summary>A permission subject referring to a command the Agent intends to execute.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record CommandPermissionSubject : RequestPermissionSubject
 {
     /// <inheritdoc />
@@ -51,6 +55,7 @@ public sealed record CommandPermissionSubject : RequestPermissionSubject
 }
 
 /// <summary>Raw carrier for an unmodeled permission subject.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record CustomRequestPermissionSubject : RequestPermissionSubject
 {
     private readonly string _type = string.Empty;

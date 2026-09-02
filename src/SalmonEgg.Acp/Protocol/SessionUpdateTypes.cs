@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -221,6 +222,7 @@ namespace SalmonEgg.Acp.Protocol
     /// STJ rejects a JsonConverter on a type participating in a polymorphic hierarchy
     /// (DerivedConverterDoesNotSupportMetadata), so the flattening cannot live on this type.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record StateSessionUpdate : SessionUpdate
     {
         /// <summary>
@@ -309,6 +311,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <c>tool_call_update</c> carrying <c>content</c> replaces the whole array, so streaming through it
     /// would require resending everything produced so far on every fragment.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record ToolCallContentChunkUpdate : SessionUpdate
     {
         /// <summary>
@@ -341,6 +344,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <see cref="HasContent"/> reports presence separately from the value.
     /// </para>
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public abstract record WholeMessageUpdate : SessionUpdate
     {
         /// <summary>
@@ -369,6 +373,7 @@ namespace SalmonEgg.Acp.Protocol
     /// V2 <c>agent_message</c>: a complete agent message, replacing whatever content that message id
     /// currently holds.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record AgentWholeMessageUpdate : WholeMessageUpdate
     {
     }
@@ -378,6 +383,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Agent must report this after accepting a prompt, and it is the source of truth for the
     /// agent-owned message id.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record UserWholeMessageUpdate : WholeMessageUpdate
     {
     }
@@ -385,6 +391,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// V2 <c>agent_thought</c>: a complete agent reasoning message.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record AgentWholeThoughtUpdate : WholeMessageUpdate
     {
     }
