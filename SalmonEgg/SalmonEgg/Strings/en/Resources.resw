@@ -1840,4 +1840,19 @@
   <data name="AcpSetup_InstallToolchain.Content" xml:space="preserve">
     <value>Install toolchain</value>
   </data>
+  <data name="ChatViewElicitationTitle.Text" xml:space="preserve">
+    <value>Agent needs your input</value>
+  </data>
+  <data name="ChatViewElicitationRequiredMarker.Text" xml:space="preserve">
+    <value>Required</value>
+  </data>
+  <data name="ChatViewElicitationCancelButton.Content" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ChatViewElicitationDeclineButton.Content" xml:space="preserve">
+    <value>Decline</value>
+  </data>
+  <data name="ChatViewElicitationSubmitButton.Content" xml:space="preserve">
+    <value>Submit</value>
+  </data>
 </root>

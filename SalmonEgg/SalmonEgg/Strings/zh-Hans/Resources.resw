@@ -1735,4 +1735,19 @@
   <data name="AcpSetup_InstallToolchain.Content" xml:space="preserve">
     <value>安装工具链</value>
   </data>
+  <data name="ChatViewElicitationTitle.Text" xml:space="preserve">
+    <value>Agent 需要你的输入</value>
+  </data>
+  <data name="ChatViewElicitationRequiredMarker.Text" xml:space="preserve">
+    <value>必填</value>
+  </data>
+  <data name="ChatViewElicitationCancelButton.Content" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="ChatViewElicitationDeclineButton.Content" xml:space="preserve">
+    <value>拒绝</value>
+  </data>
+  <data name="ChatViewElicitationSubmitButton.Content" xml:space="preserve">
+    <value>提交</value>
+  </data>
 </root>

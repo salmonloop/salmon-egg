@@ -90,6 +90,16 @@ namespace SalmonEgg.Application.Services.Chat
         event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
 
         /// <summary>
+        /// 标准 elicitation/create 请求事件
+        /// </summary>
+        event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived;
+
+        /// <summary>
+        /// 标准 elicitation/complete 通知事件
+        /// </summary>
+        event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
+
+        /// <summary>
         /// 错误事件
         /// </summary>
         event EventHandler<string>? ErrorOccurred;
@@ -173,6 +183,21 @@ namespace SalmonEgg.Application.Services.Chat
         /// 响应 ask-user 请求
         /// </summary>
         Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers);
+
+        /// <summary>
+        /// 接受 elicitation 请求，可携带表单内容
+        /// </summary>
+        Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content);
+
+        /// <summary>
+        /// 用户明确拒绝 elicitation 请求
+        /// </summary>
+        Task<bool> DeclineElicitationRequestAsync(object messageId);
+
+        /// <summary>
+        /// 用户未作选择即关闭 elicitation 请求
+        /// </summary>
+        Task<bool> CancelElicitationRequestAsync(object messageId);
 
         /// <summary>
         /// 断开连接
