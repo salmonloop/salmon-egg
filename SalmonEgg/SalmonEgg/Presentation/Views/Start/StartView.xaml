@@ -176,6 +176,8 @@
             <InfoBar x:Name="StartDraftErrorInfoBar"
                      Grid.Row="0"
                      Margin="12,0,12,0"
+                     HorizontalAlignment="Center"
+                     MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                      Severity="Error"
                      IsOpen="{x:Bind ViewModel.HasStartSessionDraftError, Mode=OneWay}"
                      Message="{x:Bind ViewModel.StartSessionDraftErrorMessage, Mode=OneWay}" />
