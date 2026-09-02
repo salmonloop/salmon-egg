@@ -35,8 +35,17 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// Deprecated alias for <see cref="HighestModeled"/>.
         /// </summary>
-        [Obsolete(LatestRenamedMessage)]
+        [Obsolete(LatestRenamedMessage, DiagnosticId = LatestRenamedDiagnosticId)]
         public const int Latest = HighestModeled;
+
+        /// <summary>
+        /// Diagnostic id reported when source references <see cref="Latest"/>. A dedicated id is the
+        /// point of this deprecation: CS0618 covers every obsolete member at once, so it can only be
+        /// escalated or suppressed wholesale, while this id lets the repository escalate exactly the
+        /// "production code must not reference the modeled-version ceiling" rule to an error (see
+        /// WarningsAsErrors in Directory.Build.props) without touching any other deprecation.
+        /// </summary>
+        internal const string LatestRenamedDiagnosticId = "SEACP001";
 
         /// <summary>
         /// Obsoletion text for <see cref="Latest"/>. Named so the deprecation contract can be
