@@ -1085,7 +1085,9 @@ public partial class ChatViewModel
             _hydrationOverlayPhase = HydrationOverlayPhase.None;
             _hydrationOverlayPhaseConversationId = null;
             _panelStateCoordinator.ClearAskUserRequests();
+            _panelStateCoordinator.ClearElicitationRequests();
             PendingAskUserRequest = null;
+            PendingElicitationRequest = null;
         }
         _chatService = chatService;
         if (chatService != null)
@@ -1139,7 +1141,9 @@ public partial class ChatViewModel
             _hydrationOverlayPhase = HydrationOverlayPhase.None;
             _hydrationOverlayPhaseConversationId = null;
             _panelStateCoordinator.ClearAskUserRequests();
+            _panelStateCoordinator.ClearElicitationRequests();
             PendingAskUserRequest = null;
+            PendingElicitationRequest = null;
         }
 
         _chatService = chatService;

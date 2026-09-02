@@ -35,6 +35,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.AskUser;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
@@ -1034,6 +1035,7 @@ public partial class ChatViewModel
         TerminalSessions = selection.TerminalSessions;
         SelectedTerminalSession = selection.SelectedTerminal;
         PendingAskUserRequest = selection.PendingAskUserRequest;
+        PendingElicitationRequest = selection.PendingElicitationRequest;
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             ActiveLocalTerminalSession = null;
@@ -1126,6 +1128,7 @@ public partial class ChatViewModel
             SelectedTerminalSession = selection.SelectedTerminal;
             ActiveLocalTerminalSession = null;
             PendingAskUserRequest = selection.PendingAskUserRequest;
+            PendingElicitationRequest = selection.PendingElicitationRequest;
         }
     }
 
@@ -1734,6 +1737,50 @@ public partial class ChatViewModel
         {
             ApplySessionSwitchPreviewClear(conversationId);
         });
+    }
+
+    private void OnElicitationRequestReceived(object? sender, ElicitationRequestEventArgs e)
+    {
+        _ = ProcessElicitationRequestAsync(e);
+    }
+
+    private async Task ProcessElicitationRequestAsync(ElicitationRequestEventArgs e)
+    {
+        try
+        {
+            var projection = await _interactionEventBridge.BuildElicitationRequestAsync(
+                e,
+                conversationId => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId)),
+                Logger).ConfigureAwait(false);
+            if (projection is null)
+            {
+                return;
+            }
+
+            await PostToUiAsync(() =>
+            {
+                _panelStateCoordinator.StoreElicitationRequest(projection.Value.ConversationId, projection.Value.ViewModel);
+                PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(CurrentSessionId);
+            }).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing elicitation request");
+        }
+    }
+
+    private void RemovePendingElicitationRequestState(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        _panelStateCoordinator.RemoveElicitationRequest(conversationId);
+        if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(conversationId);
+        }
     }
 
     private void OnAskUserRequestReceived(object? sender, AskUserRequestEventArgs e)

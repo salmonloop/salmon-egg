@@ -79,6 +79,18 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
         remove => _inner.AskUserRequestReceived -= value;
     }
 
+    public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived
+    {
+        add => _inner.ElicitationRequestReceived += value;
+        remove => _inner.ElicitationRequestReceived -= value;
+    }
+
+    public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted
+    {
+        add => _inner.ElicitationCompleted += value;
+        remove => _inner.ElicitationCompleted -= value;
+    }
+
     public event EventHandler<string>? ErrorOccurred
     {
         add => _inner.ErrorOccurred += value;
@@ -132,6 +144,15 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
 
     public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
         => _inner.RespondToAskUserRequestAsync(messageId, answers);
+
+    public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+        => _inner.RespondToElicitationRequestAsync(messageId, content);
+
+    public Task<bool> DeclineElicitationRequestAsync(object messageId)
+        => _inner.DeclineElicitationRequestAsync(messageId);
+
+    public Task<bool> CancelElicitationRequestAsync(object messageId)
+        => _inner.CancelElicitationRequestAsync(messageId);
 
     public Task<bool> DisconnectAsync()
         => _inner.DisconnectAsync();

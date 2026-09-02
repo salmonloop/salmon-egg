@@ -38,6 +38,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.AskUser;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
@@ -214,6 +215,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private long _connectionGeneration;
     private string? _connectionInstanceId;
     private readonly ObservableCollection<AskUserQuestionViewModel> _emptyAskUserQuestions = new();
+    private readonly ObservableCollection<ElicitationFieldViewModel> _emptyElicitationFields = new();
     private readonly object _sessionUpdateTrackingSync = new();
     private TaskCompletionSource<object?>? _sessionUpdatesDrainedTcs;
     private readonly object _sessionUpdateObservationSync = new();
@@ -232,6 +234,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
     private AskUserRequestViewModel? _observedPendingAskUserRequest;
+    private ElicitationRequestViewModel? _observedPendingElicitationRequest;
     private string? _sessionSwitchOverlayConversationId;
     private string? _connectionLifecycleOverlayConversationId;
     private string? _historyOverlayConversationId;
@@ -965,6 +968,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public IAsyncRelayCommand? AskUserSubmitCommand => ResolveAskUserState().SubmitCommand;
 
+    public bool HasPendingElicitationRequest => PendingElicitationRequest is not null;
+
+    public string ElicitationPrompt => PendingElicitationRequest?.Prompt ?? string.Empty;
+
+    public ObservableCollection<ElicitationFieldViewModel> ElicitationFields
+        => PendingElicitationRequest?.Fields ?? _emptyElicitationFields;
+
+    public bool ElicitationHasError => PendingElicitationRequest?.HasError ?? false;
+
+    public string ElicitationErrorMessage => PendingElicitationRequest?.ErrorMessage ?? string.Empty;
+
+    public IAsyncRelayCommand? ElicitationSubmitCommand => PendingElicitationRequest?.SubmitCommand;
+
+    public IAsyncRelayCommand? ElicitationDeclineCommand => PendingElicitationRequest?.DeclineCommand;
+
+    public IAsyncRelayCommand? ElicitationCancelCommand => PendingElicitationRequest?.CancelCommand;
+
     // UI-BOUND PROPERTIES: Handlers for WinUI/Uno property change notifications.
     // These ensure the View reflects internal state changes that might not trigger automatically.
     public bool CanSendPromptUi => ResolveInputState().CanSendPrompt;
@@ -1308,6 +1328,22 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     [NotifyPropertyChangedFor(nameof(ComposerSelectorSlots))]
     [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
     private AskUserRequestViewModel? _pendingAskUserRequest;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingElicitationRequest))]
+    [NotifyPropertyChangedFor(nameof(ElicitationPrompt))]
+    [NotifyPropertyChangedFor(nameof(ElicitationFields))]
+    [NotifyPropertyChangedFor(nameof(ElicitationHasError))]
+    [NotifyPropertyChangedFor(nameof(ElicitationErrorMessage))]
+    [NotifyPropertyChangedFor(nameof(ElicitationSubmitCommand))]
+    [NotifyPropertyChangedFor(nameof(ElicitationDeclineCommand))]
+    [NotifyPropertyChangedFor(nameof(ElicitationCancelCommand))]
+    [NotifyPropertyChangedFor(nameof(ComposerState))]
+    [NotifyPropertyChangedFor(nameof(IsInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsTextInputEnabled))]
+    [NotifyPropertyChangedFor(nameof(AreComposerToolsEnabled))]
+    [NotifyPropertyChangedFor(nameof(CanSendPromptUi))]
+    private ElicitationRequestViewModel? _pendingElicitationRequest;
 
     [ObservableProperty]
     private bool _isAuthenticationRequired;
@@ -3306,6 +3342,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         chatService.TerminalRequestReceived += OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
         chatService.AskUserRequestReceived += OnAskUserRequestReceived;
+        chatService.ElicitationRequestReceived += OnElicitationRequestReceived;
         chatService.ErrorOccurred += OnErrorOccurred;
 
         _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
@@ -3319,6 +3356,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
         chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
+        chatService.ElicitationRequestReceived -= OnElicitationRequestReceived;
         chatService.ErrorOccurred -= OnErrorOccurred;
     }
 
@@ -3653,6 +3691,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             _observedPendingAskUserRequest.PropertyChanged -= OnPendingAskUserRequestPropertyChanged;
             _observedPendingAskUserRequest = null;
+        }
+
+        if (_observedPendingElicitationRequest != null)
+        {
+            _observedPendingElicitationRequest.PropertyChanged -= OnPendingElicitationRequestPropertyChanged;
+            _observedPendingElicitationRequest = null;
         }
 
         _sendPromptCts?.Cancel();

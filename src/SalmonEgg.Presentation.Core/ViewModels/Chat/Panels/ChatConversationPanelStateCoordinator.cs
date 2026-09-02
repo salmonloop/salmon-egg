@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Panels;
 
@@ -10,6 +11,7 @@ public sealed class ChatConversationPanelStateCoordinator
     private readonly Dictionary<string, ObservableCollection<TerminalPanelSessionViewModel>> _terminalSessionsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedTerminalIdByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ElicitationRequestViewModel> _pendingElicitationRequestsByConversation = new(StringComparer.Ordinal);
 
     public ChatConversationPanelSelection SyncConversation(string? conversationId)
     {
@@ -27,7 +29,8 @@ public sealed class ChatConversationPanelStateCoordinator
         return new ChatConversationPanelSelection(
             sessions,
             ResolveSelectedTerminal(conversationId, sessions),
-            _pendingAskUserRequestsByConversation.TryGetValue(conversationId, out var request) ? request : null);
+            _pendingAskUserRequestsByConversation.TryGetValue(conversationId, out var request) ? request : null,
+            _pendingElicitationRequestsByConversation.TryGetValue(conversationId, out var elicitation) ? elicitation : null);
     }
 
     public AskUserRequestViewModel? GetPendingAskUserRequest(string? conversationId)
@@ -61,6 +64,38 @@ public sealed class ChatConversationPanelStateCoordinator
 
     public void ClearAskUserRequests()
         => _pendingAskUserRequestsByConversation.Clear();
+
+    public ElicitationRequestViewModel? GetPendingElicitationRequest(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return null;
+        }
+
+        return _pendingElicitationRequestsByConversation.TryGetValue(conversationId, out var request)
+            ? request
+            : null;
+    }
+
+    public void StoreElicitationRequest(string conversationId, ElicitationRequestViewModel request)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
+        ArgumentNullException.ThrowIfNull(request);
+        _pendingElicitationRequestsByConversation[conversationId] = request;
+    }
+
+    public void RemoveElicitationRequest(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        _pendingElicitationRequestsByConversation.Remove(conversationId);
+    }
+
+    public void ClearElicitationRequests()
+        => _pendingElicitationRequestsByConversation.Clear();
 
     public TerminalPanelSessionViewModel GetOrCreateTerminalSession(string conversationId, string terminalId)
     {
@@ -100,6 +135,7 @@ public sealed class ChatConversationPanelStateCoordinator
             : new ChatConversationPanelSelection(
                 new ObservableCollection<TerminalPanelSessionViewModel>(),
                 null,
+                null,
                 null);
     }
 
@@ -113,6 +149,7 @@ public sealed class ChatConversationPanelStateCoordinator
         _terminalSessionsByConversation.Remove(conversationId);
         _selectedTerminalIdByConversation.Remove(conversationId);
         _pendingAskUserRequestsByConversation.Remove(conversationId);
+        _pendingElicitationRequestsByConversation.Remove(conversationId);
 
         return isCurrentConversation ? EmptySelection() : NoUiChange();
     }
@@ -138,11 +175,13 @@ public sealed class ChatConversationPanelStateCoordinator
         => new(
             new ObservableCollection<TerminalPanelSessionViewModel>(),
             null,
+            null,
             null);
 
     private static ChatConversationPanelSelection NoUiChange()
         => new(
             new ObservableCollection<TerminalPanelSessionViewModel>(),
+            null,
             null,
             null);
 }
