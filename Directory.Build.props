@@ -3,6 +3,14 @@
     <!-- Suppress SDK preview banner to keep build output clean -->
     <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
 
+    <!-- AGENTS.md requires that production code never reference the modeled-version ceiling
+         (AcpProtocolVersion.Latest / HighestModeled) - only SalmonEgg.Acp itself enables
+         TreatWarningsAsErrors, so without this the rule would be a warning everywhere else and
+         nothing would stop an app project from shipping a reference to a draft ceiling. The id is
+         AcpProtocolVersion.LatestRenamedDiagnosticId; AcpProtocolVersionGateTests asserts the two
+         stay in step, because a mismatch would silently disarm this gate rather than fail. -->
+    <WarningsAsErrors>$(WarningsAsErrors);SEACP001</WarningsAsErrors>
+
     <!-- MinVer 6.0.0 treats an empty MinVerTagPrefix as "ignore every tag", so the v* namespace
          must be declared here. The ACP SDK project overrides it with acp-sdk-v for its own line. -->
     <MinVerTagPrefix>v</MinVerTagPrefix>
