@@ -864,6 +864,8 @@ public sealed class ChatServiceSessionTests
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
         public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived;
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
         public event EventHandler<string>? ErrorOccurred;
 
         public bool IsInitialized { get; private set; }
@@ -934,6 +936,15 @@ public sealed class ChatServiceSessionTests
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
             => Task.FromResult(true);
 
+        public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+            => Task.FromResult(true);
+
+        public Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => Task.FromResult(true);
+
+        public Task<bool> CancelElicitationRequestAsync(object messageId)
+            => Task.FromResult(true);
+
         public Task<bool> DisconnectAsync()
         {
             _ = SessionUpdateReceived;
@@ -942,6 +953,8 @@ public sealed class ChatServiceSessionTests
             _ = TerminalRequestReceived;
             _ = TerminalStateChangedReceived;
             _ = AskUserRequestReceived;
+            _ = ElicitationRequestReceived;
+            _ = ElicitationCompleted;
             _ = ErrorOccurred;
             return Task.FromResult(true);
         }
