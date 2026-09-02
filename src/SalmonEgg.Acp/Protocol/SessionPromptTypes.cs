@@ -61,16 +61,29 @@ namespace SalmonEgg.Acp.Protocol
         public StopReason StopReason { get; init; } = StopReason.EndTurn;
 
         /// <summary>
-        /// Whether the v1 terminal <c>stopReason</c> was present on the wire. V2 prompt responses are
-        /// bare acknowledgements, so this is false for their empty result and callers must wait for an
-        /// idle state_update instead of treating the default value as completion.
+        /// Whether <c>stopReason</c> was present on the wire, reported separately from
+        /// <see cref="SessionPromptResponse.StopReason"/> so an absent field cannot be mistaken for
+        /// the default <c>StopReason.EndTurn</c>.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Version-independent by design, and meaningful on both protocol versions - which is why it
+        /// carries no draft marking even though one of its two readings is about v2.
+        /// </para>
+        /// <para>
+        /// On v1, <c>stopReason</c> is required, so <c>false</c> means the Agent violated the
+        /// contract. It is the only observable signal for that violation: the field is typed, and a
+        /// missing one silently reads as "the turn ended normally". A v1 client that wants to
+        /// attribute the fault to the peer rather than absorb it has to read this.
+        /// </para>
+        /// <para>
+        /// On v2, prompt responses are bare acknowledgements, so <c>false</c> is the expected shape
+        /// and completion arrives later as an idle <c>state_update</c> instead.
+        /// </para>
+        /// </remarks>
         [JsonIgnore]
         public bool HasStopReason { get; init; }
 
-        /// <summary>
-        /// Protocol extension field (<c>_meta</c>).
-        /// </summary>
         /// <summary>
         /// Creates a new <see cref="SessionPromptResponse"/> instance.
         /// </summary>
