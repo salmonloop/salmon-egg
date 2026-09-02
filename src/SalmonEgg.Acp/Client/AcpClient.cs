@@ -31,12 +31,14 @@ namespace SalmonEgg.Acp.Client
                 string method,
                 object? messageId,
                 string? sessionId = null,
-                AskUserRequest? askUserRequest = null)
+                AskUserRequest? askUserRequest = null,
+                CreateElicitationRequest? elicitationRequest = null)
             {
                 Method = method;
                 MessageId = messageId;
                 SessionId = sessionId;
                 AskUserRequest = askUserRequest;
+                ElicitationRequest = elicitationRequest;
             }
 
             public string Method { get; }
@@ -47,14 +49,25 @@ namespace SalmonEgg.Acp.Client
 
             public AskUserRequest? AskUserRequest { get; }
 
+            public CreateElicitationRequest? ElicitationRequest { get; }
+
             public PendingInboundRequest WithSessionId(string sessionId)
-                => new(Method, MessageId, sessionId, AskUserRequest);
+                => new(Method, MessageId, sessionId, AskUserRequest, ElicitationRequest);
 
             public PendingInboundRequest WithAskUserRequest(AskUserRequest request)
                 => new(
                     string.IsNullOrWhiteSpace(Method) ? ClientCapabilityMetadata.AskUserExtensionMethod : Method,
                     MessageId,
                     request.SessionId,
+                    request,
+                    ElicitationRequest);
+
+            public PendingInboundRequest WithElicitationRequest(CreateElicitationRequest request)
+                => new(
+                    string.IsNullOrWhiteSpace(Method) ? ElicitationMethods.Create : Method,
+                    MessageId,
+                    request.Scope.SessionId ?? SessionId,
+                    AskUserRequest,
                     request);
         }
         private readonly IAcpTransport _transport;
@@ -130,6 +143,12 @@ namespace SalmonEgg.Acp.Client
         /// Raised when an ask-user request is received.
         /// </summary>
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
+
+        /// <inheritdoc />
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived;
+
+        /// <inheritdoc />
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
 
         /// <summary>
         /// Raised when a connection error occurs.
@@ -825,6 +844,63 @@ namespace SalmonEgg.Acp.Client
             return await TrySendAskUserResponseAsync(messageId, answers).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Accepts an elicitation request, optionally submitting form content.
+        /// </summary>
+        public async Task<bool> RespondToElicitationRequestAsync(
+            object messageId,
+            ElicitationAcceptContent? content)
+        {
+            return await TrySendElicitationResponseAsync(
+                messageId,
+                new ElicitationAcceptResponse { Content = content?.ToWireContent() }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Declines an elicitation request on the user's behalf.
+        /// </summary>
+        public async Task<bool> DeclineElicitationRequestAsync(object messageId)
+        {
+            return await TrySendElicitationResponseAsync(
+                messageId,
+                new ElicitationDeclineResponse()).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Cancels an elicitation request the user dismissed without choosing.
+        /// </summary>
+        public async Task<bool> CancelElicitationRequestAsync(object messageId)
+        {
+            return await TrySendElicitationResponseAsync(
+                messageId,
+                new ElicitationCancelResponse()).ConfigureAwait(false);
+        }
+
+        private async Task<bool> TrySendElicitationResponseAsync(
+            object messageId,
+            CreateElicitationResponse response)
+        {
+            var idStr = messageId?.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(idStr))
+            {
+                return false;
+            }
+
+            // Taking the pending entry is what makes the three actions mutually exclusive: whichever one
+            // runs first removes the correlation, so a late second action cannot answer the same request
+            // twice.
+            if (!TryTakePendingInboundRequest(idStr, out var pending)
+                || pending.ElicitationRequest == null)
+            {
+                return false;
+            }
+
+            return await SendResponseAsync(
+                new JsonRpcResponse(
+                    messageId!,
+                    ToElement(response, AcpJsonContext.Default.CreateElicitationResponse))).ConfigureAwait(false);
+        }
+
         private async Task<bool> TrySendPermissionOutcomeResponseAsync(object? messageId, string outcome, string? optionId)
         {
             if (messageId == null)
@@ -1246,6 +1322,9 @@ namespace SalmonEgg.Acp.Client
                 case "session/update":
                     HandleSessionUpdate(notification);
                     break;
+                case ElicitationMethods.Complete:
+                    HandleElicitationCompleted(notification);
+                    break;
                 default:
                     // Unknown notification type.
                     break;
@@ -1299,6 +1378,20 @@ namespace SalmonEgg.Acp.Client
                     }
                     _ = HandleTerminalRequestAsync(request);
                     break;
+                case ElicitationMethods.Create:
+                    if (!SupportsAdvertisedElicitation)
+                    {
+                        RejectUnsupportedClientRequest(request);
+                        break;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(requestIdStr))
+                    {
+                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
+                    }
+
+                    HandleElicitationRequest(request);
+                    break;
                 case ClientCapabilityMetadata.AskUserExtensionMethod:
                     if (!SupportsAdvertisedAskUserExtension(request.Method))
                     {
@@ -1333,6 +1426,35 @@ namespace SalmonEgg.Acp.Client
 
         private bool SupportsAdvertisedAskUserExtension(string method)
             => _clientCapabilities?.SupportsExtension(method) == true;
+
+        /// <summary>
+        /// Whether the client advertised the elicitation mode the agent asked for.
+        /// </summary>
+        /// <remarks>
+        /// Unlike the fs and terminal gates, an un-advertised mode is answered with
+        /// <c>-32602 Invalid params</c> rather than <c>-32601</c>: the elicitation specification names that
+        /// code explicitly, because the method itself exists and only the requested mode is unavailable.
+        /// A request whose mode this client does not model at all is never advertised, so it lands here
+        /// too instead of being rendered as a known mode.
+        /// </remarks>
+        /// <summary>
+        /// Whether the client advertised elicitation at all.
+        /// </summary>
+        /// <remarks>
+        /// An omitted or <c>null</c> capability object means the whole family is unsupported, so the
+        /// method genuinely does not exist here and <c>-32601</c> is the honest answer, symmetric with the
+        /// fs and terminal gates. Mode-level refusal is a different case, handled by
+        /// <see cref="SupportsAdvertisedElicitationMode"/>.
+        /// </remarks>
+        private bool SupportsAdvertisedElicitation => _clientCapabilities?.Elicitation is not null;
+
+        private bool SupportsAdvertisedElicitationMode(CreateElicitationRequest request)
+            => request switch
+            {
+                FormElicitationRequest => _clientCapabilities?.Elicitation?.SupportsForm == true,
+                UrlElicitationRequest => _clientCapabilities?.Elicitation?.SupportsUrl == true,
+                _ => false
+            };
 
         private void EnsureMcpServersSupported(IEnumerable<McpServer>? mcpServers, string method)
         {
@@ -1648,6 +1770,134 @@ namespace SalmonEgg.Acp.Client
                 OnErrorOccurred($"Failed to process ask_user request: {ex.Message}");
                 _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInternalError(ex.Message)));
             }
+        }
+
+        /// <summary>
+        /// Handles an inbound <c>elicitation/create</c> request.
+        /// </summary>
+        private void HandleElicitationRequest(JsonRpcRequest request)
+        {
+            var requestIdStr = request.Id?.ToString() ?? string.Empty;
+
+            try
+            {
+                if (!request.Params.HasValue)
+                {
+                    RemovePendingInboundTracking(requestIdStr);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        request.Id,
+                        JsonRpcError.CreateInvalidParams("Missing params")));
+                    return;
+                }
+
+                var elicitationRequest = FromElement(
+                    request.Params.Value,
+                    AcpJsonContext.Default.CreateElicitationRequest);
+                if (elicitationRequest == null)
+                {
+                    RemovePendingInboundTracking(requestIdStr);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        request.Id,
+                        JsonRpcError.CreateInvalidParams("Failed to deserialize elicitation/create request.")));
+                    return;
+                }
+
+                if (request.Id == null)
+                {
+                    RemovePendingInboundTracking(requestIdStr);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        request.Id,
+                        JsonRpcError.CreateInvalidRequest("Missing request id")));
+                    return;
+                }
+
+                if (!SupportsAdvertisedElicitationMode(elicitationRequest))
+                {
+                    RemovePendingInboundTracking(requestIdStr);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        request.Id,
+                        JsonRpcError.CreateInvalidParams(
+                            $"Elicitation mode '{elicitationRequest.Mode}' was not advertised by the client.")));
+                    return;
+                }
+
+                var messageId = request.Id!;
+                if (!string.IsNullOrWhiteSpace(requestIdStr))
+                {
+                    SetPendingInboundElicitationRequest(requestIdStr, elicitationRequest);
+                }
+
+                if (ElicitationRequestReceived == null)
+                {
+                    RemovePendingInboundTracking(requestIdStr);
+                    _ = SendResponseAsync(new JsonRpcResponse(
+                        messageId,
+                        new JsonRpcError(
+                            JsonRpcErrorCode.CapabilityNotSupported,
+                            "Elicitation requests are not supported.")));
+                    return;
+                }
+
+                var eventArgs = new ElicitationRequestEventArgs(
+                    messageId,
+                    elicitationRequest,
+                    content => RespondToElicitationRequestAsync(messageId, content),
+                    () => DeclineElicitationRequestAsync(messageId),
+                    () => CancelElicitationRequestAsync(messageId));
+
+                ElicitationRequestReceived.Invoke(this, eventArgs);
+            }
+            catch (JsonException ex)
+            {
+                RemovePendingInboundTracking(requestIdStr);
+                _ = SendResponseAsync(new JsonRpcResponse(
+                    request.Id,
+                    JsonRpcError.CreateInvalidParams(ex.Message)));
+            }
+            catch (Exception ex)
+            {
+                RemovePendingInboundTracking(requestIdStr);
+                OnErrorOccurred($"Failed to process elicitation/create request: {ex.Message}");
+                _ = SendResponseAsync(new JsonRpcResponse(
+                    request.Id,
+                    JsonRpcError.CreateInternalError(ex.Message)));
+            }
+        }
+
+        /// <summary>
+        /// Handles the <c>elicitation/complete</c> notification.
+        /// </summary>
+        private void HandleElicitationCompleted(JsonRpcNotification notification)
+        {
+            if (!notification.Params.HasValue)
+            {
+                return;
+            }
+
+            CompleteElicitationNotification? completion;
+            try
+            {
+                completion = FromElement(
+                    notification.Params.Value,
+                    AcpJsonContext.Default.CompleteElicitationNotification);
+            }
+            catch (JsonException ex)
+            {
+                // A notification has no reply, and the specification tells clients to ignore ids they do
+                // not recognize, so a malformed payload is a diagnostic rather than a user-visible fault.
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "ELICITATION_COMPLETE_INVALID",
+                    ex.Message);
+                return;
+            }
+
+            if (completion == null || string.IsNullOrWhiteSpace(completion.ElicitationId))
+            {
+                return;
+            }
+
+            ElicitationCompleted?.Invoke(this, new ElicitationCompletedEventArgs(completion.ElicitationId));
         }
 
         /// <summary>
@@ -1967,6 +2217,24 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
             }
+        }
+
+        private void SetPendingInboundElicitationRequest(string idStr, CreateElicitationRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(idStr))
+            {
+                return;
+            }
+
+            _pendingInboundRequests.AddOrUpdate(
+                idStr,
+                _ => new PendingInboundRequest(
+                    ElicitationMethods.Create,
+                    null,
+                    request.Scope.SessionId,
+                    null,
+                    request),
+                (_, existing) => existing.WithElicitationRequest(request));
         }
 
         private void SetPendingInboundAskUserRequest(string idStr, AskUserRequest request)
