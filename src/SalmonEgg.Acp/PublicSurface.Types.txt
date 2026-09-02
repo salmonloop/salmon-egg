@@ -1,228 +1,243 @@
-SalmonEgg.Acp.Client.AcpClient
-SalmonEgg.Acp.Client.AcpClientLogLevel
-SalmonEgg.Acp.Client.AcpTransportErrorEventArgs
-SalmonEgg.Acp.Client.AcpTransportErrorKind
-SalmonEgg.Acp.Client.AcpTransportMessageReceivedEventArgs
-SalmonEgg.Acp.Client.ElicitationCompletedEventArgs
-SalmonEgg.Acp.Client.ElicitationRequestEventArgs
-SalmonEgg.Acp.Client.FileSystemRequestEventArgs
-SalmonEgg.Acp.Client.FileSystemRequestKind
-SalmonEgg.Acp.Client.IAcpClient
-SalmonEgg.Acp.Client.IAcpClientLogger
-SalmonEgg.Acp.Client.IAcpClientSessionStore
-SalmonEgg.Acp.Client.IAcpTerminalSessionManager
-SalmonEgg.Acp.Client.IAcpTransport
-SalmonEgg.Acp.Client.InMemoryAcpClientSessionStore
-SalmonEgg.Acp.Client.NullAcpClientLogger
-SalmonEgg.Acp.Client.PermissionRequestEventArgs
-SalmonEgg.Acp.Client.SessionUpdateEventArgs
-SalmonEgg.Acp.Client.UnsupportedAcpTerminalSessionManager
-SalmonEgg.Acp.Content.Annotations
-SalmonEgg.Acp.Content.AudioContentBlock
-SalmonEgg.Acp.Content.ContentBlock
-SalmonEgg.Acp.Content.EmbeddedResource
-SalmonEgg.Acp.Content.ImageContentBlock
-SalmonEgg.Acp.Content.ResourceContentBlock
-SalmonEgg.Acp.Content.ResourceLinkContentBlock
-SalmonEgg.Acp.Content.TextContentBlock
-SalmonEgg.Acp.JsonRpc.AcpException
-SalmonEgg.Acp.JsonRpc.AcpFrame
-SalmonEgg.Acp.JsonRpc.JsonRpcErrorCode
-SalmonEgg.Acp.Mcp.CustomMcpServer
-SalmonEgg.Acp.Mcp.HttpMcpServer
-SalmonEgg.Acp.Mcp.McpEnvVariable
-SalmonEgg.Acp.Mcp.McpHttpHeader
-SalmonEgg.Acp.Mcp.McpServer
-SalmonEgg.Acp.Mcp.McpServerSnapshots
-SalmonEgg.Acp.Mcp.McpServerSupportPolicy
-SalmonEgg.Acp.Mcp.McpServerSupportResult
-SalmonEgg.Acp.Mcp.McpServerTransport
-SalmonEgg.Acp.Mcp.SseMcpServer
-SalmonEgg.Acp.Mcp.StdioMcpServer
-SalmonEgg.Acp.Observability.AcpActivitySources
-SalmonEgg.Acp.Plan.Plan
-SalmonEgg.Acp.Plan.PlanEntry
-SalmonEgg.Acp.Plan.PlanEntryPriority
-SalmonEgg.Acp.Plan.PlanEntryStatus
-SalmonEgg.Acp.Protocol.AcpMetaJson
-SalmonEgg.Acp.Protocol.AcpProtocolObject
-SalmonEgg.Acp.Protocol.AcpProtocolVersion
-SalmonEgg.Acp.Protocol.AcpRequestId
-SalmonEgg.Acp.Protocol.AcpRequestIdKind
-SalmonEgg.Acp.Protocol.AgentAuthCapabilities
-SalmonEgg.Acp.Protocol.AgentCapabilities
-SalmonEgg.Acp.Protocol.AgentInfo
-SalmonEgg.Acp.Protocol.AgentMessageUpdate
-SalmonEgg.Acp.Protocol.AgentSessionInfo
-SalmonEgg.Acp.Protocol.AgentThoughtUpdate
-SalmonEgg.Acp.Protocol.AgentWholeMessageUpdate
-SalmonEgg.Acp.Protocol.AgentWholeThoughtUpdate
-SalmonEgg.Acp.Protocol.AskUserContract
-SalmonEgg.Acp.Protocol.AskUserOption
-SalmonEgg.Acp.Protocol.AskUserQuestion
-SalmonEgg.Acp.Protocol.AskUserRequest
-SalmonEgg.Acp.Protocol.AskUserRequestEventArgs
-SalmonEgg.Acp.Protocol.AskUserResponse
-SalmonEgg.Acp.Protocol.AuthMethod
-SalmonEgg.Acp.Protocol.AuthMethodDefinition
-SalmonEgg.Acp.Protocol.AuthenticateParams
-SalmonEgg.Acp.Protocol.AuthenticateResponse
-SalmonEgg.Acp.Protocol.AvailableCommand
-SalmonEgg.Acp.Protocol.AvailableCommandInput
-SalmonEgg.Acp.Protocol.AvailableCommandsUpdate
-SalmonEgg.Acp.Protocol.BooleanConfigOptionCapabilities
-SalmonEgg.Acp.Protocol.BooleanPropertySchema
-SalmonEgg.Acp.Protocol.CancelRequestParams
-SalmonEgg.Acp.Protocol.ClientCapabilities
-SalmonEgg.Acp.Protocol.ClientCapabilityDefaults
-SalmonEgg.Acp.Protocol.ClientCapabilityMetadata
-SalmonEgg.Acp.Protocol.ClientInfo
-SalmonEgg.Acp.Protocol.ClientSessionCapabilities
-SalmonEgg.Acp.Protocol.CommandPermissionSubject
-SalmonEgg.Acp.Protocol.CompleteElicitationNotification
-SalmonEgg.Acp.Protocol.ConfigOption
-SalmonEgg.Acp.Protocol.ConfigOptionGroup
-SalmonEgg.Acp.Protocol.ConfigOptionUpdate
-SalmonEgg.Acp.Protocol.ConfigOptionValue
-SalmonEgg.Acp.Protocol.ContentChunkUpdate
-SalmonEgg.Acp.Protocol.CreateElicitationRequest
-SalmonEgg.Acp.Protocol.CreateElicitationResponse
-SalmonEgg.Acp.Protocol.CurrentModeUpdate
-SalmonEgg.Acp.Protocol.CustomElicitationRequest
-SalmonEgg.Acp.Protocol.CustomElicitationResponse
-SalmonEgg.Acp.Protocol.CustomMultiSelectItems
-SalmonEgg.Acp.Protocol.CustomPlanUpdateContent
-SalmonEgg.Acp.Protocol.CustomPropertySchema
-SalmonEgg.Acp.Protocol.CustomRequestPermissionSubject
-SalmonEgg.Acp.Protocol.CustomSessionWorkState
-SalmonEgg.Acp.Protocol.ElicitationAcceptContent
-SalmonEgg.Acp.Protocol.ElicitationAcceptResponse
-SalmonEgg.Acp.Protocol.ElicitationActions
-SalmonEgg.Acp.Protocol.ElicitationCancelResponse
-SalmonEgg.Acp.Protocol.ElicitationCapabilities
-SalmonEgg.Acp.Protocol.ElicitationContentValue
-SalmonEgg.Acp.Protocol.ElicitationDeclineResponse
-SalmonEgg.Acp.Protocol.ElicitationFormCapabilities
-SalmonEgg.Acp.Protocol.ElicitationMethods
-SalmonEgg.Acp.Protocol.ElicitationModes
-SalmonEgg.Acp.Protocol.ElicitationPropertySchema
-SalmonEgg.Acp.Protocol.ElicitationSchema
-SalmonEgg.Acp.Protocol.ElicitationScope
-SalmonEgg.Acp.Protocol.ElicitationUrlCapabilities
-SalmonEgg.Acp.Protocol.EnumOption
-SalmonEgg.Acp.Protocol.EnvVariable
-SalmonEgg.Acp.Protocol.FormElicitationRequest
-SalmonEgg.Acp.Protocol.FsCapability
-SalmonEgg.Acp.Protocol.Icon
-SalmonEgg.Acp.Protocol.IconThemeKind
-SalmonEgg.Acp.Protocol.IdleSessionWorkState
-SalmonEgg.Acp.Protocol.InitializeParams
-SalmonEgg.Acp.Protocol.InitializeResponse
-SalmonEgg.Acp.Protocol.IntegerPropertySchema
-SalmonEgg.Acp.Protocol.LogoutCapabilities
-SalmonEgg.Acp.Protocol.LogoutParams
-SalmonEgg.Acp.Protocol.LogoutResponse
-SalmonEgg.Acp.Protocol.McpCapabilities
-SalmonEgg.Acp.Protocol.McpHttpCapabilities
-SalmonEgg.Acp.Protocol.MultiSelectItems
-SalmonEgg.Acp.Protocol.MultiSelectPropertySchema
-SalmonEgg.Acp.Protocol.NumberPropertySchema
-SalmonEgg.Acp.Protocol.PermissionOption
-SalmonEgg.Acp.Protocol.PermissionOutcome
-SalmonEgg.Acp.Protocol.PermissionOutcomeResult
-SalmonEgg.Acp.Protocol.PlanItemsUpdateContent
-SalmonEgg.Acp.Protocol.PlanUpdate
-SalmonEgg.Acp.Protocol.PlanUpdateContent
-SalmonEgg.Acp.Protocol.PromptAudioCapabilities
-SalmonEgg.Acp.Protocol.PromptCapabilities
-SalmonEgg.Acp.Protocol.PromptEmbeddedContextCapabilities
-SalmonEgg.Acp.Protocol.PromptImageCapabilities
-SalmonEgg.Acp.Protocol.ProtocolPathRules
-SalmonEgg.Acp.Protocol.ReadTextFileResult
-SalmonEgg.Acp.Protocol.RequestPermissionSubject
-SalmonEgg.Acp.Protocol.RequiresActionSessionWorkState
-SalmonEgg.Acp.Protocol.RunningSessionWorkState
-SalmonEgg.Acp.Protocol.SessionAdditionalDirectoriesCapabilities
-SalmonEgg.Acp.Protocol.SessionCancelParams
-SalmonEgg.Acp.Protocol.SessionCapabilities
-SalmonEgg.Acp.Protocol.SessionCloseCapabilities
-SalmonEgg.Acp.Protocol.SessionCloseParams
-SalmonEgg.Acp.Protocol.SessionCloseResponse
-SalmonEgg.Acp.Protocol.SessionConfigOptionsCapabilities
-SalmonEgg.Acp.Protocol.SessionDeleteCapabilities
-SalmonEgg.Acp.Protocol.SessionDeleteParams
-SalmonEgg.Acp.Protocol.SessionDeleteResponse
-SalmonEgg.Acp.Protocol.SessionInfoUpdate
-SalmonEgg.Acp.Protocol.SessionListCapabilities
-SalmonEgg.Acp.Protocol.SessionListParams
-SalmonEgg.Acp.Protocol.SessionListResponse
-SalmonEgg.Acp.Protocol.SessionLoadParams
-SalmonEgg.Acp.Protocol.SessionLoadResponse
-SalmonEgg.Acp.Protocol.SessionMode
-SalmonEgg.Acp.Protocol.SessionModesState
-SalmonEgg.Acp.Protocol.SessionNewParams
-SalmonEgg.Acp.Protocol.SessionNewResponse
-SalmonEgg.Acp.Protocol.SessionPromptParams
-SalmonEgg.Acp.Protocol.SessionPromptResponse
-SalmonEgg.Acp.Protocol.SessionReplayFrom
-SalmonEgg.Acp.Protocol.SessionResumeCapabilities
-SalmonEgg.Acp.Protocol.SessionResumeParams
-SalmonEgg.Acp.Protocol.SessionResumeResponse
-SalmonEgg.Acp.Protocol.SessionSetConfigOptionParams
-SalmonEgg.Acp.Protocol.SessionSetConfigOptionResponse
-SalmonEgg.Acp.Protocol.SessionSetModeParams
-SalmonEgg.Acp.Protocol.SessionSetModeResponse
-SalmonEgg.Acp.Protocol.SessionUpdate
-SalmonEgg.Acp.Protocol.SessionUpdateParams
-SalmonEgg.Acp.Protocol.SessionWorkState
-SalmonEgg.Acp.Protocol.SessionWorkStateKind
-SalmonEgg.Acp.Protocol.StateSessionUpdate
-SalmonEgg.Acp.Protocol.StopReason
-SalmonEgg.Acp.Protocol.StringFormat
-SalmonEgg.Acp.Protocol.StringMultiSelectItems
-SalmonEgg.Acp.Protocol.StringPropertySchema
-SalmonEgg.Acp.Protocol.TerminalAuthCapabilities
-SalmonEgg.Acp.Protocol.TerminalCreateRequest
-SalmonEgg.Acp.Protocol.TerminalCreateResponse
-SalmonEgg.Acp.Protocol.TerminalExitStatus
-SalmonEgg.Acp.Protocol.TerminalKillRequest
-SalmonEgg.Acp.Protocol.TerminalKillResponse
-SalmonEgg.Acp.Protocol.TerminalOutput
-SalmonEgg.Acp.Protocol.TerminalOutputChunkSessionUpdate
-SalmonEgg.Acp.Protocol.TerminalOutputRequest
-SalmonEgg.Acp.Protocol.TerminalOutputResponse
-SalmonEgg.Acp.Protocol.TerminalReleaseRequest
-SalmonEgg.Acp.Protocol.TerminalReleaseResponse
-SalmonEgg.Acp.Protocol.TerminalRequestEventArgs
-SalmonEgg.Acp.Protocol.TerminalSessionUpdate
-SalmonEgg.Acp.Protocol.TerminalStateChangedEventArgs
-SalmonEgg.Acp.Protocol.TerminalWaitForExitRequest
-SalmonEgg.Acp.Protocol.TerminalWaitForExitResponse
-SalmonEgg.Acp.Protocol.TextCommandInput
-SalmonEgg.Acp.Protocol.TitledMultiSelectItems
-SalmonEgg.Acp.Protocol.ToolCallContentChunkUpdate
-SalmonEgg.Acp.Protocol.ToolCallPermissionSubject
-SalmonEgg.Acp.Protocol.ToolCallStatusUpdate
-SalmonEgg.Acp.Protocol.ToolCallUpdate
-SalmonEgg.Acp.Protocol.UrlElicitationRequest
-SalmonEgg.Acp.Protocol.UsageCost
-SalmonEgg.Acp.Protocol.UsageUpdate
-SalmonEgg.Acp.Protocol.UserMessageUpdate
-SalmonEgg.Acp.Protocol.UserWholeMessageUpdate
-SalmonEgg.Acp.Protocol.V2PlanUpdate
-SalmonEgg.Acp.Protocol.WholeMessageUpdate
-SalmonEgg.Acp.Serialization.AcpJsonContext
-SalmonEgg.Acp.Tool.ContentToolCallContent
-SalmonEgg.Acp.Tool.CustomToolCallContent
-SalmonEgg.Acp.Tool.DiffChange
-SalmonEgg.Acp.Tool.DiffFileTypeKind
-SalmonEgg.Acp.Tool.DiffOperationKind
-SalmonEgg.Acp.Tool.DiffPatch
-SalmonEgg.Acp.Tool.DiffPatchFormatKind
-SalmonEgg.Acp.Tool.DiffToolCallContent
-SalmonEgg.Acp.Tool.StructuredDiff
-SalmonEgg.Acp.Tool.TerminalToolCallContent
-SalmonEgg.Acp.Tool.ToolCallContent
-SalmonEgg.Acp.Tool.ToolCallKind
-SalmonEgg.Acp.Tool.ToolCallLocation
-SalmonEgg.Acp.Tool.ToolCallStatus
+# Pinned public surface of SalmonEgg.Acp. One line per exported type:
+#
+#     <fully-qualified type name> <stable|draft>
+#
+# The tag is mandatory. A line without one fails to parse, which is the point: a new exported type
+# cannot be added without answering whether it belongs to the stable protocol or to the v2 draft,
+# and the answer shows up in the diff for review rather than being inferred from a default.
+#
+#   stable - part of the supported surface. Semver applies; package validation compares it against
+#            the last published baseline.
+#   draft  - v2 draft surface. Must carry [Experimental(AcpDraftProtocol.DiagnosticId)]; the
+#            attribute and this column are asserted to agree in both directions, so marking one
+#            without the other is a red gate rather than a silent gap.
+#
+# Sorted by type name, ordinal. Asserted by PublicSurfaceBaselineTests and DraftProtocolSurfaceTests.
+SalmonEgg.Acp.Client.AcpClient stable
+SalmonEgg.Acp.Client.AcpClientLogLevel stable
+SalmonEgg.Acp.Client.AcpTransportErrorEventArgs stable
+SalmonEgg.Acp.Client.AcpTransportErrorKind stable
+SalmonEgg.Acp.Client.AcpTransportMessageReceivedEventArgs stable
+SalmonEgg.Acp.Client.ElicitationCompletedEventArgs stable
+SalmonEgg.Acp.Client.ElicitationRequestEventArgs stable
+SalmonEgg.Acp.Client.FileSystemRequestEventArgs stable
+SalmonEgg.Acp.Client.FileSystemRequestKind stable
+SalmonEgg.Acp.Client.IAcpClient stable
+SalmonEgg.Acp.Client.IAcpClientLogger stable
+SalmonEgg.Acp.Client.IAcpClientSessionStore stable
+SalmonEgg.Acp.Client.IAcpTerminalSessionManager stable
+SalmonEgg.Acp.Client.IAcpTransport stable
+SalmonEgg.Acp.Client.InMemoryAcpClientSessionStore stable
+SalmonEgg.Acp.Client.NullAcpClientLogger stable
+SalmonEgg.Acp.Client.PermissionRequestEventArgs stable
+SalmonEgg.Acp.Client.SessionUpdateEventArgs stable
+SalmonEgg.Acp.Client.UnsupportedAcpTerminalSessionManager stable
+SalmonEgg.Acp.Content.Annotations stable
+SalmonEgg.Acp.Content.AudioContentBlock stable
+SalmonEgg.Acp.Content.ContentBlock stable
+SalmonEgg.Acp.Content.EmbeddedResource stable
+SalmonEgg.Acp.Content.ImageContentBlock stable
+SalmonEgg.Acp.Content.ResourceContentBlock stable
+SalmonEgg.Acp.Content.ResourceLinkContentBlock stable
+SalmonEgg.Acp.Content.TextContentBlock stable
+SalmonEgg.Acp.JsonRpc.AcpException stable
+SalmonEgg.Acp.JsonRpc.AcpFrame stable
+SalmonEgg.Acp.JsonRpc.JsonRpcErrorCode stable
+SalmonEgg.Acp.Mcp.CustomMcpServer stable
+SalmonEgg.Acp.Mcp.HttpMcpServer stable
+SalmonEgg.Acp.Mcp.McpEnvVariable stable
+SalmonEgg.Acp.Mcp.McpHttpHeader stable
+SalmonEgg.Acp.Mcp.McpServer stable
+SalmonEgg.Acp.Mcp.McpServerSnapshots stable
+SalmonEgg.Acp.Mcp.McpServerSupportPolicy stable
+SalmonEgg.Acp.Mcp.McpServerSupportResult stable
+SalmonEgg.Acp.Mcp.McpServerTransport stable
+SalmonEgg.Acp.Mcp.SseMcpServer stable
+SalmonEgg.Acp.Mcp.StdioMcpServer stable
+SalmonEgg.Acp.Observability.AcpActivitySources stable
+SalmonEgg.Acp.Plan.Plan stable
+SalmonEgg.Acp.Plan.PlanEntry stable
+SalmonEgg.Acp.Plan.PlanEntryPriority stable
+SalmonEgg.Acp.Plan.PlanEntryStatus stable
+SalmonEgg.Acp.Protocol.AcpMetaJson stable
+SalmonEgg.Acp.Protocol.AcpProtocolObject stable
+SalmonEgg.Acp.Protocol.AcpProtocolVersion stable
+SalmonEgg.Acp.Protocol.AcpRequestId stable
+SalmonEgg.Acp.Protocol.AcpRequestIdKind stable
+SalmonEgg.Acp.Protocol.AgentAuthCapabilities stable
+SalmonEgg.Acp.Protocol.AgentCapabilities stable
+SalmonEgg.Acp.Protocol.AgentInfo stable
+SalmonEgg.Acp.Protocol.AgentMessageUpdate stable
+SalmonEgg.Acp.Protocol.AgentSessionInfo stable
+SalmonEgg.Acp.Protocol.AgentThoughtUpdate stable
+SalmonEgg.Acp.Protocol.AgentWholeMessageUpdate draft
+SalmonEgg.Acp.Protocol.AgentWholeThoughtUpdate draft
+SalmonEgg.Acp.Protocol.AskUserContract stable
+SalmonEgg.Acp.Protocol.AskUserOption stable
+SalmonEgg.Acp.Protocol.AskUserQuestion stable
+SalmonEgg.Acp.Protocol.AskUserRequest stable
+SalmonEgg.Acp.Protocol.AskUserRequestEventArgs stable
+SalmonEgg.Acp.Protocol.AskUserResponse stable
+SalmonEgg.Acp.Protocol.AuthMethod stable
+SalmonEgg.Acp.Protocol.AuthMethodDefinition stable
+SalmonEgg.Acp.Protocol.AuthenticateParams stable
+SalmonEgg.Acp.Protocol.AuthenticateResponse stable
+SalmonEgg.Acp.Protocol.AvailableCommand stable
+SalmonEgg.Acp.Protocol.AvailableCommandInput stable
+SalmonEgg.Acp.Protocol.AvailableCommandsUpdate stable
+SalmonEgg.Acp.Protocol.BooleanConfigOptionCapabilities stable
+SalmonEgg.Acp.Protocol.BooleanPropertySchema stable
+SalmonEgg.Acp.Protocol.CancelRequestParams stable
+SalmonEgg.Acp.Protocol.ClientCapabilities stable
+SalmonEgg.Acp.Protocol.ClientCapabilityDefaults stable
+SalmonEgg.Acp.Protocol.ClientCapabilityMetadata stable
+SalmonEgg.Acp.Protocol.ClientInfo stable
+SalmonEgg.Acp.Protocol.ClientSessionCapabilities stable
+SalmonEgg.Acp.Protocol.CommandPermissionSubject draft
+SalmonEgg.Acp.Protocol.CompleteElicitationNotification stable
+SalmonEgg.Acp.Protocol.ConfigOption stable
+SalmonEgg.Acp.Protocol.ConfigOptionGroup stable
+SalmonEgg.Acp.Protocol.ConfigOptionUpdate stable
+SalmonEgg.Acp.Protocol.ConfigOptionValue stable
+SalmonEgg.Acp.Protocol.ContentChunkUpdate stable
+SalmonEgg.Acp.Protocol.CreateElicitationRequest stable
+SalmonEgg.Acp.Protocol.CreateElicitationResponse stable
+SalmonEgg.Acp.Protocol.CurrentModeUpdate stable
+SalmonEgg.Acp.Protocol.CustomElicitationRequest stable
+SalmonEgg.Acp.Protocol.CustomElicitationResponse stable
+SalmonEgg.Acp.Protocol.CustomMultiSelectItems stable
+SalmonEgg.Acp.Protocol.CustomPlanUpdateContent draft
+SalmonEgg.Acp.Protocol.CustomPropertySchema stable
+SalmonEgg.Acp.Protocol.CustomRequestPermissionSubject draft
+SalmonEgg.Acp.Protocol.CustomSessionWorkState draft
+SalmonEgg.Acp.Protocol.ElicitationAcceptContent stable
+SalmonEgg.Acp.Protocol.ElicitationAcceptResponse stable
+SalmonEgg.Acp.Protocol.ElicitationActions stable
+SalmonEgg.Acp.Protocol.ElicitationCancelResponse stable
+SalmonEgg.Acp.Protocol.ElicitationCapabilities stable
+SalmonEgg.Acp.Protocol.ElicitationContentValue stable
+SalmonEgg.Acp.Protocol.ElicitationDeclineResponse stable
+SalmonEgg.Acp.Protocol.ElicitationFormCapabilities stable
+SalmonEgg.Acp.Protocol.ElicitationMethods stable
+SalmonEgg.Acp.Protocol.ElicitationModes stable
+SalmonEgg.Acp.Protocol.ElicitationPropertySchema stable
+SalmonEgg.Acp.Protocol.ElicitationSchema stable
+SalmonEgg.Acp.Protocol.ElicitationScope stable
+SalmonEgg.Acp.Protocol.ElicitationUrlCapabilities stable
+SalmonEgg.Acp.Protocol.EnumOption stable
+SalmonEgg.Acp.Protocol.EnvVariable stable
+SalmonEgg.Acp.Protocol.FormElicitationRequest stable
+SalmonEgg.Acp.Protocol.FsCapability stable
+SalmonEgg.Acp.Protocol.Icon draft
+SalmonEgg.Acp.Protocol.IconThemeKind draft
+SalmonEgg.Acp.Protocol.IdleSessionWorkState draft
+SalmonEgg.Acp.Protocol.InitializeParams stable
+SalmonEgg.Acp.Protocol.InitializeResponse stable
+SalmonEgg.Acp.Protocol.IntegerPropertySchema stable
+SalmonEgg.Acp.Protocol.LogoutCapabilities stable
+SalmonEgg.Acp.Protocol.LogoutParams stable
+SalmonEgg.Acp.Protocol.LogoutResponse stable
+SalmonEgg.Acp.Protocol.McpCapabilities stable
+SalmonEgg.Acp.Protocol.McpHttpCapabilities draft
+SalmonEgg.Acp.Protocol.MultiSelectItems stable
+SalmonEgg.Acp.Protocol.MultiSelectPropertySchema stable
+SalmonEgg.Acp.Protocol.NumberPropertySchema stable
+SalmonEgg.Acp.Protocol.PermissionOption stable
+SalmonEgg.Acp.Protocol.PermissionOutcome stable
+SalmonEgg.Acp.Protocol.PermissionOutcomeResult stable
+SalmonEgg.Acp.Protocol.PlanItemsUpdateContent draft
+SalmonEgg.Acp.Protocol.PlanUpdate stable
+SalmonEgg.Acp.Protocol.PlanUpdateContent draft
+SalmonEgg.Acp.Protocol.PromptAudioCapabilities draft
+SalmonEgg.Acp.Protocol.PromptCapabilities stable
+SalmonEgg.Acp.Protocol.PromptEmbeddedContextCapabilities draft
+SalmonEgg.Acp.Protocol.PromptImageCapabilities draft
+SalmonEgg.Acp.Protocol.ProtocolPathRules stable
+SalmonEgg.Acp.Protocol.ReadTextFileResult stable
+SalmonEgg.Acp.Protocol.RequestPermissionSubject draft
+SalmonEgg.Acp.Protocol.RequiresActionSessionWorkState draft
+SalmonEgg.Acp.Protocol.RunningSessionWorkState draft
+SalmonEgg.Acp.Protocol.SessionAdditionalDirectoriesCapabilities stable
+SalmonEgg.Acp.Protocol.SessionCancelParams stable
+SalmonEgg.Acp.Protocol.SessionCapabilities stable
+SalmonEgg.Acp.Protocol.SessionCloseCapabilities stable
+SalmonEgg.Acp.Protocol.SessionCloseParams stable
+SalmonEgg.Acp.Protocol.SessionCloseResponse stable
+SalmonEgg.Acp.Protocol.SessionConfigOptionsCapabilities stable
+SalmonEgg.Acp.Protocol.SessionDeleteCapabilities stable
+SalmonEgg.Acp.Protocol.SessionDeleteParams stable
+SalmonEgg.Acp.Protocol.SessionDeleteResponse stable
+SalmonEgg.Acp.Protocol.SessionInfoUpdate stable
+SalmonEgg.Acp.Protocol.SessionListCapabilities stable
+SalmonEgg.Acp.Protocol.SessionListParams stable
+SalmonEgg.Acp.Protocol.SessionListResponse stable
+SalmonEgg.Acp.Protocol.SessionLoadParams stable
+SalmonEgg.Acp.Protocol.SessionLoadResponse stable
+SalmonEgg.Acp.Protocol.SessionMode stable
+SalmonEgg.Acp.Protocol.SessionModesState stable
+SalmonEgg.Acp.Protocol.SessionNewParams stable
+SalmonEgg.Acp.Protocol.SessionNewResponse stable
+SalmonEgg.Acp.Protocol.SessionPromptParams stable
+SalmonEgg.Acp.Protocol.SessionPromptResponse stable
+SalmonEgg.Acp.Protocol.SessionReplayFrom stable
+SalmonEgg.Acp.Protocol.SessionResumeCapabilities stable
+SalmonEgg.Acp.Protocol.SessionResumeParams stable
+SalmonEgg.Acp.Protocol.SessionResumeResponse stable
+SalmonEgg.Acp.Protocol.SessionSetConfigOptionParams stable
+SalmonEgg.Acp.Protocol.SessionSetConfigOptionResponse stable
+SalmonEgg.Acp.Protocol.SessionSetModeParams stable
+SalmonEgg.Acp.Protocol.SessionSetModeResponse stable
+SalmonEgg.Acp.Protocol.SessionUpdate stable
+SalmonEgg.Acp.Protocol.SessionUpdateParams stable
+SalmonEgg.Acp.Protocol.SessionWorkState draft
+SalmonEgg.Acp.Protocol.SessionWorkStateKind draft
+SalmonEgg.Acp.Protocol.StateSessionUpdate draft
+SalmonEgg.Acp.Protocol.StopReason stable
+SalmonEgg.Acp.Protocol.StringFormat stable
+SalmonEgg.Acp.Protocol.StringMultiSelectItems stable
+SalmonEgg.Acp.Protocol.StringPropertySchema stable
+SalmonEgg.Acp.Protocol.TerminalAuthCapabilities draft
+SalmonEgg.Acp.Protocol.TerminalCreateRequest stable
+SalmonEgg.Acp.Protocol.TerminalCreateResponse stable
+SalmonEgg.Acp.Protocol.TerminalExitStatus stable
+SalmonEgg.Acp.Protocol.TerminalKillRequest stable
+SalmonEgg.Acp.Protocol.TerminalKillResponse stable
+SalmonEgg.Acp.Protocol.TerminalOutput draft
+SalmonEgg.Acp.Protocol.TerminalOutputChunkSessionUpdate draft
+SalmonEgg.Acp.Protocol.TerminalOutputRequest stable
+SalmonEgg.Acp.Protocol.TerminalOutputResponse stable
+SalmonEgg.Acp.Protocol.TerminalReleaseRequest stable
+SalmonEgg.Acp.Protocol.TerminalReleaseResponse stable
+SalmonEgg.Acp.Protocol.TerminalRequestEventArgs stable
+SalmonEgg.Acp.Protocol.TerminalSessionUpdate draft
+SalmonEgg.Acp.Protocol.TerminalStateChangedEventArgs stable
+SalmonEgg.Acp.Protocol.TerminalWaitForExitRequest stable
+SalmonEgg.Acp.Protocol.TerminalWaitForExitResponse stable
+SalmonEgg.Acp.Protocol.TextCommandInput draft
+SalmonEgg.Acp.Protocol.TitledMultiSelectItems stable
+SalmonEgg.Acp.Protocol.ToolCallContentChunkUpdate draft
+SalmonEgg.Acp.Protocol.ToolCallPermissionSubject draft
+SalmonEgg.Acp.Protocol.ToolCallStatusUpdate stable
+SalmonEgg.Acp.Protocol.ToolCallUpdate stable
+SalmonEgg.Acp.Protocol.UrlElicitationRequest stable
+SalmonEgg.Acp.Protocol.UsageCost stable
+SalmonEgg.Acp.Protocol.UsageUpdate stable
+SalmonEgg.Acp.Protocol.UserMessageUpdate stable
+SalmonEgg.Acp.Protocol.UserWholeMessageUpdate draft
+SalmonEgg.Acp.Protocol.V2PlanUpdate draft
+SalmonEgg.Acp.Protocol.WholeMessageUpdate draft
+SalmonEgg.Acp.Serialization.AcpJsonContext stable
+SalmonEgg.Acp.Tool.ContentToolCallContent stable
+SalmonEgg.Acp.Tool.CustomToolCallContent stable
+SalmonEgg.Acp.Tool.DiffChange draft
+SalmonEgg.Acp.Tool.DiffFileTypeKind draft
+SalmonEgg.Acp.Tool.DiffOperationKind draft
+SalmonEgg.Acp.Tool.DiffPatch draft
+SalmonEgg.Acp.Tool.DiffPatchFormatKind draft
+SalmonEgg.Acp.Tool.DiffToolCallContent stable
+SalmonEgg.Acp.Tool.StructuredDiff draft
+SalmonEgg.Acp.Tool.TerminalToolCallContent stable
+SalmonEgg.Acp.Tool.ToolCallContent stable
+SalmonEgg.Acp.Tool.ToolCallKind stable
+SalmonEgg.Acp.Tool.ToolCallLocation stable
+SalmonEgg.Acp.Tool.ToolCallStatus stable
