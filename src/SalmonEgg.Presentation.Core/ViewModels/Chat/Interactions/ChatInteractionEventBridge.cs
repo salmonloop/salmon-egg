@@ -8,6 +8,7 @@ using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Interactions;
@@ -74,6 +75,42 @@ public sealed class ChatInteractionEventBridge
             _localizer);
 
         return (conversationId, requestViewModel);
+    }
+
+    public async Task<(string ConversationId, ElicitationRequestViewModel ViewModel)?> BuildElicitationRequestAsync(
+        ElicitationRequestEventArgs args,
+        Func<string, Task> clearPendingRequestAsync,
+        ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(clearPendingRequestAsync);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        if (args.Request is not FormElicitationRequest || string.IsNullOrWhiteSpace(args.SessionId))
+        {
+            logger.LogWarning(
+                "Elicitation request ignored because it is not a session-scoped form. Mode={ElicitationMode}",
+                args.Request.Mode);
+            return null;
+        }
+
+        var conversationId = await _authoritativeRemoteSessionRouter
+            .ResolveConversationIdAsync(args.SessionId)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            logger.LogWarning(
+                "Elicitation request ignored because no bound conversation matched remote session {RemoteSessionId}",
+                args.SessionId);
+            return null;
+        }
+
+        return (
+            conversationId,
+            ElicitationInteractionViewModelFactory.Create(
+                args,
+                () => clearPendingRequestAsync(conversationId),
+                _localizer));
     }
 
     public async Task<(string ConversationId, ChatConversationPanelSelection Selection)?> BuildTerminalRequestSelectionAsync(
