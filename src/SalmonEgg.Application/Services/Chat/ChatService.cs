@@ -93,6 +93,8 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
         public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived;
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
         public event EventHandler<string>? ErrorOccurred;
 
         public ChatService(IAcpClient acpClient, IErrorLogger errorLogger, ISessionManager sessionManager)
@@ -107,6 +109,8 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.TerminalRequestReceived += OnTerminalRequestReceived;
             _acpClient.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
             _acpClient.AskUserRequestReceived += OnAskUserRequestReceived;
+            _acpClient.ElicitationRequestReceived += OnElicitationRequestReceived;
+            _acpClient.ElicitationCompleted += OnElicitationCompleted;
             _acpClient.ErrorOccurred += OnErrorOccurred;
         }
 
@@ -256,6 +260,16 @@ namespace SalmonEgg.Application.Services.Chat
         private void OnAskUserRequestReceived(object? sender, AskUserRequestEventArgs e)
         {
             AskUserRequestReceived?.Invoke(this, e);
+        }
+
+        private void OnElicitationRequestReceived(object? sender, ElicitationRequestEventArgs e)
+        {
+            ElicitationRequestReceived?.Invoke(this, e);
+        }
+
+        private void OnElicitationCompleted(object? sender, ElicitationCompletedEventArgs e)
+        {
+            ElicitationCompleted?.Invoke(this, e);
         }
 
         private static SessionUpdateEntry CreateSessionUpdateEntry(SessionUpdate update, string sessionId)
@@ -1141,6 +1155,43 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
+        public async Task<bool> RespondToElicitationRequestAsync(
+            object messageId,
+            ElicitationAcceptContent? content)
+            => await InvokeElicitationResponseAsync(
+                () => _acpClient.RespondToElicitationRequestAsync(messageId, content),
+                nameof(RespondToElicitationRequestAsync)).ConfigureAwait(false);
+
+        public async Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => await InvokeElicitationResponseAsync(
+                () => _acpClient.DeclineElicitationRequestAsync(messageId),
+                nameof(DeclineElicitationRequestAsync)).ConfigureAwait(false);
+
+        public async Task<bool> CancelElicitationRequestAsync(object messageId)
+            => await InvokeElicitationResponseAsync(
+                () => _acpClient.CancelElicitationRequestAsync(messageId),
+                nameof(CancelElicitationRequestAsync)).ConfigureAwait(false);
+
+        private async Task<bool> InvokeElicitationResponseAsync(Func<Task<bool>> send, string operation)
+        {
+            try
+            {
+                return await send().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                var entry = new ErrorLogEntry(
+                    $"{operation} failed",
+                    ex.Message,
+                    ErrorSeverity.Error,
+                    operation,
+                    null,
+                    ex);
+                _errorLogger.LogError(entry);
+                throw;
+            }
+        }
+
         public async Task<bool> DisconnectAsync()
         {
             try
@@ -1228,6 +1279,8 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.TerminalRequestReceived -= OnTerminalRequestReceived;
             _acpClient.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
             _acpClient.AskUserRequestReceived -= OnAskUserRequestReceived;
+            _acpClient.ElicitationRequestReceived -= OnElicitationRequestReceived;
+            _acpClient.ElicitationCompleted -= OnElicitationCompleted;
             _acpClient.ErrorOccurred -= OnErrorOccurred;
 
             // 本服务独占其 ACP 客户端（进而独占传输/进程/套接字/CTS），释放沿所有权链下传。

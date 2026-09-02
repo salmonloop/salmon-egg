@@ -2309,6 +2309,10 @@ public sealed class NavigationCoordinatorTests
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived { add { } remove { } }
         public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived { add { } remove { } }
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived { add { } remove { } }
+
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived { add { } remove { } }
+
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted { add { } remove { } }
         public event EventHandler<string>? ErrorOccurred { add { } remove { } }
         public Task<InitializeResponse> InitializeAsync(InitializeParams @params) => throw new NotSupportedException();
         public Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params) => throw new NotSupportedException();
@@ -2326,6 +2330,12 @@ public sealed class NavigationCoordinatorTests
         public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null) => throw new NotSupportedException();
         public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null) => throw new NotSupportedException();
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers) => throw new NotSupportedException();
+
+        public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content) => throw new NotSupportedException();
+
+        public Task<bool> DeclineElicitationRequestAsync(object messageId) => throw new NotSupportedException();
+
+        public Task<bool> CancelElicitationRequestAsync(object messageId) => throw new NotSupportedException();
         public Task<bool> DisconnectAsync() => throw new NotSupportedException();
         public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync() => throw new NotSupportedException();
         public void ClearHistory() { }

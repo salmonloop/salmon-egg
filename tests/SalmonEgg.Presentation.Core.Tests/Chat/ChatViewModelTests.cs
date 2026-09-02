@@ -6671,6 +6671,18 @@ public partial class ChatViewModelTests
             remove { }
         }
 
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted
+        {
+            add { }
+            remove { }
+        }
+
         public event EventHandler<string>? ErrorOccurred
         {
             add { }
@@ -6734,6 +6746,15 @@ public partial class ChatViewModelTests
             => throw new NotSupportedException();
 
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
+            => throw new NotSupportedException();
+
+        public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+            => throw new NotSupportedException();
+
+        public Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => throw new NotSupportedException();
+
+        public Task<bool> CancelElicitationRequestAsync(object messageId)
             => throw new NotSupportedException();
 
         public Task<bool> DisconnectAsync()
@@ -6811,6 +6832,18 @@ public partial class ChatViewModelTests
         }
 
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted
         {
             add { }
             remove { }
@@ -6903,6 +6936,15 @@ public partial class ChatViewModelTests
             => throw new NotSupportedException();
 
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
+            => throw new NotSupportedException();
+
+        public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+            => throw new NotSupportedException();
+
+        public Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => throw new NotSupportedException();
+
+        public Task<bool> CancelElicitationRequestAsync(object messageId)
             => throw new NotSupportedException();
 
         public Task<bool> DisconnectAsync()

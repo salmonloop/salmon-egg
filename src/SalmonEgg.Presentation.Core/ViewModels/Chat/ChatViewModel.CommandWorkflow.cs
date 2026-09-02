@@ -34,6 +34,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.AskUser;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Presentation.ViewModels.Chat.Hydration;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Input;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
@@ -456,7 +457,7 @@ public partial class ChatViewModel
             IsPromptSubmitInFlight: IsPromptSubmitInFlight,
             IsVoiceInputListening: IsVoiceInputListening,
             VoiceInputTransportState: _voiceInputTransportState,
-            HasPendingAskUserRequest: PendingAskUserRequest is not null,
+            HasPendingAskUserRequest: PendingAskUserRequest is not null || PendingElicitationRequest is not null,
             ShouldShowLoadingOverlayPresenter: ShouldShowLoadingOverlayPresenter,
             IsSessionActive: IsSessionActive,
             HasChatService: _chatService is not null,
@@ -1626,7 +1627,9 @@ public partial class ChatViewModel
             await _acpConnectionCommands.DisconnectAsync(this);
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
             _panelStateCoordinator.ClearAskUserRequests();
+            _panelStateCoordinator.ClearElicitationRequests();
             PendingAskUserRequest = null;
+            PendingElicitationRequest = null;
         }
         catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
         {
@@ -1734,6 +1737,40 @@ public partial class ChatViewModel
     partial void OnIsVoiceInputSupportedChanged(bool value)
     {
         NotifyComposerProjectionChanged();
+    }
+
+    partial void OnPendingElicitationRequestChanged(ElicitationRequestViewModel? value)
+    {
+        if (_observedPendingElicitationRequest != null)
+        {
+            _observedPendingElicitationRequest.PropertyChanged -= OnPendingElicitationRequestPropertyChanged;
+        }
+
+        _observedPendingElicitationRequest = value;
+        if (_observedPendingElicitationRequest != null)
+        {
+            _observedPendingElicitationRequest.PropertyChanged += OnPendingElicitationRequestPropertyChanged;
+        }
+
+        SendPromptCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(HasPendingElicitationRequest));
+        OnPropertyChanged(nameof(ElicitationPrompt));
+        OnPropertyChanged(nameof(ElicitationFields));
+        OnPropertyChanged(nameof(ElicitationHasError));
+        OnPropertyChanged(nameof(ElicitationErrorMessage));
+        OnPropertyChanged(nameof(ElicitationSubmitCommand));
+        OnPropertyChanged(nameof(ElicitationDeclineCommand));
+        OnPropertyChanged(nameof(ElicitationCancelCommand));
+        NotifyComposerProjectionChanged();
+    }
+
+    private void OnPendingElicitationRequestPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(ElicitationHasError));
+        OnPropertyChanged(nameof(ElicitationErrorMessage));
+        OnPropertyChanged(nameof(ElicitationSubmitCommand));
+        OnPropertyChanged(nameof(ElicitationDeclineCommand));
+        OnPropertyChanged(nameof(ElicitationCancelCommand));
     }
 
     partial void OnPendingAskUserRequestChanged(AskUserRequestViewModel? value)
