@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -34,6 +35,7 @@ namespace SalmonEgg.Acp.Protocol
     /// </para>
     /// </remarks>
     [JsonConverter(typeof(SessionWorkStateJsonConverter))]
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public abstract record SessionWorkState : AcpProtocolObject
     {
         /// <summary>
@@ -45,6 +47,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Well-known <c>state</c> discriminator values.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public static class SessionWorkStateKind
     {
         /// <summary>Foreground work is in progress.</summary>
@@ -60,6 +63,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Foreground work is in progress. The Agent must send this when foreground work starts or resumes.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record RunningSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
@@ -69,6 +73,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// The Agent is ready to process a new prompt. This is the v2 end-of-turn signal.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record IdleSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
@@ -85,6 +90,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Foreground work is blocked on user action, such as an outstanding permission request.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record RequiresActionSessionWorkState : SessionWorkState
     {
         /// <inheritdoc />
@@ -95,6 +101,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Forward-compatibility carrier for a <c>state</c> value this SDK does not model, preserving the
     /// payload verbatim so it round-trips instead of being downgraded by the client.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record CustomSessionWorkState : SessionWorkState
     {
         private readonly string _state = string.Empty;
