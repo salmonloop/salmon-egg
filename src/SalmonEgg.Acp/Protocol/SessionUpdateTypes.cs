@@ -211,7 +211,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// V2 <c>state_update</c>: the Agent's foreground-work state changed. In v2 this - not the
     /// <c>session/prompt</c> response - is what ends a turn, via
-    /// <see cref="IdleSessionState"/> carrying a stop reason.
+    /// <see cref="IdleSessionWorkState"/> carrying a stop reason.
     /// </summary>
     /// <remarks>
     /// The inner <c>state</c> discriminator and its payload are siblings of the outer
@@ -227,7 +227,7 @@ namespace SalmonEgg.Acp.Protocol
         /// The reported foreground-work state. Required by the protocol.
         /// </summary>
         [JsonIgnore]
-        public SessionState State { get; init; } = null!;
+        public SessionWorkState State { get; init; } = null!;
 
         /// <summary>
         /// Creates an empty update.
@@ -240,7 +240,7 @@ namespace SalmonEgg.Acp.Protocol
         /// Creates an update reporting the given state.
         /// </summary>
         /// <param name="state">The reported foreground-work state.</param>
-        public StateSessionUpdate(SessionState state)
+        public StateSessionUpdate(SessionWorkState state)
         {
             State = state ?? throw new ArgumentNullException(nameof(state));
         }
@@ -264,7 +264,7 @@ namespace SalmonEgg.Acp.Protocol
         {
             var state = JsonSerializer.Deserialize(
                 root.GetRawText(),
-                (JsonTypeInfo<SessionState>)options.GetTypeInfo(typeof(SessionState)));
+                (JsonTypeInfo<SessionWorkState>)options.GetTypeInfo(typeof(SessionWorkState)));
 
             return new StateSessionUpdate
             {
@@ -287,7 +287,7 @@ namespace SalmonEgg.Acp.Protocol
             // converter this writer directly would open a nested object instead.
             var element = JsonSerializer.SerializeToElement(
                 value.State,
-                (JsonTypeInfo<SessionState>)options.GetTypeInfo(typeof(SessionState)));
+                (JsonTypeInfo<SessionWorkState>)options.GetTypeInfo(typeof(SessionWorkState)));
 
             writer.WriteStartObject();
             writer.WriteString("sessionUpdate", Discriminator);
