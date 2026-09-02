@@ -256,7 +256,8 @@ public sealed class AcpJsonContextTests
 
     // "Latest" shipped in SalmonEgg.Acp 1.0.0, so package validation forbids removing it: the rename
     // has to keep the old constant as an obsolete alias. Reading it through reflection rather than
-    // source keeps this assertion from tripping the SDK's warnings-as-errors on CS0618.
+    // source keeps this assertion from tripping the deprecation, which Directory.Build.props
+    // escalates to an error repository-wide.
     [Fact]
     public void AcpProtocolVersion_Latest_IsObsoleteAliasOfHighestModeled()
     {
@@ -273,6 +274,12 @@ public sealed class AcpJsonContextTests
         Assert.Equal(AcpProtocolVersion.LatestRenamedMessage, obsolete.Message);
         Assert.Contains(nameof(AcpProtocolVersion.HighestModeled), obsolete.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(AcpProtocolVersion.Default), obsolete.Message, StringComparison.Ordinal);
+
+        // A dedicated diagnostic id is what makes the "production code must not reference the
+        // modeled-version ceiling" rule enforceable on its own: CS0618 would drag every other
+        // deprecation along when escalated. AcpProtocolVersionGateTests asserts the build actually
+        // escalates this id.
+        Assert.Equal(AcpProtocolVersion.LatestRenamedDiagnosticId, obsolete.DiagnosticId);
     }
 
     [Fact]
