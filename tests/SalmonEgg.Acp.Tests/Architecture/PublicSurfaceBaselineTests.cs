@@ -13,13 +13,9 @@ namespace SalmonEgg.Acp.Tests.Architecture;
 public sealed class PublicSurfaceBaselineTests
 {
     [Fact]
-    public void ExportedTypes_MatchCheckedInBaseline()
+    public void ExportedTypes_MatchCheckedInManifest()
     {
-        var baselinePath = FindBaseline();
-        var expected = File.ReadAllLines(baselinePath)
-            .Select(static line => line.Trim())
-            .Where(static line => line.Length > 0 && !line.StartsWith("#", StringComparison.Ordinal))
-            .ToArray();
+        var expected = PublicSurfaceManifest.Load().AllTypeNames;
 
         var actual = typeof(AcpClient).Assembly
             .GetExportedTypes()
@@ -121,25 +117,5 @@ public sealed class PublicSurfaceBaselineTests
         Assert.True(typeof(AcpException).IsSealed);
         Assert.True(typeof(AcpJsonContext).IsPublic);
         Assert.False(typeof(AcpJsonContext).IsAbstract); // partial concrete
-    }
-
-    private static string FindBaseline()
-    {
-        var outputBaseline = Path.Combine(AppContext.BaseDirectory, "PublicSurface.Types.txt");
-        if (File.Exists(outputBaseline))
-        {
-            return outputBaseline;
-        }
-
-        var repoBaseline = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "src", "SalmonEgg.Acp", "PublicSurface.Types.txt"));
-        if (File.Exists(repoBaseline))
-        {
-            return repoBaseline;
-        }
-
-        throw new FileNotFoundException("PublicSurface.Types.txt baseline was not found.");
     }
 }
