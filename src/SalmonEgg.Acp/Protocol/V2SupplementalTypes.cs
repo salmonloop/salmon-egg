@@ -52,27 +52,6 @@ public sealed record Icon
     public string? Theme { get; init; }
 }
 
-/// <summary>Opaque v2 pagination cursor. Its contents are Agent-defined and must not be interpreted.</summary>
-public readonly record struct SessionListCursor
-{
-    private readonly string? _value;
-
-    /// <summary>Creates an opaque cursor.</summary>
-    public SessionListCursor(string value) => _value = value ?? throw new ArgumentNullException(nameof(value));
-
-    /// <summary>The wire value.</summary>
-    public string Value => _value ?? string.Empty;
-
-    /// <inheritdoc />
-    public override string ToString() => Value;
-
-    /// <summary>Converts a wire value to an opaque cursor.</summary>
-    public static implicit operator SessionListCursor(string value) => new(value);
-
-    /// <summary>Converts an opaque cursor to its wire value.</summary>
-    public static implicit operator string(SessionListCursor value) => value.Value;
-}
-
 /// <summary>V2 command input specification for free text after the command name.</summary>
 public sealed record TextCommandInput : AcpProtocolObject
 {
