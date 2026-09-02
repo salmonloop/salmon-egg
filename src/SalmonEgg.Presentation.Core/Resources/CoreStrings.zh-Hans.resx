@@ -1298,4 +1298,19 @@
   <data name="AcpSetup_Toolchain_DownloadFailed" xml:space="preserve">
     <value>工具链下载或校验失败。请检查网络连接，或使用文档链接手动安装。</value>
   </data>
+  <data name="Elicitation_SubmitUnavailable" xml:space="preserve">
+    <value>这个表单暂时无法提交。</value>
+  </data>
+  <data name="Elicitation_InvalidForm" xml:space="preserve">
+    <value>请检查标红的字段后再提交。</value>
+  </data>
+  <data name="Elicitation_ResponseUnavailable" xml:space="preserve">
+    <value>这个请求已无法响应。</value>
+  </data>
+  <data name="Elicitation_ResponseFailed" xml:space="preserve">
+    <value>响应未能发送，请重试。</value>
+  </data>
+  <data name="Elicitation_InvalidValue" xml:space="preserve">
+    <value>这个值无效。</value>
+  </data>
 </root>

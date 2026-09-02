@@ -144,5 +144,6 @@ public sealed class ChatTerminalProjectionCoordinator
         => new(
             new(),
             null,
+            null,
             null);
 }

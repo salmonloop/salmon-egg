@@ -1320,6 +1320,18 @@ public sealed class AcpConnectionCoordinatorTests
             remove { }
         }
 
+        public event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted
+        {
+            add { }
+            remove { }
+        }
+
         public event EventHandler<string>? ErrorOccurred
         {
             add { }
@@ -1387,6 +1399,15 @@ public sealed class AcpConnectionCoordinatorTests
             => throw new NotSupportedException();
 
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
+            => throw new NotSupportedException();
+
+        public Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+            => throw new NotSupportedException();
+
+        public Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => throw new NotSupportedException();
+
+        public Task<bool> CancelElicitationRequestAsync(object messageId)
             => throw new NotSupportedException();
 
         public Task<bool> DisconnectAsync()
