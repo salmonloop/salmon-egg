@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,6 +9,7 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Well-known <c>fileType</c> values on a <see cref="DiffChange"/>.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public static class DiffFileTypeKind
     {
         /// <summary>A text file.</summary>
@@ -26,6 +28,7 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Well-known <c>operation</c> values on a <see cref="DiffChange"/>.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public static class DiffOperationKind
     {
         /// <summary>The file was created.</summary>
@@ -47,6 +50,7 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Well-known <c>format</c> values on a <see cref="DiffPatch"/>.
     /// </summary>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public static class DiffPatchFormatKind
     {
         /// <summary>A git-style unified patch. Paths within it are absolute.</summary>
@@ -60,6 +64,7 @@ namespace SalmonEgg.Acp.Tool
     /// Optional and advisory: <see cref="StructuredDiff.Changes"/> is authoritative, and the patch must
     /// be consistent with it. Clients must handle the patch being omitted.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record DiffPatch
     {
         /// <summary>
@@ -91,6 +96,7 @@ namespace SalmonEgg.Acp.Tool
     /// begin with <c>_</c> are reserved for future ACP, so they are preserved rather than rejected.
     /// </para>
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record DiffChange
     {
         /// <summary>
@@ -132,6 +138,7 @@ namespace SalmonEgg.Acp.Tool
     /// could only describe one modified text file. The v1 shape remains on the public surface and stays
     /// correct for v1 connections; the two are separate variants rather than one type with dual meaning.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record StructuredDiff : ToolCallContent
     {
         private readonly List<DiffChange> _changes = new();

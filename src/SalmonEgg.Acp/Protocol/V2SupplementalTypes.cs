@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -8,21 +9,27 @@ using SalmonEgg.Acp.Plan;
 namespace SalmonEgg.Acp.Protocol;
 
 /// <summary>V2 presence marker for image prompt support; an empty object means supported.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record PromptImageCapabilities : AcpProtocolObject;
 
 /// <summary>V2 presence marker for audio prompt support; an empty object means supported.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record PromptAudioCapabilities : AcpProtocolObject;
 
 /// <summary>V2 presence marker for embedded-context prompt support; an empty object means supported.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record PromptEmbeddedContextCapabilities : AcpProtocolObject;
 
 /// <summary>V2 presence marker for MCP HTTP support; an empty object means supported.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record McpHttpCapabilities : AcpProtocolObject;
 
 /// <summary>V2 presence marker that the Client can reproduce terminal-based authentication.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record TerminalAuthCapabilities : AcpProtocolObject;
 
 /// <summary>Theme for an <see cref="Icon"/>. Unknown strings remain valid for forward compatibility.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public static class IconThemeKind
 {
     /// <summary>Icon intended for a light surface.</summary>
@@ -33,6 +40,7 @@ public static class IconThemeKind
 }
 
 /// <summary>An icon supplied by an Agent in v2 metadata.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record Icon
 {
     /// <summary>URI of the icon resource. Required.</summary>
@@ -53,6 +61,7 @@ public sealed record Icon
 }
 
 /// <summary>V2 command input specification for free text after the command name.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record TextCommandInput : AcpProtocolObject
 {
     /// <summary>Input hint shown to the user. Required.</summary>
@@ -65,6 +74,7 @@ public sealed record TextCommandInput : AcpProtocolObject
 /// their payload so new Agent plan representations do not get silently destroyed by a proxy.
 /// </summary>
 [JsonConverter(typeof(PlanUpdateContentJsonConverter))]
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public abstract record PlanUpdateContent : AcpProtocolObject
 {
     /// <summary>Raw type discriminator.</summary>
@@ -72,6 +82,7 @@ public abstract record PlanUpdateContent : AcpProtocolObject
 }
 
 /// <summary>Full replacement list of plan items.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record PlanItemsUpdateContent : PlanUpdateContent
 {
     /// <inheritdoc />
@@ -87,6 +98,7 @@ public sealed record PlanItemsUpdateContent : PlanUpdateContent
 }
 
 /// <summary>Forward-compatible raw carrier for a plan content type this SDK does not model.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record CustomPlanUpdateContent : PlanUpdateContent
 {
     private readonly string _type = string.Empty;
@@ -106,6 +118,7 @@ public sealed record CustomPlanUpdateContent : PlanUpdateContent
 }
 
 /// <summary>V2 <c>plan_update</c> session update.</summary>
+[Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record V2PlanUpdate : SessionUpdate
 {
     /// <summary>Plan content. Required.</summary>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -9,6 +10,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Carries no terminal id of its own: it is always read in the context of the
     /// <see cref="TerminalSessionUpdate"/> that contains it.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record TerminalOutput : AcpProtocolObject
     {
         /// <summary>
@@ -34,6 +36,7 @@ namespace SalmonEgg.Acp.Protocol
     /// cannot tell "leave unchanged" from "clear".
     /// </para>
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record TerminalSessionUpdate : SessionUpdate
     {
         /// <summary>
@@ -100,6 +103,7 @@ namespace SalmonEgg.Acp.Protocol
     /// the resulting bytes. Concatenating the base64 text first would corrupt the stream at any chunk
     /// boundary whose payload length is not a multiple of three.
     /// </remarks>
+    [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
     public sealed record TerminalOutputChunkSessionUpdate : SessionUpdate
     {
         /// <summary>
