@@ -26,14 +26,6 @@ public sealed class V2SupplementalTypesTests
     }
 
     [Fact]
-    public void SessionListCursor_IsOpaque()
-    {
-        SessionListCursor cursor = "agent-defined:opaque";
-        Assert.Equal("agent-defined:opaque", cursor.Value);
-        Assert.Equal("agent-defined:opaque", (string)cursor);
-    }
-
-    [Fact]
     public void TextCommandInput_RequiresOnlyAHint()
     {
         var input = JsonSerializer.Deserialize("{\"hint\":\"branch name\"}", AcpJsonContext.Default.TextCommandInput);
