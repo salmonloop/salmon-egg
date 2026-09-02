@@ -317,8 +317,10 @@ namespace SalmonEgg.Application.Services.Chat
                 case SessionInfoUpdate sessionInfoUpdate:
                     entry.Title = sessionInfoUpdate.Title;
                     break;
-                // Config options, available commands, and usage remain ACP wire concerns.
-                // Domain history only keeps recovery-relevant projections.
+                default:
+                    // Config options, available commands, and usage remain ACP wire concerns.
+                    // Domain history only keeps recovery-relevant projections.
+                    break;
             }
 
             return entry;
