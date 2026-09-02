@@ -5,7 +5,7 @@ using Xunit;
 
 namespace SalmonEgg.Acp.Tests.Protocol;
 
-public sealed class SessionStateUpdateTypesTests
+public sealed class SessionWorkStateUpdateTypesTests
 {
     private static string SerializeV2(SessionUpdateParams value)
     {
@@ -20,7 +20,7 @@ public sealed class SessionStateUpdateTypesTests
     {
         var json = SerializeV2(new SessionUpdateParams(
             "session-1",
-            new StateSessionUpdate(new IdleSessionState { StopReason = StopReason.EndTurn })));
+            new StateSessionUpdate(new IdleSessionWorkState { StopReason = StopReason.EndTurn })));
 
         using var document = JsonDocument.Parse(json);
         var update = document.RootElement.GetProperty("update");
@@ -37,7 +37,7 @@ public sealed class SessionStateUpdateTypesTests
     {
         var json = SerializeV2(new SessionUpdateParams(
             "session-1",
-            new StateSessionUpdate(new RunningSessionState())));
+            new StateSessionUpdate(new RunningSessionWorkState())));
 
         using var document = JsonDocument.Parse(json);
         var update = document.RootElement.GetProperty("update");
@@ -52,7 +52,7 @@ public sealed class SessionStateUpdateTypesTests
     {
         var json = SerializeV2(new SessionUpdateParams(
             "session-1",
-            new StateSessionUpdate(new RequiresActionSessionState())));
+            new StateSessionUpdate(new RequiresActionSessionWorkState())));
 
         using var document = JsonDocument.Parse(json);
         var update = document.RootElement.GetProperty("update");
@@ -74,7 +74,7 @@ public sealed class SessionStateUpdateTypesTests
             AcpJsonContext.Default.SessionUpdateParams);
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        var idle = Assert.IsType<IdleSessionState>(update.State);
+        var idle = Assert.IsType<IdleSessionWorkState>(update.State);
         Assert.Null(idle.StopReason);
     }
 
@@ -87,7 +87,7 @@ public sealed class SessionStateUpdateTypesTests
             AcpJsonContext.Default.SessionUpdateParams);
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        var idle = Assert.IsType<IdleSessionState>(update.State);
+        var idle = Assert.IsType<IdleSessionWorkState>(update.State);
         Assert.Equal(StopReason.Cancelled, idle.StopReason);
 
         var json = SerializeV2(parsed!);
@@ -113,7 +113,7 @@ public sealed class SessionStateUpdateTypesTests
             AcpJsonContext.Default.SessionUpdateParams);
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        var idle = Assert.IsType<IdleSessionState>(update.State);
+        var idle = Assert.IsType<IdleSessionWorkState>(update.State);
         Assert.Null(idle.StopReason);
     }
 
@@ -126,7 +126,7 @@ public sealed class SessionStateUpdateTypesTests
             AcpJsonContext.Default.SessionUpdateParams);
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        var idle = Assert.IsType<IdleSessionState>(update.State);
+        var idle = Assert.IsType<IdleSessionWorkState>(update.State);
         Assert.Equal(new StopReason("_vendor_halted"), idle.StopReason);
     }
 
@@ -144,7 +144,7 @@ public sealed class SessionStateUpdateTypesTests
             AcpJsonContext.Default.SessionUpdateParams);
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        var custom = Assert.IsType<CustomSessionState>(update.State);
+        var custom = Assert.IsType<CustomSessionWorkState>(update.State);
         Assert.Equal("_vendor_paused", custom.State);
 
         var json = SerializeV2(parsed!);
@@ -159,7 +159,7 @@ public sealed class SessionStateUpdateTypesTests
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\"}}",
             AcpJsonContext.Default.SessionUpdateParams));
 
-        Assert.Equal(SessionStateJsonConverter.MissingStateMessage, exception.Message);
+        Assert.Equal(SessionWorkStateJsonConverter.MissingStateMessage, exception.Message);
     }
 
     // state_update does not exist in v1. Emitting one under a v1 write context would put a field on
@@ -169,12 +169,12 @@ public sealed class SessionStateUpdateTypesTests
     {
         var value = new SessionUpdateParams(
             "session-1",
-            new StateSessionUpdate(new IdleSessionState { StopReason = StopReason.EndTurn }));
+            new StateSessionUpdate(new IdleSessionWorkState { StopReason = StopReason.EndTurn }));
 
         var exception = Assert.Throws<JsonException>(
             () => JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams));
 
-        Assert.Equal(SessionStateJsonConverter.V2OnlyMessage, exception.Message);
+        Assert.Equal(SessionWorkStateJsonConverter.V2OnlyMessage, exception.Message);
     }
 
     // Reading must stay version-agnostic: a parser has to keep accepting whatever the peer sends, and
@@ -190,6 +190,6 @@ public sealed class SessionStateUpdateTypesTests
 
         Assert.Equal(AcpProtocolVersion.V1, AcpProtocolWriteContext.Current);
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        Assert.IsType<IdleSessionState>(update.State);
+        Assert.IsType<IdleSessionWorkState>(update.State);
     }
 }
