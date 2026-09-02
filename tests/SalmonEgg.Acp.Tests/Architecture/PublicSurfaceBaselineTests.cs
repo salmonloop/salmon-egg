@@ -68,7 +68,11 @@ public sealed class PublicSurfaceBaselineTests
                 || type == typeof(SessionUpdateParams)
                 || type == typeof(ContentBlock)
                 || type == typeof(ToolCallContent)
-                || type == typeof(McpServer);
+                || type == typeof(McpServer)
+                || type == typeof(CreateElicitationRequest)
+                || type == typeof(CreateElicitationResponse)
+                || type == typeof(ElicitationPropertySchema)
+                || type == typeof(MultiSelectItems);
             if (type.IsClass && type.IsSealed == false && type.IsAbstract == false && !isPolymorphicRoot)
             {
                 violations.Add($"{type.FullName}: expected sealed or abstract record/class");

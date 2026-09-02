@@ -125,6 +125,17 @@ namespace SalmonEgg.Acp.Protocol
         public ClientSessionCapabilities? Session { get; init; }
 
         /// <summary>
+        /// Elicitation capabilities, declaring which <c>elicitation/create</c> modes the agent may use.
+        /// </summary>
+        /// <remarks>
+        /// Unlike <see cref="Fs"/>, <see cref="Terminal"/>, and <see cref="Session"/>, this field is a
+        /// root capability in both v1 and v2 schemas, so it survives the v2 wire form rather than being
+        /// rejected as a legacy field.
+        /// </remarks>
+        [JsonPropertyName("elicitation")]
+        public ElicitationCapabilities? Elicitation { get; init; }
+
+        /// <summary>
         /// Extension field (_meta) used to declare custom client capabilities.
         /// </summary>
         /// <summary>
@@ -141,6 +152,11 @@ namespace SalmonEgg.Acp.Protocol
         /// <param name="terminal">Terminal capability</param>
         /// <param name="session">Session capabilities</param>
         /// <param name="meta">Extension capability metadata</param>
+        /// <remarks>
+        /// <see cref="Elicitation"/> is deliberately not a constructor parameter: adding one would change
+        /// this published constructor's signature, which is binary-breaking for the shipped package even
+        /// though an optional parameter looks source-compatible. Set it through the init-only property.
+        /// </remarks>
         public ClientCapabilities(
             FsCapability? fs = null,
             bool? terminal = null,
@@ -829,6 +845,16 @@ namespace SalmonEgg.Acp.Protocol
         {
             writer.WritePropertyName("capabilities");
             writer.WriteStartObject();
+
+            // elicitation is a root capability in the v2 schema too (unlike fs/terminal/session, which
+            // v2 dropped), so dropping it here would silently un-advertise a mode the client supports and
+            // make every standards-compliant agent fall back.
+            if (value.Elicitation is not null)
+            {
+                writer.WritePropertyName("elicitation");
+                JsonSerializer.Serialize(writer, value.Elicitation, AcpJsonContext.Default.ElicitationCapabilities);
+            }
+
             AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }

@@ -53,6 +53,32 @@ namespace SalmonEgg.Acp.Client
         event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
 
         /// <summary>
+        /// Elicitation request event. Raised when the Agent requests structured user input through the
+        /// standard <c>elicitation/create</c> method.
+        /// </summary>
+        /// <remarks>
+        /// Carries a default implementation so adding the elicitation family to this published interface
+        /// does not break existing external implementers. A client that leaves the default in place never
+        /// raises the event, which is consistent with not advertising the capability. The shipped
+        /// <see cref="AcpClient"/> implements it.
+        /// </remarks>
+        event EventHandler<ElicitationRequestEventArgs>? ElicitationRequestReceived
+        {
+            add { }
+            remove { }
+        }
+
+        /// <summary>
+        /// Elicitation completion event. Raised when the Agent reports that a URL-mode elicitation
+        /// finished out of band.
+        /// </summary>
+        event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted
+        {
+            add { }
+            remove { }
+        }
+
+        /// <summary>
         /// Connection error event. Raised when a connection error occurs.
         /// </summary>
         event EventHandler<string>? ErrorOccurred;
@@ -219,6 +245,31 @@ namespace SalmonEgg.Acp.Client
         /// <param name="answers">A mapping from question to answer.</param>
         /// <returns>Whether the response was sent successfully</returns>
         Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers);
+
+        /// <summary>
+        /// Accepts an elicitation request, optionally submitting the collected form content.
+        /// </summary>
+        /// <param name="messageId">The message ID of the original request.</param>
+        /// <param name="content">The submitted content, or <c>null</c> to accept without content.</param>
+        /// <returns>Whether the response was sent successfully</returns>
+        Task<bool> RespondToElicitationRequestAsync(object messageId, ElicitationAcceptContent? content)
+            => Task.FromResult(false);
+
+        /// <summary>
+        /// Declines an elicitation request on the user's behalf.
+        /// </summary>
+        /// <param name="messageId">The message ID of the original request.</param>
+        /// <returns>Whether the response was sent successfully</returns>
+        Task<bool> DeclineElicitationRequestAsync(object messageId)
+            => Task.FromResult(false);
+
+        /// <summary>
+        /// Cancels an elicitation request the user dismissed without choosing.
+        /// </summary>
+        /// <param name="messageId">The message ID of the original request.</param>
+        /// <returns>Whether the response was sent successfully</returns>
+        Task<bool> CancelElicitationRequestAsync(object messageId)
+            => Task.FromResult(false);
 
         /// <summary>
         /// Disconnects from the Agent.
