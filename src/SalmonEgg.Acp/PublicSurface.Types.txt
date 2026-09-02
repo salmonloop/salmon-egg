@@ -154,7 +154,6 @@ SalmonEgg.Acp.Protocol.SessionDeleteParams
 SalmonEgg.Acp.Protocol.SessionDeleteResponse
 SalmonEgg.Acp.Protocol.SessionInfoUpdate
 SalmonEgg.Acp.Protocol.SessionListCapabilities
-SalmonEgg.Acp.Protocol.SessionListCursor
 SalmonEgg.Acp.Protocol.SessionListParams
 SalmonEgg.Acp.Protocol.SessionListResponse
 SalmonEgg.Acp.Protocol.SessionLoadParams
