@@ -38,6 +38,15 @@
          CS1572/CS1573 stay enforced: a param tag naming a parameter that does not exist, or a
          documented member that silently drops a parameter, is a defect in shipped documentation. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- SEACP002 is the ACP v2 draft surface marker (AcpDraftProtocol.DiagnosticId). Silencing it
+         project-wide is forced, not chosen: the JSON source generator emits AcpJsonContext.*.g.cs,
+         which names every registered draft type, and a #pragma in a hand-written file cannot reach
+         generated code. Without this the SDK cannot compile its own contracts.
+         The cost is explicit: this also silences the marker inside AcpClient.cs, so the compiler no
+         longer backstops AGENTS.md's rule that production entry points must not silently send
+         incompletely implemented draft wire. DraftProtocolSurfaceTests carries that weight instead -
+         it is the compensating control, not a nice-to-have. -->
+    <NoWarn>$(NoWarn);SEACP002</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
