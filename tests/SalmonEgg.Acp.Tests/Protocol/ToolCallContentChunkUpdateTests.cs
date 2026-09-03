@@ -12,7 +12,12 @@ public sealed class ToolCallContentChunkUpdateTests
     private static SessionUpdateParams? Parse(string updateJson) =>
         JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":" + updateJson + "}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
+
+    private static SessionUpdateParams? ParseV1(string updateJson) =>
+        JsonSerializer.Deserialize(
+            "{\"sessionId\":\"session-1\",\"update\":" + updateJson + "}",
+            Wire.V1<SessionUpdateParams>());
 
     [Fact]
     public void ToolCallContentChunk_MapsToolCallIdAndSingleContentItem()
@@ -35,9 +40,14 @@ public sealed class ToolCallContentChunkUpdateTests
         var chunk = Assert.IsType<ToolCallContentChunkUpdate>(Parse(
             "{\"sessionUpdate\":\"tool_call_content_chunk\",\"toolCallId\":\"tc-1\","
             + "\"content\":{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"a\"}}}")?.Update);
-        var replacing = Assert.IsType<ToolCallUpdate>(Parse(
+        // tool_call is the v1 way to open a tool call, and v2 removed it - the first tool_call_update
+        // for an id creates it there. So the comparison has to cross versions: parsing the v1 variant
+        // through the v2 contract is exactly the mirror of the defect this pair of surfaces fixes.
+        const string toolCallJson =
             "{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tc-1\","
-            + "\"content\":[{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"a\"}}]}")?.Update);
+            + "\"content\":[{\"type\":\"content\",\"content\":{\"type\":\"text\",\"text\":\"a\"}}]}";
+        var replacing = Assert.IsType<ToolCallUpdate>(ParseV1(toolCallJson)?.Update);
+        Assert.Equal("tool_call", Assert.IsType<SessionUpdate>(Parse(toolCallJson)?.Update).UnknownUpdateKind);
 
         Assert.IsType<ContentToolCallContent>(chunk.Content);
         Assert.Single(replacing.Content!);
@@ -62,8 +72,8 @@ public sealed class ToolCallContentChunkUpdateTests
             + "\"content\":{\"type\":\"terminal\",\"terminalId\":\"t-1\"}}";
 
         var parsed = Parse(UpdateJson);
-        var json = JsonSerializer.Serialize(parsed!, AcpJsonContext.Default.SessionUpdateParams);
-        var reparsed = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
+        var json = JsonSerializer.Serialize(parsed!, Wire.V2<SessionUpdateParams>());
+        var reparsed = JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<ToolCallContentChunkUpdate>(reparsed?.Update);
         Assert.Equal("tc-3", update.ToolCallId);

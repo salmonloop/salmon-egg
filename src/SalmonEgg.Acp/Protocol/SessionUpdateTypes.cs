@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Acp.Protocol
@@ -51,8 +52,24 @@ namespace SalmonEgg.Acp.Protocol
 
     /// <summary>
     /// Base polymorphic type for session updates.
-    /// Uses the JsonPolymorphic attribute to support different kinds of updates.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The registrations below are the <b>v1</b> surface only, and deliberately so. Attribute metadata
+    /// is static, so whatever it declares is what every unversioned caller sees - including
+    /// <c>AcpJsonContext.Default</c>, which is public. Declaring the union of both versions here would
+    /// make that default a protocol version nobody negotiates, and would hand a consumer reading through
+    /// the generated context a draft contract with no signal. Declaring v1 makes the default equal
+    /// <see cref="AcpProtocolVersion.Default"/>, so the unversioned path is merely stable rather than
+    /// wrong.
+    /// </para>
+    /// <para>
+    /// The negotiated surface is assembled per connection from
+    /// <see cref="SessionUpdateWireSurface"/> - the single table of which version defines which
+    /// discriminator - by <c>AcpWireFormat</c>. A gate asserts the registrations here are exactly that
+    /// table's v1 entries, so the two cannot drift.
+    /// </para>
+    /// </remarks>
     [JsonPolymorphic(
         TypeDiscriminatorPropertyName = "sessionUpdate",
         UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType,
@@ -68,13 +85,6 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     [JsonDerivedType(typeof(SessionInfoUpdate), "session_info_update")]
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
-    [JsonDerivedType(typeof(AgentWholeMessageUpdate), "agent_message")]
-    [JsonDerivedType(typeof(UserWholeMessageUpdate), "user_message")]
-    [JsonDerivedType(typeof(AgentWholeThoughtUpdate), "agent_thought")]
-    [JsonDerivedType(typeof(TerminalSessionUpdate), "terminal_update")]
-    [JsonDerivedType(typeof(TerminalOutputChunkSessionUpdate), "terminal_output_chunk")]
-    [JsonDerivedType(typeof(ToolCallContentChunkUpdate), "tool_call_content_chunk")]
-    [JsonDerivedType(typeof(V2PlanUpdate), "plan_update")]
     public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
@@ -102,6 +112,162 @@ namespace SalmonEgg.Acp.Protocol
                 && kind.ValueKind == JsonValueKind.String
             ? kind.GetString()
             : null;
+    }
+
+    /// <summary>
+    /// Which protocol surface defines each <c>sessionUpdate</c> discriminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ACP v1 and v2 do not share one update vocabulary. v2 adds eight variants, but it also
+    /// <em>removes</em> three that v1 defines - <c>tool_call</c>, <c>plan</c> and
+    /// <c>current_mode_update</c> - so neither surface is a superset of the other and a single
+    /// discriminator table cannot serve both. This is the table that makes them separable;
+    /// <c>AcpWireFormat</c> prunes the polymorphic contract down to the negotiated surface with it.
+    /// </para>
+    /// <para>
+    /// Authority is the upstream schema, read as JSON rather than as the rendered docs page (which
+    /// truncates before <c>SessionUpdate</c>):
+    /// <c>schema/v1/schema.json</c> defines <c>SessionUpdate</c> as a closed <c>oneOf</c> with a
+    /// <c>discriminator</c> keyword and 11 named variants and no fallback; <c>schema/v2/schema.json</c>
+    /// defines it as an <c>anyOf</c> with 16 named variants plus one open "custom or future" fallback.
+    /// Those two counts are asserted, so an edit here that drifts from the schema fails a gate rather
+    /// than quietly changing which updates a connection accepts.
+    /// </para>
+    /// <para>
+    /// <c>state_update</c> is listed even though it is not a <see cref="JsonDerivedTypeAttribute"/>
+    /// registration: its inner discriminator is a sibling of the outer one, so
+    /// <see cref="SessionUpdateParamsJsonConverter"/> dispatches it by hand. It is still part of the v2
+    /// surface, and asking this table is how the converter knows that.
+    /// </para>
+    /// </remarks>
+    internal static class SessionUpdateWireSurface
+    {
+        [Flags]
+        internal enum Surfaces
+        {
+            None = 0,
+            V1 = 1,
+            V2 = 2,
+        }
+
+        private const Surfaces Both = Surfaces.V1 | Surfaces.V2;
+
+        /// <summary>
+        /// One entry per <c>sessionUpdate</c> discriminator: which versions define it, and which type it
+        /// binds to.
+        /// </summary>
+        /// <param name="Discriminator">The wire value of the <c>sessionUpdate</c> field.</param>
+        /// <param name="Surface">The protocol versions that define this discriminator.</param>
+        /// <param name="UpdateType">The contract it binds to.</param>
+        /// <param name="DispatchedByConverter">
+        /// True for the one variant that cannot be a polymorphic registration:
+        /// <c>state_update</c> flattens a second discriminator alongside the first, which STJ
+        /// polymorphism cannot express, so <see cref="SessionUpdateParamsJsonConverter"/> reads and
+        /// writes it by hand. It still belongs to the v2 surface, so it is recorded here and excluded
+        /// from the registrations rather than left out of the table and forgotten.
+        /// </param>
+        internal readonly record struct Entry(
+            string Discriminator,
+            Surfaces Surface,
+            Type UpdateType,
+            bool DispatchedByConverter = false);
+
+        private static readonly Entry[] s_entries =
+        [
+            new("agent_message", Surfaces.V2, typeof(AgentWholeMessageUpdate)),
+            new("agent_message_chunk", Both, typeof(AgentMessageUpdate)),
+            new("agent_thought", Surfaces.V2, typeof(AgentWholeThoughtUpdate)),
+            new("agent_thought_chunk", Both, typeof(AgentThoughtUpdate)),
+            new("available_commands_update", Both, typeof(AvailableCommandsUpdate)),
+            new("config_option_update", Both, typeof(ConfigOptionUpdate)),
+            new("current_mode_update", Surfaces.V1, typeof(CurrentModeUpdate)),
+            new("plan", Surfaces.V1, typeof(PlanUpdate)),
+            new("plan_update", Surfaces.V2, typeof(V2PlanUpdate)),
+            new("session_info_update", Both, typeof(SessionInfoUpdate)),
+            new("state_update", Surfaces.V2, typeof(StateSessionUpdate), DispatchedByConverter: true),
+            new("terminal_output_chunk", Surfaces.V2, typeof(TerminalOutputChunkSessionUpdate)),
+            new("terminal_update", Surfaces.V2, typeof(TerminalSessionUpdate)),
+            new("tool_call", Surfaces.V1, typeof(ToolCallUpdate)),
+            new("tool_call_content_chunk", Surfaces.V2, typeof(ToolCallContentChunkUpdate)),
+            new("tool_call_update", Both, typeof(ToolCallStatusUpdate)),
+            new("usage_update", Both, typeof(UsageUpdate)),
+            new("user_message", Surfaces.V2, typeof(UserWholeMessageUpdate)),
+            new("user_message_chunk", Both, typeof(UserMessageUpdate)),
+        ];
+
+        /// <summary>Every classified discriminator, in wire-value order.</summary>
+        internal static IReadOnlyList<Entry> Entries => s_entries;
+
+        /// <summary>
+        /// Whether the given protocol version defines this discriminator.
+        /// </summary>
+        /// <remarks>
+        /// An unlisted discriminator is defined by no version. That is the fail-closed direction: a
+        /// variant nobody classified is treated as unknown, which routes it through the
+        /// forward-compatible fallback instead of binding it to a contract no version asked for.
+        /// </remarks>
+        internal static bool IsDefinedIn(string discriminator, int version)
+        {
+            var surface = SurfaceOf(version);
+            foreach (var entry in s_entries)
+            {
+                if (string.Equals(entry.Discriminator, discriminator, StringComparison.Ordinal))
+                {
+                    return entry.Surface.HasFlag(surface);
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The polymorphic registrations a version's contract should carry.
+        /// </summary>
+        /// <remarks>
+        /// Excludes the converter-dispatched variant: registering it would hand STJ a second
+        /// discriminator it cannot write, and the converter would then be fighting the contract it is
+        /// supposed to complete.
+        /// </remarks>
+        internal static IReadOnlyList<Entry> RegistrationsFor(int version)
+        {
+            var surface = SurfaceOf(version);
+            var registrations = new List<Entry>();
+            foreach (var entry in s_entries)
+            {
+                if (!entry.DispatchedByConverter && entry.Surface.HasFlag(surface))
+                {
+                    registrations.Add(entry);
+                }
+            }
+
+            return registrations;
+        }
+
+        /// <summary>The discriminators a version defines, converter-dispatched ones included.</summary>
+        internal static IReadOnlyList<string> DiscriminatorsFor(int version)
+        {
+            var surface = SurfaceOf(version);
+            var discriminators = new List<string>();
+            foreach (var entry in s_entries)
+            {
+                if (entry.Surface.HasFlag(surface))
+                {
+                    discriminators.Add(entry.Discriminator);
+                }
+            }
+
+            return discriminators;
+        }
+
+        private static Surfaces SurfaceOf(int version) => version switch
+        {
+            AcpProtocolVersion.V1 => Surfaces.V1,
+            AcpProtocolVersion.V2 => Surfaces.V2,
+            // Not an exception: a version the SDK does not model defines none of these, and the caller
+            // asked whether a discriminator is in that surface. "No" is the honest and safe answer.
+            _ => Surfaces.None,
+        };
     }
 
     /// <summary>
@@ -133,9 +299,18 @@ namespace SalmonEgg.Acp.Protocol
                 // state_update carries a second discriminator ("state") flattened alongside
                 // "sessionUpdate". STJ polymorphism resolves exactly one discriminator per hierarchy, so
                 // this variant is handled here instead of through a JsonDerivedType registration.
+                //
+                // Being dispatched by hand is exactly why it needs the surface check spelled out: the
+                // resolver prunes the JsonDerivedType table down to the negotiated version, but it has no
+                // reach into this branch. Without the check, state_update would remain the one v2 update
+                // a v1 connection still binds - the defect this change exists to remove, surviving in the
+                // one place the mechanism cannot see.
                 if (updateElement.TryGetProperty("sessionUpdate", out var stateKind)
                     && stateKind.ValueKind == JsonValueKind.String
-                    && stateKind.ValueEquals(StateSessionUpdateWireFormat.Discriminator))
+                    && stateKind.ValueEquals(StateSessionUpdateWireFormat.Discriminator)
+                    && SessionUpdateWireSurface.IsDefinedIn(
+                        StateSessionUpdateWireFormat.Discriminator,
+                        AcpWireFormat.NegotiatedVersion(options)))
                 {
                     return new SessionUpdateParams
                     {

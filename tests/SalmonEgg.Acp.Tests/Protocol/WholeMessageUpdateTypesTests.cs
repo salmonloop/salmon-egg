@@ -11,7 +11,7 @@ public sealed class WholeMessageUpdateTypesTests
     private static SessionUpdateParams? Parse(string updateJson) =>
         JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":" + updateJson + "}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
     [Theory]
     [InlineData("agent_message", typeof(AgentWholeMessageUpdate))]
@@ -88,7 +88,7 @@ public sealed class WholeMessageUpdateTypesTests
                 HasContent = true
             });
 
-        var json = JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams);
+        var json = JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>());
 
         using var document = JsonDocument.Parse(json);
         var update = document.RootElement.GetProperty("update");
@@ -108,8 +108,8 @@ public sealed class WholeMessageUpdateTypesTests
             + "\"content\":[{\"type\":\"text\",\"text\":\"prompt\"}]}";
 
         var parsed = Parse(UpdateJson);
-        var json = JsonSerializer.Serialize(parsed!, AcpJsonContext.Default.SessionUpdateParams);
-        var reparsed = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
+        var json = JsonSerializer.Serialize(parsed!, Wire.V2<SessionUpdateParams>());
+        var reparsed = JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<UserWholeMessageUpdate>(reparsed?.Update);
         Assert.Equal("m-7", update.MessageId);
