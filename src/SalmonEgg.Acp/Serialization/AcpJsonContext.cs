@@ -9,7 +9,23 @@ using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Acp.Serialization;
 
+// Metadata-only generation, deliberately, not an oversight about performance.
+//
+// The default mode also emits a "fast path" SerializeHandler per type, and that handler resolves its
+// nested contracts from the context instance rather than from the caller's JsonSerializerOptions -
+// generated as JsonSerializer.Serialize(writer, value.ReplayFrom, SessionReplayFrom), where the
+// property reads AcpJsonContext.Default.Options. So a nested converter invoked through the fast path
+// sees the generated context's options, never the ones the caller passed.
+//
+// That matters here because the negotiated protocol version is carried on the options
+// (AcpWireFormat). With the fast path on, serializing SessionResumeParams through the v2 contract
+// reached SessionReplayFromJsonConverter with v1 options and threw "replayFrom is only available in
+// protocolVersion 2" - the version silently did not survive one level of nesting. Metadata mode routes
+// serialization through the metadata machinery, which resolves nested contracts from the options in
+// force. AcpWireFormatTests asserts the mode by checking SerializeHandler is null, because the failure
+// it prevents is invisible until a nested version-dependent converter happens to be exercised.
 [JsonSourceGenerationOptions(
+    GenerationMode = JsonSourceGenerationMode.Metadata,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

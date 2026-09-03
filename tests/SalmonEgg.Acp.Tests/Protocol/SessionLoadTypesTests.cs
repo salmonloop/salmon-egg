@@ -152,7 +152,7 @@ public sealed class SessionLoadTypesTests
     }
 
     [Fact]
-    public void SessionResumeParams_WhenReplayFromStart_DefaultWriteContextRejectsV2Field()
+    public void SessionResumeParams_WhenReplayFromStart_OnAStableConnectionRejectsV2Field()
     {
         var sessionParams = new SessionResumeParams(
             "test-session",
@@ -167,18 +167,14 @@ public sealed class SessionLoadTypesTests
     }
 
     [Fact]
-    public void SessionResumeParams_WhenReplayFromStart_ExplicitV2WriteContextSerializesTypeStart()
+    public void SessionResumeParams_WhenReplayFromStart_OnADraftConnectionSerializesTypeStart()
     {
         var sessionParams = new SessionResumeParams(
             "test-session",
             "/home/user/project",
             replayFrom: SessionReplayFrom.Start);
 
-        string json;
-        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
-        {
-            json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionResumeParams);
-        }
+        var json = JsonSerializer.Serialize(sessionParams, Wire.V2<SessionResumeParams>());
 
         using var parsed = JsonDocument.Parse(json);
 
@@ -187,7 +183,7 @@ public sealed class SessionLoadTypesTests
     }
 
     [Fact]
-    public void SessionResumeParams_UnknownReplayCursor_RoundTripsInExplicitV2WriteContext()
+    public void SessionResumeParams_UnknownReplayCursor_RoundTripsOnADraftConnection()
     {
         const string CursorJson =
             "{\"type\":\"_vendor_cursor\",\"messageId\":\"first\",\"messageId\":\"second\"," +
@@ -204,11 +200,7 @@ public sealed class SessionLoadTypesTests
         Assert.Equal("opaque", cursor.GetString());
         Assert.Equal(CursorJson, replayFrom.RawPayload.GetRawText());
 
-        string json;
-        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
-        {
-            json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionResumeParams);
-        }
+        var json = JsonSerializer.Serialize(sessionParams, Wire.V2<SessionResumeParams>());
 
         Assert.Contains("\"replayFrom\":" + CursorJson, json, StringComparison.Ordinal);
         Assert.Contains("\"messageId\":\"first\",\"messageId\":\"second\"", json, StringComparison.Ordinal);
@@ -294,17 +286,16 @@ public sealed class SessionLoadTypesTests
     }
 
     [Fact]
-    public void SessionResumeParams_WhenReplayCursorTypeIsNullInMemory_ExplicitV2WriteContextThrowsJsonException()
+    public void SessionResumeParams_WhenReplayCursorTypeIsNullInMemory_OnADraftConnectionThrowsJsonException()
     {
         var sessionParams = new SessionResumeParams(
             "test-session",
             "/home/user/project",
             replayFrom: new SessionReplayFrom(null!));
 
-        using var scope = AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2);
         var exception = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(
             sessionParams,
-            AcpJsonContext.Default.SessionResumeParams));
+            Wire.V2<SessionResumeParams>()));
 
         Assert.Contains("replayFrom.type", exception.Message, StringComparison.Ordinal);
     }

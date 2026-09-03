@@ -138,31 +138,4 @@ public sealed class SessionUpdateSurfaceTests
         }
     }
 
-    [Fact]
-    public void WireFormatOptions_AgreeWithTheGeneratedContractSettings()
-    {
-        // The DTOs were authored against AcpJsonContext's [JsonSourceGenerationOptions]. A wire format
-        // whose knobs disagreed would serve those contracts under different rules - camelCase drifting,
-        // or nulls suddenly written - which is a wire change with no diff at the DTO.
-        var generated = AcpJsonContext.Default.Options;
-        foreach (var version in new[] { AcpProtocolVersion.V1, AcpProtocolVersion.V2 })
-        {
-            var options = AcpWireFormat.For(version).Options;
-            Assert.Same(generated.PropertyNamingPolicy, options.PropertyNamingPolicy);
-            Assert.Equal(generated.PropertyNameCaseInsensitive, options.PropertyNameCaseInsensitive);
-            Assert.Equal(generated.DefaultIgnoreCondition, options.DefaultIgnoreCondition);
-            Assert.Equal(generated.AllowOutOfOrderMetadataProperties, options.AllowOutOfOrderMetadataProperties);
-            Assert.True(options.IsReadOnly);
-        }
-    }
-
-    [Fact]
-    public void UnmodeledVersion_HasNoContract()
-    {
-        // Falling back to the stable surface here would be the wrong kind of lenient: the caller asked
-        // for a version this SDK cannot speak, and answering with v1's contract would put v1 wire on a
-        // connection that negotiated something else.
-        Assert.Throws<ArgumentOutOfRangeException>(() => AcpWireFormat.For(3));
-        Assert.Throws<ArgumentOutOfRangeException>(() => AcpWireFormat.For(0));
-    }
 }

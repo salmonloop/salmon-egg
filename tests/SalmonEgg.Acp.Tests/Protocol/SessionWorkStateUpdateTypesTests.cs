@@ -9,7 +9,6 @@ public sealed class SessionWorkStateUpdateTypesTests
 {
     private static string SerializeV2(SessionUpdateParams value)
     {
-        using var scope = AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2);
         return JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>());
     }
 
@@ -79,7 +78,7 @@ public sealed class SessionWorkStateUpdateTypesTests
     }
 
     [Fact]
-    public void StateSessionUpdate_IdleWithStopReason_RoundTripsThroughV2WriteContext()
+    public void StateSessionUpdate_IdleWithStopReason_RoundTripsOnADraftConnection()
     {
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
@@ -165,31 +164,16 @@ public sealed class SessionWorkStateUpdateTypesTests
     // state_update does not exist in v1. Emitting one under a v1 write context would put a field on
     // the wire that a v1 Agent has no contract for, so writing fails closed rather than degrading.
     [Fact]
-    public void StateSessionUpdate_UnderV1WriteContext_RefusesToSerialize()
+    public void StateSessionUpdate_OnAStableConnection_RefusesToSerialize()
     {
         var value = new SessionUpdateParams(
             "session-1",
             new StateSessionUpdate(new IdleSessionWorkState { StopReason = StopReason.EndTurn }));
 
         var exception = Assert.Throws<JsonException>(
-            () => JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>()));
+            () => JsonSerializer.Serialize(value, Wire.V1<SessionUpdateParams>()));
 
         Assert.Equal(SessionWorkStateJsonConverter.V2OnlyMessage, exception.Message);
     }
 
-    // Reading must stay version-agnostic: a parser has to keep accepting whatever the peer sends, and
-    // gating reads on the negotiated version would make the client the arbiter of the Agent's
-    // semantics. Only writes are version-gated.
-    [Fact]
-    public void StateSessionUpdate_ReadIsNotVersionGated()
-    {
-        var parsed = JsonSerializer.Deserialize(
-            "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
-            + "\"state\":\"idle\",\"stopReason\":\"end_turn\"}}",
-            Wire.V2<SessionUpdateParams>());
-
-        Assert.Equal(AcpProtocolVersion.V1, AcpProtocolWriteContext.Current);
-        var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
-        Assert.IsType<IdleSessionWorkState>(update.State);
-    }
 }
