@@ -262,6 +262,62 @@ public sealed class StdioTransportConnectionTests
         }
     }
 
+    [Fact]
+    public void Create_WithConfiguredPathOverride_ResolvesAgainstOverrideNotProcessPath()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
+        // The command exists only in the directory the caller puts on the child's PATH. Resolution
+        // has to run against that effective PATH — against the process PATH it would report missing
+        // and the preflight would refuse to start a command that would actually have worked.
+        var commandDirectory = Path.Combine(Path.GetTempPath(), "stdio-transport-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(commandDirectory);
+        File.WriteAllText(Path.Combine(commandDirectory, "agent.cmd"), "@echo off");
+
+        try
+        {
+            using var transport = new StdioTransport(
+                "agent",
+                [],
+                environment: new Dictionary<string, string> { ["PATH"] = commandDirectory });
+
+            var startInfo = transport.CreateProcessStartInfo();
+
+            Assert.Equal("cmd.exe", startInfo.FileName);
+            Assert.Equal(["/c", Path.Combine(commandDirectory, "agent.cmd")], startInfo.ArgumentList);
+        }
+        finally
+        {
+            Directory.Delete(commandDirectory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("/definitely/not/a/real/binary-", "does not exist")]
+    [InlineData("definitely-not-a-real-agent-command-", "not found on PATH")]
+    public async Task ConnectAsync_WhenCommandMissing_PreflightFailsFast(string commandPrefix, string expectedPhrase)
+    {
+        // The old path forwarded CreateProcess's raw Win32 error ("Unable to start process: ...
+        // 系统找不到指定的文件"). The preflight must answer instead, in words the user can act on,
+        // with the same ProcessStartFailed classification the caller already handles.
+        var command = commandPrefix + Guid.NewGuid().ToString("N");
+        var errors = new List<TransportErrorEventArgs>();
+        using var transport = new StdioTransport(command, []);
+        transport.ErrorOccurred += (_, error) => errors.Add(error);
+
+        var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(connected);
+        var error = Assert.Single(errors);
+        Assert.Equal(TransportErrorKind.ProcessStartFailed, error.Kind);
+        Assert.Contains(expectedPhrase, error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(command, error.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unable to start process", error.ErrorMessage, StringComparison.Ordinal);
+    }
+
     private static (string Command, string[] Args) CreateImmediateFailureCommand(string stderrMessage)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

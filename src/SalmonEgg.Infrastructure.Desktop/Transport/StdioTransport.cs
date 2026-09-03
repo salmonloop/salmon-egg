@@ -72,12 +72,13 @@ namespace SalmonEgg.Infrastructure.Transport
             IReadOnlyDictionary<string, string>? environment = null)
         {
             // 命令解析、.cmd/.bat 包装与启动器目录上 PATH 都由 LauncherInvocation 统一负责，
-            // 使 ACP 向导的探测/安装与本传输走同一套规则。
-            _invocation = LauncherInvocation.Create(command, args);
+            // 使 ACP 向导的探测/安装与本传输走同一套规则。解析用配置环境覆盖后的生效 PATH，
+            // 与 ApplyTo 写入子进程的执行 PATH 同源，预检结论因此与启动行为一致。
+            _environment = NormalizeEnvironment(environment);
+            _invocation = LauncherInvocation.Create(command, args, _environment);
             _workingDirectory = ResolveWorkingDirectory(_invocation.ResolvedCommand);
 
             _encoding = NormalizeTransportEncoding(encoding ?? Encoding.UTF8);
-            _environment = NormalizeEnvironment(environment);
         }
 
         /// <summary>
@@ -137,6 +138,18 @@ namespace SalmonEgg.Infrastructure.Transport
 
             try
             {
+                // 在启动进程前按同一份解析结果自查：命令根本不存在时，给用户一句能照着做的报错，
+                // 而不是转发 CreateProcess 的原始 Win32 异常。纯只读判定（解析期已判完），不 spawn。
+                if (StdioCommandPreflight.BuildMissingCommandError(_invocation, OperatingSystem.IsWindows()) is { } preflightError)
+                {
+                    _logger.Warning(
+                        "Agent command not found during preflight. Command={Command} SearchedDirectories={SearchedDirectories}",
+                        _invocation.ResolvedCommand,
+                        _invocation.SearchedDirectories);
+                    OnErrorOccurred(new TransportErrorEventArgs(preflightError, kind: TransportErrorKind.ProcessStartFailed));
+                    return false;
+                }
+
                 _readCts = new CancellationTokenSource();
 
                 var processInfo = CreateProcessStartInfo();

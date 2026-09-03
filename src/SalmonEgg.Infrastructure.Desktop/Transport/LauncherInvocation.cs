@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace SalmonEgg.Infrastructure.Transport;
 
@@ -41,28 +42,87 @@ internal sealed record LauncherInvocation(
         : StringComparison.Ordinal;
 
     /// <summary>
+    /// Whether <see cref="ResolvedCommand"/> named a file that actually existed at resolution time.
+    /// Judged by the same resolver that produced the command, so the preflight and the process start
+    /// can never disagree about what "on PATH" means.
+    /// </summary>
+    internal bool ResolvedToExistingFile { get; init; }
+
+    /// <summary>
+    /// The directories the resolver searched before giving up. Diagnostics only — never user-facing.
+    /// </summary>
+    internal IReadOnlyList<string> SearchedDirectories { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Normalizes <paramref name="command"/> and <paramref name="arguments"/> into something
     /// <c>CreateProcess</c> accepts, resolving the command against PATH and wrapping a batch launcher in
     /// the command interpreter.
     /// </summary>
-    public static LauncherInvocation Create(string? command, IReadOnlyList<string>? arguments)
+    /// <remarks>
+    /// The resolution runs against the PATH the child will actually get: <paramref name="environment"/>
+    /// when the caller configured one (it replaces the inherited block entirely), otherwise the current
+    /// process's. Resolving against anything else would let the preflight clear a command that
+    /// <c>ApplyTo</c> will then fail to launch — or the reverse.
+    /// </remarks>
+    public static LauncherInvocation Create(
+        string? command,
+        IReadOnlyList<string>? arguments,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var trimmedCommand = (command ?? string.Empty).Trim();
         var trimmedArguments = arguments is null
             ? Array.Empty<string>()
             : arguments.Select(argument => (argument ?? string.Empty).Trim()).ToArray();
 
-        var resolvedCommand = StdioCommandResolver.Resolve(trimmedCommand);
+        var effectivePath = ResolveEffectivePath(environment);
+        var resolution = StdioCommandResolver.TryResolve(
+            trimmedCommand,
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+            Environment.CurrentDirectory,
+            effectivePath,
+            Environment.GetEnvironmentVariable("PATHEXT"));
+
+        var resolvedCommand = resolution.Command;
 
         if (IsBatchLauncher(resolvedCommand))
         {
             return new LauncherInvocation(
                 FileName: "cmd.exe",
                 Arguments: new[] { "/c", resolvedCommand }.Concat(trimmedArguments).ToArray(),
-                ResolvedCommand: resolvedCommand);
+                ResolvedCommand: resolvedCommand)
+            {
+                ResolvedToExistingFile = resolution.ResolvedToExistingFile,
+                SearchedDirectories = resolution.SearchedDirectories,
+            };
         }
 
-        return new LauncherInvocation(resolvedCommand, trimmedArguments, resolvedCommand);
+        return new LauncherInvocation(resolvedCommand, trimmedArguments, resolvedCommand)
+        {
+            ResolvedToExistingFile = resolution.ResolvedToExistingFile,
+            SearchedDirectories = resolution.SearchedDirectories,
+        };
+    }
+
+    /// <summary>
+    /// The PATH the child will inherit from <paramref name="environment"/> — the configured value in
+    /// full, since ApplyTo only ever prepends to it. Windows environment dictionaries compare keys
+    /// case-insensitively, but this is also built from arbitrary dictionaries, so the lookup stays
+    /// insensitive everywhere.
+    /// </summary>
+    private static string? ResolveEffectivePath(IReadOnlyDictionary<string, string>? environment)
+    {
+        if (environment is not null)
+        {
+            foreach (var key in environment.Keys)
+            {
+                if (string.Equals(key, "PATH", StringComparison.OrdinalIgnoreCase))
+                {
+                    return environment[key];
+                }
+            }
+        }
+
+        return Environment.GetEnvironmentVariable("PATH");
     }
 
     /// <summary>
