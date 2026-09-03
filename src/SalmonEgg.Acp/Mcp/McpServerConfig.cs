@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Mcp
 {
@@ -400,7 +401,7 @@ namespace SalmonEgg.Acp.Mcp
             switch (value)
             {
                 case StdioMcpServer stdio:
-                    WriteStdio(writer, stdio);
+                    WriteStdio(writer, stdio, options);
                     break;
                 case HttpMcpServer http:
                     writer.WriteStartObject();
@@ -626,13 +627,13 @@ namespace SalmonEgg.Acp.Mcp
             return result;
         }
 
-        private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio)
+        private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
             // The V2 schema discriminates stdio/http/sse via the `type` field; V1 stdio has no type field and is
             // identified implicitly by its absence. Write type only when the negotiated version is V2, so a V1 Agent
             // is never sent a field it does not recognize.
-            if (AcpProtocolWriteContext.Current >= AcpProtocolVersion.V2)
+            if (AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2)
             {
                 writer.WriteString("type", "stdio");
             }

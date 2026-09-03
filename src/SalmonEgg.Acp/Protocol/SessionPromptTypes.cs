@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -120,7 +121,7 @@ namespace SalmonEgg.Acp.Protocol
         public override void Write(Utf8JsonWriter writer, SessionPromptResponse value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            if (AcpProtocolWriteContext.Current == AcpProtocolVersion.V1)
+            if (AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V1)
                 writer.WriteString("stopReason", value.StopReason.Value);
             AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();

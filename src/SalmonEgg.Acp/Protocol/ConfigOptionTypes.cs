@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol;
 
@@ -122,7 +123,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
     {
         writer.WriteStartObject();
         writer.WriteString(
-            AcpProtocolWriteContext.Current == AcpProtocolVersion.V2 ? "configId" : "id",
+            AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2 ? "configId" : "id",
             value.Id);
         writer.WriteString("name", value.Name);
         WriteOptionalString(writer, "description", value.Description, options);
