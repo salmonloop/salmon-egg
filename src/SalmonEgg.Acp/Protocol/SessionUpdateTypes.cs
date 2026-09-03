@@ -88,12 +88,20 @@ namespace SalmonEgg.Acp.Protocol
     public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
-        /// Forward-compatible fields that are not bound to a known contract (including the complete payload of an
-        /// unknown sessionUpdate discriminator value).
-        /// The protocol requires unknown updates to be preserved verbatim and to round-trip; the client neither
-        /// interprets nor discards them, and their semantics are decided by the agent
-        /// (AGENTS.md: protocol leniency must never be tightened in reverse).
+        /// Forward-compatible fields that are not bound to a known contract, including the complete payload
+        /// of a <c>sessionUpdate</c> discriminator the negotiated version does not define.
         /// </summary>
+        /// <remarks>
+        /// Preserving them verbatim is this SDK's choice, stated precisely because it is easy to overclaim.
+        /// v2's schema does require a fallback: its <c>SessionUpdate</c> is an <c>anyOf</c> with an open
+        /// "custom or future" variant, and the specification says implementations SHOULD preserve unknown
+        /// values and raw tagged-union payloads. v1's is a closed <c>oneOf</c> with a <c>discriminator</c>
+        /// keyword and no fallback, and v1's own extensibility rules say only that implementations SHOULD
+        /// ignore unrecognized notifications - preservation is permitted there, not mandated. It is chosen
+        /// anyway because AGENTS.md forbids reducing existing leniency, because a proxy has to forward what
+        /// it cannot read, and because <see cref="UnknownUpdateKind"/> can then attribute the violation to
+        /// the peer instead of the client absorbing it.
+        /// </remarks>
         // STJ requires JsonExtensionData binders to be settable (not init-only) when the
         // polymorphic record hierarchy uses a deserialization constructor. Keep mutation
         // confined to serializer/converter paths; protocol consumers should treat this as
@@ -260,6 +268,56 @@ namespace SalmonEgg.Acp.Protocol
             return discriminators;
         }
 
+        /// <summary>
+        /// Rejects writing an update the negotiated version does not define.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Needed because pruning the read contract does not make the write direction safe, it makes it
+        /// quiet. An update whose discriminator the negotiated version does not define has no
+        /// registration to serialize through, so it is written as the base type - which carries nothing
+        /// but extension data, so a fully populated v2 update leaves as <c>{}</c>. Silent field loss is
+        /// worse than the protocol violation it replaced, because the receiving Agent sees a
+        /// well-formed-looking update instead of an obviously wrong one.
+        /// </para>
+        /// <para>
+        /// This is not the "throw on write while still binding on read" shape that made
+        /// <c>StructuredDiff</c> unable to round-trip. That shape was a write guard standing in for a
+        /// missing read gate. Here the read side already passes the update through untyped, so nothing
+        /// received can reach this guard - only a caller who constructed a contract their own connection
+        /// cannot send, which is a caller error and should say so.
+        /// </para>
+        /// </remarks>
+        internal static void RequireWritableOn(SessionUpdate? update, int version)
+        {
+            if (update is null)
+            {
+                return;
+            }
+
+            var updateType = update.GetType();
+            foreach (var entry in s_entries)
+            {
+                if (entry.UpdateType != updateType)
+                {
+                    continue;
+                }
+
+                if (!entry.Surface.HasFlag(SurfaceOf(version)))
+                {
+                    throw new JsonException(
+                        $"ACP session update '{entry.Discriminator}' is not defined in protocolVersion "
+                        + $"{version}, so this connection cannot send it.");
+                }
+
+                return;
+            }
+
+            // Not in the table: the forward-compatible base type carrying preserved extension data, or a
+            // variant this SDK does not model. Both are legitimate to write - the first is passthrough,
+            // and refusing the second would be this SDK deciding what future ACP may contain.
+        }
+
         private static Surfaces SurfaceOf(int version) => version switch
         {
             AcpProtocolVersion.V1 => Surfaces.V1,
@@ -363,6 +421,8 @@ namespace SalmonEgg.Acp.Protocol
 
         public override void Write(Utf8JsonWriter writer, SessionUpdateParams value, JsonSerializerOptions options)
         {
+            SessionUpdateWireSurface.RequireWritableOn(value.Update, AcpWireFormat.NegotiatedVersion(options));
+
             writer.WriteStartObject();
             writer.WriteString("sessionId", value.SessionId);
             if (value.Update is StateSessionUpdate stateUpdate)
