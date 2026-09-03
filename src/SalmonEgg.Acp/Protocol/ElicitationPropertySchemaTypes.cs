@@ -214,7 +214,7 @@ namespace SalmonEgg.Acp.Protocol
                 "integer" => ReadInteger(root),
                 "number" => ReadNumber(root),
                 "boolean" => ReadBoolean(root),
-                "array" => ReadMultiSelect(root),
+                "array" => ReadMultiSelect(root, options),
                 // Any other type value (including `_` extensions and future ACP variants) must preserve
                 // the raw schema, leaving it to the Agent rather than the client to tighten.
                 _ => ReadCustom(root, schemaType)
@@ -241,7 +241,7 @@ namespace SalmonEgg.Acp.Protocol
                     WriteBoolean(writer, booleanSchema);
                     break;
                 case MultiSelectPropertySchema multiSelectSchema:
-                    WriteMultiSelect(writer, multiSelectSchema);
+                    WriteMultiSelect(writer, multiSelectSchema, options);
                     break;
                 case CustomPropertySchema customSchema:
                     ElicitationSchemaJson.WritePassthrough(
@@ -302,12 +302,12 @@ namespace SalmonEgg.Acp.Protocol
                 Meta = AcpMetaJson.Read(root)
             };
 
-        private static MultiSelectPropertySchema ReadMultiSelect(JsonElement root)
+        private static MultiSelectPropertySchema ReadMultiSelect(JsonElement root, JsonSerializerOptions options)
             => new()
             {
                 Default = ElicitationSchemaJson.ReadOptionalStringArray(root, "default"),
                 Description = ElicitationSchemaJson.ReadOptionalString(root, "description"),
-                Items = ElicitationSchemaJson.ReadRequiredMultiSelectItems(root, "items"),
+                Items = ElicitationSchemaJson.ReadRequiredMultiSelectItems(root, "items", options),
                 MaxItems = ElicitationSchemaJson.ReadOptionalUInt32(root, "maxItems"),
                 MinItems = ElicitationSchemaJson.ReadOptionalUInt32(root, "minItems"),
                 Title = ElicitationSchemaJson.ReadOptionalString(root, "title"),
@@ -386,14 +386,14 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteEndObject();
         }
 
-        private static void WriteMultiSelect(Utf8JsonWriter writer, MultiSelectPropertySchema schema)
+        private static void WriteMultiSelect(Utf8JsonWriter writer, MultiSelectPropertySchema schema, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
             writer.WriteString("type", "array");
             ElicitationSchemaJson.WriteOptionalStringArray(writer, "default", schema.Default);
             ElicitationSchemaJson.WriteOptionalString(writer, "description", schema.Description);
             writer.WritePropertyName("items");
-            ElicitationSchemaJson.WriteMultiSelectItems(writer, schema.Items);
+            ElicitationSchemaJson.WriteMultiSelectItems(writer, schema.Items, options);
             ElicitationSchemaJson.WriteOptionalUInt32(writer, "maxItems", schema.MaxItems);
             ElicitationSchemaJson.WriteOptionalUInt32(writer, "minItems", schema.MinItems);
             ElicitationSchemaJson.WriteOptionalString(writer, "title", schema.Title);
