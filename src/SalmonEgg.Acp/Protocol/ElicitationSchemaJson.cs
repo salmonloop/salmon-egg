@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using SalmonEgg.Acp.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -153,19 +154,19 @@ namespace SalmonEgg.Acp.Protocol
             return options;
         }
 
-        internal static MultiSelectItems ReadRequiredMultiSelectItems(JsonElement root, string propertyName)
+        internal static MultiSelectItems ReadRequiredMultiSelectItems(JsonElement root, string propertyName, JsonSerializerOptions options)
         {
             if (!TryGetPresent(root, propertyName, out var value))
             {
                 throw new JsonException($"Elicitation schema is missing required '{propertyName}'.");
             }
 
-            var items = value.Deserialize(AcpJsonContext.Default.MultiSelectItems);
+            var items = value.Deserialize((JsonTypeInfo<MultiSelectItems>)options.GetTypeInfo(typeof(MultiSelectItems)));
             return items ?? throw new JsonException($"Elicitation '{propertyName}' must be an object.");
         }
 
-        internal static void WriteMultiSelectItems(Utf8JsonWriter writer, MultiSelectItems items)
-            => JsonSerializer.Serialize(writer, items, AcpJsonContext.Default.MultiSelectItems);
+        internal static void WriteMultiSelectItems(Utf8JsonWriter writer, MultiSelectItems items, JsonSerializerOptions options)
+            => JsonSerializer.Serialize(writer, items, (JsonTypeInfo<MultiSelectItems>)options.GetTypeInfo(typeof(MultiSelectItems)));
 
         internal static void WriteOptionalString(Utf8JsonWriter writer, string propertyName, string? value)
         {
