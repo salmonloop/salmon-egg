@@ -594,6 +594,7 @@ namespace SalmonEgg.Acp.Protocol
         /// <see cref="HasContent"/> to tell "clear" apart from "leave unchanged".
         /// </summary>
         [JsonPropertyName("content")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ContentBlock>))]
         public List<ContentBlock>? Content { get; init; }
 
         /// <summary>
@@ -734,12 +735,14 @@ namespace SalmonEgg.Acp.Protocol
         /// Tool call kind.
         /// </summary>
         [JsonPropertyName("kind")]
+        [JsonConverter(typeof(ToolCallKindToleranceJsonConverter))]
         public ToolCallKind? Kind { get; init; }
 
         /// <summary>
         /// Tool call status.
         /// </summary>
         [JsonPropertyName("status")]
+        [JsonConverter(typeof(ToolCallStatusToleranceJsonConverter))]
         public ToolCallStatus? Status { get; init; }
 
         /// <summary>
@@ -752,12 +755,14 @@ namespace SalmonEgg.Acp.Protocol
         /// Content produced by the tool call.
         /// </summary>
         [JsonPropertyName("content")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ToolCallContent>))]
         public List<ToolCallContent>? Content { get; init; }
 
         /// <summary>
         /// List of file locations, indicating the files affected by the tool call.
         /// </summary>
         [JsonPropertyName("locations")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ToolCallLocation>))]
         public List<ToolCallLocation>? Locations { get; init; }
 
         /// <summary>
@@ -824,6 +829,7 @@ namespace SalmonEgg.Acp.Protocol
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("entries")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<PlanEntry>))]
         public List<PlanEntry> Entries
         {
             get => _entries;
@@ -883,6 +889,7 @@ namespace SalmonEgg.Acp.Protocol
         /// Tool call kind.
         /// </summary>
         [JsonPropertyName("kind")]
+        [JsonConverter(typeof(ToolCallKindToleranceJsonConverter))]
         public ToolCallKind? Kind { get; init; }
 
         /// <summary>
@@ -895,18 +902,21 @@ namespace SalmonEgg.Acp.Protocol
         /// Tool call status.
         /// </summary>
         [JsonPropertyName("status")]
+        [JsonConverter(typeof(ToolCallStatusToleranceJsonConverter))]
         public ToolCallStatus? Status { get; init; }
 
         /// <summary>
         /// Content produced by the tool call.
         /// </summary>
         [JsonPropertyName("content")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ToolCallContent>))]
         public List<ToolCallContent>? Content { get; init; }
 
         /// <summary>
         /// List of file locations, indicating the files affected by the tool call.
         /// </summary>
         [JsonPropertyName("locations")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ToolCallLocation>))]
         public List<ToolCallLocation>? Locations { get; init; }
 
         /// <summary>

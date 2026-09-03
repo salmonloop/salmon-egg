@@ -57,6 +57,7 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="SchemaTolerance.Fields.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Package validation needs two things that only exist once MinVer has run: the derived $(Version)

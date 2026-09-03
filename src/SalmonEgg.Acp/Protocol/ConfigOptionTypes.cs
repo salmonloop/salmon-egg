@@ -19,9 +19,11 @@ public sealed record ConfigOption : AcpProtocolObject
     public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
+    [JsonConverter(typeof(DefaultOnErrorStringJsonConverter))]
     public string? Description { get; init; }
 
     [JsonPropertyName("category")]
+    [JsonConverter(typeof(DefaultOnErrorStringJsonConverter))]
     public string? Category { get; init; }
 
     [JsonPropertyName("type")]
@@ -49,6 +51,7 @@ public sealed record ConfigOptionValue : AcpProtocolObject
     public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
+    [JsonConverter(typeof(DefaultOnErrorStringJsonConverter))]
     public string? Description { get; init; }
 }
 
@@ -61,6 +64,7 @@ public sealed record ConfigOptionGroup : AcpProtocolObject
     public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("options")]
+    [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<ConfigOptionValue>))]
     public List<ConfigOptionValue> Options { get; init; } = new();
 }
 

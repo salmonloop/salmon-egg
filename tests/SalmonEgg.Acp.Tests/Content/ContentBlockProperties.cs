@@ -487,12 +487,12 @@ namespace SalmonEgg.Acp.Tests.Content
         }
 
         /// <summary>
-        /// 类型契约:annotations.priority 提供了却非 JSON number 时必须抛错,
-        /// 不得静默降级为「未提供」。协议宽松度只允许缺省可空字段回落 null,
-        /// 一旦字段出现且类型错误(如字符串)仍须拒绝(AGENTS.md §82)。
+        /// 协议宽松度:annotations.priority 在上游 schema 上标了 x-deserialize-default-on-error,
+        /// 因此提供了却非 JSON number 时必须回落为「未提供」,不得抛错把整个 content block 判死。
+        /// 见 src/SalmonEgg.Acp/SchemaTolerance.Fields.txt 与 AGENTS.md「协议宽松度不得反向收紧」。
         /// </summary>
         [Fact]
-        public void ContentBlock_AnnotationsPriorityWrongType_Throws()
+        public void ContentBlock_AnnotationsPriorityWrongType_DegradesToUnset()
         {
             var json = """
             {
@@ -504,16 +504,21 @@ namespace SalmonEgg.Acp.Tests.Content
             }
             """;
 
-            Assert.Throws<JsonException>(
-                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+            var block = Assert.IsType<TextContentBlock>(
+                JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+
+            Assert.NotNull(block.Annotations);
+            Assert.Null(block.Annotations!.Priority);
+            // 同一 block 里其他字段不受牵连。
+            Assert.Equal("hello", block.Text);
         }
 
         /// <summary>
-        /// 类型契约:resource_link.size 提供了却非 JSON integer 时必须抛错。
-        /// 与 priority 同理,缺省回落 null 合法,类型错误则拒绝。
+        /// 协议宽松度:resource_link.size 同样标了 x-deserialize-default-on-error,
+        /// 类型错误回落 null 而不是拒绝整块内容。
         /// </summary>
         [Fact]
-        public void ContentBlock_ResourceLinkSizeWrongType_Throws()
+        public void ContentBlock_ResourceLinkSizeWrongType_DegradesToUnset()
         {
             var json = """
             {
@@ -523,14 +528,17 @@ namespace SalmonEgg.Acp.Tests.Content
             }
             """;
 
-            Assert.Throws<JsonException>(
-                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+            var block = Assert.IsType<ResourceLinkContentBlock>(
+                JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+
+            Assert.Null(block.Size);
+            Assert.Equal("file:///tmp/a.bin", block.Uri);
         }
 
         /// <summary>
         /// 类型契约:resource content 类型缺失必填 resource 字段时读取即拒绝(fail-fast),
         /// 不得存 null 延迟到序列化才 NRE。官方 content schema 中 resource 变体的
-        /// resource 字段为 required。
+        /// resource 字段为 required,且**没有**容忍标注,所以这里仍须抛。
         /// </summary>
         [Fact]
         public void ContentBlock_ResourceMissingRequiredResource_Throws()
@@ -552,6 +560,8 @@ namespace SalmonEgg.Acp.Tests.Content
         /// 类型契约:必填字符串字段(如 text.text)提供了却非 JSON string 时,
         /// 必须抛 JsonException——与本层其余读取器的异常类型保持一致,
         /// 不得外泄裸 InvalidOperationException(嵌套反序列化时会污染调用方)。
+        /// TextContent.text 在上游 schema 上**没有**容忍标注,与 priority/size 的处置正好相反,
+        /// 这一对用例即是「只在无标注处收紧」的正反样本。
         /// </summary>
         [Fact]
         public void ContentBlock_StringFieldWrongType_ThrowsJsonException()
@@ -568,24 +578,27 @@ namespace SalmonEgg.Acp.Tests.Content
         }
 
         /// <summary>
-        /// 类型契约:字符串数组字段(annotations.audience)含非字符串元素时必须抛 JsonException,
-        /// 不得静默 null 化或外泄裸 InvalidOperationException。
+        /// 协议宽松度:annotations.audience 标了 x-deserialize-skip-invalid-items,
+        /// 因此单个非字符串元素必须被跳过、其余元素保留,不得因一个坏元素丢掉整条消息。
         /// </summary>
         [Fact]
-        public void ContentBlock_StringListWrongElementType_ThrowsJsonException()
+        public void ContentBlock_StringListWrongElementType_SkipsInvalidItem()
         {
             var json = """
             {
               "type": "text",
               "text": "hello",
               "annotations": {
-                "audience": ["user", 7]
+                "audience": ["user", 7, "assistant"]
               }
             }
             """;
 
-            Assert.Throws<JsonException>(
-                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+            var block = Assert.IsType<TextContentBlock>(
+                JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+
+            Assert.NotNull(block.Annotations);
+            Assert.Equal(new[] { "user", "assistant" }, block.Annotations!.Audience);
         }
 
         /// <summary>

@@ -124,7 +124,7 @@ namespace SalmonEgg.Acp.Content
         {
             var block = new TextContentBlock
             {
-                Text = ReadString(root, "text")!,
+                Text = ReadStringStrict(root, "text")!,
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
             };
@@ -135,9 +135,9 @@ namespace SalmonEgg.Acp.Content
         {
             var block = new ImageContentBlock
             {
-                Data = ReadString(root, "data")!,
-                MimeType = ReadString(root, "mimeType")!,
-                Uri = ReadString(root, "uri"),
+                Data = ReadStringStrict(root, "data")!,
+                MimeType = ReadStringStrict(root, "mimeType")!,
+                Uri = ReadStringTolerant(root, "uri"),
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
             };
@@ -148,8 +148,8 @@ namespace SalmonEgg.Acp.Content
         {
             var block = new AudioContentBlock
             {
-                Data = ReadString(root, "data")!,
-                MimeType = ReadString(root, "mimeType")!,
+                Data = ReadStringStrict(root, "data")!,
+                MimeType = ReadStringStrict(root, "mimeType")!,
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
             };
@@ -160,11 +160,11 @@ namespace SalmonEgg.Acp.Content
         {
             var block = new ResourceLinkContentBlock
             {
-                Uri = ReadString(root, "uri")!,
-                Name = ReadString(root, "name"),
-                MimeType = ReadString(root, "mimeType"),
-                Title = ReadString(root, "title"),
-                Description = ReadString(root, "description"),
+                Uri = ReadStringStrict(root, "uri")!,
+                Name = ReadStringStrict(root, "name"),
+                MimeType = ReadStringTolerant(root, "mimeType"),
+                Title = ReadStringTolerant(root, "title"),
+                Description = ReadStringTolerant(root, "description"),
                 Size = ReadInt64(root, "size"),
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
@@ -214,10 +214,10 @@ namespace SalmonEgg.Acp.Content
 
             return new EmbeddedResource
             {
-                Uri = ReadString(element, "uri")!,
-                MimeType = ReadString(element, "mimeType")!,
-                Text = ReadString(element, "text"),
-                Blob = ReadString(element, "blob"),
+                Uri = ReadStringStrict(element, "uri")!,
+                MimeType = ReadStringTolerant(element, "mimeType")!,
+                Text = ReadStringStrict(element, "text"),
+                Blob = ReadStringStrict(element, "blob"),
                 Meta = AcpMetaJson.Read(element)
             };
         }
@@ -239,7 +239,7 @@ namespace SalmonEgg.Acp.Content
             {
                 Audience = ReadStringList(annotationsElement, "audience"),
                 Priority = ReadDouble(annotationsElement, "priority"),
-                LastModified = ReadString(annotationsElement, "lastModified"),
+                LastModified = ReadStringStrict(annotationsElement, "lastModified"),
                 Meta = AcpMetaJson.Read(annotationsElement)
             };
 
@@ -256,15 +256,22 @@ namespace SalmonEgg.Acp.Content
 
             if (property.ValueKind != JsonValueKind.Array)
             {
-                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON array.");
+                // Annotations.audience and the three resource-content description fields have upstream
+                // x-deserialize-default-on-error + x-deserialize-skip-invalid-items. A wrong-type value
+                // degrades to "no list" instead of failing its whole enclosing content block.
+                // See src/SalmonEgg.Acp/SchemaTolerance.Fields.txt.
+                return null;
             }
 
             var values = new List<string>();
             foreach (var item in property.EnumerateArray())
             {
+                // Skip-invalid-items: if one element is malformed, skip it and keep the rest.
+                // Only audience + the resource-content description fields have skip-items; all other
+                // string lists still throw.
                 if (item.ValueKind != JsonValueKind.String)
                 {
-                    throw new JsonException($"ContentBlock '{propertyName}' entries must be JSON strings.");
+                    continue;
                 }
 
                 values.Add(item.GetString()!);
@@ -273,7 +280,11 @@ namespace SalmonEgg.Acp.Content
             return values;
         }
 
-        private static string? ReadString(JsonElement root, string propertyName)
+        /// <summary>
+        /// Reads an optional string whose schema carries no tolerance marker: an absent value is
+        /// "not provided", but a value of the wrong JSON type is a contract violation and throws.
+        /// </summary>
+        private static string? ReadStringStrict(JsonElement root, string propertyName)
         {
             if (!root.TryGetProperty(propertyName, out var property)
                 || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -289,6 +300,22 @@ namespace SalmonEgg.Acp.Content
             return property.GetString();
         }
 
+        /// <summary>
+        /// Reads a string whose schema marks it <c>x-deserialize-default-on-error</c>: a value of the
+        /// wrong JSON type degrades to "not provided" rather than failing the enclosing content block.
+        /// See <c>src/SalmonEgg.Acp/SchemaTolerance.Fields.txt</c>.
+        /// </summary>
+        private static string? ReadStringTolerant(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var property)
+                || property.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            return property.GetString();
+        }
+
         private static double? ReadDouble(JsonElement root, string propertyName)
         {
             if (!root.TryGetProperty(propertyName, out var property)
@@ -299,7 +326,8 @@ namespace SalmonEgg.Acp.Content
 
             if (property.ValueKind != JsonValueKind.Number || !property.TryGetDouble(out var value))
             {
-                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON number.");
+                // Annotations.priority carries x-deserialize-default-on-error. Wrong-type degrades to null.
+                return null;
             }
 
             return value;
@@ -315,7 +343,8 @@ namespace SalmonEgg.Acp.Content
 
             if (property.ValueKind != JsonValueKind.Number || !property.TryGetInt64(out var value))
             {
-                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON integer.");
+                // ResourceLink.size has x-deserialize-default-on-error. Wrong-type degrades to null.
+                return null;
             }
 
             return value;
