@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -272,7 +273,7 @@ namespace SalmonEgg.Acp.Protocol
             SessionReplayFrom value,
             JsonSerializerOptions options)
         {
-            if (AcpProtocolWriteContext.Current != AcpProtocolVersion.V2)
+            if (AcpWireFormat.NegotiatedVersion(options) != AcpProtocolVersion.V2)
             {
                 throw new JsonException(V2OnlyMessage);
             }

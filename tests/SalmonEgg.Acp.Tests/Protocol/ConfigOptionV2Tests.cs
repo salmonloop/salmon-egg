@@ -21,9 +21,7 @@ public sealed class ConfigOptionV2Tests
     {
         var option = new ConfigOption { Id = "mode", Name = "Mode", Type = "boolean", CurrentBooleanValue = true };
         var v1 = JsonSerializer.Serialize(option, AcpJsonContext.Default.ConfigOption);
-        string v2;
-        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
-            v2 = JsonSerializer.Serialize(option, AcpJsonContext.Default.ConfigOption);
+        var v2 = JsonSerializer.Serialize(option, Wire.V2<ConfigOption>());
         Assert.Contains("\"id\":\"mode\"", v1, StringComparison.Ordinal);
         Assert.DoesNotContain("\"configId\"", v1, StringComparison.Ordinal);
         Assert.Contains("\"configId\":\"mode\"", v2, StringComparison.Ordinal);
