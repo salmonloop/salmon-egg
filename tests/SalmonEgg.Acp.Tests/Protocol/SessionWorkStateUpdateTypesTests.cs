@@ -10,7 +10,7 @@ public sealed class SessionWorkStateUpdateTypesTests
     private static string SerializeV2(SessionUpdateParams value)
     {
         using var scope = AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2);
-        return JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams);
+        return JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>());
     }
 
     // The v2 wire form is doubly flattened: the inner "state" discriminator and its payload are
@@ -71,7 +71,7 @@ public sealed class SessionWorkStateUpdateTypesTests
     {
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":" + updateJson + "}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
         var idle = Assert.IsType<IdleSessionWorkState>(update.State);
@@ -84,7 +84,7 @@ public sealed class SessionWorkStateUpdateTypesTests
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
             + "\"state\":\"idle\",\"stopReason\":\"cancelled\"}}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
         var idle = Assert.IsType<IdleSessionWorkState>(update.State);
@@ -110,7 +110,7 @@ public sealed class SessionWorkStateUpdateTypesTests
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
             + "\"state\":\"idle\",\"stopReason\":" + stopReasonJson + "}}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
         var idle = Assert.IsType<IdleSessionWorkState>(update.State);
@@ -123,7 +123,7 @@ public sealed class SessionWorkStateUpdateTypesTests
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
             + "\"state\":\"idle\",\"stopReason\":\"_vendor_halted\"}}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
         var idle = Assert.IsType<IdleSessionWorkState>(update.State);
@@ -141,7 +141,7 @@ public sealed class SessionWorkStateUpdateTypesTests
 
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":" + UpdateJson + "}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);
         var custom = Assert.IsType<CustomSessionWorkState>(update.State);
@@ -157,7 +157,7 @@ public sealed class SessionWorkStateUpdateTypesTests
     {
         var exception = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\"}}",
-            AcpJsonContext.Default.SessionUpdateParams));
+            Wire.V2<SessionUpdateParams>()));
 
         Assert.Equal(SessionWorkStateJsonConverter.MissingStateMessage, exception.Message);
     }
@@ -172,7 +172,7 @@ public sealed class SessionWorkStateUpdateTypesTests
             new StateSessionUpdate(new IdleSessionWorkState { StopReason = StopReason.EndTurn }));
 
         var exception = Assert.Throws<JsonException>(
-            () => JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams));
+            () => JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>()));
 
         Assert.Equal(SessionWorkStateJsonConverter.V2OnlyMessage, exception.Message);
     }
@@ -186,7 +186,7 @@ public sealed class SessionWorkStateUpdateTypesTests
         var parsed = JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
             + "\"state\":\"idle\",\"stopReason\":\"end_turn\"}}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
         Assert.Equal(AcpProtocolVersion.V1, AcpProtocolWriteContext.Current);
         var update = Assert.IsType<StateSessionUpdate>(parsed?.Update);

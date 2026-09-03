@@ -95,8 +95,52 @@ namespace SalmonEgg.Acp.Serialization
         internal JsonTypeInfo<T> TypeInfo<T>() => (JsonTypeInfo<T>)Options.GetTypeInfo(typeof(T));
 
         /// <inheritdoc />
-        public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) =>
-            _inner.GetTypeInfo(type, options);
+        public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options)
+        {
+            var info = _inner.GetTypeInfo(type, options);
+            if (info is not null && info.Type == typeof(SessionUpdate) && info.PolymorphismOptions is not null)
+            {
+                ApplyNegotiatedSurface(info.PolymorphismOptions);
+            }
+
+            return info;
+        }
+
+        /// <summary>
+        /// Replaces the polymorphic registrations with the ones the negotiated version defines.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Rebuilt from <see cref="SessionUpdateWireSurface"/> rather than patched, because neither
+        /// direction is a subset of the other: v2 adds eight discriminators and removes three that v1
+        /// defines. Patching would need both an add list and a remove list to stay in step with one
+        /// table, and the table is the only thing that should have to be right.
+        /// </para>
+        /// <para>
+        /// Mutation is safe because a generated context asked for a contract by a foreign
+        /// <see cref="JsonSerializerOptions"/> builds a fresh <see cref="JsonTypeInfo"/> bound to those
+        /// options: measured, the two versions get separate instances regardless of which is resolved
+        /// first, the outer options cache the result so this runs once per version, and concurrent
+        /// resolution sees the same set. Registrations added here behave exactly like declared ones -
+        /// also measured, including verbatim round-trip of a variant that has no attribute.
+        /// </para>
+        /// <para>
+        /// This changes the read direction into forward-compatible passthrough: an update the negotiated
+        /// version does not define falls back to the base type with its payload preserved. It does
+        /// <em>not</em> make the write direction safe - a contract written through a version that does
+        /// not define it serializes as the base type, which is an empty object rather than an error. The
+        /// explicit write guards are what turn that into a failure; do not read this as covering both
+        /// directions.
+        /// </para>
+        /// </remarks>
+        private void ApplyNegotiatedSurface(JsonPolymorphismOptions polymorphism)
+        {
+            polymorphism.DerivedTypes.Clear();
+            foreach (var entry in SessionUpdateWireSurface.RegistrationsFor(Version))
+            {
+                polymorphism.DerivedTypes.Add(new JsonDerivedType(entry.UpdateType, entry.Discriminator));
+            }
+        }
 
         private static Dictionary<int, AcpWireFormat> BuildAll()
         {
