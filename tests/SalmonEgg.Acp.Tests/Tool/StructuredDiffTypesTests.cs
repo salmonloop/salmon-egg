@@ -10,8 +10,7 @@ public sealed class StructuredDiffTypesTests
 {
     private static string SerializeV2(ToolCallContent value)
     {
-        using var scope = AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2);
-        return JsonSerializer.Serialize(value, AcpJsonContext.Default.ToolCallContent);
+        return JsonSerializer.Serialize(value, Wire.V2<ToolCallContent>());
     }
 
     [Fact]
