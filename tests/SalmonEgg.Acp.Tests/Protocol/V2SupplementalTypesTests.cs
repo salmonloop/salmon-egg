@@ -37,7 +37,7 @@ public sealed class V2SupplementalTypesTests
     {
         var update = JsonSerializer.Deserialize<SessionUpdateParams>(
             "{\"sessionId\":\"s\",\"update\":{\"sessionUpdate\":\"plan_update\",\"plan\":{\"type\":\"items\",\"planId\":\"p\",\"entries\":[{\"content\":\"Do it\",\"priority\":\"high\",\"status\":\"pending\"}]}}}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
         var planUpdate = Assert.IsType<V2PlanUpdate>(update!.Update);
         var items = Assert.IsType<PlanItemsUpdateContent>(planUpdate.Plan);
         Assert.Equal("p", items.PlanId);
