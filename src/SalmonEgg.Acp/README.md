@@ -69,13 +69,16 @@ var update = JsonSerializer.Deserialize(json, info);    // draft contract in han
 
 26 context members are reachable this way. The hole cannot be closed while the DTOs are public - an
 internal context over public types is `CS0053` - so it is pinned by name in the SDK's gate tests
-instead: a new draft registration fails the build until someone decides deliberately.
+instead: a new draft registration fails the build until someone decides deliberately. What you get
+through it is a draft *contract*, not a draft-populated connection: the context resolves the stable
+surface, so nothing a v1 connection reads binds to one of these.
 
-The same applies to reads. `SessionUpdate` declares the v2 discriminators as static polymorphic
-metadata, which has no notion of the negotiated version, so a v1 connection whose Agent sends a v2
-update still materializes the draft type. Treat any `SessionUpdate` you did not construct yourself as
-possibly draft-typed, and match on the stable variants you handle rather than assuming the rest
-cannot appear.
+Reads are a different story now, and a better one. `SessionUpdate` declares only the **v1** surface as
+static polymorphic metadata, and the negotiated surface is assembled per connection - so a v1
+connection whose Agent sends a v2 update gets the base type with the payload preserved, not a draft
+contract. Reading through `AcpJsonContext.Default` yields the same stable surface. You still cannot
+assume the set of variants is closed: an update your version does not define arrives as `SessionUpdate`
+with `UnknownUpdateKind` set, which on v1 means the Agent sent something v1 does not have.
 
 ## Collection equality
 

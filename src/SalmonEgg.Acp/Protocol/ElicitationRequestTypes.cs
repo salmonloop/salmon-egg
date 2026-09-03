@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -189,7 +190,7 @@ namespace SalmonEgg.Acp.Protocol
                 {
                     Message = message,
                     Scope = scope,
-                    RequestedSchema = ReadRequestedSchema(root),
+                    RequestedSchema = ReadRequestedSchema(root, options),
                     Meta = meta
                 },
                 ElicitationModes.Url => new UrlElicitationRequest
@@ -237,7 +238,7 @@ namespace SalmonEgg.Acp.Protocol
                     JsonSerializer.Serialize(
                         writer,
                         form.RequestedSchema,
-                        AcpJsonContext.Default.ElicitationSchema);
+                        (JsonTypeInfo<ElicitationSchema>)options.GetTypeInfo(typeof(ElicitationSchema)));
                     break;
                 case UrlElicitationRequest url:
                     writer.WriteString("elicitationId", url.ElicitationId);
@@ -283,7 +284,7 @@ namespace SalmonEgg.Acp.Protocol
                 ?? throw new JsonException($"elicitation/create is missing required '{propertyName}'.");
         }
 
-        private static ElicitationSchema ReadRequestedSchema(JsonElement root)
+        private static ElicitationSchema ReadRequestedSchema(JsonElement root, JsonSerializerOptions options)
         {
             if (!root.TryGetProperty("requestedSchema", out var schemaElement)
                 || schemaElement.ValueKind == JsonValueKind.Null)
@@ -291,7 +292,7 @@ namespace SalmonEgg.Acp.Protocol
                 throw new JsonException("elicitation/create form mode is missing required 'requestedSchema'.");
             }
 
-            return schemaElement.Deserialize(AcpJsonContext.Default.ElicitationSchema)
+            return schemaElement.Deserialize((JsonTypeInfo<ElicitationSchema>)options.GetTypeInfo(typeof(ElicitationSchema)))
                 ?? throw new JsonException("elicitation/create 'requestedSchema' must be an object.");
         }
 
