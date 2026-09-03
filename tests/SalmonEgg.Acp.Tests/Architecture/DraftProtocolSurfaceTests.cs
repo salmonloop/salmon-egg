@@ -80,28 +80,6 @@ public sealed class DraftProtocolSurfaceTests
         "V2PlanUpdate",
     ];
 
-    /// <summary>
-    /// The v2 <c>sessionUpdate</c> discriminators declared on the stable
-    /// <see cref="SessionUpdate"/> root, pinned so adding one is a deliberate act.
-    /// </summary>
-    /// <remarks>
-    /// Every entry here means a v1-negotiated connection can materialize a draft type on the read
-    /// path: <see cref="JsonDerivedTypeAttribute"/> is static metadata with no notion of the
-    /// negotiated version, so the discriminator is honored regardless. That is a known behavioral gap
-    /// tracked on its own; this pins its size so the gap cannot grow unnoticed while it is open.
-    /// <c>state_update</c> is deliberately absent - it is dispatched by
-    /// <c>SessionUpdateParamsJsonConverter</c> instead, and asserted separately below.
-    /// </remarks>
-    private static readonly string[] PinnedDraftSessionUpdateDiscriminators =
-    [
-        "agent_message",
-        "agent_thought",
-        "plan_update",
-        "terminal_output_chunk",
-        "terminal_update",
-        "tool_call_content_chunk",
-        "user_message",
-    ];
 
     [Fact]
     public void ManifestDraftClassification_MatchesTheExperimentalAttributes()
@@ -290,24 +268,40 @@ public sealed class DraftProtocolSurfaceTests
     }
 
     [Fact]
-    public void StableSessionUpdateRoot_DeclaresOnlyThePinnedDraftDiscriminators()
+    public void DraftUpdateContracts_AreExactlyTheV2OnlySessionUpdateSurface()
     {
+        // Ties the two mechanisms together instead of leaving them as parallel facts that happen to
+        // agree today. "This type is draft" and "this discriminator only exists in v2" are the same
+        // statement about a session update, so they are asserted as one equivalence: a v2-only entry
+        // whose type is not marked would ship unannounced, and a marked type sitting in the v1 surface
+        // would mean a stable connection binds a draft contract.
         var draft = DraftTypes().ToHashSet();
-        var declared = typeof(SessionUpdate)
-            .GetCustomAttributes<JsonDerivedTypeAttribute>(inherit: false)
-            .Where(attribute => draft.Contains(attribute.DerivedType))
-            .Select(static attribute => attribute.TypeDiscriminator?.ToString() ?? "<none>")
-            .OrderBy(static discriminator => discriminator, StringComparer.Ordinal)
+        var v1Surface = SessionUpdateWireSurface.Entries
+            .Where(static entry => entry.Surface.HasFlag(SessionUpdateWireSurface.Surfaces.V1))
+            .ToArray();
+        var v2Only = SessionUpdateWireSurface.Entries
+            .Where(static entry => entry.Surface == SessionUpdateWireSurface.Surfaces.V2)
             .ToArray();
 
-        Assert.Equal(PinnedDraftSessionUpdateDiscriminators, declared);
+        var unmarkedDraftSurface = v2Only
+            .Where(entry => !draft.Contains(entry.UpdateType))
+            .Select(static entry => entry.Discriminator)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.True(
+            unmarkedDraftSurface.Length == 0,
+            "These sessionUpdate discriminators exist only in v2, so the contracts they bind are draft "
+            + "surface and must be marked: " + string.Join(", ", unmarkedDraftSurface));
 
-        // state_update is the one draft update the polymorphic contract cannot express (its inner
-        // discriminator is a sibling of the outer one), so it is dispatched by the params converter.
-        // Pinned here too: both routes reach a draft type from a v1-negotiated read, and this test is
-        // the inventory of that exposure.
-        Assert.Equal("state_update", StateSessionUpdateWireFormat.Discriminator);
-        Assert.DoesNotContain("state_update", declared, StringComparer.Ordinal);
+        var markedStableSurface = v1Surface
+            .Where(entry => draft.Contains(entry.UpdateType))
+            .Select(static entry => entry.Discriminator)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.True(
+            markedStableSurface.Length == 0,
+            "These discriminators are part of the stable v1 surface, so a v1 connection binds them - "
+            + "their contracts cannot be draft: " + string.Join(", ", markedStableSurface));
     }
 
     private static IEnumerable<Type> DraftTypes() =>

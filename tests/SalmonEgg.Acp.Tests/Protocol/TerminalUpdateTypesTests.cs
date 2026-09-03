@@ -11,7 +11,7 @@ public sealed class TerminalUpdateTypesTests
     private static SessionUpdateParams? Parse(string updateJson) =>
         JsonSerializer.Deserialize(
             "{\"sessionId\":\"session-1\",\"update\":" + updateJson + "}",
-            AcpJsonContext.Default.SessionUpdateParams);
+            Wire.V2<SessionUpdateParams>());
 
     [Fact]
     public void TerminalSessionUpdate_FullPayload_MapsEveryField()
@@ -115,7 +115,7 @@ public sealed class TerminalUpdateTypesTests
                 HasOutput = true
             });
 
-        var json = JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams);
+        var json = JsonSerializer.Serialize(value, Wire.V2<SessionUpdateParams>());
 
         using var document = JsonDocument.Parse(json);
         var update = document.RootElement.GetProperty("update");
@@ -136,8 +136,8 @@ public sealed class TerminalUpdateTypesTests
             "{\"sessionUpdate\":\"terminal_update\",\"terminalId\":\"t-3\",\"exitStatus\":{\"signal\":\"SIGTERM\"}}";
 
         var parsed = Parse(UpdateJson);
-        var json = JsonSerializer.Serialize(parsed!, AcpJsonContext.Default.SessionUpdateParams);
-        var reparsed = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
+        var json = JsonSerializer.Serialize(parsed!, Wire.V2<SessionUpdateParams>());
+        var reparsed = JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>());
 
         var update = Assert.IsType<TerminalSessionUpdate>(reparsed?.Update);
         Assert.Equal("t-3", update.TerminalId);
