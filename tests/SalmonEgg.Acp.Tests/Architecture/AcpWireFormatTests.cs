@@ -100,6 +100,75 @@ public sealed class AcpWireFormatTests
         Assert.Equal(AcpProtocolVersion.Default, AcpWireFormat.NegotiatedVersion(new JsonSerializerOptions()));
     }
 
+    /// <summary>
+    /// The two places inside the SDK that may name the unversioned generated context.
+    /// </summary>
+    /// <remarks>
+    /// <c>AcpWireFormat</c> wraps it, which is the whole point of the seam. <c>MessageParser</c> combines
+    /// it for the JSON-RPC envelope, which is genuinely version-independent and is parsed before any
+    /// version has been negotiated.
+    /// </remarks>
+    private static readonly string[] AllowedGeneratedContextUsers =
+    [
+        Path.Combine("Serialization", "AcpWireFormat.cs"),
+        Path.Combine("JsonRpc", "MessageParser.cs"),
+    ];
+
+    [Fact]
+    public void SdkCode_ReachesContractsThroughTheWireFormatOnly()
+    {
+        // A converter naming AcpJsonContext.Default gets contracts bound to the generated context's
+        // options, so the negotiated version silently does not reach it - the same failure the fast path
+        // caused, arrived at by hand. Before this was cleaned up, 23 sites in InitializeTypes and the
+        // elicitation converters did exactly that; today none do, which only stays true if it is checked.
+        var sdk = FindSdkDirectory();
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(sdk, "*.cs", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sdk, file);
+            if (relative.StartsWith("obj", StringComparison.Ordinal)
+                || relative.StartsWith("bin", StringComparison.Ordinal)
+                || AllowedGeneratedContextUsers.Contains(relative, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var lineNumber = 0;
+            foreach (var line in File.ReadLines(file))
+            {
+                lineNumber++;
+                var trimmed = line.TrimStart();
+                // Prose may name it; code may not.
+                if (trimmed.StartsWith("//", StringComparison.Ordinal)
+                    || trimmed.StartsWith("///", StringComparison.Ordinal)
+                    || trimmed.StartsWith("*", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (line.Contains("AcpJsonContext.Default", StringComparison.Ordinal))
+                {
+                    offenders.Add($"{relative}({lineNumber})");
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "These SDK sites bypass the connection's wire format and would serialize under the "
+            + "unversioned contract. Take the contract from the JsonSerializerOptions already in scope: "
+            + string.Join(", ", offenders));
+    }
+
+    private static string FindSdkDirectory()
+    {
+        var path = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "SalmonEgg.Acp"));
+        Assert.True(Directory.Exists(path), $"SalmonEgg.Acp source directory was not found at {path}.");
+        return path;
+    }
+
     [Fact]
     public void UnmodeledVersion_HasNoContract()
     {
