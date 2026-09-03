@@ -217,7 +217,7 @@ namespace SalmonEgg.Acp.Tool
                     writer.WriteEndObject();
                     break;
                 case StructuredDiff structuredDiff:
-                    StructuredDiffWireFormat.Write(writer, structuredDiff);
+                    StructuredDiffWireFormat.Write(writer, structuredDiff, options);
                     break;
                 case DiffToolCallContent diff:
                     writer.WriteStartObject();

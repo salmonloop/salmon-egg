@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tool
 {
@@ -248,11 +249,11 @@ namespace SalmonEgg.Acp.Tool
                 ? value.GetString()
                 : null;
 
-        internal static void Write(Utf8JsonWriter writer, StructuredDiff value)
+        internal static void Write(Utf8JsonWriter writer, StructuredDiff value, JsonSerializerOptions options)
         {
             ArgumentNullException.ThrowIfNull(value);
 
-            if (Protocol.AcpProtocolWriteContext.Current != Protocol.AcpProtocolVersion.V2)
+            if (Serialization.AcpWireFormat.NegotiatedVersion(options) != Protocol.AcpProtocolVersion.V2)
             {
                 throw new JsonException(V2OnlyMessage);
             }

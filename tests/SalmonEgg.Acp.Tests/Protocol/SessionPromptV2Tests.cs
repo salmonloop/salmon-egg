@@ -13,9 +13,7 @@ public sealed class SessionPromptV2Tests
         var parsed = JsonSerializer.Deserialize("{}", AcpJsonContext.Default.SessionPromptResponse);
         Assert.False(parsed!.HasStopReason);
         Assert.Equal(StopReason.EndTurn, parsed.StopReason);
-        string v2;
-        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
-            v2 = JsonSerializer.Serialize(parsed, AcpJsonContext.Default.SessionPromptResponse);
+        var v2 = JsonSerializer.Serialize(parsed, Wire.V2<SessionPromptResponse>());
         Assert.Equal("{}", v2);
     }
 

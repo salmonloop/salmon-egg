@@ -40,7 +40,7 @@ public sealed class SessionNewTypesTests
     }
 
     [Fact]
-    public void SessionNewParams_StdioMcpServers_ExplicitV2WriteContext_SerializesTypeDiscriminator()
+    public void SessionNewParams_StdioMcpServers_OnADraftConnection_SerializesTypeDiscriminator()
     {
         var sessionParams = new SessionNewParams
         {
@@ -51,11 +51,7 @@ public sealed class SessionNewTypesTests
             ]
         };
 
-        string json;
-        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
-        {
-            json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionNewParams);
-        }
+        var json = JsonSerializer.Serialize(sessionParams, Wire.V2<SessionNewParams>());
 
         using var parsed = JsonDocument.Parse(json);
         var mcpServers = parsed.RootElement.GetProperty("mcpServers");

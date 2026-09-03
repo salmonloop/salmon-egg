@@ -2488,16 +2488,8 @@ namespace SalmonEgg.Acp.Client
         // serialization context, so it can no longer name the wrong one. The type argument is explicit
         // rather than inferred so the contract is chosen by the declared protocol type, not by whatever
         // static type the local variable happens to have.
-        private JsonElement ToElement<T>(T value)
-        {
-            // Carry the negotiated protocol version along the call flow to the internal converters (for
-            // example the version-specific McpServer write path). set -> SerializeToElement -> restore
-            // closes synchronously with no await in between, so concurrent requests cannot mix versions.
-            using (AcpProtocolWriteContext.Enter(_protocolVersion))
-            {
-                return JsonSerializer.SerializeToElement(value, _wire.TypeInfo<T>());
-            }
-        }
+        private JsonElement ToElement<T>(T value) =>
+            JsonSerializer.SerializeToElement(value, _wire.TypeInfo<T>());
 
         private T? FromElement<T>(JsonElement value) =>
             value.Deserialize(_wire.TypeInfo<T>());
