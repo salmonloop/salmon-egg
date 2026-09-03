@@ -88,7 +88,16 @@ namespace SalmonEgg.Acp.Client
         private string? _lastTransportErrorMessage;
 
         private bool _isInitialized;
-        private int _protocolVersion = AcpProtocolVersion.V1;
+
+        // The serialization contract of this connection. ACP negotiates one major version per
+        // connection and each side then serves that version's surface, so the contract is connection
+        // state - not a per-call argument and not ambient state. Starts on the stable surface because
+        // that is what an un-negotiated client may legitimately write (the initialize request itself).
+        private AcpWireFormat _wire = AcpWireFormat.For(AcpProtocolVersion.V1);
+
+        // Projection rather than a second field: a copy could drift from the contract actually in use,
+        // and the two disagreeing is exactly the class of defect this refactor exists to remove.
+        private int _protocolVersion => _wire.Version;
         private AgentInfo? _agentInfo;
         private AgentCapabilities? _agentCapabilities;
         private IReadOnlyList<AuthMethodDefinition>? _authMethods;
@@ -239,7 +248,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "initialize",
-                ToElement(@params, AcpJsonContext.Default.InitializeParams));
+                ToElement<InitializeParams>(@params));
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
             // Validate the response.
@@ -255,7 +264,7 @@ namespace SalmonEgg.Acp.Client
             }
 
             // Parse the response.
-            var initializeResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.InitializeResponse);
+            var initializeResponse = FromElement<InitializeResponse>(response.Result!.Value);
             if (initializeResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse initialize response");
@@ -278,7 +287,7 @@ namespace SalmonEgg.Acp.Client
             }
 
             // Store the agent information.
-            _protocolVersion = serverVersion;
+            _wire = AcpWireFormat.For(serverVersion);
             _agentInfo = initializeResponse.AgentInfo;
             _agentCapabilities = initializeResponse.AgentCapabilities;
             _authMethods = initializeResponse.AuthMethods;
@@ -308,7 +317,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/new",
-                ToElement(@params, AcpJsonContext.Default.SessionNewParams));
+                ToElement<SessionNewParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -317,7 +326,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var sessionNewResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.SessionNewResponse);
+            var sessionNewResponse = FromElement<SessionNewResponse>(response.Result!.Value);
             if (sessionNewResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/new response");
@@ -358,7 +367,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/load",
-                ToElement(@params, AcpJsonContext.Default.SessionLoadParams));
+                ToElement<SessionLoadParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -378,7 +387,7 @@ namespace SalmonEgg.Acp.Client
                 return SessionLoadResponse.Completed;
             }
 
-            var sessionLoadResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionLoadResponse);
+            var sessionLoadResponse = FromElement<SessionLoadResponse>(response.Result.Value);
 
             return sessionLoadResponse ?? SessionLoadResponse.Completed;
         }
@@ -416,7 +425,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/resume",
-                ToElement(@params, AcpJsonContext.Default.SessionResumeParams));
+                ToElement<SessionResumeParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -436,7 +445,7 @@ namespace SalmonEgg.Acp.Client
                 return SessionResumeResponse.Completed;
             }
 
-            var sessionResumeResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionResumeResponse);
+            var sessionResumeResponse = FromElement<SessionResumeResponse>(response.Result.Value);
 
             return sessionResumeResponse ?? SessionResumeResponse.Completed;
         }
@@ -463,7 +472,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/close",
-                ToElement(@params, AcpJsonContext.Default.SessionCloseParams));
+                ToElement<SessionCloseParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -479,7 +488,7 @@ namespace SalmonEgg.Acp.Client
                 return SessionCloseResponse.Completed;
             }
 
-            var sessionCloseResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionCloseResponse);
+            var sessionCloseResponse = FromElement<SessionCloseResponse>(response.Result.Value);
 
             _sessionStore.RemoveSession(@params.SessionId);
             return sessionCloseResponse ?? SessionCloseResponse.Completed;
@@ -506,7 +515,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/delete",
-                ToElement(@params, AcpJsonContext.Default.SessionDeleteParams));
+                ToElement<SessionDeleteParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -522,7 +531,7 @@ namespace SalmonEgg.Acp.Client
                 return SessionDeleteResponse.Completed;
             }
 
-            var sessionDeleteResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionDeleteResponse);
+            var sessionDeleteResponse = FromElement<SessionDeleteResponse>(response.Result.Value);
 
             _sessionStore.RemoveSession(@params.SessionId);
             return sessionDeleteResponse ?? SessionDeleteResponse.Completed;
@@ -550,7 +559,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/list",
-                ToElement(@params, AcpJsonContext.Default.SessionListParams));
+                ToElement<SessionListParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -559,7 +568,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var listResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.SessionListResponse);
+            var listResponse = FromElement<SessionListResponse>(response.Result!.Value);
             if (listResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/list response");
@@ -587,7 +596,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/prompt",
-                ToElement(@params, AcpJsonContext.Default.SessionPromptParams));
+                ToElement<SessionPromptParams>(@params));
 
             // ACP requires a real session/prompt response with a protocol stopReason.
             // The client must wait for the protocol response instead of fabricating a terminal result.
@@ -598,7 +607,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var promptResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.SessionPromptResponse);
+            var promptResponse = FromElement<SessionPromptResponse>(response.Result!.Value);
             if (promptResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/prompt response");
@@ -651,7 +660,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/set_mode",
-                ToElement(@params, AcpJsonContext.Default.SessionSetModeParams));
+                ToElement<SessionSetModeParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -660,7 +669,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var setModeResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.SessionSetModeResponse);
+            var setModeResponse = FromElement<SessionSetModeResponse>(response.Result!.Value);
             if (setModeResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_mode response");
@@ -682,7 +691,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/set_config_option",
-                ToElement(@params, AcpJsonContext.Default.SessionSetConfigOptionParams));
+                ToElement<SessionSetConfigOptionParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -691,7 +700,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var configResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.SessionSetConfigOptionResponse);
+            var configResponse = FromElement<SessionSetConfigOptionResponse>(response.Result!.Value);
             if (configResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_config_option response");
@@ -720,7 +729,7 @@ namespace SalmonEgg.Acp.Client
 
             var notification = new JsonRpcNotification(
                 "session/cancel",
-                ToElement(@params, AcpJsonContext.Default.SessionCancelParams));
+                ToElement<SessionCancelParams>(@params));
 
             await _transport.SendMessageAsync(
                 _parser.SerializeMessage(notification),
@@ -768,7 +777,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 methodName,
-                ToElement(@params, AcpJsonContext.Default.AuthenticateParams));
+                ToElement<AuthenticateParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken);
 
@@ -777,7 +786,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var authResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.AuthenticateResponse);
+            var authResponse = FromElement<AuthenticateResponse>(response.Result!.Value);
             if (authResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse authenticate response");
@@ -805,7 +814,7 @@ namespace SalmonEgg.Acp.Client
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 methodName,
-                ToElement(@params, AcpJsonContext.Default.LogoutParams));
+                ToElement<LogoutParams>(@params));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -820,7 +829,7 @@ namespace SalmonEgg.Acp.Client
                 return LogoutResponse.Completed;
             }
 
-            return FromElement(response.Result.Value, AcpJsonContext.Default.LogoutResponse)
+            return FromElement<LogoutResponse>(response.Result.Value)
                 ?? LogoutResponse.Completed;
         }
 
@@ -907,7 +916,7 @@ namespace SalmonEgg.Acp.Client
             return await SendResponseAsync(
                 new JsonRpcResponse(
                     messageId!,
-                    ToElement(response, AcpJsonContext.Default.CreateElicitationResponse))).ConfigureAwait(false);
+                    ToElement<CreateElicitationResponse>(response))).ConfigureAwait(false);
         }
 
         private async Task<bool> TrySendPermissionOutcomeResponseAsync(object? messageId, string outcome, string? optionId)
@@ -954,7 +963,7 @@ namespace SalmonEgg.Acp.Client
 
             var response = new JsonRpcResponse(
                 messageId,
-                ToElement(outcomePayload, AcpJsonContext.Default.PermissionOutcomeResult));
+                ToElement<PermissionOutcomeResult>(outcomePayload));
             return await SendResponseAsync(response).ConfigureAwait(false);
         }
 
@@ -978,9 +987,8 @@ namespace SalmonEgg.Acp.Client
             JsonElement result;
             if (string.Equals(pending.Method, "fs/read_text_file", StringComparison.Ordinal))
             {
-                result = ToElement(
-                    new ReadTextFileResult { Content = content ?? string.Empty },
-                    AcpJsonContext.Default.ReadTextFileResult);
+                result = ToElement<ReadTextFileResult>(
+                    new ReadTextFileResult { Content = content ?? string.Empty });
             }
             else
             {
@@ -1014,7 +1022,7 @@ namespace SalmonEgg.Acp.Client
             return await SendResponseAsync(
                 new JsonRpcResponse(
                     messageId,
-                    ToElement(response, AcpJsonContext.Default.AskUserResponse))).ConfigureAwait(false);
+                    ToElement<AskUserResponse>(response))).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1143,9 +1151,8 @@ namespace SalmonEgg.Acp.Client
             {
                 var notification = new JsonRpcNotification(
                     CancelRequestParams.Method,
-                    ToElement(
-                        new CancelRequestParams(requestId),
-                        AcpJsonContext.Default.CancelRequestParams));
+                    ToElement<CancelRequestParams>(
+                        new CancelRequestParams(requestId)));
                 var sent = await _transport.SendMessageAsync(_parser.SerializeMessage(notification)).ConfigureAwait(false);
                 if (!sent)
                 {
@@ -1505,7 +1512,7 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
 
-                var updateParams = FromElement(notification.Params.Value, AcpJsonContext.Default.SessionUpdateParams);
+                var updateParams = FromElement<SessionUpdateParams>(notification.Params.Value);
                 if (updateParams == null || updateParams.Update == null)
                 {
                     return;
@@ -1726,7 +1733,7 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
 
-                var askUserRequest = FromElement(request.Params.Value, AcpJsonContext.Default.AskUserRequest);
+                var askUserRequest = FromElement<AskUserRequest>(request.Params.Value);
                 if (askUserRequest == null)
                 {
                     RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
@@ -1799,9 +1806,8 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
 
-                var elicitationRequest = FromElement(
-                    request.Params.Value,
-                    AcpJsonContext.Default.CreateElicitationRequest);
+                var elicitationRequest = FromElement<CreateElicitationRequest>(
+                    request.Params.Value);
                 if (elicitationRequest == null)
                 {
                     RemovePendingInboundTracking(requestIdStr);
@@ -1886,9 +1892,8 @@ namespace SalmonEgg.Acp.Client
             CompleteElicitationNotification? completion;
             try
             {
-                completion = FromElement(
-                    notification.Params.Value,
-                    AcpJsonContext.Default.CompleteElicitationNotification);
+                completion = FromElement<CompleteElicitationNotification>(
+                    notification.Params.Value);
             }
             catch (JsonException ex)
             {
@@ -1972,7 +1977,7 @@ namespace SalmonEgg.Acp.Client
                 switch (request.Method)
                 {
                     case "terminal/create":
-                        var createRequest = FromElement(rawParams, AcpJsonContext.Default.TerminalCreateRequest)
+                        var createRequest = FromElement<TerminalCreateRequest>(rawParams)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/create request.");
                         var createResponse = await _terminalSessionManager.CreateAsync(createRequest).ConfigureAwait(false);
                         PublishTerminalStateChanged(sessionId, createResponse.TerminalId, request.Method);
@@ -1980,7 +1985,7 @@ namespace SalmonEgg.Acp.Client
                         break;
 
                     case "terminal/output":
-                        var outputRequest = FromElement(rawParams, AcpJsonContext.Default.TerminalOutputRequest)
+                        var outputRequest = FromElement<TerminalOutputRequest>(rawParams)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/output request.");
                         var outputResponse = await _terminalSessionManager.GetOutputAsync(outputRequest).ConfigureAwait(false);
                         PublishTerminalStateChanged(
@@ -1994,7 +1999,7 @@ namespace SalmonEgg.Acp.Client
                         break;
 
                     case "terminal/wait_for_exit":
-                        var waitRequest = FromElement(rawParams, AcpJsonContext.Default.TerminalWaitForExitRequest)
+                        var waitRequest = FromElement<TerminalWaitForExitRequest>(rawParams)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/wait_for_exit request.");
                         var waitResponse = await _terminalSessionManager.WaitForExitAsync(waitRequest).ConfigureAwait(false);
                         PublishTerminalStateChanged(
@@ -2010,7 +2015,7 @@ namespace SalmonEgg.Acp.Client
                         break;
 
                     case "terminal/kill":
-                        var killRequest = FromElement(rawParams, AcpJsonContext.Default.TerminalKillRequest)
+                        var killRequest = FromElement<TerminalKillRequest>(rawParams)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/kill request.");
                         var killResponse = await _terminalSessionManager.KillAsync(killRequest).ConfigureAwait(false);
                         PublishTerminalStateChanged(sessionId, killRequest.TerminalId, request.Method);
@@ -2018,7 +2023,7 @@ namespace SalmonEgg.Acp.Client
                         break;
 
                     case "terminal/release":
-                        var releaseRequest = FromElement(rawParams, AcpJsonContext.Default.TerminalReleaseRequest)
+                        var releaseRequest = FromElement<TerminalReleaseRequest>(rawParams)
                             ?? throw new InvalidOperationException("Failed to deserialize terminal/release request.");
                         var releaseResponse = await _terminalSessionManager.ReleaseAsync(releaseRequest).ConfigureAwait(false);
                         PublishTerminalStateChanged(
@@ -2062,27 +2067,27 @@ namespace SalmonEgg.Acp.Client
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, TerminalCreateResponse result)
         {
-            await SendTerminalSuccessResponseAsync(messageId, ToElement(result, AcpJsonContext.Default.TerminalCreateResponse)).ConfigureAwait(false);
+            await SendTerminalSuccessResponseAsync(messageId, ToElement<TerminalCreateResponse>(result)).ConfigureAwait(false);
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, TerminalOutputResponse result)
         {
-            await SendTerminalSuccessResponseAsync(messageId, ToElement(result, AcpJsonContext.Default.TerminalOutputResponse)).ConfigureAwait(false);
+            await SendTerminalSuccessResponseAsync(messageId, ToElement<TerminalOutputResponse>(result)).ConfigureAwait(false);
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, TerminalWaitForExitResponse result)
         {
-            await SendTerminalSuccessResponseAsync(messageId, ToElement(result, AcpJsonContext.Default.TerminalWaitForExitResponse)).ConfigureAwait(false);
+            await SendTerminalSuccessResponseAsync(messageId, ToElement<TerminalWaitForExitResponse>(result)).ConfigureAwait(false);
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, TerminalKillResponse result)
         {
-            await SendTerminalSuccessResponseAsync(messageId, ToElement(result, AcpJsonContext.Default.TerminalKillResponse)).ConfigureAwait(false);
+            await SendTerminalSuccessResponseAsync(messageId, ToElement<TerminalKillResponse>(result)).ConfigureAwait(false);
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, TerminalReleaseResponse result)
         {
-            await SendTerminalSuccessResponseAsync(messageId, ToElement(result, AcpJsonContext.Default.TerminalReleaseResponse)).ConfigureAwait(false);
+            await SendTerminalSuccessResponseAsync(messageId, ToElement<TerminalReleaseResponse>(result)).ConfigureAwait(false);
         }
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, JsonElement result)
@@ -2478,19 +2483,24 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo)
+        // Both directions resolve their contract from the connection's wire format, and neither takes a
+        // JsonTypeInfo argument any more. That is the point: a call site can no longer name a
+        // serialization context, so it can no longer name the wrong one. The type argument is explicit
+        // rather than inferred so the contract is chosen by the declared protocol type, not by whatever
+        // static type the local variable happens to have.
+        private JsonElement ToElement<T>(T value)
         {
             // Carry the negotiated protocol version along the call flow to the internal converters (for
             // example the version-specific McpServer write path). set -> SerializeToElement -> restore
             // closes synchronously with no await in between, so concurrent requests cannot mix versions.
             using (AcpProtocolWriteContext.Enter(_protocolVersion))
             {
-                return JsonSerializer.SerializeToElement(value, typeInfo);
+                return JsonSerializer.SerializeToElement(value, _wire.TypeInfo<T>());
             }
         }
 
-        private static T? FromElement<T>(JsonElement value, JsonTypeInfo<T> typeInfo) =>
-            value.Deserialize(typeInfo);
+        private T? FromElement<T>(JsonElement value) =>
+            value.Deserialize(_wire.TypeInfo<T>());
 
         private static JsonElement NullJsonElement()
         {
