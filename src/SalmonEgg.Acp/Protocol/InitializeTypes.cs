@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -768,8 +769,8 @@ namespace SalmonEgg.Acp.Protocol
             var result = new InitializeParams
             {
                 ProtocolVersion = ReadProtocolVersion(root),
-                ClientInfo = ReadClientInfo(root),
-                ClientCapabilities = ReadClientCapabilities(root),
+                ClientInfo = ReadClientInfo(root, options),
+                ClientCapabilities = ReadClientCapabilities(root, options),
                 Meta = AcpMetaJson.Read(root)
             };
 
@@ -786,15 +787,15 @@ namespace SalmonEgg.Acp.Protocol
             if (value.ProtocolVersion == AcpProtocolVersion.V1)
             {
                 writer.WritePropertyName("clientInfo");
-                JsonSerializer.Serialize(writer, value.ClientInfo, AcpJsonContext.Default.ClientInfo);
+                JsonSerializer.Serialize(writer, value.ClientInfo, (JsonTypeInfo<ClientInfo>)options.GetTypeInfo(typeof(ClientInfo)));
                 writer.WritePropertyName("clientCapabilities");
-                JsonSerializer.Serialize(writer, value.ClientCapabilities, AcpJsonContext.Default.ClientCapabilities);
+                JsonSerializer.Serialize(writer, value.ClientCapabilities, (JsonTypeInfo<ClientCapabilities>)options.GetTypeInfo(typeof(ClientCapabilities)));
             }
             else
             {
                 writer.WritePropertyName("info");
-                JsonSerializer.Serialize(writer, value.ClientInfo, AcpJsonContext.Default.ClientInfo);
-                WriteClientCapabilitiesV2(writer, value.ClientCapabilities);
+                JsonSerializer.Serialize(writer, value.ClientInfo, (JsonTypeInfo<ClientInfo>)options.GetTypeInfo(typeof(ClientInfo)));
+                WriteClientCapabilitiesV2(writer, value.ClientCapabilities, options);
             }
 
             AcpMetaJson.Write(writer, value.Meta);
@@ -811,37 +812,37 @@ namespace SalmonEgg.Acp.Protocol
             return version.GetInt32();
         }
 
-        private static ClientInfo ReadClientInfo(JsonElement root)
+        private static ClientInfo ReadClientInfo(JsonElement root, JsonSerializerOptions options)
         {
             if (root.TryGetProperty("info", out var info))
             {
-                return JsonSerializer.Deserialize(info.GetRawText(), AcpJsonContext.Default.ClientInfo) ?? new ClientInfo();
+                return JsonSerializer.Deserialize(info.GetRawText(), (JsonTypeInfo<ClientInfo>)options.GetTypeInfo(typeof(ClientInfo))) ?? new ClientInfo();
             }
 
             if (root.TryGetProperty("clientInfo", out var clientInfo))
             {
-                return JsonSerializer.Deserialize(clientInfo.GetRawText(), AcpJsonContext.Default.ClientInfo) ?? new ClientInfo();
+                return JsonSerializer.Deserialize(clientInfo.GetRawText(), (JsonTypeInfo<ClientInfo>)options.GetTypeInfo(typeof(ClientInfo))) ?? new ClientInfo();
             }
 
             return new ClientInfo();
         }
 
-        private static ClientCapabilities ReadClientCapabilities(JsonElement root)
+        private static ClientCapabilities ReadClientCapabilities(JsonElement root, JsonSerializerOptions options)
         {
             if (root.TryGetProperty("capabilities", out var capabilities))
             {
-                return JsonSerializer.Deserialize(capabilities.GetRawText(), AcpJsonContext.Default.ClientCapabilities) ?? new ClientCapabilities();
+                return JsonSerializer.Deserialize(capabilities.GetRawText(), (JsonTypeInfo<ClientCapabilities>)options.GetTypeInfo(typeof(ClientCapabilities))) ?? new ClientCapabilities();
             }
 
             if (root.TryGetProperty("clientCapabilities", out var clientCapabilities))
             {
-                return JsonSerializer.Deserialize(clientCapabilities.GetRawText(), AcpJsonContext.Default.ClientCapabilities) ?? new ClientCapabilities();
+                return JsonSerializer.Deserialize(clientCapabilities.GetRawText(), (JsonTypeInfo<ClientCapabilities>)options.GetTypeInfo(typeof(ClientCapabilities))) ?? new ClientCapabilities();
             }
 
             return new ClientCapabilities();
         }
 
-        private static void WriteClientCapabilitiesV2(Utf8JsonWriter writer, ClientCapabilities value)
+        private static void WriteClientCapabilitiesV2(Utf8JsonWriter writer, ClientCapabilities value, JsonSerializerOptions options)
         {
             writer.WritePropertyName("capabilities");
             writer.WriteStartObject();
@@ -852,7 +853,7 @@ namespace SalmonEgg.Acp.Protocol
             if (value.Elicitation is not null)
             {
                 writer.WritePropertyName("elicitation");
-                JsonSerializer.Serialize(writer, value.Elicitation, AcpJsonContext.Default.ElicitationCapabilities);
+                JsonSerializer.Serialize(writer, value.Elicitation, (JsonTypeInfo<ElicitationCapabilities>)options.GetTypeInfo(typeof(ElicitationCapabilities)));
             }
 
             AcpMetaJson.Write(writer, value.Meta);
@@ -870,9 +871,9 @@ namespace SalmonEgg.Acp.Protocol
             var result = new InitializeResponse
             {
                 ProtocolVersion = ReadProtocolVersion(root),
-                AgentInfo = ReadAgentInfo(root),
-                AgentCapabilities = ReadAgentCapabilities(root),
-                AuthMethods = ReadAuthMethods(root),
+                AgentInfo = ReadAgentInfo(root, options),
+                AgentCapabilities = ReadAgentCapabilities(root, options),
+                AuthMethods = ReadAuthMethods(root, options),
                 Meta = AcpMetaJson.Read(root)
             };
 
@@ -887,15 +888,15 @@ namespace SalmonEgg.Acp.Protocol
             if (value.ProtocolVersion == AcpProtocolVersion.V1)
             {
                 writer.WritePropertyName("agentInfo");
-                JsonSerializer.Serialize(writer, value.AgentInfo, AcpJsonContext.Default.AgentInfo);
+                JsonSerializer.Serialize(writer, value.AgentInfo, (JsonTypeInfo<AgentInfo>)options.GetTypeInfo(typeof(AgentInfo)));
                 writer.WritePropertyName("agentCapabilities");
-                JsonSerializer.Serialize(writer, value.AgentCapabilities, AcpJsonContext.Default.AgentCapabilities);
+                JsonSerializer.Serialize(writer, value.AgentCapabilities, (JsonTypeInfo<AgentCapabilities>)options.GetTypeInfo(typeof(AgentCapabilities)));
             }
             else
             {
                 writer.WritePropertyName("info");
-                JsonSerializer.Serialize(writer, value.AgentInfo, AcpJsonContext.Default.AgentInfo);
-                WriteAgentCapabilitiesV2(writer, value.AgentCapabilities);
+                JsonSerializer.Serialize(writer, value.AgentInfo, (JsonTypeInfo<AgentInfo>)options.GetTypeInfo(typeof(AgentInfo)));
+                WriteAgentCapabilitiesV2(writer, value.AgentCapabilities, options);
             }
 
             writer.WritePropertyName("authMethods");
@@ -914,47 +915,47 @@ namespace SalmonEgg.Acp.Protocol
             return version.GetInt32();
         }
 
-        private static AgentInfo ReadAgentInfo(JsonElement root)
+        private static AgentInfo ReadAgentInfo(JsonElement root, JsonSerializerOptions options)
         {
             if (root.TryGetProperty("info", out var info))
             {
-                return JsonSerializer.Deserialize(info.GetRawText(), AcpJsonContext.Default.AgentInfo) ?? new AgentInfo();
+                return JsonSerializer.Deserialize(info.GetRawText(), (JsonTypeInfo<AgentInfo>)options.GetTypeInfo(typeof(AgentInfo))) ?? new AgentInfo();
             }
 
             if (root.TryGetProperty("agentInfo", out var agentInfo))
             {
-                return JsonSerializer.Deserialize(agentInfo.GetRawText(), AcpJsonContext.Default.AgentInfo) ?? new AgentInfo();
+                return JsonSerializer.Deserialize(agentInfo.GetRawText(), (JsonTypeInfo<AgentInfo>)options.GetTypeInfo(typeof(AgentInfo))) ?? new AgentInfo();
             }
 
             return new AgentInfo();
         }
 
-        private static AgentCapabilities ReadAgentCapabilities(JsonElement root)
+        private static AgentCapabilities ReadAgentCapabilities(JsonElement root, JsonSerializerOptions options)
         {
             if (root.TryGetProperty("capabilities", out var capabilities))
             {
-                return ReadAgentCapabilitiesV2(capabilities);
+                return ReadAgentCapabilitiesV2(capabilities, options);
             }
 
             if (root.TryGetProperty("agentCapabilities", out var agentCapabilities))
             {
-                return JsonSerializer.Deserialize(agentCapabilities.GetRawText(), AcpJsonContext.Default.AgentCapabilities) ?? new AgentCapabilities();
+                return JsonSerializer.Deserialize(agentCapabilities.GetRawText(), (JsonTypeInfo<AgentCapabilities>)options.GetTypeInfo(typeof(AgentCapabilities))) ?? new AgentCapabilities();
             }
 
             return new AgentCapabilities();
         }
 
-        private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root)
+        private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root, JsonSerializerOptions options)
         {
             if (!root.TryGetProperty("authMethods", out var authMethods) || authMethods.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
                 return null;
             }
 
-            return JsonSerializer.Deserialize(authMethods.GetRawText(), AcpJsonContext.Default.ListAuthMethodDefinition);
+            return JsonSerializer.Deserialize(authMethods.GetRawText(), (JsonTypeInfo<List<AuthMethodDefinition>>)options.GetTypeInfo(typeof(List<AuthMethodDefinition>)));
         }
 
-        private static AgentCapabilities ReadAgentCapabilitiesV2(JsonElement root)
+        private static AgentCapabilities ReadAgentCapabilitiesV2(JsonElement root, JsonSerializerOptions options)
         {
             SessionCapabilities? sessionCapabilities = null;
             AgentAuthCapabilities? auth = null;
@@ -966,7 +967,7 @@ namespace SalmonEgg.Acp.Protocol
 
             if (root.TryGetProperty("auth", out var authElement) && authElement.ValueKind == JsonValueKind.Object)
             {
-                auth = JsonSerializer.Deserialize(authElement.GetRawText(), AcpJsonContext.Default.AgentAuthCapabilities);
+                auth = JsonSerializer.Deserialize(authElement.GetRawText(), (JsonTypeInfo<AgentAuthCapabilities>)options.GetTypeInfo(typeof(AgentAuthCapabilities)));
             }
 
             return new AgentCapabilities
@@ -1030,7 +1031,7 @@ namespace SalmonEgg.Acp.Protocol
         private static bool IsObjectMarkerPresent(JsonElement root, string propertyName)
             => root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Object;
 
-        private static void WriteAgentCapabilitiesV2(Utf8JsonWriter writer, AgentCapabilities value)
+        private static void WriteAgentCapabilitiesV2(Utf8JsonWriter writer, AgentCapabilities value, JsonSerializerOptions options)
         {
             writer.WritePropertyName("capabilities");
             writer.WriteStartObject();
@@ -1096,7 +1097,7 @@ namespace SalmonEgg.Acp.Protocol
             if (value.Auth != null)
             {
                 writer.WritePropertyName("auth");
-                JsonSerializer.Serialize(writer, value.Auth, AcpJsonContext.Default.AgentAuthCapabilities);
+                JsonSerializer.Serialize(writer, value.Auth, (JsonTypeInfo<AgentAuthCapabilities>)options.GetTypeInfo(typeof(AgentAuthCapabilities)));
             }
 
             AcpMetaJson.Write(writer, value.Meta);

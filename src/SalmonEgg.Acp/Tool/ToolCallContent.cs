@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tool
 {
@@ -188,7 +189,15 @@ namespace SalmonEgg.Acp.Tool
             return type switch
             {
                 "content" => ReadContent(root, options),
-                "diff" when StructuredDiffWireFormat.IsStructured(root) => StructuredDiffWireFormat.Read(root),
+                // v1 and v2 share the "diff" discriminator; only the payload shape tells them apart. On a
+                // v1 connection a structured diff is not a diff this side can read, and it is not a flat
+                // one either - reading it as flat would silently produce empty path/oldText/newText. So it
+                // goes to passthrough, which is where it landed before the v2 shape was modeled: the
+                // payload survives a round-trip instead of being half-read and then unwritable.
+                "diff" when StructuredDiffWireFormat.IsStructured(root)
+                    => AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2
+                        ? StructuredDiffWireFormat.Read(root)
+                        : new CustomToolCallContent("diff", root.Clone()) { Meta = AcpMetaJson.Read(root) },
                 "diff" => ReadDiff(root, options),
                 "terminal" => ReadTerminal(root, options),
                 // Unknown or missing discriminator: keep the raw payload for forward passthrough and let the Agent

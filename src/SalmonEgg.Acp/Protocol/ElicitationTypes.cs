@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -122,7 +123,7 @@ namespace SalmonEgg.Acp.Protocol
                 // The schema defaults type to "object"; an omitted value is restored to that default
                 // rather than rejected.
                 Type = ElicitationSchemaJson.ReadOptionalString(root, "type") ?? "object",
-                Properties = ReadProperties(root),
+                Properties = ReadProperties(root, options),
                 Required = ElicitationSchemaJson.ReadOptionalStringArray(root, "required"),
                 Description = ElicitationSchemaJson.ReadOptionalString(root, "description"),
                 Title = ElicitationSchemaJson.ReadOptionalString(root, "title"),
@@ -142,7 +143,7 @@ namespace SalmonEgg.Acp.Protocol
                 JsonSerializer.Serialize(
                     writer,
                     property.Value,
-                    AcpJsonContext.Default.ElicitationPropertySchema);
+                    (JsonTypeInfo<ElicitationPropertySchema>)options.GetTypeInfo(typeof(ElicitationPropertySchema)));
             }
 
             writer.WriteEndObject();
@@ -153,7 +154,7 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteEndObject();
         }
 
-        private static Dictionary<string, ElicitationPropertySchema> ReadProperties(JsonElement root)
+        private static Dictionary<string, ElicitationPropertySchema> ReadProperties(JsonElement root, JsonSerializerOptions options)
         {
             var properties = new Dictionary<string, ElicitationPropertySchema>(StringComparer.Ordinal);
             if (!root.TryGetProperty("properties", out var propertiesElement)
@@ -171,7 +172,7 @@ namespace SalmonEgg.Acp.Protocol
 
             foreach (var property in propertiesElement.EnumerateObject())
             {
-                var schema = property.Value.Deserialize(AcpJsonContext.Default.ElicitationPropertySchema);
+                var schema = property.Value.Deserialize((JsonTypeInfo<ElicitationPropertySchema>)options.GetTypeInfo(typeof(ElicitationPropertySchema)));
                 if (schema is null)
                 {
                     throw new JsonException(

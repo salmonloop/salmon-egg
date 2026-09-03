@@ -173,7 +173,10 @@ public sealed class SessionWorkStateUpdateTypesTests
         var exception = Assert.Throws<JsonException>(
             () => JsonSerializer.Serialize(value, Wire.V1<SessionUpdateParams>()));
 
-        Assert.Equal(SessionWorkStateJsonConverter.V2OnlyMessage, exception.Message);
+        // The container guard fires first now, and names both the discriminator and the version - the
+        // inner converter's message is still reachable when a bare SessionWorkState is serialized.
+        Assert.Contains("state_update", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("protocolVersion 1", exception.Message, StringComparison.Ordinal);
     }
 
 }
