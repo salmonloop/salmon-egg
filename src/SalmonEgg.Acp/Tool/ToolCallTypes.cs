@@ -221,4 +221,69 @@ namespace SalmonEgg.Acp.Tool
             writer.WriteStringValue(value.Value);
         }
     }
+
+    /// <summary>
+    /// Reads <c>ToolCall.status</c> / <c>ToolCallUpdate.status</c>, which the upstream schema marks
+    /// <c>x-deserialize-default-on-error</c>.
+    /// </summary>
+    /// <remarks>
+    /// Tolerance belongs to the field, not the type: a wrong-typed <c>status</c> on an update degrades to
+    /// "not reported" so one malformed field cannot discard the whole update, while a bare
+    /// <see cref="ToolCallStatus"/> - which is not a schema field and carries no marker - keeps throwing
+    /// through <see cref="ToolCallStatusJsonConverter"/>. Applied per property so the distinction is
+    /// visible at the declaration. See <c>src/SalmonEgg.Acp/SchemaTolerance.Fields.txt</c>.
+    /// </remarks>
+    internal sealed class ToolCallStatusToleranceJsonConverter : JsonConverter<ToolCallStatus?>
+    {
+        public override ToolCallStatus? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.String)
+            {
+                reader.Skip();
+                return null;
+            }
+
+            return new ToolCallStatus(reader.GetString()!);
+        }
+
+        public override void Write(Utf8JsonWriter writer, ToolCallStatus? value, JsonSerializerOptions options)
+        {
+            if (value is null)
+            {
+                writer.WriteNullValue();
+                return;
+            }
+
+            writer.WriteStringValue(value.Value.Value);
+        }
+    }
+
+    /// <summary>
+    /// Reads <c>ToolCall.kind</c> / <c>ToolCallUpdate.kind</c>, which the upstream schema marks
+    /// <c>x-deserialize-default-on-error</c>. See <see cref="ToolCallStatusToleranceJsonConverter"/>.
+    /// </summary>
+    internal sealed class ToolCallKindToleranceJsonConverter : JsonConverter<ToolCallKind?>
+    {
+        public override ToolCallKind? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.String)
+            {
+                reader.Skip();
+                return null;
+            }
+
+            return new ToolCallKind(reader.GetString()!);
+        }
+
+        public override void Write(Utf8JsonWriter writer, ToolCallKind? value, JsonSerializerOptions options)
+        {
+            if (value is null)
+            {
+                writer.WriteNullValue();
+                return;
+            }
+
+            writer.WriteStringValue(value.Value.Value);
+        }
+    }
 }

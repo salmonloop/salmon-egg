@@ -129,6 +129,12 @@ public sealed class ExtensibleEnumRoundTripTests
             JsonSerializer.Deserialize(json, AcpJsonContext.Default.StopReason));
     }
 
+    /// <summary>
+    /// 类型契约:裸 <see cref="ToolCallStatus"/> 不是 schema 里的某个字段,没有任何容忍标注,
+    /// 因此直接反序列化一个非字符串 token 仍须抛错。容忍属于**字段**而不属于类型 ——
+    /// <c>ToolCallUpdate.status</c> 那一侧标了 x-deserialize-default-on-error,由属性级
+    /// 转换器负责回落,见 <c>ToolCallStatusToleranceJsonConverter</c>。
+    /// </summary>
     [Fact]
     public void ToolCallStatus_NonStringToken_StillThrows()
     {

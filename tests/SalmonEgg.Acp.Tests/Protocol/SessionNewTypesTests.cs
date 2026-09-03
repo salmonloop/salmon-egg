@@ -181,8 +181,13 @@ public sealed class SessionNewTypesTests
         Assert.Equal("workspace", ((JsonElement)clonedEnv.Meta!["scope"]!).GetString());
     }
 
+    /// <summary>
+    /// 协议宽松度：<c>McpServerStdio._meta</c> 标了 x-deserialize-default-on-error，
+    /// 因此 <c>"_meta": "invalid"</c> 必须回落为「未提供」而不是把整个 MCP server 判死。
+    /// 见 src/SalmonEgg.Acp/SchemaTolerance.Fields.txt 与 AGENTS.md「协议宽松度不得反向收紧」。
+    /// </summary>
     [Fact]
-    public void McpServer_WhenMetaIsNotObjectOrNull_Should_NotDeserialize()
+    public void McpServer_WhenMetaIsNotObjectOrNull_DegradesToUnset()
     {
         var json = """
         {
@@ -194,7 +199,12 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        var stdio = Assert.IsType<StdioMcpServer>(server);
+        Assert.Null(stdio.Meta);
+        Assert.Equal("filesystem", stdio.Name);
+        Assert.Equal("/usr/bin/mcp-filesystem", stdio.Command);
     }
 
     [Fact]

@@ -178,7 +178,11 @@ namespace SalmonEgg.Acp.Tool
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                throw new JsonException("Tool call content must be a JSON object.");
+                // ToolCallUpdate.content / ToolCall.content both carry default+skip-items, so a malformed
+                // element degrades to being skipped instead of failing the entire content list. Passthrough
+                // (rather than null) preserves the broken payload for diagnostic purposes: the agent can
+                // see something arrived, just not parse it.
+                return new CustomToolCallContent(string.Empty, root.Clone());
             }
 
             var type = root.TryGetProperty("type", out var typeElement)

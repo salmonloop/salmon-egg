@@ -17,17 +17,16 @@ public abstract record AcpProtocolObject
 
 public static class AcpMetaJson
 {
+    // Every `_meta` in both schemas carries `x-deserialize-default-on-error`, so an unreadable value
+    // degrades to "no metadata" instead of failing its whole enclosing message. `_meta` sits on nearly
+    // every protocol type, so throwing here would let one malformed extension bag discard an otherwise
+    // valid update. See src/SalmonEgg.Acp/SchemaTolerance.Fields.txt.
     public static Dictionary<string, object?>? Read(JsonElement root)
     {
         if (!root.TryGetProperty("_meta", out var metaElement)
-            || metaElement.ValueKind == JsonValueKind.Null)
+            || metaElement.ValueKind != JsonValueKind.Object)
         {
             return null;
-        }
-
-        if (metaElement.ValueKind != JsonValueKind.Object)
-        {
-            throw new JsonException("ACP '_meta' must be an object or null.");
         }
 
         var meta = new Dictionary<string, object?>();
@@ -41,14 +40,11 @@ public static class AcpMetaJson
 
     public static Dictionary<string, object?>? ReadValue(ref Utf8JsonReader reader)
     {
-        if (reader.TokenType == JsonTokenType.Null)
-        {
-            return null;
-        }
-
         if (reader.TokenType != JsonTokenType.StartObject)
         {
-            throw new JsonException("ACP '_meta' must be an object or null.");
+            // Consume whatever stands in for the object so the caller resumes on the next token.
+            reader.Skip();
+            return null;
         }
 
         using var document = JsonDocument.ParseValue(ref reader);

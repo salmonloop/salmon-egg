@@ -78,18 +78,14 @@ namespace SalmonEgg.Acp.Plan
         {
             if (entries is null)
             {
-                throw new JsonException("Plan entries must not be null.");
+                // Plan.entries / PlanUpdate.entries / PlanItems.entries carry default+skip-items. A null
+                // value degrades to an empty list instead of failing the entire plan update.
+                return new List<PlanEntry>();
             }
 
-            foreach (var entry in entries)
-            {
-                if (entry is null)
-                {
-                    throw new JsonException("Plan entries must not contain null items.");
-                }
-            }
-
-            return entries;
+            // Skip-invalid-items: if one element is malformed (null or wrong-type), skip it and keep the
+            // rest. Only Plan.entries / PlanItems.entries have skip-items; other array fields still throw.
+            return entries.FindAll(e => e is not null);
         }
     }
 

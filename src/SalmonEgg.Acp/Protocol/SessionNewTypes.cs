@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -119,6 +120,7 @@ namespace SalmonEgg.Acp.Protocol
         /// The list of available modes.
         /// </summary>
         [JsonPropertyName("availableModes")]
+        [JsonConverter(typeof(SkipInvalidItemsListJsonConverter<SessionMode>))]
         public List<SessionMode> AvailableModes { get; init; } = new();
     }
 
@@ -131,6 +133,7 @@ namespace SalmonEgg.Acp.Protocol
         public string Name { get; init; } = string.Empty;
 
         [JsonPropertyName("description")]
+        [JsonConverter(typeof(DefaultOnErrorStringJsonConverter))]
         public string? Description { get; init; }
     }
 
