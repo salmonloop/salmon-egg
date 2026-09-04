@@ -252,8 +252,12 @@ with open(path, "wb") as handle:
 ' "$app/Contents/Info.plist" "$exe"
     printf 'bin' > "$app/Contents/MacOS/$exe"
     # The bundled command, which a conforming release bundle carries and the pkg's postinstall links.
+    # Executability has two host spellings and this self-test rehearses on all of them: a POSIX host
+    # reads the mode bit set below, while a Windows host under Git Bash has no mode bits for chmod to
+    # set -- there test -x falls back to the file's first bytes, accepting '#!' (cygwin path.h
+    # has_exec_chars). Writing both satisfies either host without branching on which one is running.
     mkdir -p "$app/Contents/$area/cli"
-    printf 'bin' > "$app/Contents/$area/cli/salmon-egg"
+    printf '#!/bin/sh\nbin' > "$app/Contents/$area/cli/salmon-egg"
     chmod +x "$app/Contents/$area/cli/salmon-egg"
   }
 
@@ -355,7 +359,8 @@ with open(path, "wb") as handle:
   # and could change back.
   mkdir -p "$work/XmlPlist.app/Contents/MacOS/cli"
   printf 'bin' > "$work/XmlPlist.app/Contents/MacOS/SalmonEgg"
-  printf 'bin' > "$work/XmlPlist.app/Contents/MacOS/cli/salmon-egg"
+  # Same shebang as the fixture above: on a mode-bit-less host the content is what test -x reads.
+  printf '#!/bin/sh\nbin' > "$work/XmlPlist.app/Contents/MacOS/cli/salmon-egg"
   chmod +x "$work/XmlPlist.app/Contents/MacOS/cli/salmon-egg"
   cat > "$work/XmlPlist.app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -391,6 +396,9 @@ PLIST
   # produces. The postinstall tests -x, so the installer would refuse it.
   make_good_bundle "$work/UnexecutableCli.app"
   chmod -x "$work/UnexecutableCli.app/Contents/MacOS/cli/salmon-egg"
+  # That chmod is a no-op on a host without mode bits, so there the file must also drop the shebang
+  # that made its content executable. On POSIX the rewrite cannot resurrect the cleared mode bit.
+  printf 'bin' > "$work/UnexecutableCli.app/Contents/MacOS/cli/salmon-egg"
   expect "a bundle whose salmon-egg is not executable" fail verify_macos_bundle "$work/UnexecutableCli.app"
 
   # macos: a plain directory that is not a bundle
