@@ -25,7 +25,7 @@ With Salmon Egg, you can connect to local or remote ACP services, create and res
 
 ## Tech Stack
 
-- Uno Platform 6.6+ (repo pin: `Uno.Sdk` 6.6.29)
+- Uno Platform 6.7+ (repo pin: `Uno.Sdk` 6.7.22)
 - .NET 10 (repo pin: SDK 10.0.302, with 10.0.3xx patch roll-forward)
 - WinUI 3 on Windows
 - Clean Architecture + MVVM

@@ -16,7 +16,7 @@ dotnet --version
 dotnet --info
 ```
 
-仓库通过 `global.json` 锁定 .NET SDK `10.0.302`，允许同一 feature band 内的 patch 前滚；Uno SDK 锁定为 `6.6.29`。版本不匹配时先安装 .NET 10 SDK，不要手改项目 TFM 或 `global.json`。
+仓库通过 `global.json` 锁定 .NET SDK `10.0.302`，允许同一 feature band 内的 patch 前滚；Uno SDK 锁定为 `6.7.22`。版本不匹配时先安装 .NET 10 SDK，不要手改项目 TFM 或 `global.json`。
 
 ### 必需与可选依赖
 

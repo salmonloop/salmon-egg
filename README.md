@@ -25,7 +25,7 @@ Salmon Egg 是一款依托 ACP 协议打造的桌面端智能体客户端。
 
 ## 技术栈
 
-- Uno Platform 6.6+（仓库锁定 `Uno.Sdk` 6.6.29）
+- Uno Platform 6.7+（仓库锁定 `Uno.Sdk` 6.7.22）
 - .NET 10（仓库锁定 SDK 10.0.302，允许 10.0.3xx patch 前滚）
 - WinUI 3（Windows）
 - Clean Architecture + MVVM
