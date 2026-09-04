@@ -99,6 +99,10 @@ public sealed class SessionExportServiceTests : IDisposable
         public bool SupportsInteractiveTerminalSurface => false;
         public bool SupportsLocalTerminal => false;
         public bool SupportsGamepadInput => false;
+
+        public bool SupportsCliCommandInspection => false;
+
+        public bool SupportsCliCommandLinking => false;
     }
 
     private sealed class TestAppDataService : IAppDataService

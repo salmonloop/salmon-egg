@@ -76,5 +76,9 @@ public sealed class DiagnosticsBundleServiceTests : IDisposable
         public bool SupportsInteractiveTerminalSurface => false;
         public bool SupportsLocalTerminal => false;
         public bool SupportsGamepadInput => false;
+
+        public bool SupportsCliCommandInspection => false;
+
+        public bool SupportsCliCommandLinking => false;
     }
 }
