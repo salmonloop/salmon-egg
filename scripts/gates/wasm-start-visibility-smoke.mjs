@@ -15,18 +15,9 @@ const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-start-visibility-smoke.m
 const browser = await chromium.launch({ headless: true });
 
 const expectedSuggestions = [
-  {
-    automationId: "StartView.Suggestion.ReportGuidance",
-    title: ["举报 AI 内容", "Report AI content"]
-  },
-  {
-    automationId: "StartView.Suggestion.RecommendTasks",
-    title: ["推荐开发任务", "Recommend tasks"]
-  },
-  {
-    automationId: "StartView.Suggestion.ResolveErrors",
-    title: ["解决最近报错", "Resolve recent errors"]
-  }
+  { title: ["举报 AI 内容", "Report AI content"] },
+  { title: ["推荐开发任务", "Recommend tasks"] },
+  { title: ["解决最近报错", "Resolve recent errors"] }
 ];
 
 try {
@@ -35,20 +26,28 @@ try {
   try {
     await openApp(page, baseUrl);
 
-    // Each hero card must be present in the semantic DOM under its AutomationId and carry its
-    // localized title as the accessible name - exactly what a screen reader announces. This
-    // smoke used to additionally assert title/subtitle alpha and opacity against the pre-6.7
-    // DOM; the semantic tree mirrors structure, not styling, so visible-here means "present,
-    // unhidden, named". (waitForControlState only reports nodes that are not hidden.)
+    // Each hero card must be present in the semantic DOM as a button carrying its localized
+    // title as the accessible name - exactly what a screen reader announces. The match is by
+    // name, not by the cards' AutomationId: those ids are x:Bind-fed, and Uno's BrowserWasm
+    // semantic mapping bakes the automation id into the semantic element when the node is
+    // created - before bindings resolve - and never revises it, so the DOM still carries the
+    // button's x:Name fallback (HeroSuggestionButton). Static ids survive that bake; dynamic
+    // ones never show. The accessible name, in contrast, is read live, and Windows UIA reads
+    // the bound id live too, so the ViewModel ids remain valid for real consumers - they are
+    // just unobservable through this tree. This smoke used to additionally assert title/
+    // subtitle alpha and opacity against the pre-6.7 DOM; the semantic tree mirrors
+    // structure, not styling, so visible-here means "present, unhidden, named".
+    // (waitForControlState only reports nodes that are not hidden.)
     for (const suggestion of expectedSuggestions) {
       const state = await waitForControlState(
         page,
-        { automationIds: [suggestion.automationId], labels: [] },
-        suggestion.automationId);
-      if (!suggestion.title.includes(state.aria)) {
+        { labels: suggestion.title, automationIds: [] },
+        suggestion.title.join(" / "));
+      // matchNode's label fallback also accepts a plain textContent hit, so pin the match to
+      // the card itself: an announced, activatable button, not the title TextBlock inside it.
+      if (state.role !== "button") {
         throw new Error(
-          `${suggestion.automationId} accessible name was '${state.aria}', `
-          + `expected one of ${JSON.stringify(suggestion.title)}.`);
+          `${suggestion.title.join(" / ")} matched role '${state.role}', expected 'button'.`);
       }
     }
 
@@ -56,7 +55,7 @@ try {
     // the behaviour, and it only exists after the card is activated.
     await clickVisibleControl(
       page,
-      { automationIds: ["StartView.Suggestion.ReportGuidance"], labels: [] });
+      { labels: ["举报 AI 内容", "Report AI content"], automationIds: [] });
     await waitForBodyText(
       page,
       /这张提示卡本身只是说明，不会发送举报|This tip card only explains the path and cannot send a report/,
