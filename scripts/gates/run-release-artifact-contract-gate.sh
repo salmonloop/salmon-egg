@@ -3,7 +3,7 @@
 # Asserts that a locally produced release artifact actually contains what it must, before it is uploaded.
 #
 # The CLI already holds this standard: run-cli-release-artifact-smoke.sh executes the binary it just
-# built, and run-cli-linux-package-smoke.sh installs the .deb it just built. The other artifacts had no
+# built, and run-desktop-linux-package-smoke.sh installs the .deb it just built. The other artifacts had no
 # equivalent — a successful `dotnet publish` was the entire evidence that the WASM bundle or the macOS
 # app bundle was usable. Those two shapes can fail in ways a green build never reveals:
 #

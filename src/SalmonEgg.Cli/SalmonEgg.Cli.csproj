@@ -30,10 +30,12 @@
   </PropertyGroup>
 
   <!--
-    Release publishing is gated on the declared support matrix so a typo or an aspirational RID cannot
-    silently produce a release asset for a platform that has no native smoke coverage. The list is read
-    back by scripts/release/build-cli-artifacts.sh, keeping this project the single source of truth for
-    which runtimes are officially supported.
+    Publishing is gated on the declared support matrix so a typo or an aspirational RID cannot silently
+    produce a binary for a platform that has no native smoke coverage. The list is read back by
+    scripts/release/publish-cli-binary.sh, keeping this project the single source of truth for which
+    runtimes are supported. Those are exactly the platforms whose SalmonEgg installer embeds the command:
+    win-x64 for the MSIX and the desktop MSI, linux-x64 for the deb, osx-arm64 for the app bundle and pkg.
+    The CLI is not distributed on its own, so a runtime outside this list has no delivery path at all.
 
     SalmonEggCliAllowUnsupportedRuntimeIdentifier exists only so a developer can exercise the packaging
     and artifact-smoke scripts natively on a host whose RID is not in the matrix. Release jobs must never

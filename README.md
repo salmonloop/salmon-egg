@@ -75,15 +75,17 @@ build.bat msix
 
 ### 配置管理 CLI
 
-仓库包含一个跨平台桌面 CLI，用于管理服务器配置与凭据。发布产物是 self-contained 单文件，用户无需预装 .NET。安装 GUI **不会**注册 `salmon-egg` 命令，全局命令只来自 CLI 安装包。
+仓库包含一个跨平台桌面 CLI，用于管理服务器配置与凭据。它随主程序一起分发：**安装 SalmonEgg 就会注册 `salmon-egg` 命令**，无需单独安装，也不必预装 .NET（产物是 self-contained 单文件）。
 
-| 平台 | 安装方式 | PATH |
-|---|---|---|
-| Linux x64 | `sudo dpkg -i salmon-egg-cli_<版本>_amd64.deb` | dpkg 安装到 `/usr/bin/salmon-egg`，卸载时移除 |
-| Windows x64 | 运行 `salmon-egg-cli-<版本>-win-x64.msi`（per-user） | MSI 追加安装目录到用户 PATH，卸载时移除 |
-| macOS Apple Silicon | `brew install --formula ./salmon-egg-cli.rb` | Homebrew 链接到其 `bin`，已在 PATH 上 |
+| 安装包 | 命令注册方式 |
+|---|---|
+| Windows MSIX | 包内声明 app execution alias，Windows 在 `%LOCALAPPDATA%\Microsoft\WindowsApps` 生成入口（该目录默认在用户 PATH 上） |
+| Windows MSI（Skia Desktop） | MSI 的 `Environment` 表把安装目录下的 `cli` 追加到用户 PATH，卸载时移除 |
+| Linux `.deb` | dpkg 安装 `/usr/bin/salmon-egg` 符号链接，purge 时移除 |
+| macOS `.pkg` | 安装脚本把命令链接到 `/usr/local/bin`（macOS 默认 PATH），删除时手工 `rm /usr/local/bin/salmon-egg` |
+| macOS `.dmg` | 命令在 `SalmonEgg.app` 内，但拖拽安装没有安装钩子，需要自行链接或改用 `.pkg` |
 
-也提供 `.tar.gz` / `.zip` 压缩包供自行放入 PATH。`win-arm64`、`linux-arm64`、`osx-x64` 等不属于正式支持范围：可交叉编译，但没有真实机器验证。
+`win-arm64`、`linux-arm64`、`osx-x64` 等不属于正式支持范围：可交叉编译，但没有真实机器验证。
 
 ```bash
 salmon-egg --help
