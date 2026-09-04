@@ -194,6 +194,154 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void SessionSelectionWithoutNavRow_SchedulesRebuild_RatherThanMutatingTheBoundTreeInline()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new QueuedSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(Array.Empty<ConversationCatalogItem>());
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out var selectionStore,
+                out _,
+                presenterOverride: presenter);
+
+            syncContext.DrainAll();
+
+            var stamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+            presenter.Refresh(new[]
+            {
+                new ConversationCatalogItem(
+                    "session-1",
+                    "Session 1",
+                    @"C:\repo\demo",
+                    stamp,
+                    stamp,
+                    stamp)
+            });
+
+            // The restore placeholder is itself a session row, so only real rows count here.
+            Assert.Empty(EnumerateRealSessionRows(navVm));
+
+            SetSessionSelection(selectionStore, "session-1");
+
+            // The selection notification may ask for a rebuild but must not perform one: mutating the
+            // bound Items/Children from here re-enters the same path, because RebuildTreeCore ends in
+            // NormalizeSelectionAfterRebuild. The coalescing scheduler owns the mutation instead.
+            Assert.Empty(EnumerateRealSessionRows(navVm));
+
+            syncContext.DrainAll();
+
+            var row = Assert.Single(EnumerateRealSessionRows(navVm));
+            Assert.Equal("session-1", row.SessionId);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private static IEnumerable<SessionNavItemViewModel> EnumerateRealSessionRows(MainNavigationViewModel navVm)
+        => EnumerateProjectedMenuSourceItems(navVm)
+            .OfType<SessionNavItemViewModel>()
+            .Where(row => !row.IsPlaceholder);
+
+    private static ConversationCatalogItem OpenedSessionCatalogItem(DateTime stamp)
+        => new(
+            "session-open",
+            "Opened Session",
+            @"C:\repo\demo",
+            stamp,
+            stamp,
+            stamp);
+
+    [Fact]
+    public void RebuildTree_RepublishesSelectedItemBinding_WhenNewerSessionIsInsertedAboveSelection()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-open");
+            var openedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(new[] { OpenedSessionCatalogItem(openedAt) });
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out var selectionStore,
+                out _,
+                presenterOverride: presenter);
+
+            navVm.RebuildTree();
+            SetSessionSelection(selectionStore, "session-open");
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var projectedBefore = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+
+            var selectedItemChanges = 0;
+            navVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainNavigationViewModel.ProjectedControlSelectedItem))
+                {
+                    selectedItemChanges++;
+                }
+            };
+
+            // A session created from the Start page carries the newest timestamp, so it is inserted
+            // above the session already open and re-indexes every row below it.
+            var createdAt = new DateTime(2026, 3, 1, 0, 5, 0, DateTimeKind.Utc);
+            presenter.Refresh(new[]
+            {
+                OpenedSessionCatalogItem(openedAt),
+                new ConversationCatalogItem(
+                    "session-created",
+                    "Created Session",
+                    @"C:\repo\demo",
+                    createdAt,
+                    createdAt,
+                    createdAt)
+            });
+            navVm.RebuildTree();
+
+            Assert.Equal(
+                new[] { "session-created", "session-open" },
+                project.Children.OfType<SessionNavItemViewModel>().Select(child => child.SessionId).ToArray());
+
+            // SyncSessions reuses the row view model on purpose, so the projected instance is
+            // unchanged. Keying the push on that instance alone leaves the control never told about
+            // the reshuffle, and its selection visual stays on whichever container now sits there.
+            Assert.Same(projectedBefore, navVm.ProjectedControlSelectedItem);
+            Assert.True(
+                selectedItemChanges >= 1,
+                $"expected the selection to be re-published after the insert, got {selectedItemChanges} notifications");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void PaneOpenToClosed_KeepsSessionAsProjectedSelection()
     {
         var originalContext = SynchronizationContext.Current;

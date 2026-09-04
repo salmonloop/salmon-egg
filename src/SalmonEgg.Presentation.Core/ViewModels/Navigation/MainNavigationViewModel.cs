@@ -65,6 +65,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private int _rebuildPending;
     private int _rebuildScheduled;
 
+    // Structural revision of the menu source the control renders, bumped by every add/move/remove on
+    // Items or on a project's Children. ApplySelectionProjection compares it against the revision it
+    // last published so a selection that survives a reshuffle is still re-pushed once; see the publish
+    // decision there for why the projected instance alone is not a sufficient key.
+    private long _navTreeStructureRevision;
+    private long _publishedNavTreeStructureRevision = -1;
+
     public ObservableCollection<MainNavItemViewModel> Items { get; } = new();
     public ObservableCollection<MainNavItemViewModel> FooterItems { get; } = new();
 
@@ -210,6 +217,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         FooterItems.Add(DiscoverSessionsItem);
         FooterItems.Add(SettingsItem);
 
+        Items.CollectionChanged += OnNavTreeStructureChanged;
         Items.Add(StartItem);
         Items.Add(SessionsLabelItem);
         Items.Add(AddProjectItem);
@@ -319,11 +327,28 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void DisposeItem(object? item)
     {
+        if (item is ProjectNavItemViewModel projectVm)
+        {
+            UnwatchNavTreeStructure(projectVm);
+        }
+
         if (item is IDisposable disposable)
         {
             disposable.Dispose();
         }
     }
+
+    private void WatchNavTreeStructure(ProjectNavItemViewModel projectVm)
+        => projectVm.Children.CollectionChanged += OnNavTreeStructureChanged;
+
+    private void UnwatchNavTreeStructure(ProjectNavItemViewModel projectVm)
+        => projectVm.Children.CollectionChanged -= OnNavTreeStructureChanged;
+
+    // Any add/move/remove changes which container renders which row, so the control's own selection
+    // visual can end up attached to a row that now shows a different session. Record that the menu
+    // source moved; ApplySelectionProjection decides whether a re-push is owed.
+    private void OnNavTreeStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => _navTreeStructureRevision++;
 
     private void OnConversationCatalogPresenterPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -830,6 +855,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     {
                         IsExpanded = true
                     };
+                    WatchNavTreeStructure(projectVm);
                     _projectVms[projectId] = projectVm;
                 }
                 else
@@ -1262,8 +1288,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             OnPropertyChanged(nameof(IsSettingsSelected));
         }
 
-        if (!ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
+        // Two independent reasons to push the control's SelectedItem, and the second is not derivable
+        // from the first. The projected instance is stable across rebuilds on purpose - SyncSessions
+        // reuses the row view models so a realized container is never recycled needlessly - so a
+        // reshuffle, such as inserting a freshly created session at the top of its project, leaves
+        // this projection reference-equal while every container below it now renders a different row.
+        // Keying only on the instance means the control is never told again, and a OneWay binding
+        // gives us no readback to notice. Re-stating the selection once per structural revision keeps
+        // pane toggles and no-op refreshes quiet while still re-pushing against a rebuilt source.
+        var structureMoved = _navTreeStructureRevision != _publishedNavTreeStructureRevision;
+        if (structureMoved
+            || !ReferenceEquals(previousProjection.ControlSelectedItem, _projection.ControlSelectedItem))
         {
+            _publishedNavTreeStructureRevision = _navTreeStructureRevision;
             OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }
     }
@@ -1274,6 +1311,22 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private bool TryMaterializeProjectedSession(NavigationSelectionState selection)
         => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(selection));
 
+    /// <summary>
+    /// Asks for a rebuild so a catalog-known session that has no nav row yet gains one, and reports
+    /// whether the caller should let that rebuild publish the projection instead of publishing now.
+    /// </summary>
+    /// <remarks>
+    /// Goes through the coalescing scheduler rather than calling <see cref="RebuildTreeCore"/> inline.
+    /// Both callers run inside selection change notifications, and mutating the bound Items/Children
+    /// collections from there re-enters this same path, because <see cref="RebuildTreeCore"/> ends in
+    /// <see cref="NormalizeSelectionAfterRebuild"/>. The scheduler already serialises rebuild requests:
+    /// a request raised while one is running is folded into the pending flag and re-scheduled by
+    /// <see cref="ProcessRebuildTreeRequests"/> when the running pass unwinds.
+    /// Returning true keeps this pass from publishing, because the projection available right now
+    /// resolves the not-yet-materialised session to a null selected item, and pushing that null
+    /// through the binding costs NavigationView its IsChildSelected ancestor visual - the same reason
+    /// <see cref="RebuildTreeCore"/> swaps its indexes atomically instead of clearing them upfront.
+    /// </remarks>
     private bool TryMaterializeSession(string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId)
@@ -1283,7 +1336,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return false;
         }
 
-        RebuildTreeCore();
+        RebuildTree();
         return true;
     }
 
@@ -1366,6 +1419,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             RootPath = string.Empty
         };
         var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState, _uiDispatcher) { IsExpanded = true };
+        WatchNavTreeStructure(vm);
         _projectIndex[vm.ProjectId] = vm;
         return vm;
     }
