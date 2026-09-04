@@ -162,19 +162,18 @@ public sealed class PathCliCommandRegistrationInspectorTests
     public async Task TheCommandFileNameAndSeparatorComeFromTheEnvironment()
     {
         // The Windows shape: a semicolon-separated PATH and a name carrying the extension, which is where an
-        // MSIX alias lives. The candidate path is built with Path.Combine rather than spelled out, because
-        // the inspector combines with the *host's* separator -- correct on Windows, and the only way this
-        // case can assert the file name rather than the running machine's path conventions.
-        const string windowsApps = @"C:\Users\u\AppData\Local\Microsoft\WindowsApps";
-        var candidate = System.IO.Path.Combine(windowsApps, "salmon-egg.exe");
+        // MSIX alias lives. The candidate path is built through the environment's own grammar rather than
+        // spelled out or joined with the host's Path.Combine, so this case asserts the file name and the
+        // separator without inheriting the running machine's path conventions.
         var environment = new FakeProbeEnvironment
         {
-            SearchPath = windowsApps,
+            SearchPath = @"C:\Users\u\AppData\Local\Microsoft\WindowsApps",
             Separator = ';',
             FileName = "salmon-egg.exe",
-            Files = { candidate },
-            Versions = { [candidate] = AppVersion },
         };
+        var candidate = environment.Combine(environment.GetSearchPath()!, environment.CommandFileName);
+        environment.Files.Add(candidate);
+        environment.Versions[candidate] = AppVersion;
 
         var registration = await Create(environment).InspectAsync(TestContext.Current.CancellationToken);
 
@@ -228,6 +227,14 @@ public sealed class PathCliCommandRegistrationInspectorTests
         public char SearchPathSeparator => Separator;
 
         public string CommandFileName => FileName;
+
+        // Deterministic Unix grammar: the inventory is spelled with forward slashes, and the candidates the
+        // inspector asks about must land on exactly those strings on every host. The real machine supplies
+        // Path.Combine (via SystemCliCommandProbeEnvironment) with the host's own grammar instead.
+        public string Combine(string directory, string fileName) =>
+            directory.Length == 0 ? fileName
+            : directory.EndsWith('/') ? directory + fileName
+            : directory + '/' + fileName;
 
         public bool FileExists(string path) => Files.Contains(path);
 
