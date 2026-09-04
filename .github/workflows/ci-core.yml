@@ -103,10 +103,11 @@ jobs:
           -SkipContractSuites
 
       # The release build can only assert this rule while producing a real MSI, which happens on tags
-      # only. Running the rule itself here keeps a weakened PATH check from reaching a release.
-      - name: Run CLI MSI PATH contract gate
+      # only. Running the rule itself here keeps a weakened PATH check from reaching a release. Both
+      # Windows installers register the command this way, so this one rule covers both.
+      - name: Run MSI PATH contract gate
         shell: pwsh
-        run: ./scripts/gates/run-cli-msi-path-contract-gate.ps1
+        run: ./scripts/gates/run-msi-path-contract-gate.ps1
 
       # The MSIX contract gate itself only runs against a real package in the platform workflow. Running
       # its self-test here keeps the rule from being weakened without anyone noticing: a check that never
@@ -115,7 +116,7 @@ jobs:
         shell: pwsh
         run: ./scripts/gates/run-msix-package-contract-gate.ps1 -SelfTest
 
-      # Same reasoning as the CLI MSI gate above, for the desktop package: the release step can only read
+      # Same reasoning as the PATH gate above, for the desktop package as a whole: the release step can only read
       # a real MSI on a tag with WiX present, so the rule ran unrehearsed until it broke the v1.3.0
       # release from inside OpenView. This drives the rule against fake databases on every push.
       - name: Run desktop MSI contract gate

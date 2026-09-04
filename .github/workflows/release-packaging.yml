@@ -86,6 +86,21 @@ jobs:
           cd SalmonEgg/SalmonEgg
           dotnet publish -f net10.0-desktop -c ${{ env.CONFIGURATION }} -o ../../publish/desktop-windows
 
+      # Installing SalmonEgg installs the salmon-egg command, so the MSI carries the CLI and registers the
+      # directory it lands in on the user's PATH. Published separately from the app rather than through the
+      # app's publish output, because the WiX authoring below has to name the directory the PATH row points
+      # at, and heat generates unstable identifiers for anything it harvests.
+      - name: Publish bundled CLI
+        id: bundled-cli
+        shell: bash
+        run: scripts/release/publish-cli-binary.sh --rid win-x64 --configuration ${{ env.CONFIGURATION }}
+
+      # A publish that produced a file is not evidence the file starts. This is the binary users will
+      # invoke, so exercise it before it is sealed into an installer.
+      - name: Smoke the bundled CLI executable
+        shell: bash
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.bundled-cli.outputs.executable-path }}"
+
       - name: Install WiX Toolset
         shell: pwsh
         run: |
@@ -93,6 +108,8 @@ jobs:
 
       - name: Build Windows Skia MSI
         shell: pwsh
+        env:
+          BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path-native }}
         run: |
           $desktopDir = Join-Path $env:GITHUB_WORKSPACE "publish\desktop-windows"
           if (-not (Test-Path $desktopDir)) {
@@ -112,6 +129,22 @@ jobs:
           }
 
           $harvestPath = Join-Path $installerDir "Harvest.wxs"
+          # The CLI is authored explicitly below rather than harvested, because the PATH row has to name the
+          # directory it lands in and heat generates directory identifiers that change with the tree. So the
+          # app's publish output must not contain it too: two components declaring the same file in the same
+          # directory is a duplicate light refuses, and finding that out from an ICE error is worse than
+          # finding it out here.
+          $harvestedCli = Join-Path $desktopDir "cli"
+          if (Test-Path $harvestedCli) {
+            throw ("The desktop publish output contains '$harvestedCli'. The bundled CLI is authored " +
+                   "into CLIFOLDER by this step; it must not also reach the heat harvest.")
+          }
+
+          $bundledCli = $env:BUNDLED_CLI
+          if ([string]::IsNullOrWhiteSpace($bundledCli) -or -not (Test-Path -LiteralPath $bundledCli)) {
+            throw "The bundled CLI executable was not found: '$bundledCli'."
+          }
+
           heat dir $desktopDir `
             -cg SalmonEggDesktopFiles `
             -dr INSTALLFOLDER `
@@ -132,6 +165,7 @@ jobs:
             '    <MediaTemplate EmbedCab="yes" />'
             '    <Feature Id="MainFeature" Title="SalmonEgg Desktop" Level="1">'
             '      <ComponentGroupRef Id="SalmonEggDesktopFiles" />'
+            '      <ComponentGroupRef Id="SalmonEggCliComponents" />'
             '    </Feature>'
             '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />'
             '    <UIRef Id="WixUI_InstallDir" />'
@@ -140,9 +174,28 @@ jobs:
             '  <Fragment>'
             '    <Directory Id="TARGETDIR" Name="SourceDir">'
             '      <Directory Id="LocalAppDataFolder">'
-            '        <Directory Id="INSTALLFOLDER" Name="SalmonEgg" />'
+            '        <Directory Id="INSTALLFOLDER" Name="SalmonEgg">'
+            '          <!-- The command lives in its own directory so the PATH entry below exposes one'
+            '               executable rather than every DLL shipped beside the app. -->'
+            '          <Directory Id="CLIFOLDER" Name="cli" />'
+            '        </Directory>'
             '      </Directory>'
             '    </Directory>'
+            '    <ComponentGroup Id="SalmonEggCliComponents" Directory="CLIFOLDER">'
+            '      <Component Id="SalmonEggCliComponent" Guid="*">'
+            '        <File Id="SalmonEggCli" Name="salmon-egg.exe" Source="$(var.BundledCliPath)" KeyPath="yes" />'
+            '        <!-- Windows Installer owns this PATH entry: added on install, removed on uninstall,'
+            '             which a script calling setx or editing the registry cannot guarantee. Windows has'
+            '             no /usr/bin, so this is how the command becomes discoverable. -->'
+            '        <Environment Id="SalmonEggCliPathEntry"'
+            '                     Name="PATH"'
+            '                     Value="[CLIFOLDER]"'
+            '                     Action="set"'
+            '                     Part="last"'
+            '                     System="no"'
+            '                     Permanent="no" />'
+            '      </Component>'
+            '    </ComponentGroup>'
             '  </Fragment>'
             '</Wix>'
           )
@@ -154,6 +207,7 @@ jobs:
           candle `
             -ext WixUIExtension `
             -dDesktopPublishDir="$desktopDir" `
+            -dBundledCliPath="$bundledCli" `
             -out (Join-Path $wixObjDir "") `
             $productPath `
             $harvestPath

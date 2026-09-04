@@ -25,6 +25,15 @@
 
 Set-StrictMode -Version Latest
 
+# The PATH-row encoding is the same contract the CLI-only MSI enforced, so it stays in one place rather
+# than being restated here. Only the directory differs: this package installs the app into INSTALLFOLDER
+# and the command into a `cli` subdirectory, so the row must name that subdirectory.
+. (Join-Path $PSScriptRoot 'MsiPathContract.ps1')
+
+$script:DesktopMsiCommandDirectoryToken = '[CLIFOLDER]'
+$script:DesktopMsiAppExecutableName = 'SalmonEgg.exe'
+$script:DesktopMsiCommandExecutableName = 'salmon-egg.exe'
+
 # Aggregate functions, GROUP BY, JOIN, ORDER BY, DISTINCT and LIKE are all absent from Windows Installer's
 # SQL dialect: it fails inside OpenView rather than returning a wrong answer. The grammar's WHERE clause
 # allows only column-to-column comparison, {column} {comparator} {constant}, IS [NOT] NULL -- and for
@@ -147,6 +156,42 @@ function Get-MsiColumn
     return , $values.ToArray()
 }
 
+function Get-MsiRowPair
+{
+    <#
+    .SYNOPSIS
+        Returns every row of a two-column query as Name/Value pairs.
+
+    .DESCRIPTION
+        The Environment table has to be read as pairs, not as two independent columns: which value belongs
+        to which variable is the whole point, and two Get-MsiColumn calls would silently pair row 1's name
+        with row 1's value only for as long as the table has one row.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Database,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Query
+    )
+
+    Assert-MsiQuerySupported -Query $Query
+
+    $view = $Database.OpenView($Query)
+    [void]$view.Execute()
+
+    $rows = [System.Collections.Generic.List[psobject]]::new()
+    while ($null -ne ($record = $view.Fetch()))
+    {
+        $rows.Add([pscustomobject]@{ Name = $record.StringData(1); Value = $record.StringData(2) })
+    }
+
+    # Unary comma for the same reason as Get-MsiColumn: an empty result is the violation this exists to
+    # catch, and PowerShell would unroll it to $null.
+    return , $rows.ToArray()
+}
+
 function Measure-MsiRows
 {
     <#
@@ -180,16 +225,19 @@ function Measure-MsiRows
     return $count
 }
 
-function Get-MsiAppExecutableName
+function Find-MsiFileName
 {
     <#
     .SYNOPSIS
-        Returns the harvested name of the app executable, or $null when the package does not carry it.
+        Returns the harvested cell naming the wanted file, or $null when the package does not carry it.
 
     .DESCRIPTION
         The File table's FileName column holds either a long name or the pair 'SHORTNA~1.EXE|LongName.exe'.
         Both halves are checked, because which form heat emits depends on whether the name needs a 8.3
         alias -- and a rule that only understood one form would pass or fail for the wrong reason.
+
+        Two files matter to this package: the app executable it exists to deliver, and the command it puts
+        on PATH. Taking the wanted name as a parameter is what lets one rule cover both.
     #>
     [CmdletBinding()]
     param(
@@ -200,7 +248,10 @@ function Get-MsiAppExecutableName
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
         [AllowEmptyString()]
-        [string[]]$FileNames
+        [string[]]$FileNames,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedName
     )
 
     foreach ($fileName in $FileNames)
@@ -209,7 +260,7 @@ function Get-MsiAppExecutableName
 
         foreach ($candidate in $fileName.Split('|'))
         {
-            if ($candidate -eq 'SalmonEgg.exe') { return $fileName }
+            if ($candidate -eq $ExpectedName) { return $fileName }
         }
     }
 
@@ -250,6 +301,31 @@ function Write-MsiFileTableShape
     }
 }
 
+function Write-MsiEnvironmentTableShape
+{
+    <#
+    .SYNOPSIS
+        Reports the PATH rows the contract is about to judge.
+
+    .DESCRIPTION
+        Same reason as Write-MsiFileTableShape: the encoding of an Environment row is dense enough that
+        "the contract was violated" is not actionable without seeing the row. Prefix characters and the
+        null marker are invisible in a WiX source file, because WiX composes both columns itself.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [psobject[]]$Rows
+    )
+
+    Write-Host "[desktop-msi] Environment table: $($Rows.Count) row(s)"
+    foreach ($row in $Rows)
+    {
+        Write-Host "[desktop-msi]   Name='$($row.Name)' Value='$($row.Value)'"
+    }
+}
+
 function Get-DesktopMsiContractViolation
 {
     <#
@@ -279,10 +355,24 @@ function Get-DesktopMsiContractViolation
         }
     }
 
-    $appExe = Get-MsiAppExecutableName -FileNames $fileNames
+    $appExe = Find-MsiFileName -FileNames $fileNames -ExpectedName $script:DesktopMsiAppExecutableName
     if ([string]::IsNullOrWhiteSpace($appExe))
     {
-        return [pscustomobject]@{ Id = 'MissingAppExe'; Detail = "$fileCount file rows, none of them SalmonEgg.exe" }
+        return [pscustomobject]@{
+            Id     = 'MissingAppExe'
+            Detail = "$fileCount file rows, none of them $($script:DesktopMsiAppExecutableName)"
+        }
+    }
+
+    # Installing the app installs the command. A package that lost the CLI still installs a working app,
+    # and the PATH entry below would then point at a directory with nothing in it.
+    $commandExe = Find-MsiFileName -FileNames $fileNames -ExpectedName $script:DesktopMsiCommandExecutableName
+    if ([string]::IsNullOrWhiteSpace($commandExe))
+    {
+        return [pscustomobject]@{
+            Id     = 'MissingCommandExe'
+            Detail = "$fileCount file rows, none of them $($script:DesktopMsiCommandExecutableName)"
+        }
     }
 
     $version = Get-MsiScalar -Database $Database `
@@ -290,6 +380,36 @@ function Get-DesktopMsiContractViolation
     if ($version -notmatch '^\d+\.\d+\.\d+$')
     {
         return [pscustomobject]@{ Id = 'InvalidVersion'; Detail = "ProductVersion '$version'" }
+    }
+
+    # Shipping the command without registering it leaves the user with a file they cannot invoke, which is
+    # indistinguishable from a working install until they type the command.
+    $environmentRows = Get-MsiRowPair -Database $Database -Query 'SELECT `Name`, `Value` FROM `Environment`'
+    if ($environmentRows.Count -eq 0)
+    {
+        return [pscustomobject]@{
+            Id     = 'NoPathRegistration'
+            Detail = 'the Environment table is empty, so nothing puts the command on PATH'
+        }
+    }
+
+    # More than one row means a second, unreviewed environment write reached the package -- a machine PATH
+    # entry, say. Windows Installer would apply both.
+    if ($environmentRows.Count -ne 1)
+    {
+        $described = ($environmentRows | ForEach-Object { "Name='$($_.Name)' Value='$($_.Value)'" }) -join '; '
+        return [pscustomobject]@{ Id = 'MultiplePathRegistrations'; Detail = $described }
+    }
+
+    # The row's own encoding is judged by the shared rule, and its identifiers are passed through so a
+    # failure names the specific defect (prepending, machine scope, permanence) rather than "bad PATH row".
+    $pathViolation = Get-MsiPathContractViolation `
+        -Name $environmentRows[0].Name `
+        -Value $environmentRows[0].Value `
+        -DirectoryToken $script:DesktopMsiCommandDirectoryToken
+    if ($null -ne $pathViolation)
+    {
+        return [pscustomobject]@{ Id = $pathViolation.Id; Detail = $pathViolation.Message }
     }
 
     return $null
@@ -311,6 +431,7 @@ function Assert-DesktopMsiContract
     # reading, so a log that only ever shows the verdict leaves the next surprise undiagnosable.
     $fileNames = Get-MsiColumn -Database $Database -Query 'SELECT `FileName` FROM `File`'
     Write-MsiFileTableShape -FileNames $fileNames
+    Write-MsiEnvironmentTableShape -Rows (Get-MsiRowPair -Database $Database -Query 'SELECT `Name`, `Value` FROM `Environment`')
 
     $violation = Get-DesktopMsiContractViolation -Database $Database
     if ($null -ne $violation)
@@ -320,7 +441,10 @@ function Assert-DesktopMsiContract
 
     $version = Get-MsiScalar -Database $Database `
         -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'"
-    $appExe = Get-MsiAppExecutableName -FileNames $fileNames
+    $appExe = Find-MsiFileName -FileNames $fileNames -ExpectedName $script:DesktopMsiAppExecutableName
+    $commandExe = Find-MsiFileName -FileNames $fileNames -ExpectedName $script:DesktopMsiCommandExecutableName
 
-    Write-Host "[desktop-msi] verified: $($fileNames.Count) file row(s), ProductVersion $version, $appExe present"
+    Write-Host ("[desktop-msi] verified: $($fileNames.Count) file row(s), ProductVersion $version, " +
+                "$appExe and $commandExe present, one conforming PATH row for " +
+                "$($script:DesktopMsiCommandDirectoryToken)")
 }
