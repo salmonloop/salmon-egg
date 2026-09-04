@@ -52,21 +52,72 @@ public sealed class GitHubWorkflowContractTests
     }
 
     [Fact]
-    public void ReleaseWorkflow_NormalizesMsysPathBeforeWindowsCliMsiBuild()
+    public void WindowsToolingReceivesNativePathsFromBashSteps()
     {
-        var workflow = ReadWorkflow("release-packaging.yml");
+        // The CLI is published by a bash script, so on a Windows runner its paths are MSYS ones (/d/a/...)
+        // that MSBuild and WiX cannot open. The translation lives in the publish script, which reports both
+        // forms, rather than being inlined as a PowerShell regex at each call site -- it used to be, once
+        // per consumer, and there are now three.
+        var publishScript = TestSourceFiles.ReadAllText(@"scripts\release\publish-cli-binary.sh")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("NATIVE_EXECUTABLE_PATH=\"$(cygpath -w \"$EXECUTABLE_PATH\")\"", publishScript, StringComparison.Ordinal);
+        Assert.Contains("executable-path-native=$NATIVE_EXECUTABLE_PATH", publishScript, StringComparison.Ordinal);
 
-        Assert.Contains("CLI_EXECUTABLE: ${{ steps.build-cli.outputs.executable-path }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("if ($executable -match '^/([A-Za-z])/(.+)$')", workflow, StringComparison.Ordinal);
-        Assert.Contains("$executable = \"$($matches[1].ToUpperInvariant()):\\$($matches[2] -replace '/', '\\')\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("-Executable $executable -Version $env:CLI_VERSION", workflow, StringComparison.Ordinal);
+        // Every Windows consumer takes the native form; the Unix ones take the plain path.
+        var release = ReadWorkflow("release-packaging.yml");
+        var gate = ReadWorkflow("platform-build-gates.yml");
+        Assert.Contains(
+            "/p:SalmonEggBundledCliExecutable=\"${{ steps.bundled-cli.outputs.executable-path-native }}\"",
+            release,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "/p:SalmonEggBundledCliExecutable=\"${{ steps.bundled-cli.outputs.executable-path-native }}\"",
+            gate,
+            StringComparison.Ordinal);
+        Assert.Contains("BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path-native }}", release, StringComparison.Ordinal);
 
-        var msiScript = TestSourceFiles.ReadAllText(@"scripts\release\build-cli-msi.ps1").Replace("\r\n", "\n", StringComparison.Ordinal);
-        Assert.Contains("$database = $installer.OpenDatabase($msiPath, 0)", msiScript, StringComparison.Ordinal);
-        Assert.Contains("$view = $database.OpenView('SELECT `Name`, `Value` FROM `Environment`')", msiScript, StringComparison.Ordinal);
-        Assert.Contains("$view.Execute()", msiScript, StringComparison.Ordinal);
-        Assert.Contains("$record = $view.Fetch()", msiScript, StringComparison.Ordinal);
-        Assert.Contains("Name  = $record.StringData(1)", msiScript, StringComparison.Ordinal);
+        // A regex doing this by hand at a call site is what the script replaced.
+        Assert.DoesNotContain("if ($executable -match '^/([A-Za-z])/(.+)$')", release, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryInstallerShipsTheBundledCliOnPath()
+    {
+        // Issue #145: installing SalmonEgg installs the salmon-egg command. Each platform registers it with
+        // its own mechanism, and each of those is a separate thing that can silently stop happening, so the
+        // wiring for all four is pinned here rather than only in the per-platform gates.
+        var release = ReadWorkflow("release-packaging.yml");
+        var gate = ReadWorkflow("platform-build-gates.yml");
+        var manifest = TestSourceFiles.ReadAllText(@"SalmonEgg\SalmonEgg\Package.appxmanifest")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        // MSIX: a packaged app cannot edit PATH, so an app execution alias is the mechanism. Both the
+        // release build and the PR-level gate must carry the payload the alias names.
+        Assert.Contains("Category=\"windows.appExecutionAlias\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("Executable=\"cli\\salmon-egg.exe\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("EntryPoint=\"Windows.FullTrustApplication\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("Alias=\"salmon-egg.exe\"", manifest, StringComparison.Ordinal);
+
+        // Windows desktop MSI: a WiX Environment row appending the command's own directory, not the app's.
+        Assert.Contains("<Directory Id=\"CLIFOLDER\" Name=\"cli\" />", release, StringComparison.Ordinal);
+        Assert.Contains("Value=\"[CLIFOLDER]\"", release, StringComparison.Ordinal);
+        Assert.Contains("Part=\"last\"", release, StringComparison.Ordinal);
+        Assert.Contains("-dBundledCliPath=\"$bundledCli\"", release, StringComparison.Ordinal);
+
+        // Linux: dpkg owns a /usr/bin symlink, and the install is verified for real on every push.
+        Assert.Contains("scripts/release/build-desktop-deb.sh", release, StringComparison.Ordinal);
+        Assert.Contains("scripts/gates/run-desktop-linux-package-smoke.sh", release, StringComparison.Ordinal);
+        Assert.Contains("scripts/gates/run-desktop-linux-package-smoke.sh", gate, StringComparison.Ordinal);
+
+        // macOS: the pkg's postinstall is the only hook available, since a .dmg is dragged.
+        Assert.Contains("scripts/release/build-macos-pkg.sh", release, StringComparison.Ordinal);
+
+        // The binary itself is exercised wherever it is published: four packaging chains, one smoke script.
+        Assert.Equal(4, CountOccurrences(release, "run-cli-release-artifact-smoke.sh"));
+        Assert.Contains("run-cli-release-artifact-smoke.sh", gate, StringComparison.Ordinal);
+
+        // And it is the same publish everywhere, so the command in every installer is the same binary.
+        Assert.Equal(4, CountOccurrences(release, "scripts/release/publish-cli-binary.sh"));
     }
 
     [Fact]
@@ -156,6 +207,19 @@ public sealed class GitHubWorkflowContractTests
         Assert.Contains("run-msix-package-contract-gate.ps1 -Package", workflow, StringComparison.Ordinal);
         Assert.Contains("Verify Windows Skia MSI contract", workflow, StringComparison.Ordinal);
 
+        // The Linux package is verified by installing it, which is the only packaging chain a runner can
+        // exercise for real. The macOS pkg is verified through the bundle it is built from, so it must be
+        // built after that contract has accepted the bundle -- otherwise a bundle missing the bundled command
+        // would fail inside pkgbuild instead of as a named contract violation.
+        Assert.Contains("run-desktop-linux-package-smoke.sh", workflow, StringComparison.Ordinal);
+        var bundleContractIndex = workflow.IndexOf(
+            "run-release-artifact-contract-gate.sh macos-bundle",
+            StringComparison.Ordinal);
+        var pkgBuildIndex = workflow.IndexOf("scripts/release/build-macos-pkg.sh", StringComparison.Ordinal);
+        Assert.True(
+            pkgBuildIndex > bundleContractIndex,
+            "the macOS pkg must be built from a bundle the contract gate has already accepted");
+
         // The rule must stay in the shared script the push-time gate rehearses. Inlining it again is how
         // it last shipped unverifiable.
         Assert.Contains(". ./scripts/release/DesktopMsiContract.ps1", workflow, StringComparison.Ordinal);
@@ -218,6 +282,10 @@ public sealed class GitHubWorkflowContractTests
 
         Assert.Contains("run-msix-package-contract-gate.ps1 -SelfTest", workflow, StringComparison.Ordinal);
         Assert.Contains("run-release-artifact-contract-gate.sh --self-test", workflow, StringComparison.Ordinal);
+
+        // The macOS installer's PATH registration is one shell script that otherwise runs only inside
+        // `installer -pkg` on a Mac, so it is driven against fake roots here for the same reason.
+        Assert.Contains("run-macos-pkg-contract-gate.sh", workflow, StringComparison.Ordinal);
 
         // This one was missing, and the omission is what let the desktop MSI rule reach a tag with SQL
         // Windows Installer cannot parse: the release step is the only place it ran.
@@ -347,6 +415,12 @@ public sealed class GitHubWorkflowContractTests
             Assert.Contains(argument, gate, StringComparison.Ordinal);
             Assert.Contains(argument, release, StringComparison.Ordinal);
         }
+
+        // The bundled CLI is part of the package, not a release-only extra: a gate that built the package
+        // without it would prove nothing about the package that ships, and the manifest's alias would point
+        // at a payload only the release job carries.
+        Assert.Contains("/p:SalmonEggBundledCliExecutable=", gate, StringComparison.Ordinal);
+        Assert.Contains("/p:SalmonEggBundledCliExecutable=", release, StringComparison.Ordinal);
 
         // The gate must never require signing secrets, and the release must never stop signing.
         Assert.Contains("/p:AppxPackageSigningEnabled=false", gate, StringComparison.Ordinal);

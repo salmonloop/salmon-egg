@@ -228,18 +228,18 @@ jobs:
           name: desktop-windows-build
           path: publish/desktop-windows
 
-      # The CLI MSI verifies its own Environment table (scripts/release/build-cli-msi.ps1); this MSI had
-      # no equivalent, so a heat harvest that picked up nothing would still emit a valid, installable,
-      # and empty package. Read the built package's own tables rather than trusting the authoring above.
+      # A heat harvest that picked up nothing still emits a valid, installable, empty package, and a PATH
+      # row can name a directory the package never creates. Read the built package's own tables rather
+      # than trusting the authoring above.
       #
       # The rule itself lives in scripts/release/DesktopMsiContract.ps1 so that
       # scripts/gates/run-desktop-msi-contract-gate.ps1 can rehearse it on every push. It used to be
       # inline here, and being unrehearsable is how it shipped with `SELECT COUNT(*)` -- SQL Windows
       # Installer cannot parse -- and took down the v1.3.0 release build from inside OpenView.
       #
-      # Native COM calls, matching build-cli-msi.ps1 after 2690a1eb: the GetType().InvokeMember(...) form
-      # was tried and replaced there, and GitHubWorkflowContractTests pins the native shape. Using the
-      # rejected form here would reintroduce what that commit removed.
+      # Native COM calls: the GetType().InvokeMember(...) form was tried and replaced in 2690a1eb, and
+      # GitHubWorkflowContractTests pins the native shape. Using the rejected form here would reintroduce
+      # what that commit removed.
       - name: Verify Windows Skia MSI contract
         shell: pwsh
         run: |
@@ -622,95 +622,9 @@ jobs:
             artifacts/desktop/*.sha256
           if-no-files-found: error
 
-  package-cli:
-    # One job per officially supported CLI runtime identifier. Each publishes on its own native runner,
-    # smokes the executable it just produced, and only then packages it — a cross-compiled artifact that
-    # nothing has executed is not something this repository is willing to release.
-    name: Package CLI (${{ matrix.rid }})
-    runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - rid: linux-x64
-            runs-on: ubuntu-latest
-            deb-architecture: amd64
-          - rid: win-x64
-            runs-on: windows-latest
-          # Pinned for the same reason as the macOS package job: a rolling image alias silently changes
-          # the toolchain that produced a released binary.
-          - rid: osx-arm64
-            runs-on: macos-15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-        with:
-          global-json-file: global.json
-
-      - name: Build CLI artifact
-        id: build-cli
-        shell: bash
-        run: scripts/release/build-cli-artifacts.sh --rid ${{ matrix.rid }} --configuration ${{ env.CONFIGURATION }}
-
-      - name: Smoke the published CLI executable
-        shell: bash
-        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.build-cli.outputs.executable-path }}"
-
-      - name: Build Debian package
-        if: matrix.deb-architecture != ''
-        id: build-deb
-        shell: bash
-        run: >-
-          scripts/release/build-cli-deb.sh
-          --executable "${{ steps.build-cli.outputs.executable-path }}"
-          --version "${{ steps.build-cli.outputs.display-version }}"
-          --architecture ${{ matrix.deb-architecture }}
-
-      - name: Smoke the Debian package install and PATH registration
-        if: matrix.deb-architecture != ''
-        shell: bash
-        run: scripts/gates/run-cli-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
-
-      - name: Install WiX Toolset
-        if: matrix.rid == 'win-x64'
-        shell: pwsh
-        run: choco install wixtoolset -y --no-progress
-
-      - name: Build Windows MSI
-        if: matrix.rid == 'win-x64'
-        shell: pwsh
-        env:
-          CLI_EXECUTABLE: ${{ steps.build-cli.outputs.executable-path }}
-          CLI_VERSION: ${{ steps.build-cli.outputs.display-version }}
-        run: |
-          $executable = $env:CLI_EXECUTABLE
-          if ($executable -match '^/([A-Za-z])/(.+)$') {
-            $executable = "$($matches[1].ToUpperInvariant()):\$($matches[2] -replace '/', '\')"
-          }
-
-          ./scripts/release/build-cli-msi.ps1 -Executable $executable -Version $env:CLI_VERSION
-
-      - name: Upload CLI artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        with:
-          name: cli-${{ matrix.rid }}
-          path: |
-            artifacts/cli/*.tar.gz
-            artifacts/cli/*.zip
-            artifacts/cli/*.deb
-            artifacts/cli/*.msi
-            artifacts/cli/*.sha256
-          if-no-files-found: error
-
   publish-release-assets:
     name: Publish Release Assets
-    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-linux-desktop, package-cli]
+    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-linux-desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Only a tag build publishes. workflow_dispatch remains available for rehearsing the packaging jobs
@@ -720,26 +634,12 @@ jobs:
       contents: write
     env:
       RELEASE_TAG: ${{ github.ref_name }}
+    # No checkout and no SDK: every step here works on downloaded artifacts and the gh CLI. Both used to be
+    # required by the CLI asset step, which evaluated MinVer to reconstruct archive names, and that step is
+    # gone now that the packaging jobs name and upload their own artifacts. Keeping them would also keep the
+    # ordering hazard that came with them -- `Setup .NET` before the checkout resolved global.json against an
+    # empty workspace and killed a tag build after all seven packaging jobs had already succeeded.
     steps:
-      # Checkout leads this job because the step below reads global.json out of the workspace. When
-      # `Setup .NET` came first the SDK pin resolved against an empty workspace and every tag build died
-      # on "The specified global.json file 'global.json' does not exist" -- after all seven packaging jobs
-      # had already succeeded, so the release ended up tagged with zero assets.
-      #
-      # The tree lands in `repo/` rather than the workspace root so the artifact downloads below own the
-      # root without colliding with tracked paths, and `global-json-file` is pointed at it. Full history
-      # is required: the CLI asset step reads the display version from MinVer, which needs the tags.
-      - name: Checkout for release tooling
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          path: repo
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-        with:
-          global-json-file: repo/global.json
-
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
@@ -788,13 +688,6 @@ jobs:
         with:
           name: desktop-linux-deb
           path: linux-deb
-
-      - name: Download CLI artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: cli-*
-          merge-multiple: true
-          path: cli-artifacts
 
       - name: Ensure GitHub release exists
         shell: bash
@@ -868,58 +761,6 @@ jobs:
           if [ -d "wasm-build" ]; then
             zip -r "release-assets/SalmonEgg-wasm.zip" "wasm-build"
           fi
-
-      - name: Prepare CLI release assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-
-          # Every supported runtime identifier must be present. A release that silently ships two of the
-          # three advertised platforms is worse than a failed release: the support matrix in the docs would
-          # be wrong for whoever downloads it.
-          supported_rids="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
-            -getProperty:SalmonEggCliSupportedRuntimeIdentifiers -nologo | tr -d '\r' | tail -n 1)"
-          display_version="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
-            -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
-
-          missing=""
-          IFS=';' read -ra rids <<< "$supported_rids"
-          for rid in "${rids[@]}"; do
-            [ -n "$rid" ] || continue
-            case "$rid" in
-              win-*) archive="salmon-egg-cli-$display_version-$rid.zip" ;;
-              *) archive="salmon-egg-cli-$display_version-$rid.tar.gz" ;;
-            esac
-            if [ ! -f "cli-artifacts/$archive" ]; then
-              missing="$missing $archive"
-              continue
-            fi
-            if [ ! -f "cli-artifacts/$archive.sha256" ]; then
-              missing="$missing $archive.sha256"
-            fi
-          done
-
-          if [ -n "$missing" ]; then
-            echo "Missing CLI release assets for the supported matrix ($supported_rids):$missing" >&2
-            exit 1
-          fi
-
-          cp cli-artifacts/*.tar.gz cli-artifacts/*.zip cli-artifacts/*.sha256 release-assets/
-
-          # Installer packages are copied only when present. An unmatched glob would otherwise pass the
-          # literal pattern to cp and fail the whole job under `set -e`.
-          find cli-artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.msi' \) \
-            -exec cp {} release-assets/ \;
-
-          # The formula's checksums are read from the sidecars produced by this run, so it can only ever
-          # describe archives that were actually built and uploaded.
-          repo/scripts/release/build-cli-homebrew-formula.sh \
-            --version "$display_version" \
-            --release-tag "${RELEASE_TAG}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --artifact-dir cli-artifacts \
-            --output release-assets/salmon-egg-cli.rb
 
       - name: Upload release assets
         shell: bash

@@ -79,15 +79,18 @@ The repository includes a cross-platform desktop CLI for server configuration an
 
 #### Supported platforms and installation
 
-Released as a self-contained single-file executable, so no .NET runtime is required. Installing the GUI does **not** put `salmon-egg` on PATH; the CLI packages own that.
+The CLI ships with the app: **installing SalmonEgg registers the `salmon-egg` command**. There is nothing
+separate to install, and no .NET runtime is required (the command is a self-contained single-file build).
 
-| Platform | Install | PATH |
-|---|---|---|
-| Linux x64 | `sudo dpkg -i salmon-egg-cli_<version>_amd64.deb` | dpkg installs `/usr/bin/salmon-egg` and removes it on purge |
-| Windows x64 | run `salmon-egg-cli-<version>-win-x64.msi` (per-user) | the MSI adds its install folder to your user PATH and removes it on uninstall |
-| macOS Apple Silicon | `brew install --formula ./salmon-egg-cli.rb` | Homebrew links the binary into its `bin`, already on PATH |
+| Installer | How the command is registered |
+|---|---|
+| Windows MSIX | the package declares an app execution alias, and Windows materializes it under `%LOCALAPPDATA%\Microsoft\WindowsApps`, a directory already on your user PATH |
+| Windows MSI (Skia Desktop) | the MSI's `Environment` table appends the install folder's `cli` directory to your user PATH, and removes it on uninstall |
+| Linux `.deb` | dpkg installs a `/usr/bin/salmon-egg` symlink and removes it on purge |
+| macOS `.pkg` | the installer links the command into `/usr/local/bin`, which is on the default macOS PATH; remove it with `rm /usr/local/bin/salmon-egg` |
+| macOS `.dmg` | the command is inside `SalmonEgg.app`, but a dragged app has no install hook, so link it yourself or use the `.pkg` |
 
-Plain archives (`.tar.gz` / `.zip`) are also published for anyone who prefers to place the binary on PATH themselves. Other runtime identifiers — `win-arm64`, `linux-arm64`, `osx-x64` — are not officially supported: they can be cross-compiled, but nothing verifies them on a real machine.
+Other runtime identifiers — `win-arm64`, `linux-arm64`, `osx-x64` — are not officially supported: they can be cross-compiled, but nothing verifies them on a real machine.
 
 After installing, the command is available directly:
 
