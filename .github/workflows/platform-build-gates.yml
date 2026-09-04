@@ -72,14 +72,40 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Installing SalmonEgg installs the salmon-egg command, so the app package carries the CLI and
+      # symlinks it into /usr/bin. Published first because the app publish embeds it.
+      - name: Publish bundled CLI
+        id: bundled-cli
+        run: scripts/release/publish-cli-binary.sh --rid linux-x64 --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the bundled CLI executable
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.bundled-cli.outputs.executable-path }}"
+
+      # Self-contained rather than framework-dependent: this is the shape the Debian package ships, and a
+      # framework-dependent publish would prove something about a layout nobody installs. The bundled CLI
+      # lands at cli/salmon-egg in the publish output, which is what the package symlinks to.
       - name: Publish Linux Desktop
         run: >-
           dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj
           --configuration ${{ env.CONFIGURATION }}
           --framework net10.0-desktop
           --runtime linux-x64
-          --self-contained false
+          --self-contained true
+          -p:SalmonEggBundledCliExecutable=${{ steps.bundled-cli.outputs.executable-path }}
           --output publish/linux-desktop
+
+      - name: Build Debian package
+        id: build-deb
+        run: >-
+          scripts/release/build-desktop-deb.sh
+          --publish-dir publish/linux-desktop
+          --architecture amd64
+
+      # The one packaging chain in this repository that can be verified end to end by a runner: install the
+      # package, prove the app and the command are both usable, then purge and prove they are gone. Every
+      # other installer's PATH registration can only be asserted against the package's own tables.
+      - name: Smoke the Debian package install and PATH registration
+        run: scripts/gates/run-desktop-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
 
   macos-desktop:
     name: macOS Desktop
