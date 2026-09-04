@@ -280,7 +280,20 @@ async function describeUnrenderedPage(page) {
       bodyText: (document.body?.innerText ?? "").slice(0, 400),
       ariaLabels: Array.from(document.querySelectorAll("[aria-label]"))
         .slice(0, 25)
-        .map(element => element.getAttribute("aria-label"))
+        .map(element => element.getAttribute("aria-label")),
+      // Uno's WASM semantic DOM decides per role whether a name becomes aria-label,
+      // aria-labelledby or text content, so an empty aria-label set does not mean the
+      // element is missing. Report what identifying attributes the page actually carries.
+      identifyingAttributes: Array.from(
+        new Set(Array.from(document.querySelectorAll("*"))
+          .flatMap(element => Array.from(element.attributes).map(attribute => attribute.name))
+          .filter(name => name.startsWith("aria-")
+            || name.startsWith("data-")
+            || name === "role"
+            || name === "id"
+            || name === "title")))
+        .sort(),
+      semanticDomSample: (document.body?.outerHTML ?? "").slice(0, 3000)
     }))
     .catch(error => ({ evaluateFailed: error.message }));
 
