@@ -101,7 +101,7 @@ async function verifyNativeBrowserNoDeviceProjection() {
     await refreshGamepadDiagnostics(page, "native BrowserWasm gamepad diagnostics");
     const projection = await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics");
 
-    await page.mouse.click(projection.startState.x, projection.startState.y);
+    await clickVisibleControl(page, gamepadStart);
     await page.waitForTimeout(350);
     await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics after monitoring start");
 
@@ -717,64 +717,69 @@ async function revealGamepadDiagnosticsSection(page) {
       return;
     }
 
-    // Uno Expander does not reliably expand from synthetic element.click() in
-    // BrowserWasm. Use a real Playwright mouse click on the Gamepad expander
-    // toggle (or the nearest ExpanderToggleButton whose text mentions gamepad).
-    const togglePoint = await page.evaluate(() => {
-      const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      const start = document.querySelector('[aria-label="Diagnostics.GamepadStart"]');
-      const expander =
-        start?.closest(".uno-expander")
-        ?? start?.closest("[class*='Expander']")
-        ?? start?.closest("details")
-        ?? null;
-      const ownedToggle =
-        expander?.querySelector('[aria-label="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
-        ?? null;
-      if (ownedToggle) {
-        const rect = ownedToggle.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          return {
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-            source: "owned-toggle"
-          };
-        }
-      }
-
-      const toggles = Array.from(
-        document.querySelectorAll('[aria-label="ExpanderToggleButton"], button, [role="button"], summary'));
-      for (const toggle of toggles) {
-        const text = normalize(toggle.textContent);
-        if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
-          const rect = toggle.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0
-            && rect.left >= -1
-            && rect.top >= -1
-            && rect.left <= innerWidth
-            && rect.top <= innerHeight) {
+    // The section hides behind an Expander, whose header is a ToggleButton; in the semantic DOM that
+    // maps to a node whose click the peer programs as Toggle, so semantic activation is the primary
+    // route. An earlier DOM-patching harness measured unreliable expansion from synthetic clicks and
+    // fell back to a real Playwright mouse click; that measurement predates the semantic activation
+    // contract, so the mouse click stays only as the fallback until CI confirms the primary route.
+    try {
+      await clickVisibleControl(page, headerTargets);
+    } catch {
+      const togglePoint = await page.evaluate(() => {
+        const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+        const start = document.querySelector('[aria-label="Diagnostics.GamepadStart"]');
+        const expander =
+          start?.closest(".uno-expander")
+          ?? start?.closest("[class*='Expander']")
+          ?? start?.closest("details")
+          ?? null;
+        const ownedToggle =
+          expander?.querySelector('[aria-label="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
+          ?? null;
+        if (ownedToggle) {
+          const rect = ownedToggle.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
             return {
               x: rect.left + rect.width / 2,
               y: rect.top + rect.height / 2,
-              source: "text-toggle"
+              source: "owned-toggle"
             };
           }
         }
-      }
 
-      return null;
-    });
+        const toggles = Array.from(
+          document.querySelectorAll('[aria-label="ExpanderToggleButton"], button, [role="button"], summary'));
+        for (const toggle of toggles) {
+          const text = normalize(toggle.textContent);
+          if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
+            const rect = toggle.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0
+              && rect.left >= -1
+              && rect.top >= -1
+              && rect.left <= innerWidth
+              && rect.top <= innerHeight) {
+              return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+                source: "text-toggle"
+              };
+            }
+          }
+        }
 
-    if (togglePoint) {
-      await page.mouse.click(togglePoint.x, togglePoint.y);
-      await page.waitForTimeout(500);
-      const afterToggle = await readControlState(page, gamepadStart);
-      if (afterToggle.found) {
-        return;
+        return null;
+      });
+
+      if (togglePoint) {
+        await page.mouse.click(togglePoint.x, togglePoint.y);
       }
     }
 
-    await scrollToVisibleControl(page, headerTargets);
+    await page.waitForTimeout(500);
+    if ((await readControlState(page, gamepadStart)).found) {
+      return;
+    }
+
     await scrollToVisibleControl(page, gamepadStart);
     await page.mouse.wheel(0, 700);
     await page.waitForTimeout(300);
