@@ -511,6 +511,65 @@ jobs:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
 
+  package-linux-desktop:
+    name: Package Linux Desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The version identity is derived from git tags by MinVer; a shallow clone sees no tags and
+          # would stamp 0.0.0 into the package version, which no later release could upgrade over.
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      # Installing SalmonEgg installs the salmon-egg command, so the package carries the CLI and symlinks
+      # it into /usr/bin. Published first because the app publish embeds it at cli/salmon-egg.
+      - name: Publish bundled CLI
+        id: bundled-cli
+        run: scripts/release/publish-cli-binary.sh --rid linux-x64 --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the bundled CLI executable
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.bundled-cli.outputs.executable-path }}"
+
+      # Self-contained: the package installs into /opt and users are not asked to install a .NET runtime.
+      - name: Publish Linux Desktop
+        run: >-
+          dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj
+          --configuration ${{ env.CONFIGURATION }}
+          --framework net10.0-desktop
+          --runtime linux-x64
+          --self-contained true
+          -p:SalmonEggBundledCliExecutable=${{ steps.bundled-cli.outputs.executable-path }}
+          --output publish/linux-desktop
+
+      - name: Build Debian package
+        id: build-deb
+        run: >-
+          scripts/release/build-desktop-deb.sh
+          --publish-dir publish/linux-desktop
+          --architecture amd64
+
+      # Unlike every other installer here, this one can be verified for real: install it, prove the app and
+      # the command are both usable, purge it, prove they are gone. A package that merely contains two
+      # executables is not an installed app with a PATH command.
+      - name: Smoke the Debian package install and PATH registration
+        run: scripts/gates/run-desktop-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
+
+      - name: Upload Linux desktop package artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: desktop-linux-deb
+          path: |
+            artifacts/desktop/*.deb
+            artifacts/desktop/*.sha256
+          if-no-files-found: error
+
   package-cli:
     # One job per officially supported CLI runtime identifier. Each publishes on its own native runner,
     # smokes the executable it just produced, and only then packages it — a cross-compiled artifact that
@@ -599,7 +658,7 @@ jobs:
 
   publish-release-assets:
     name: Publish Release Assets
-    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-cli]
+    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-linux-desktop, package-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Only a tag build publishes. workflow_dispatch remains available for rehearsing the packaging jobs
@@ -664,6 +723,13 @@ jobs:
           name: desktop-macos-dmg
           path: macos-dmg
 
+      - name: Download Linux desktop package artifact
+        if: needs.package-linux-desktop.result == 'success'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: desktop-linux-deb
+          path: linux-deb
+
       - name: Download CLI artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -725,6 +791,12 @@ jobs:
                 zip -r "${GITHUB_WORKSPACE}/release-assets/${APP_NAME}.zip" "${APP_NAME}"
               )
             fi
+          fi
+
+          # Copy the Linux desktop package and its checksum when available
+          if [ -d "linux-deb" ]; then
+            find linux-deb -maxdepth 1 -type f \( -name '*.deb' -o -name '*.sha256' \) \
+              -exec cp {} release-assets/ \;
           fi
 
           # Package WebAssembly output as zip
