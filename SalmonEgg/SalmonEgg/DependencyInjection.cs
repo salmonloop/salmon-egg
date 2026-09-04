@@ -51,6 +51,7 @@ using SalmonEgg.Infrastructure.Observability;
 #if !__WASM__ && !__ANDROID__ && !__IOS__
 using SalmonEgg.Infrastructure.Desktop.AcpSetup;
 using SalmonEgg.Infrastructure.Desktop.DependencyInjection;
+using SalmonEgg.Infrastructure.Desktop.Services;
 #endif
 #if __WASM__
 using SalmonEgg.Platforms.WebAssembly;
@@ -927,6 +928,21 @@ public static class DependencyInjection
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<DataStorageSettingsViewModel>();
+
+        // Whether the salmon-egg command is reachable is a machine fact, so the inspector needs a PATH and a
+        // process host. Platforms with neither get an implementation that says so, rather than the view model
+        // learning which platform it is on. Linking is macOS-only for a different reason: everywhere else the
+        // installer owns the PATH entry and a second owner would fight it.
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+        services.AddSingleton<ICliCommandRegistrationInspector>(sp =>
+            new PathCliCommandRegistrationInspector(sp.GetRequiredService<IPlatformCapabilityService>()));
+        services.AddSingleton<ICliCommandLinkService>(sp =>
+            new MacOsCliCommandLinkService(sp.GetRequiredService<IPlatformCapabilityService>()));
+#else
+        services.AddSingleton<ICliCommandRegistrationInspector, UnsupportedCliCommandRegistrationInspector>();
+        services.AddSingleton<ICliCommandLinkService, UnsupportedCliCommandLinkService>();
+#endif
+        services.AddSingleton<CommandLineSettingsViewModel>();
         services.AddSingleton<McpSettingsViewModel>(sp =>
             new McpSettingsViewModel(
                 sp.GetRequiredService<IMcpSettingsService>(),

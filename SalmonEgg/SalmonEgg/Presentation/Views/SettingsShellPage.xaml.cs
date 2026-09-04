@@ -113,6 +113,7 @@ public sealed partial class SettingsShellPage : Page, IPrimaryContentFocusTarget
         SettingsSectionCatalog.AgentAcpKey => typeof(Settings.AcpConnectionSettingsPage),
         SettingsSectionCatalog.McpKey => typeof(Settings.McpSettingsPage),
         SettingsSectionCatalog.DataStorageKey => typeof(Settings.DataStorageSettingsPage),
+        SettingsSectionCatalog.CommandLineKey => typeof(Settings.CommandLineSettingsPage),
         SettingsSectionCatalog.ShortcutsKey => typeof(Settings.ShortcutsSettingsPage),
         SettingsSectionCatalog.DiagnosticsKey => typeof(Settings.DiagnosticsSettingsPage),
         SettingsSectionCatalog.AboutKey => typeof(Settings.AboutPage),

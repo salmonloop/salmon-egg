@@ -18,6 +18,7 @@ public sealed class SettingsShellViewModelTests
             section => AssertSection(section, "AgentAcp", "SettingsSection_AgentAcp", "SettingsNav.AgentAcp"),
             section => AssertSection(section, "Mcp", "SettingsSection_Mcp", "SettingsNav.Mcp"),
             section => AssertSection(section, "DataStorage", "SettingsSection_DataStorage", "SettingsNav.DataStorage"),
+            section => AssertSection(section, "CommandLine", "SettingsSection_CommandLine", "SettingsNav.CommandLine"),
             section => AssertSection(section, "Shortcuts", "SettingsSection_Shortcuts", "SettingsNav.Shortcuts"),
             section => AssertSection(section, "Diagnostics", "SettingsSection_Diagnostics", "SettingsNav.Diagnostics"),
             section => AssertSection(section, "About", "SettingsSection_About", "SettingsNav.About"));
@@ -46,6 +47,7 @@ public sealed class SettingsShellViewModelTests
             section => Assert.Equal("AgentAcp", section.Key),
             section => Assert.Equal("Mcp", section.Key),
             section => Assert.Equal("DataStorage", section.Key),
+            section => Assert.Equal("CommandLine", section.Key),
             section => Assert.Equal("Shortcuts", section.Key),
             section => Assert.Equal("Diagnostics", section.Key),
             section => Assert.Equal("About", section.Key));
@@ -59,7 +61,7 @@ public sealed class SettingsShellViewModelTests
 
         var selected = viewModel.SelectSection(SettingsSectionCatalog.DiagnosticsKey);
 
-        Assert.Same(viewModel.Sections[6], selected);
+        Assert.Same(viewModel.Sections[7], selected);
         Assert.Same(selected, viewModel.SelectedSection);
     }
 

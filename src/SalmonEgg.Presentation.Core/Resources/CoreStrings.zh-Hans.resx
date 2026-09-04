@@ -1313,4 +1313,64 @@
   <data name="Elicitation_InvalidValue" xml:space="preserve">
     <value>这个值无效。</value>
   </data>
+  <data name="SettingsSection_CommandLine" xml:space="preserve">
+    <value>命令行工具</value>
+  </data>
+  <data name="CommandLine_Status_Registered" xml:space="preserve">
+    <value>命令可用</value>
+  </data>
+  <data name="CommandLine_Status_NotRegistered" xml:space="preserve">
+    <value>命令不可用</value>
+  </data>
+  <data name="CommandLine_Status_VersionMismatch" xml:space="preserve">
+    <value>PATH 上是另一个版本</value>
+  </data>
+  <data name="CommandLine_Status_Unreadable" xml:space="preserve">
+    <value>无法确认这个命令</value>
+  </data>
+  <data name="CommandLine_Status_Unsupported" xml:space="preserve">
+    <value>此平台不适用</value>
+  </data>
+  <data name="CommandLine_Status_Unknown" xml:space="preserve">
+    <value>尚未检查</value>
+  </data>
+  <data name="CommandLine_Message_Registered" xml:space="preserve">
+    <value>在终端里输入 salmon-egg，运行的就是当前安装的这一份。</value>
+  </data>
+  <data name="CommandLine_Message_VersionMismatch" xml:space="preserve">
+    <value>PATH 上先命中的那一份不是当前安装的版本，可能来自旧安装或另一个安装包。</value>
+  </data>
+  <data name="CommandLine_Message_Unreadable" xml:space="preserve">
+    <value>PATH 上有这个命令，但它没能报出版本：</value>
+  </data>
+  <data name="CommandLine_Message_NotRegistered_CanLink" xml:space="preserve">
+    <value>PATH 上没有这个命令。可以在下面把它链接到 /usr/local/bin。</value>
+  </data>
+  <data name="CommandLine_Message_NotRegistered_Installer" xml:space="preserve">
+    <value>PATH 上没有这个命令。它由安装包注册，重新安装即可恢复。</value>
+  </data>
+  <data name="CommandLine_Message_Unsupported" xml:space="preserve">
+    <value>这个平台没有 PATH，也无法启动进程，因此没有命令行工具。</value>
+  </data>
+  <data name="CommandLine_Message_Unknown" xml:space="preserve">
+    <value>点击「重新检查」查看命令状态。</value>
+  </data>
+  <data name="CommandLine_Action_Linked" xml:space="preserve">
+    <value>已链接。新打开的终端就能找到这个命令。</value>
+  </data>
+  <data name="CommandLine_Action_Unlinked" xml:space="preserve">
+    <value>已移除链接。</value>
+  </data>
+  <data name="CommandLine_Action_Cancelled" xml:space="preserve">
+    <value>已取消，未做任何更改。</value>
+  </data>
+  <data name="CommandLine_Action_Unsupported" xml:space="preserve">
+    <value>这个平台的命令由安装包管理，应用不会改动它。</value>
+  </data>
+  <data name="CommandLine_Action_LinkFailed" xml:space="preserve">
+    <value>操作失败：</value>
+  </data>
+  <data name="CommandLine_Action_InspectFailed" xml:space="preserve">
+    <value>检查命令状态时出错。</value>
+  </data>
 </root>

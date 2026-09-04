@@ -1307,4 +1307,64 @@ Create the corresponding Markdown file in:
   <data name="Elicitation_InvalidValue" xml:space="preserve">
     <value>This value is not valid.</value>
   </data>
+  <data name="SettingsSection_CommandLine" xml:space="preserve">
+    <value>Command line</value>
+  </data>
+  <data name="CommandLine_Status_Registered" xml:space="preserve">
+    <value>Command available</value>
+  </data>
+  <data name="CommandLine_Status_NotRegistered" xml:space="preserve">
+    <value>Command not available</value>
+  </data>
+  <data name="CommandLine_Status_VersionMismatch" xml:space="preserve">
+    <value>A different version is on PATH</value>
+  </data>
+  <data name="CommandLine_Status_Unreadable" xml:space="preserve">
+    <value>Command could not be identified</value>
+  </data>
+  <data name="CommandLine_Status_Unsupported" xml:space="preserve">
+    <value>Not applicable on this platform</value>
+  </data>
+  <data name="CommandLine_Status_Unknown" xml:space="preserve">
+    <value>Not checked yet</value>
+  </data>
+  <data name="CommandLine_Message_Registered" xml:space="preserve">
+    <value>Typing salmon-egg in a terminal runs the copy this app was installed with.</value>
+  </data>
+  <data name="CommandLine_Message_VersionMismatch" xml:space="preserve">
+    <value>The first match on PATH is not the version installed here. It probably comes from an older install or a different installer.</value>
+  </data>
+  <data name="CommandLine_Message_Unreadable" xml:space="preserve">
+    <value>The command is on PATH but would not report its version:</value>
+  </data>
+  <data name="CommandLine_Message_NotRegistered_CanLink" xml:space="preserve">
+    <value>Nothing on PATH answers to the command. You can link it into /usr/local/bin below.</value>
+  </data>
+  <data name="CommandLine_Message_NotRegistered_Installer" xml:space="preserve">
+    <value>Nothing on PATH answers to the command. The installer registers it, so reinstalling should restore it.</value>
+  </data>
+  <data name="CommandLine_Message_Unsupported" xml:space="preserve">
+    <value>This platform has no PATH and cannot start a process, so there is no command line tool here.</value>
+  </data>
+  <data name="CommandLine_Message_Unknown" xml:space="preserve">
+    <value>Re-check to see the command's status.</value>
+  </data>
+  <data name="CommandLine_Action_Linked" xml:space="preserve">
+    <value>Linked. A newly opened terminal will find the command.</value>
+  </data>
+  <data name="CommandLine_Action_Unlinked" xml:space="preserve">
+    <value>The link was removed.</value>
+  </data>
+  <data name="CommandLine_Action_Cancelled" xml:space="preserve">
+    <value>Cancelled. Nothing was changed.</value>
+  </data>
+  <data name="CommandLine_Action_Unsupported" xml:space="preserve">
+    <value>On this platform the installer owns the command, and the app does not change it.</value>
+  </data>
+  <data name="CommandLine_Action_LinkFailed" xml:space="preserve">
+    <value>The operation failed:</value>
+  </data>
+  <data name="CommandLine_Action_InspectFailed" xml:space="preserve">
+    <value>Checking the command's status failed.</value>
+  </data>
 </root>

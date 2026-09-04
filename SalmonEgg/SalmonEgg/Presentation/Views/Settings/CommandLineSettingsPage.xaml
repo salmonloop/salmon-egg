@@ -1,0 +1,171 @@
+<views:SettingsPageBase
+    x:Class="SalmonEgg.Presentation.Views.Settings.CommandLineSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
+    xmlns:views="using:SalmonEgg.Presentation.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="Transparent"
+    AllowDrop="False">
+
+    <views:SettingsPageBase.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:CliCommandStatusSeverityConverter x:Key="CliCommandStatusSeverityConverter"/>
+    </views:SettingsPageBase.Resources>
+
+    <ScrollViewer Padding="0"
+                  HorizontalScrollBarVisibility="Disabled">
+        <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+            <controls:ResponsiveContentHost.Child>
+                <StackPanel Spacing="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="CommandLine_PageTitle"
+                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                        <TextBlock x:Uid="CommandLine_PageSummary"
+                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="CommandLine_StatusSectionTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <!-- One bar for the observed state. Severity comes from the view model so the page
+                             does not restate the classification, which lives with the state that produced it. -->
+                        <InfoBar x:Name="CommandLineStatusBar"
+                                 AutomationProperties.AutomationId="CommandLine.Status"
+                                 IsOpen="True"
+                                 IsClosable="False"
+                                 Title="{x:Bind ViewModel.StatusTitle, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                                 Severity="{x:Bind ViewModel.Severity, Mode=OneWay, Converter={StaticResource CliCommandStatusSeverityConverter}}"/>
+
+                        <!-- The result of the last action the user took, kept apart from the state above: one
+                             is what the machine looks like, the other is what just happened. -->
+                        <InfoBar x:Name="CommandLineActionBar"
+                                 AutomationProperties.AutomationId="CommandLine.ActionResult"
+                                 IsOpen="True"
+                                 IsClosable="False"
+                                 Title="{x:Bind ViewModel.CommandName, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.ActionMessage, Mode=OneWay}"
+                                 Severity="{x:Bind ViewModel.ActionSeverity, Mode=OneWay, Converter={StaticResource CliCommandStatusSeverityConverter}}"
+                                 Visibility="{x:Bind ViewModel.HasActionMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <Button x:Name="CommandLineRefreshButton"
+                                x:Uid="CommandLine_RefreshButton"
+                                AutomationProperties.AutomationId="CommandLine.Refresh"
+                                Command="{x:Bind ViewModel.RefreshCommand}"
+                                HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12"
+                                Visibility="{x:Bind ViewModel.HasResult, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock x:Uid="CommandLine_DetailsSectionTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <controls:ResponsiveFormRow
+                                    Visibility="{x:Bind ViewModel.HasResolvedPath, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <controls:ResponsiveFormRow.Label>
+                                        <TextBlock x:Uid="CommandLine_ResolvedPathLabel"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                   VerticalAlignment="Center"/>
+                                    </controls:ResponsiveFormRow.Label>
+                                    <controls:ResponsiveFormRow.Value>
+                                        <TextBlock Text="{x:Bind ViewModel.ResolvedPath, Mode=OneWay}"
+                                                   AutomationProperties.AutomationId="CommandLine.ResolvedPath"
+                                                   IsTextSelectionEnabled="True"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </controls:ResponsiveFormRow.Value>
+                                </controls:ResponsiveFormRow>
+
+                                <controls:ResponsiveFormRow
+                                    Visibility="{x:Bind ViewModel.HasResolvedTargetPath, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <controls:ResponsiveFormRow.Label>
+                                        <TextBlock x:Uid="CommandLine_TargetPathLabel"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                   VerticalAlignment="Center"/>
+                                    </controls:ResponsiveFormRow.Label>
+                                    <controls:ResponsiveFormRow.Value>
+                                        <TextBlock Text="{x:Bind ViewModel.ResolvedTargetPath, Mode=OneWay}"
+                                                   AutomationProperties.AutomationId="CommandLine.LinkTarget"
+                                                   IsTextSelectionEnabled="True"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </controls:ResponsiveFormRow.Value>
+                                </controls:ResponsiveFormRow>
+
+                                <controls:ResponsiveFormRow
+                                    Visibility="{x:Bind ViewModel.HasReportedVersion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <controls:ResponsiveFormRow.Label>
+                                        <TextBlock x:Uid="CommandLine_ReportedVersionLabel"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                   VerticalAlignment="Center"/>
+                                    </controls:ResponsiveFormRow.Label>
+                                    <controls:ResponsiveFormRow.Value>
+                                        <TextBlock Text="{x:Bind ViewModel.ReportedVersion, Mode=OneWay}"
+                                                   AutomationProperties.AutomationId="CommandLine.ReportedVersion"
+                                                   IsTextSelectionEnabled="True"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </controls:ResponsiveFormRow.Value>
+                                </controls:ResponsiveFormRow>
+
+                                <controls:ResponsiveFormRow>
+                                    <controls:ResponsiveFormRow.Label>
+                                        <TextBlock x:Uid="CommandLine_ExpectedVersionLabel"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                   VerticalAlignment="Center"/>
+                                    </controls:ResponsiveFormRow.Label>
+                                    <controls:ResponsiveFormRow.Value>
+                                        <TextBlock Text="{x:Bind ViewModel.ExpectedVersion, Mode=OneWay}"
+                                                   AutomationProperties.AutomationId="CommandLine.ExpectedVersion"
+                                                   IsTextSelectionEnabled="True"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </controls:ResponsiveFormRow.Value>
+                                </controls:ResponsiveFormRow>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Only macOS reaches this: everywhere else the installer owns the entry, and the notice
+                         below says so rather than offering an action the app must not take. -->
+                    <StackPanel Spacing="12"
+                                Visibility="{x:Bind ViewModel.CanManageLink, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock x:Uid="CommandLine_ManageSectionTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel Padding="16" Spacing="12">
+                                <TextBlock x:Uid="CommandLine_LinkDescription"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="CommandLineLinkButton"
+                                            x:Uid="CommandLine_LinkButton"
+                                            AutomationProperties.AutomationId="CommandLine.Link"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Command="{x:Bind ViewModel.LinkCommand}"/>
+                                    <Button x:Name="CommandLineUnlinkButton"
+                                            x:Uid="CommandLine_UnlinkButton"
+                                            AutomationProperties.AutomationId="CommandLine.Unlink"
+                                            Command="{x:Bind ViewModel.UnlinkCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <InfoBar x:Uid="CommandLine_InstallerOwnedNotice"
+                             AutomationProperties.AutomationId="CommandLine.InstallerOwned"
+                             IsOpen="True"
+                             IsClosable="False"
+                             Severity="Informational"
+                             Visibility="{x:Bind ViewModel.IsInstallerOwned, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </StackPanel>
+            </controls:ResponsiveContentHost.Child>
+        </controls:ResponsiveContentHost>
+    </ScrollViewer>
+</views:SettingsPageBase>
