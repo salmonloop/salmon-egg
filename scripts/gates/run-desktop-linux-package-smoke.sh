@@ -75,6 +75,15 @@ check
 # have the libraries, and fails here.
 if command -v apt-get >/dev/null 2>&1; then
   install_command="apt-get install --yes --quiet"
+  # The runner image's package lists name versions the archive has since replaced, and the mirror
+  # serves only current ones -- apt then 404s mid-install ("maybe run apt-get update"). Refreshing
+  # the lists is part of installing cleanly, so it belongs inside the gate rather than in a workflow
+  # step the script cannot see.
+  if as_root env DEBIAN_FRONTEND=noninteractive apt-get update --quiet >/dev/null; then
+    pass "apt-get update refreshed the package lists"
+  else
+    fail "apt-get update failed"
+  fi
   if as_root env DEBIAN_FRONTEND=noninteractive apt-get install --yes --quiet "$DEB_PATH" >/dev/null; then
     pass "apt-get install resolved every declared dependency and installed the package"
   else
