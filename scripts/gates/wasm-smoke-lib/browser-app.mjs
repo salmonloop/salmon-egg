@@ -367,7 +367,12 @@ export async function createInstrumentedContext(browser, options = {}) {
   const fatalConsoleMessages = [];
   const context = await browser.newContext({
     viewport: options.viewport ?? { width: 1280, height: 900 },
-    deviceScaleFactor: options.deviceScaleFactor ?? 1
+    deviceScaleFactor: options.deviceScaleFactor ?? 1,
+    // Pin the culture. Uno resolves the app language from the browser, and accessible names are
+    // localized by design (AutomationProperties.Name comes from resw), so an unpinned locale forces
+    // every assertion into a multi-language alternation that passes on any one of its branches -
+    // including on the wrong screen. With the locale fixed, a name is a single expected string.
+    locale: options.locale ?? "en-US"
   });
   await context.addInitScript({ content: domHelperScript });
   const page = await context.newPage();

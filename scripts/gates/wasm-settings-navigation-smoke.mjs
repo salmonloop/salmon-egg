@@ -5,32 +5,28 @@ import {
   openApp,
   assertNoFatalConsoleMessages
 } from "./wasm-smoke-lib/browser-app.mjs";
-import {
-  waitForBodyText
-} from "./wasm-smoke-lib/ui-affordances.mjs";
-import {
-  navigateToSettingsSection,
-  clickTopNavigationOverflowTargetUntilBodyText
-} from "./wasm-smoke-lib/settings-shell.mjs";
+import { navigateToSettingsSection } from "./wasm-smoke-lib/settings-shell.mjs";
 
+// Behaviour under test: from a cold start a user can reach the settings shell and, from there, the
+// Diagnostics section - at a window narrow enough that the section list has collapsed behind the
+// overflow affordance, which is where the route is easiest to break.
+//
+// The route is not the assertion. navigateToSettingsSection owns choosing between a visible section
+// entry and the overflow menu, and confirms the section reports itself active. This file used to
+// re-run the viewport change and the overflow click that helper already performed, which made the
+// order of two viewport mutations load-bearing; the narrow window is now simply how this context is
+// created.
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-settings-navigation-smoke.mjs");
 const browser = await chromium.launch({ headless: true });
 
 try {
-  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser, {
+    viewport: { width: 390, height: 844 }
+  });
 
   try {
     await openApp(page, baseUrl);
     await navigateToSettingsSection(
-      page,
-      { labels: ["设置", "Settings"], automationIds: ["SettingsItem"] },
-      /常规|General|外观|Appearance|ACP \/ Agent/,
-      "settings shell");
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await waitForBodyText(page, /常规|General|外观|Appearance|ACP \/ Agent/, "settings shell at mobile viewport");
-
-    await clickTopNavigationOverflowTargetUntilBodyText(
       page,
       { labels: ["诊断与日志", "Diagnostics & Logs", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
       /Diagnostics and logs|诊断与日志|Live logs|日志/,
