@@ -14,6 +14,7 @@ namespace SalmonEgg;
 /// 只在 <c>Cancel &amp;&amp; SupportsClosingCancellation</c> 时才真的中止关闭。
 /// （注意：<c>lib/&lt;tfm&gt;/Uno.UI.dll</c> 是 facade，那里该属性硬编码 false，据它会得出
 /// "平台不支持取消"的相反结论。）
+/// 该反编译结论取自 6.6.166；升级到 6.7.103 后只确认了符号仍在，未重新反编译逐个 host 的取值。
 ///
 /// 为什么必须在这里 teardown、而不能只依赖宿主返回后再做：desktop 头原先只在
 /// <c>Platforms/Desktop/Program.cs</c> 里等 <c>host.RunAsync()</c> 返回后才清理，
