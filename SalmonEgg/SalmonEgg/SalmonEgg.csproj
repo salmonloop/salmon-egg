@@ -422,6 +422,12 @@
     build of this target framework: compiling the WinUI head to check for errors does not need a CLI, and
     requiring one there would make every such build depend on a second publish.
   -->
+  <!-- Resolved here rather than inside an <Error> condition: a condition string cannot nest a quoted
+       property expansion inside another quoted string (MSB4092), but property function grammar can. -->
+  <PropertyGroup>
+    <SalmonEggBundledCliFileName Condition="'$(SalmonEggBundledCliExecutable)' != ''">$([System.IO.Path]::GetFileName('$(SalmonEggBundledCliExecutable)'))</SalmonEggBundledCliFileName>
+  </PropertyGroup>
+
   <Target Name="ValidateSalmonEggBundledCli"
           BeforeTargets="_EnsureAppxManifestExists;BeforeBuild"
           Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'
@@ -433,8 +439,8 @@
            Text="SalmonEggBundledCliExecutable does not exist: '$(SalmonEggBundledCliExecutable)'. On a Windows runner the path must be the native form (D:\...); an MSYS path such as /d/... cannot be opened by MSBuild — publish-cli-binary.sh reports it as executable-path-native." />
     <!-- The alias in the manifest is a literal file name, so a payload under any other name would
          package cleanly and then fail to launch on the user's machine. -->
-    <Error Condition="'$(SalmonEggBundledCliExecutable)' != '' AND '$([System.IO.Path]::GetFileName('$(SalmonEggBundledCliExecutable)'))' != 'salmon-egg.exe'"
-           Text="The bundled CLI for the MSIX package must be named salmon-egg.exe to match the app execution alias in Package.appxmanifest, but SalmonEggBundledCliExecutable points at '$([System.IO.Path]::GetFileName('$(SalmonEggBundledCliExecutable)'))'." />
+    <Error Condition="'$(SalmonEggBundledCliExecutable)' != '' AND '$(SalmonEggBundledCliFileName)' != 'salmon-egg.exe'"
+           Text="The bundled CLI for the MSIX package must be named salmon-egg.exe to match the app execution alias in Package.appxmanifest, but SalmonEggBundledCliExecutable points at '$(SalmonEggBundledCliFileName)'." />
   </Target>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0' AND '$(MSBuildRuntimeType)' == 'Core'">
