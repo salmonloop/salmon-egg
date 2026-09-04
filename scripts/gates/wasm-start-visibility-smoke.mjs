@@ -39,23 +39,18 @@ try {
     // structure, not styling, so visible-here means "present, unhidden, named".
     // (waitForControlState only reports nodes that are not hidden.)
     for (const suggestion of expectedSuggestions) {
-      const state = await waitForControlState(
+      await waitForControlState(
         page,
-        { labels: suggestion.title, automationIds: [] },
+        { labels: suggestion.title, automationIds: [], role: "button" },
         suggestion.title.join(" / "));
-      // matchNode's label fallback also accepts a plain textContent hit, so pin the match to
-      // the card itself: an announced, activatable button, not the title TextBlock inside it.
-      if (state.role !== "button") {
-        throw new Error(
-          `${suggestion.title.join(" / ")} matched role '${state.role}', expected 'button'.`);
-      }
     }
 
     // Activating the report card explains itself instead of sending anything: the tip copy is
-    // the behaviour, and it only exists after the card is activated.
+    // the behaviour, and it only exists after the card is activated. The role pin keeps the
+    // activation on the card button and off the title text that renders before its Name lands.
     await clickVisibleControl(
       page,
-      { labels: ["举报 AI 内容", "Report AI content"], automationIds: [] });
+      { labels: ["举报 AI 内容", "Report AI content"], automationIds: [], role: "button" });
     await waitForBodyText(
       page,
       /这张提示卡本身只是说明，不会发送举报|This tip card only explains the path and cannot send a report/,
