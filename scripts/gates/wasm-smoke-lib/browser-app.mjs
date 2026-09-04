@@ -246,6 +246,7 @@ export function normalizeBaseUrl(value, usageName = "wasm smoke") {
 
 export async function openApp(page, baseUrl) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await enableSemanticDom(page);
   // StartView.Title is a gradient TextBlock; on BrowserWasm it may not project
   // AutomationId into aria-label. Prefer any stable Start shell marker instead.
   // Cold Mono/Uno first paint on aarch64 Debug can exceed 60s after framework download.
@@ -262,6 +263,30 @@ export async function openApp(page, baseUrl) {
   } catch (error) {
     throw new Error(`${error.message}\n${await describeUnrenderedPage(page)}`, { cause: error });
   }
+}
+
+// Skia paints into a <canvas>, so the accessibility tree is the only DOM Uno mirrors - and it builds
+// that lazily. Until a screen reader is detected, or the "Enable accessibility" affordance is activated,
+// the body holds only that button plus an "Application content" placeholder and no
+// AutomationProperties.Name reaches the DOM at all, which is why every [aria-label] locator waits
+// forever. Playwright is not a screen reader, so ask for the tree explicitly.
+//
+// The affordance carries role="button" and tabindex="0" but renders empty, so it has no hit box:
+// dispatch the activation on the element instead of letting Playwright aim a real pointer at it.
+// A missing affordance is not a failure - the DOM-rendered heads never had one.
+async function enableSemanticDom(page) {
+  const toggle = page.locator("#uno-enable-accessibility");
+  try {
+    await toggle.waitFor({ state: "attached", timeout: 30_000 });
+  } catch {
+    return;
+  }
+
+  await toggle.evaluate(element => {
+    element.focus();
+    element.click();
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
 }
 
 // A bare selector timeout says only that first paint never happened. Everything that explains why - a
