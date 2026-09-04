@@ -39,6 +39,8 @@ const semanticRuntimeScript = `
   const matchNode = input => {
     const automationIds = (input.automationIds ?? []).map(normalize).filter(Boolean);
     const labels = (input.labels ?? []).map(normalize).filter(Boolean);
+    const role = (input.role ?? "").trim().toLowerCase();
+    const roleOf = element => (element.getAttribute("role") ?? element.tagName.toLowerCase()).toLowerCase();
     const nodes = semanticRoot()?.querySelectorAll("[id^='uno-semantics-']");
     if (!nodes) {
       return null;
@@ -47,6 +49,14 @@ const semanticRuntimeScript = `
     let labelMatch = null;
     for (const element of nodes) {
       if (element.hidden) {
+        continue;
+      }
+
+      // Optional role pin: a label match must not settle for an inner text node whose
+      // textContent happens to equal the wanted name before the named control's own
+      // aria-label has landed (the hero suggestion cards race exactly that way - the
+      // title TextBlock renders before the button's Name binding resolves).
+      if (role !== "" && roleOf(element) !== role) {
         continue;
       }
 
