@@ -167,10 +167,17 @@ echo "[gate] Restore browserwasm dependencies"
 "${DOTNET_BIN}" restore "${PROJECT}"
 
 echo "[gate] Clean browserwasm output"
-"${DOTNET_BIN}" clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal
+"${DOTNET_BIN}" clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal \
+  -p:IsUiAutomationMappingEnabled=true
 
-echo "[gate] Build browserwasm app"
-"${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
+# IsUiAutomationMappingEnabled is what makes AutomationProperties.AutomationId reach the DOM at all:
+# per Uno's AutomationProperties reference it is off by default "to avoid performance overhead", and
+# when on, WASM publishes a `xamlautomationid` attribute plus aria-label on the element. The smokes
+# locate every affordance by AutomationId, so the gate build has to opt in. Kept to the gate rather
+# than the project file precisely because of that documented cost - shipped builds leave it off.
+echo "[gate] Build browserwasm app (UI automation mapping enabled for the smokes)"
+"${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal \
+  -p:IsUiAutomationMappingEnabled=true
 
 # Stage Debug HotReload browser module when build leaves it only under obj/.
 HOTRELOAD_MODULE_NAME="Microsoft.DotNet.HotReload.WebAssembly.Browser.lib.module.js"

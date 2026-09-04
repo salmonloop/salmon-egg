@@ -117,12 +117,14 @@ function focusVisibleNavigationTargetInPage(input) {
       const text = (element.textContent ?? "").trim();
       const aria = element.getAttribute("aria-label") ?? "";
       const automationId =
-        element.getAttribute("data-automation-id")
+        // `xamlautomationid` is what Uno documents for WASM: AutomationProperties.AutomationId maps to
+        // that attribute plus aria-label, and only when IsUiAutomationMappingEnabled is on (the WASM
+        // gate build opts in). The data-automation-* spellings are kept for the older heads. The plain
+        // id is deliberately not probed - Skia numbers its semantic nodes uno-semantics-<handle>.
+        element.getAttribute("xamlautomationid")
+        ?? element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
-        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
-        // case it carries the AutomationId there.
-        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -178,12 +180,14 @@ function clickVisibleNavigationTargetInPage(input) {
       const text = (element.textContent ?? "").trim();
       const aria = element.getAttribute("aria-label") ?? "";
       const automationId =
-        element.getAttribute("data-automation-id")
+        // `xamlautomationid` is what Uno documents for WASM: AutomationProperties.AutomationId maps to
+        // that attribute plus aria-label, and only when IsUiAutomationMappingEnabled is on (the WASM
+        // gate build opts in). The data-automation-* spellings are kept for the older heads. The plain
+        // id is deliberately not probed - Skia numbers its semantic nodes uno-semantics-<handle>.
+        element.getAttribute("xamlautomationid")
+        ?? element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
-        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
-        // case it carries the AutomationId there.
-        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -243,10 +247,10 @@ export async function scrollToVisibleNavigationTarget(page, options) {
         const text = (element.textContent ?? "").trim();
         const aria = element.getAttribute("aria-label") ?? "";
         const automationId =
-          element.getAttribute("data-automation-id")
+          element.getAttribute("xamlautomationid")
+          ?? element.getAttribute("data-automation-id")
           ?? element.getAttribute("data-automationid")
           ?? element.getAttribute("automationid")
-          ?? element.getAttribute("id")
           ?? "";
         return automationIds.includes(aria)
           || automationIds.includes(automationId)
@@ -512,12 +516,14 @@ function scrollKnownControlCandidateIntoView(input) {
       const text = (element.textContent ?? "").trim();
       const aria = element.getAttribute("aria-label") ?? "";
       const automationId =
-        element.getAttribute("data-automation-id")
+        // `xamlautomationid` is what Uno documents for WASM: AutomationProperties.AutomationId maps to
+        // that attribute plus aria-label, and only when IsUiAutomationMappingEnabled is on (the WASM
+        // gate build opts in). The data-automation-* spellings are kept for the older heads. The plain
+        // id is deliberately not probed - Skia numbers its semantic nodes uno-semantics-<handle>.
+        element.getAttribute("xamlautomationid")
+        ?? element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
-        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
-        // case it carries the AutomationId there.
-        ?? element.getAttribute("id")
         ?? "";
       return normalizedAutomationIds.includes(normalize(aria))
         || normalizedAutomationIds.includes(normalize(automationId))
@@ -1021,12 +1027,14 @@ export function findVisibleNavigationTargetPoint(input) {
       const text = (element.textContent ?? "").trim();
       const aria = element.getAttribute("aria-label") ?? "";
       const automationId =
-        element.getAttribute("data-automation-id")
+        // `xamlautomationid` is what Uno documents for WASM: AutomationProperties.AutomationId maps to
+        // that attribute plus aria-label, and only when IsUiAutomationMappingEnabled is on (the WASM
+        // gate build opts in). The data-automation-* spellings are kept for the older heads. The plain
+        // id is deliberately not probed - Skia numbers its semantic nodes uno-semantics-<handle>.
+        element.getAttribute("xamlautomationid")
+        ?? element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
-        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
-        // case it carries the AutomationId there.
-        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -1123,12 +1131,14 @@ function collectVisibleNavigationTargetMatchDebug(input) {
       const text = (element.textContent ?? "").trim();
       const aria = element.getAttribute("aria-label") ?? "";
       const automationId =
-        element.getAttribute("data-automation-id")
+        // `xamlautomationid` is what Uno documents for WASM: AutomationProperties.AutomationId maps to
+        // that attribute plus aria-label, and only when IsUiAutomationMappingEnabled is on (the WASM
+        // gate build opts in). The data-automation-* spellings are kept for the older heads. The plain
+        // id is deliberately not probed - Skia numbers its semantic nodes uno-semantics-<handle>.
+        element.getAttribute("xamlautomationid")
+        ?? element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
-        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
-        // case it carries the AutomationId there.
-        ?? element.getAttribute("id")
         ?? "";
       const clickable =
         element.closest(".uno-navigationviewitem")
