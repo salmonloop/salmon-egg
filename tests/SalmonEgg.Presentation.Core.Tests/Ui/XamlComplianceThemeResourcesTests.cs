@@ -453,7 +453,7 @@ public sealed class XamlComplianceThemeResourcesTests
         Assert.Contains("Resources[typeof(Microsoft.UI.Xaml.Controls.NumberBox)] = numberBoxStyle;", appCode, StringComparison.Ordinal);
         Assert.Contains("overrides[\"UnoNumberBoxStyleOverride\"]", appCode, StringComparison.Ordinal);
         Assert.Contains("Copyright (c) Microsoft Corporation", overrideXaml, StringComparison.Ordinal);
-        Assert.Contains("Uno 6.6.166 (commit 438b300b6171b3f2712f8897f10ea620784843ca)", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("Uno 6.7.103 (commit cd452e3ee242c9a2a8dee5e65ad8088b6f5dbf83)", overrideXaml, StringComparison.Ordinal);
         Assert.Contains("unoplatform/uno#24021", overrideXaml, StringComparison.Ordinal);
         Assert.Contains("xmlns:skia=\"http://uno.ui/skia\"", overrideXaml, StringComparison.Ordinal);
         Assert.Contains("mc:Ignorable=\"skia\"", overrideXaml, StringComparison.Ordinal);
