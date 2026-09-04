@@ -29,14 +29,18 @@ public sealed class GitHubWorkflowContractTests
     ];
 
     [Fact]
-    public void PullRequestGates_TargetDevelopBaseline()
+    public void PullRequestGates_TargetDevelopAndMainBaselines()
     {
+        // Both baselines need PR gates, and not only because that is where changes are reviewed.
+        // ci-core and code-quality have no workflow_dispatch trigger, so for a main-targeted PR they
+        // would otherwise produce no checks at all: their push triggers only fire after the merge,
+        // when the verdict can no longer block anything. Other workflows keep dispatch as their
+        // manual escape hatch for main PRs; these two have no such back door.
         foreach (var workflowName in PullRequestGateWorkflowNames)
         {
             var workflow = ReadWorkflow(workflowName);
 
-            Assert.Contains("pull_request:\n    branches: [develop]", workflow, StringComparison.Ordinal);
-            Assert.DoesNotContain("pull_request:\n    branches: [main]", workflow, StringComparison.Ordinal);
+            Assert.Contains("pull_request:\n    branches: [develop, main]", workflow, StringComparison.Ordinal);
         }
     }
 
