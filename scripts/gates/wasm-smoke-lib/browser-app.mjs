@@ -1,6 +1,11 @@
 export const fatalConsolePattern =
   /ArgumentOutOfRange|NativeDispatcher unhandled exception|NavigationView\.GetItemFromIndex|System\.ArgumentOutOfRangeException|Unhandled exception/i;
 
+// Console output is the only witness when the app never reaches first paint. Keyed off the page so
+// helpers can read it without threading an extra parameter through every smoke script.
+const pageDiagnostics = new WeakMap();
+const recentConsoleLimit = 60;
+
 export const domHelperScript = `
 (() => {
   window.__salmoneggSmoke = {
@@ -244,15 +249,49 @@ export async function openApp(page, baseUrl) {
   // StartView.Title is a gradient TextBlock; on BrowserWasm it may not project
   // AutomationId into aria-label. Prefer any stable Start shell marker instead.
   // Cold Mono/Uno first paint on aarch64 Debug can exceed 60s after framework download.
-  await page.waitForSelector(
-    [
-      '[aria-label="StartView.Title"]',
-      '[aria-label="StartView.PromptBox"]',
-      '[aria-label="StartView.Suggestion.ReportGuidance"]',
-      '[aria-label="StartView.AgentSelector"]',
-      '[aria-label="MainNavView"]'
-    ].join(", "),
-    { timeout: 180_000 });
+  try {
+    await page.waitForSelector(
+      [
+        '[aria-label="StartView.Title"]',
+        '[aria-label="StartView.PromptBox"]',
+        '[aria-label="StartView.Suggestion.ReportGuidance"]',
+        '[aria-label="StartView.AgentSelector"]',
+        '[aria-label="MainNavView"]'
+      ].join(", "),
+      { timeout: 180_000 });
+  } catch (error) {
+    throw new Error(`${error.message}\n${await describeUnrenderedPage(page)}`, { cause: error });
+  }
+}
+
+// A bare selector timeout says only that first paint never happened. Everything that explains why - a
+// runtime abort, a framework asset that 404s, a JS module that failed to load - has already gone by as
+// console output, and assertNoFatalConsoleMessages never runs because openApp threw first. Dump the raw
+// tail here so a boot regression is diagnosable from the gate log alone: the WASM head cannot be built
+// on every contributor machine, so "reproduce it locally" is not available as a fallback.
+async function describeUnrenderedPage(page) {
+  const captured = pageDiagnostics.get(page)
+    ?? { fatalConsoleMessages: [], recentConsoleMessages: [] };
+  const state = await page
+    .evaluate(() => ({
+      url: location.href,
+      title: document.title,
+      readyState: document.readyState,
+      bodyText: (document.body?.innerText ?? "").slice(0, 400),
+      ariaLabels: Array.from(document.querySelectorAll("[aria-label]"))
+        .slice(0, 25)
+        .map(element => element.getAttribute("aria-label"))
+    }))
+    .catch(error => ({ evaluateFailed: error.message }));
+
+  return [
+    "--- page state ---",
+    JSON.stringify(state, null, 2),
+    `--- fatal console (${captured.fatalConsoleMessages.length}) ---`,
+    JSON.stringify(captured.fatalConsoleMessages, null, 2),
+    `--- console/pageerror tail (${captured.recentConsoleMessages.length}) ---`,
+    JSON.stringify(captured.recentConsoleMessages, null, 2)
+  ].join("\n");
 }
 
 export async function clearBrowserOriginStorage(browser, targetUrl) {
@@ -295,8 +334,17 @@ export async function createInstrumentedContext(browser, options = {}) {
   await context.addInitScript({ content: domHelperScript });
   const page = await context.newPage();
 
+  const recentConsoleMessages = [];
+  const remember = entry => {
+    recentConsoleMessages.push(entry);
+    if (recentConsoleMessages.length > recentConsoleLimit) {
+      recentConsoleMessages.shift();
+    }
+  };
+
   page.on("console", message => {
     const text = message.text();
+    remember({ type: message.type(), text });
     if (fatalConsolePattern.test(text)) {
       fatalConsoleMessages.push({ type: message.type(), text });
     }
@@ -304,10 +352,13 @@ export async function createInstrumentedContext(browser, options = {}) {
 
   page.on("pageerror", error => {
     const text = error.stack ?? error.message;
+    remember({ type: "pageerror", text });
     if (fatalConsolePattern.test(text)) {
       fatalConsoleMessages.push({ type: "pageerror", text });
     }
   });
+
+  pageDiagnostics.set(page, { fatalConsoleMessages, recentConsoleMessages });
 
   return {
     context,
