@@ -8,7 +8,7 @@ namespace SalmonEgg.Infrastructure.Tests.Transport;
 public sealed class StdioCommandPreflightTests
 {
     [Fact]
-    public void BuildMissingCommandError_BareNameMiss_SaysNotFoundOnPath()
+    public void BuildMissingCommandError_SearchedOnPath_SaysNotFoundOnPath()
     {
         var invocation = new LauncherInvocation(
             "absent-agent",
@@ -16,10 +16,11 @@ public sealed class StdioCommandPreflightTests
             "absent-agent")
         {
             ResolvedToExistingFile = false,
+            SearchedOnPath = true,
             SearchedDirectories = ["/usr/bin"],
         };
 
-        var error = StdioCommandPreflight.BuildMissingCommandError(invocation, isWindows: false);
+        var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
         Assert.Contains("not found on PATH", error, StringComparison.Ordinal);
@@ -27,7 +28,7 @@ public sealed class StdioCommandPreflightTests
     }
 
     [Fact]
-    public void BuildMissingCommandError_ExplicitPathMissing_SaysDoesNotExist()
+    public void BuildMissingCommandError_ExplicitLocation_SaysDoesNotExist()
     {
         var invocation = new LauncherInvocation(
             @"C:\tools\absent-agent.exe",
@@ -37,7 +38,7 @@ public sealed class StdioCommandPreflightTests
             ResolvedToExistingFile = false,
         };
 
-        var error = StdioCommandPreflight.BuildMissingCommandError(invocation, isWindows: true);
+        var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
         Assert.Contains("does not exist", error, StringComparison.Ordinal);
@@ -45,17 +46,20 @@ public sealed class StdioCommandPreflightTests
     }
 
     [Fact]
-    public void BuildMissingCommandError_NonWindowsExplicitPathMissing_SaysDoesNotExist()
+    public void BuildMissingCommandError_UnlaunchableCommand_SaysDoesNotExist()
     {
+        // A blank or otherwise unlaunchable command never went near PATH, so the "install the agent"
+        // advice would be wrong; the location wording is the safer of the two.
         var invocation = new LauncherInvocation(
-            "tools/agent",
+            " ",
             [],
-            "tools/agent")
+            " ")
         {
             ResolvedToExistingFile = false,
+            SearchedOnPath = false,
         };
 
-        var error = StdioCommandPreflight.BuildMissingCommandError(invocation, isWindows: false);
+        var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
         Assert.Contains("does not exist", error, StringComparison.Ordinal);
@@ -72,7 +76,7 @@ public sealed class StdioCommandPreflightTests
             ResolvedToExistingFile = true,
         };
 
-        Assert.Null(StdioCommandPreflight.BuildMissingCommandError(invocation, isWindows: false));
+        Assert.Null(StdioCommandPreflight.BuildMissingCommandError(invocation));
     }
 
     [Fact]
@@ -88,7 +92,7 @@ public sealed class StdioCommandPreflightTests
             ResolvedToExistingFile = false,
         };
 
-        var error = StdioCommandPreflight.BuildMissingCommandError(invocation, isWindows: true);
+        var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
         Assert.Contains("does not exist", error, StringComparison.Ordinal);

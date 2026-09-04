@@ -49,6 +49,14 @@ internal sealed record LauncherInvocation(
     internal bool ResolvedToExistingFile { get; init; }
 
     /// <summary>
+    /// Whether the resolution found the command by searching PATH (as opposed to the command naming
+    /// its own location, or being unlaunchable as given). The preflight reads this to pick its
+    /// message instead of re-inspecting the string for separators — the same drift the existence
+    /// verdict is kept off it for.
+    /// </summary>
+    internal bool SearchedOnPath { get; init; }
+
+    /// <summary>
     /// The directories the resolver searched before giving up. Diagnostics only — never user-facing.
     /// </summary>
     internal IReadOnlyList<string> SearchedDirectories { get; init; } = Array.Empty<string>();
@@ -92,6 +100,7 @@ internal sealed record LauncherInvocation(
                 ResolvedCommand: resolvedCommand)
             {
                 ResolvedToExistingFile = resolution.ResolvedToExistingFile,
+                SearchedOnPath = resolution.SearchedOnPath,
                 SearchedDirectories = resolution.SearchedDirectories,
             };
         }
@@ -99,6 +108,7 @@ internal sealed record LauncherInvocation(
         return new LauncherInvocation(resolvedCommand, trimmedArguments, resolvedCommand)
         {
             ResolvedToExistingFile = resolution.ResolvedToExistingFile,
+            SearchedOnPath = resolution.SearchedOnPath,
             SearchedDirectories = resolution.SearchedDirectories,
         };
     }
