@@ -351,6 +351,7 @@
 
                                 <Button x:Name="SendButton"
                                         x:Uid="SendButton"
+                                        AutomationProperties.AutomationId="ChatInputArea.Send"
                                         Content="&#xE724;"
                                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                         Width="44"
@@ -365,6 +366,7 @@
 
                                 <Button x:Name="CancelButton"
                                         x:Uid="CancelButton"
+                                        AutomationProperties.AutomationId="ChatInputArea.Cancel"
                                         Content="&#xE711;"
                                         FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                         Width="44"

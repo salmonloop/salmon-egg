@@ -1,3 +1,276 @@
+// The page-side half of ui-affordances.mjs: the semantic matcher/activator lives here because
+// `page.evaluate` serializes callbacks without their closures, so everything that runs in the
+// page shares this one implementation instead of six drifting copies of the same scan. Injected
+// once per context; the runtime is a pure DOM reader/writer, so it is safe to register before the
+// semantic tree exists.
+const semanticRuntimeScript = `
+(() => {
+  const semanticRoot = () => document.getElementById("uno-semantics-root");
+
+  const describeNode = element => {
+    const ariaState = name => {
+      const value = element.getAttribute(name);
+      return value === "true" ? true : value === "false" ? false : null;
+    };
+    const rect = element.getBoundingClientRect();
+    return {
+      id: element.id,
+      role: element.getAttribute("role") ?? element.tagName.toLowerCase(),
+      automationId: (element.getAttribute("xamlautomationid") ?? "").trim(),
+      aria: (element.getAttribute("aria-label") ?? "").trim(),
+      text: (element.textContent ?? "").trim().slice(0, 160),
+      hidden: element.hidden === true,
+      disabled: element.disabled === true || element.getAttribute("aria-disabled") === "true",
+      checked: ariaState("aria-checked"),
+      selected: ariaState("aria-selected"),
+      expanded: ariaState("aria-expanded"),
+      value: typeof element.value === "string" ? element.value : null,
+      rect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      }
+    };
+  };
+
+  const normalize = value => (value ?? "").trim().toLowerCase();
+
+  const matchNode = input => {
+    const automationIds = (input.automationIds ?? []).map(normalize).filter(Boolean);
+    const labels = (input.labels ?? []).map(normalize).filter(Boolean);
+    const nodes = semanticRoot()?.querySelectorAll("[id^='uno-semantics-']");
+    if (!nodes) {
+      return null;
+    }
+
+    let labelMatch = null;
+    for (const element of nodes) {
+      if (element.hidden) {
+        continue;
+      }
+
+      // aria-label carries the accessible name, which for nameless controls is the automation id
+      // (the suite relies on that for e.g. StartView.PromptBox); xamlautomationid is the id
+      // proper. Check both against the caller's ids - either hit is authoritative.
+      const automationId = normalize(element.getAttribute("xamlautomationid"));
+      const aria = normalize(element.getAttribute("aria-label"));
+      if (automationIds.length > 0
+        && ((automationId !== "" && automationIds.includes(automationId))
+          || (aria !== "" && automationIds.includes(aria)))) {
+        return element;
+      }
+
+      if (labelMatch === null
+        && labels.length > 0
+        && (labels.includes(aria) || labels.includes(normalize(element.textContent)))) {
+        labelMatch = element;
+      }
+    }
+
+    return labelMatch;
+  };
+
+  const activate = input => {
+    const element = matchNode(input);
+    if (!element) {
+      return { matched: false, activated: false, state: null };
+    }
+
+    const state = describeNode(element);
+    if (state.disabled) {
+      return { matched: true, activated: false, state };
+    }
+
+    // Uno programs the peer action (Invoke / Toggle / Selection / ExpandCollapse) onto each
+    // node's click handler without hit testing, so a programmatic click IS the activation.
+    element.click();
+    return { matched: true, activated: true, state };
+  };
+
+  const findEditable = element => (element.matches("input,textarea")
+    ? element
+    : element.querySelector("input,textarea")) ?? null;
+
+  const setInput = (input, value) => {
+    const element = matchNode(input);
+    if (!element) {
+      return { matched: false, editable: false, disabled: false, state: null };
+    }
+
+    const editable = findEditable(element);
+    if (!editable) {
+      return { matched: true, editable: false, disabled: false, state: describeNode(element) };
+    }
+
+    const state = describeNode(editable);
+    if (state.disabled) {
+      return { matched: true, editable: true, disabled: true, state };
+    }
+
+    editable.focus();
+    editable.value = value;
+    try {
+      editable.setSelectionRange(value.length, value.length);
+    } catch {
+      // Some input types reject selection updates; the value assignment already took.
+    }
+
+    // The semantic input forwards 'input' events to the managed text box (OnTextInput), and
+    // Uno's key handling suppresses native insertion for canvas input - assigning the value and
+    // dispatching the event is the supported path.
+    editable.dispatchEvent(new Event("input", { bubbles: true }));
+    return { matched: true, editable: true, disabled: false, state };
+  };
+
+  const matchComboBoxItem = expectedNames => {
+    // An open ComboBox popup contributes option nodes to the semantic DOM. Options carry no
+    // automation id of their own, so match on the accessible name, falling back to contained
+    // text so item templates with secondary copy still resolve.
+    const names = (expectedNames ?? []).map(normalize).filter(Boolean);
+    const nodes = semanticRoot()?.querySelectorAll("[id^='uno-semantics-'][role='option']");
+    if (!nodes) {
+      return null;
+    }
+
+    for (const element of nodes) {
+      if (element.hidden) {
+        continue;
+      }
+
+      const aria = normalize(element.getAttribute("aria-label"));
+      const text = normalize(element.textContent);
+      if (names.includes(aria) || names.includes(text)) {
+        return element;
+      }
+    }
+
+    for (const element of nodes) {
+      if (element.hidden) {
+        continue;
+      }
+
+      const text = normalize(element.textContent);
+      if (names.some(name => text.includes(name))) {
+        return element;
+      }
+    }
+
+    return null;
+  };
+
+  const comboBoxSelectionText = automationId => {
+    const element = matchNode({ automationIds: [automationId], labels: [] });
+    if (!element) {
+      return null;
+    }
+
+    // Prefer an explicit value mirror (inputs and sliders carry one) over template text, which
+    // can include the caret.
+    return element.value
+      ?? element.getAttribute("aria-label")
+      ?? ((element.textContent ?? "").trim() || null);
+  };
+
+  const focusedSnapshot = () => {
+    const element = document.activeElement;
+    if (!element || element === document.body) {
+      return { visible: false, isBody: true };
+    }
+
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      tag: element.tagName,
+      text: (element.textContent ?? "").trim().slice(0, 120),
+      aria: element.getAttribute("aria-label") ?? "",
+      automationId: element.getAttribute("xamlautomationid") ?? "",
+      role: element.getAttribute("role") ?? "",
+      visible:
+        rect.width > 0
+        && rect.height > 0
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+        && rect.left < innerWidth
+        && rect.right > 0
+        && rect.top < innerHeight
+        && rect.bottom > 0,
+      isBody: false,
+      rect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      }
+    };
+  };
+
+  const readLocalTextFile = filePath => {
+    const result = { path: filePath, content: null, error: null };
+    try {
+      const fs = globalThis.FS;
+      if (!fs) {
+        result.error = "globalThis.FS unavailable";
+        return result;
+      }
+
+      result.content = fs.readFile(filePath, { encoding: "utf8" });
+      return result;
+    } catch (error) {
+      result.error = error?.message ?? String(error);
+      return result;
+    }
+  };
+
+  const persistenceDebug = input => {
+    const element = matchNode(input.controlOptions);
+    const editable = element ? findEditable(element) : null;
+    const visibleValue = editable?.value
+      ?? element?.getAttribute("aria-valuenow")
+      ?? (element?.textContent ?? "").trim();
+
+    return {
+      visibleValue: element ? visibleValue : null,
+      ...readLocalTextFile(input.path)
+    };
+  };
+
+  const stateWithLegacyPointers = element => {
+    const state = describeNode(element);
+    return {
+      found: true,
+      enabled: !state.disabled,
+      ...state,
+      // Semantic nodes sit at the layout position of their control; the center doubles as a
+      // legacy-style point for the callers that still read one.
+      x: state.rect.left + state.rect.width / 2,
+      y: state.rect.top + state.rect.height / 2
+    };
+  };
+
+  window.__salmoneggSmoke.semantic = {
+    describe: input => {
+      const element = matchNode(input);
+      return element ? stateWithLegacyPointers(element) : null;
+    },
+    activate,
+    setInput,
+    comboBoxItem: expectedNames => {
+      const element = matchComboBoxItem(expectedNames);
+      return element ? { activate: () => element.click(), state: describeNode(element) } : null;
+    },
+    comboBoxSelectionText,
+    focusedSnapshot,
+    readLocalTextFile,
+    persistenceDebug,
+    collectDebug: () => Array.from(semanticRoot()?.querySelectorAll("[id^='uno-semantics-']") ?? [])
+      .map(describeNode)
+      .filter(node => !node.hidden)
+      .slice(0, 200)
+  };
+})();
+`;
+
 export const fatalConsolePattern =
   /ArgumentOutOfRange|NativeDispatcher unhandled exception|NavigationView\.GetItemFromIndex|System\.ArgumentOutOfRangeException|Unhandled exception/i;
 
@@ -64,6 +337,7 @@ export const domHelperScript = `
             element.getAttribute("data-automation-id")
             ?? element.getAttribute("data-automationid")
             ?? element.getAttribute("automationid")
+            ?? element.getAttribute("xamlautomationid")
             ?? "";
 
           return {
@@ -375,6 +649,7 @@ export async function createInstrumentedContext(browser, options = {}) {
     locale: options.locale ?? "en-US"
   });
   await context.addInitScript({ content: domHelperScript });
+  await context.addInitScript({ content: semanticRuntimeScript });
   const page = await context.newPage();
 
   const recentConsoleMessages = [];
