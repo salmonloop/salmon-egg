@@ -161,7 +161,27 @@ verify_macos_bundle() {
   identifier="$(read_plist_string "$plist" CFBundleIdentifier)"
   [ -n "$identifier" ] || { fail "Info.plist declares no CFBundleIdentifier"; return 1; }
 
-  echo "[artifact-gate] macos-bundle: $(basename "$app") declares $identifier, executable '$executable' present"
+  # The bundled command. Installing SalmonEgg installs salmon-egg, and on macOS the only thing that puts it
+  # on PATH is the pkg's postinstall symlinking it -- so a bundle without it produces an installer that
+  # copies the app and then fails, or a .dmg whose command silently does not exist.
+  #
+  # Both bundle areas are accepted, in the same order the postinstall probes them: Uno's GenerateAppBundle
+  # sends the apphost and .dylib files to Contents/MacOS and everything else to Contents/Resources with
+  # relative paths intact, and a cli/ subdirectory holding one extension-less Mach-O matches neither pattern
+  # exactly. The area is reported so the first real bundle settles the question.
+  local command_path="" area=""
+  for area in MacOS Resources; do
+    if [ -f "$app/Contents/$area/cli/salmon-egg" ]; then
+      command_path="$app/Contents/$area/cli/salmon-egg"
+      break
+    fi
+  done
+  [ -n "$command_path" ] || { fail "the bundle carries no salmon-egg under Contents/MacOS/cli or Contents/Resources/cli"; return 1; }
+  # Executability, not just presence: the postinstall tests -x and refuses otherwise, so a mode bit dropped
+  # by a copy would fail the install rather than this gate.
+  [ -x "$command_path" ] || { fail "$command_path is present but not executable"; return 1; }
+
+  echo "[artifact-gate] macos-bundle: $(basename "$app") declares $identifier, executable '$executable' present, bundled salmon-egg under Contents/$area/cli"
 }
 
 # --- self-test ----------------------------------------------------------------------------------------
@@ -212,7 +232,7 @@ run_self_test() {
 
   # Written as a real binary plist, which is the form the packaging tool emits.
   make_good_bundle() {
-    local app="$1" exe="${2:-SalmonEgg}"
+    local app="$1" exe="${2:-SalmonEgg}" area="${3:-MacOS}"
     mkdir -p "$app/Contents/MacOS"
     "$PYTHON_BIN" -c '
 import plistlib
@@ -227,6 +247,10 @@ with open(path, "wb") as handle:
     )
 ' "$app/Contents/Info.plist" "$exe"
     printf 'bin' > "$app/Contents/MacOS/$exe"
+    # The bundled command, which a conforming release bundle carries and the pkg's postinstall links.
+    mkdir -p "$app/Contents/$area/cli"
+    printf 'bin' > "$app/Contents/$area/cli/salmon-egg"
+    chmod +x "$app/Contents/$area/cli/salmon-egg"
   }
 
   write_partial_plist() {
@@ -325,8 +349,10 @@ with open(path, "wb") as handle:
 
   # macos: an XML plist must also be readable -- the format is an implementation detail of the toolchain
   # and could change back.
-  mkdir -p "$work/XmlPlist.app/Contents/MacOS"
+  mkdir -p "$work/XmlPlist.app/Contents/MacOS/cli"
   printf 'bin' > "$work/XmlPlist.app/Contents/MacOS/SalmonEgg"
+  printf 'bin' > "$work/XmlPlist.app/Contents/MacOS/cli/salmon-egg"
+  chmod +x "$work/XmlPlist.app/Contents/MacOS/cli/salmon-egg"
   cat > "$work/XmlPlist.app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
@@ -345,6 +371,23 @@ PLIST
   printf 'bin' > "$work/Garbage.app/Contents/MacOS/SalmonEgg"
   printf 'not a plist' > "$work/Garbage.app/Contents/Info.plist"
   expect "a bundle whose Info.plist is unreadable" fail verify_macos_bundle "$work/Garbage.app"
+
+  # macos: the same bundle with the command in the other area Uno might choose. Rejecting this would make
+  # the gate fail on a bundle that installs correctly.
+  make_good_bundle "$work/ResourcesCli.app" SalmonEgg Resources
+  expect "a bundle carrying salmon-egg under Contents/Resources" pass verify_macos_bundle "$work/ResourcesCli.app"
+
+  # macos: the app is complete but the bundled command was never embedded. The .dmg would install an app
+  # whose `salmon-egg` does not exist, and the .pkg's postinstall would fail after copying it.
+  make_good_bundle "$work/NoCli.app"
+  rm -rf "$work/NoCli.app/Contents/MacOS/cli" "$work/NoCli.app/Contents/Resources/cli"
+  expect "a bundle carrying no bundled salmon-egg" fail verify_macos_bundle "$work/NoCli.app"
+
+  # macos: present but not executable, which is what a copy through a filesystem that drops the mode bit
+  # produces. The postinstall tests -x, so the installer would refuse it.
+  make_good_bundle "$work/UnexecutableCli.app"
+  chmod -x "$work/UnexecutableCli.app/Contents/MacOS/cli/salmon-egg"
+  expect "a bundle whose salmon-egg is not executable" fail verify_macos_bundle "$work/UnexecutableCli.app"
 
   # macos: a plain directory that is not a bundle
   mkdir -p "$work/not-a-bundle"

@@ -127,6 +127,13 @@ jobs:
         shell: bash
         run: scripts/gates/run-release-artifact-contract-gate.sh --self-test
 
+      # The macOS installer's postinstall is the only thing that puts salmon-egg on PATH there, and it
+      # normally runs only inside `installer -pkg` on a Mac. This drives that exact script against fake
+      # roots, so a weakened or broken link step fails on the pushing commit instead of on a user's machine.
+      - name: Run macOS installer PATH contract gate
+        shell: bash
+        run: scripts/gates/run-macos-pkg-contract-gate.sh
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
