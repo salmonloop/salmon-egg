@@ -112,10 +112,10 @@ if (-not (Test-Path -LiteralPath $msiPath)) {
 # real install/uninstall check needs an interactive Windows session and stays a manual release step (see
 # docs/release-guide.md); what can be asserted here is the package's own Environment table.
 #
-# The rule itself lives in CliMsiPathContract.ps1, which documents the MSI encoding it enforces, so that
-# scripts/gates/run-cli-msi-path-contract-gate.ps1 can exercise the rule — and each of its failure
+# The rule itself lives in MsiPathContract.ps1, which documents the MSI encoding it enforces, so that
+# scripts/gates/run-msi-path-contract-gate.ps1 can exercise the rule — and each of its failure
 # cases — without WiX or a Windows session.
-. (Join-Path $PSScriptRoot 'CliMsiPathContract.ps1')
+. (Join-Path $PSScriptRoot 'MsiPathContract.ps1')
 
 $installer = New-Object -ComObject WindowsInstaller.Installer
 $database = $installer.OpenDatabase($msiPath, 0)
@@ -148,7 +148,8 @@ try {
                "exactly one PATH entry. Rows: $described")
     }
 
-    Assert-CliMsiPathContract -Name $rows[0].Name -Value $rows[0].Value
+    # This package's install folder is the command directory itself, so the row must name INSTALLFOLDER.
+    Assert-MsiPathContract -Name $rows[0].Name -Value $rows[0].Value -DirectoryToken '[INSTALLFOLDER]'
     Write-Host "[cli-msi] verified PATH registration: Name='$($rows[0].Name)' Value='$($rows[0].Value)'"
 }
 finally {

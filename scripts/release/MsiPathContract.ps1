@@ -1,13 +1,18 @@
 #requires -Version 7.0
 <#
 .SYNOPSIS
-    The PATH-registration contract that a built SalmonEgg CLI MSI must satisfy.
+    The PATH-registration contract a built SalmonEgg MSI must satisfy.
 
 .DESCRIPTION
-    This lives apart from build-cli-msi.ps1 because reading an MSI needs Windows and WiX, while the rule
-    being enforced is pure string logic over one Environment-table row. Splitting them lets
-    scripts/gates/run-cli-msi-path-contract-gate.ps1 exercise the rule — including every failure case — on
+    This lives apart from the scripts that build MSIs because reading an MSI needs Windows and WiX, while
+    the rule being enforced is pure string logic over one Environment-table row. Splitting them lets
+    scripts/gates/run-msi-path-contract-gate.ps1 exercise the rule — including every failure case — on
     any platform, instead of the rule only ever running inside a release build nobody can rehearse.
+
+    The rule is not specific to one package: the directory whose token must appear in the value is a
+    parameter, because the desktop MSI installs the command into a `cli` subdirectory of the app while the
+    CLI-only MSI made its install folder the command directory itself. Everything else — which variable,
+    which prefix characters, where the null marker sits — is the same contract either way.
 
     Encoding per the MSI Environment table reference:
     https://learn.microsoft.com/windows/win32/msi/environment-table
@@ -29,11 +34,10 @@
 Set-StrictMode -Version Latest
 
 # Prefix characters Windows Installer recognises on an Environment row's Name.
-$script:CliMsiPathNamePrefixCharacters = [char[]]@('=', '+', '-', '!', '*')
+$script:MsiPathNamePrefixCharacters = [char[]]@('=', '+', '-', '!', '*')
 
-$script:CliMsiPathVariable = 'PATH'
-$script:CliMsiPathNullMarker = '[~]'
-$script:CliMsiPathInstallFolderToken = '[INSTALLFOLDER]'
+$script:MsiPathVariable = 'PATH'
+$script:MsiPathNullMarker = '[~]'
 
 function Split-MsiEnvironmentName
 {
@@ -49,7 +53,7 @@ function Split-MsiEnvironmentName
 
     $prefixLength = 0
     while ($prefixLength -lt $Name.Length -and
-           $script:CliMsiPathNamePrefixCharacters -contains $Name[$prefixLength])
+           $script:MsiPathNamePrefixCharacters -contains $Name[$prefixLength])
     {
         $prefixLength++
     }
@@ -60,7 +64,7 @@ function Split-MsiEnvironmentName
     }
 }
 
-function New-CliMsiPathContractViolation
+function New-MsiPathContractViolation
 {
     [CmdletBinding()]
     [OutputType([psobject])]
@@ -72,7 +76,7 @@ function New-CliMsiPathContractViolation
     return [pscustomobject]@{ Id = $Id; Message = $Message }
 }
 
-function Get-CliMsiPathContractViolation
+function Get-MsiPathContractViolation
 {
     <#
     .SYNOPSIS
@@ -86,7 +90,11 @@ function Get-CliMsiPathContractViolation
     [OutputType([psobject])]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Name,
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
+        # The directory the command lives in, as the MSI formats it: '[INSTALLFOLDER]' when the install
+        # folder is itself the command directory, '[CLIFOLDER]' when the command sits in a subdirectory of
+        # a larger package. Passing it in is what keeps this rule usable by more than one package.
+        [Parameter(Mandatory = $true)][string]$DirectoryToken
     )
 
     $parsed = Split-MsiEnvironmentName -Name $Name
@@ -94,66 +102,66 @@ function Get-CliMsiPathContractViolation
     $variable = $parsed.Variable
 
     # Windows environment variable names are case-insensitive, so 'Path' is the same variable as 'PATH'.
-    if ($variable -ine $script:CliMsiPathVariable)
+    if ($variable -ine $script:MsiPathVariable)
     {
-        return New-CliMsiPathContractViolation 'UnexpectedVariable' (
-            "the row targets '$variable' rather than $($script:CliMsiPathVariable), so the CLI would not " +
+        return New-MsiPathContractViolation 'UnexpectedVariable' (
+            "the row targets '$variable' rather than $($script:MsiPathVariable), so the CLI would not " +
             'become discoverable.')
     }
 
     if ($prefix.Contains('*'))
     {
-        return New-CliMsiPathContractViolation 'MachineEnvironment' (
+        return New-MsiPathContractViolation 'MachineEnvironment' (
             'the row targets the machine environment, but this is a per-user package installed with ' +
             'limited privileges; the write would fail or affect every account on the machine.')
     }
 
     if ($prefix.Contains('!'))
     {
-        return New-CliMsiPathContractViolation 'RemovedOnInstall' (
+        return New-MsiPathContractViolation 'RemovedOnInstall' (
             'the row removes the variable during installation instead of setting it.')
     }
 
     if (-not $prefix.Contains('='))
     {
-        return New-CliMsiPathContractViolation 'NotSetOnInstall' (
+        return New-MsiPathContractViolation 'NotSetOnInstall' (
             'the row is not set on install, so the install folder would never reach PATH.')
     }
 
     if (-not $prefix.Contains('-'))
     {
-        return New-CliMsiPathContractViolation 'NotRemovedOnUninstall' (
+        return New-MsiPathContractViolation 'NotRemovedOnUninstall' (
             'the row is permanent, so uninstalling would leave the install folder on PATH forever.')
     }
 
-    if (-not $Value.Contains($script:CliMsiPathNullMarker))
+    if (-not $Value.Contains($script:MsiPathNullMarker))
     {
-        return New-CliMsiPathContractViolation 'ReplacesExistingValue' (
-            "the value carries no $($script:CliMsiPathNullMarker) marker, so it replaces PATH wholesale " +
+        return New-MsiPathContractViolation 'ReplacesExistingValue' (
+            "the value carries no $($script:MsiPathNullMarker) marker, so it replaces PATH wholesale " +
             'rather than extending it — the reference warns this can leave a machine unbootable.')
     }
 
     # Leading marker plus separator is the documented append form. The trailing form prepends, which would
     # let this install folder shadow every tool the user already has on PATH.
-    if (-not $Value.StartsWith($script:CliMsiPathNullMarker, [System.StringComparison]::Ordinal) -or
-        $Value.Length -le $script:CliMsiPathNullMarker.Length)
+    if (-not $Value.StartsWith($script:MsiPathNullMarker, [System.StringComparison]::Ordinal) -or
+        $Value.Length -le $script:MsiPathNullMarker.Length)
     {
-        return New-CliMsiPathContractViolation 'NotAppended' (
-            "the value does not lead with $($script:CliMsiPathNullMarker) plus a separator, so it does " +
+        return New-MsiPathContractViolation 'NotAppended' (
+            "the value does not lead with $($script:MsiPathNullMarker) plus a separator, so it does " +
             'not append the install folder to the end of the existing PATH.')
     }
 
-    if (-not $Value.Contains($script:CliMsiPathInstallFolderToken))
+    if (-not $Value.Contains($DirectoryToken))
     {
-        return New-CliMsiPathContractViolation 'MissingInstallFolder' (
-            "the value does not reference $($script:CliMsiPathInstallFolderToken), so whatever it adds to " +
-            'PATH is not the directory this package installs into.')
+        return New-MsiPathContractViolation 'MissingDirectoryToken' (
+            "the value does not reference $DirectoryToken, so whatever it adds to PATH is not the " +
+            'directory this package installs the command into.')
     }
 
     return $null
 }
 
-function Assert-CliMsiPathContract
+function Assert-MsiPathContract
 {
     <#
     .SYNOPSIS
@@ -162,10 +170,11 @@ function Assert-CliMsiPathContract
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Name,
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory = $true)][string]$DirectoryToken
     )
 
-    $violation = Get-CliMsiPathContractViolation -Name $Name -Value $Value
+    $violation = Get-MsiPathContractViolation -Name $Name -Value $Value -DirectoryToken $DirectoryToken
     if ($null -ne $violation)
     {
         throw ("MSI PATH registration contract violated [$($violation.Id)]: $($violation.Message) " +

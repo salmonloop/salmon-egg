@@ -58,12 +58,24 @@ class FakeMsiDatabase
 {
     [string[]]$FileNames
     [string]$ProductVersion
+    [object[]]$EnvironmentRows
     [System.Collections.Generic.List[string]]$Queries
 
+    # The two-argument form carries the PATH row a correct package has, so a case only spells the
+    # Environment table out when the row itself is what it is testing.
     FakeMsiDatabase([string[]]$fileNames, [string]$productVersion)
     {
         $this.FileNames = $fileNames
         $this.ProductVersion = $productVersion
+        $this.EnvironmentRows = @([pscustomobject]@{ Name = '=-PATH'; Value = '[~];[CLIFOLDER]' })
+        $this.Queries = [System.Collections.Generic.List[string]]::new()
+    }
+
+    FakeMsiDatabase([string[]]$fileNames, [string]$productVersion, [object[]]$environmentRows)
+    {
+        $this.FileNames = $fileNames
+        $this.ProductVersion = $productVersion
+        $this.EnvironmentRows = $environmentRows
         $this.Queries = [System.Collections.Generic.List[string]]::new()
     }
 
@@ -91,6 +103,17 @@ class FakeMsiDatabase
             return [FakeMsiView]::new($rows)
         }
 
+        if ($query -match '(?i)FROM\s+`Environment`')
+        {
+            $rows = @()
+            foreach ($pair in $this.EnvironmentRows)
+            {
+                $rows += [FakeMsiRecord]::new(@($pair.Name, $pair.Value))
+            }
+
+            return [FakeMsiView]::new($rows)
+        }
+
         if ($query -match '(?i)FROM\s+`Property`')
         {
             if ([string]::IsNullOrEmpty($this.ProductVersion)) { return [FakeMsiView]::new(@()) }
@@ -108,7 +131,7 @@ function Add-Failure { param([string]$Message) $script:failures += $Message }
 $cases = @(
     @{
         Description = 'the package a successful harvest produces'
-        FileNames   = @('SalmonEgg.exe', 'SalmonEgg.dll', 'SkiaSharp.dll')
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe', 'SalmonEgg.dll', 'SkiaSharp.dll')
         Version     = '1.3.0'
         Expected    = $null
     }
@@ -129,7 +152,7 @@ $cases = @(
         # heat emits 'SHORT~1.EXE|Long.exe' whenever a name needs an 8.3 alias, so the rule has to read
         # both halves. Matching the whole cell would miss the executable and fail for the wrong reason.
         Description = 'a package whose File rows carry short|long name pairs'
-        FileNames   = @('SALMON~1.EXE|SalmonEgg.exe', 'SKIASH~1.DLL|SkiaSharp.dll')
+        FileNames   = @('SALMON~1.EXE|SalmonEgg.exe', 'SALMON~2.EXE|salmon-egg.exe', 'SKIASH~1.DLL|SkiaSharp.dll')
         Version     = '1.3.0'
         Expected    = $null
     }
@@ -151,7 +174,7 @@ $cases = @(
         # v1.3.0 attempt: PowerShell refuses to bind a [string[]] containing an empty string unless the
         # parameter declares AllowEmptyString. No fake produced one, so no gate could have caught it.
         Description = 'a package whose File table carries empty FileName cells alongside real ones'
-        FileNames   = @('', 'SalmonEgg.exe', '', 'SkiaSharp.dll')
+        FileNames   = @('', 'SalmonEgg.exe', '', 'salmon-egg.exe', 'SkiaSharp.dll')
         Version     = '1.3.0'
         Expected    = $null
     }
@@ -163,27 +186,87 @@ $cases = @(
     }
     @{
         Description = 'a package whose ProductVersion was never substituted'
-        FileNames   = @('SalmonEgg.exe')
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
         Version     = '$(SalmonEggDisplayVersion)'
         Expected    = 'InvalidVersion'
     }
     @{
         Description = 'a package carrying a four-part version MajorUpgrade cannot compare'
-        FileNames   = @('SalmonEgg.exe')
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
         Version     = '1.3.0.0'
         Expected    = 'InvalidVersion'
     }
     @{
         Description = 'a package with no ProductVersion row at all'
-        FileNames   = @('SalmonEgg.exe')
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
         Version     = ''
         Expected    = 'InvalidVersion'
+    }
+    @{
+        # The defect the bundled-CLI publish exists to prevent: the app installs, the PATH row names a cli
+        # directory, and there is nothing in it to run.
+        Description = 'a package that installs the app but never carried the command'
+        FileNames   = @('SalmonEgg.exe', 'SkiaSharp.dll')
+        Version     = '1.3.0'
+        Expected    = 'MissingCommandExe'
+    }
+    @{
+        Description = 'a package shipping the command with no PATH row at all'
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
+        Version     = '1.3.0'
+        Environment = @()
+        Expected    = 'NoPathRegistration'
+    }
+    @{
+        # A second environment write reaching the package would be applied too, unreviewed.
+        Description = 'a package carrying a second, unreviewed environment row'
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
+        Version     = '1.3.0'
+        Environment = @(
+            [pscustomobject]@{ Name = '=-PATH'; Value = '[~];[CLIFOLDER]' },
+            [pscustomobject]@{ Name = '=-*PATH'; Value = '[~];[CLIFOLDER]' }
+        )
+        Expected    = 'MultiplePathRegistrations'
+    }
+    @{
+        # Identifiers from the shared PATH rule pass through, so the diagnosis names the encoding defect
+        # rather than a generic "bad PATH row".
+        Description = 'a package whose PATH row prepends the command directory'
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
+        Version     = '1.3.0'
+        Environment = @([pscustomobject]@{ Name = '=-PATH'; Value = '[CLIFOLDER];[~]' })
+        Expected    = 'NotAppended'
+    }
+    @{
+        Description = 'a package whose PATH row survives uninstall'
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
+        Version     = '1.3.0'
+        Environment = @([pscustomobject]@{ Name = '=PATH'; Value = '[~];[CLIFOLDER]' })
+        Expected    = 'NotRemovedOnUninstall'
+    }
+    @{
+        # Registering the app folder rather than the cli subdirectory puts every shipped DLL on PATH and
+        # still leaves the command unresolvable.
+        Description = 'a package registering the app folder instead of the command folder'
+        FileNames   = @('SalmonEgg.exe', 'salmon-egg.exe')
+        Version     = '1.3.0'
+        Environment = @([pscustomobject]@{ Name = '=-PATH'; Value = '[~];[INSTALLFOLDER]' })
+        Expected    = 'MissingDirectoryToken'
     }
 )
 
 foreach ($case in $cases)
 {
-    $database = [FakeMsiDatabase]::new($case.FileNames, $case.Version)
+    # ContainsKey rather than a null check: Set-StrictMode rejects reading a key a hashtable does not have.
+    $database = if ($case.ContainsKey('Environment'))
+    {
+        [FakeMsiDatabase]::new($case.FileNames, $case.Version, $case.Environment)
+    }
+    else
+    {
+        [FakeMsiDatabase]::new($case.FileNames, $case.Version)
+    }
+
     $violation = Get-DesktopMsiContractViolation -Database $database
     $actual = if ($null -eq $violation) { $null } else { $violation.Id }
 
@@ -201,7 +284,9 @@ foreach ($case in $cases)
 
 # Every query the contract issues must be one Windows Installer can parse. Asserting on the queries the
 # conforming run actually made is what catches a future `SELECT COUNT(*)` on the pushing commit.
-$database = [FakeMsiDatabase]::new(@('SalmonEgg.exe'), '1.3.0')
+# A conforming package, so the contract runs to the end and issues every query it has -- including the
+# Environment one. A package rejected early would leave the later queries unchecked.
+$database = [FakeMsiDatabase]::new(@('SalmonEgg.exe', 'salmon-egg.exe'), '1.3.0')
 [void](Get-DesktopMsiContractViolation -Database $database)
 if ($database.Queries.Count -lt 1)
 {
@@ -226,7 +311,7 @@ foreach ($query in $database.Queries)
 {
     try
     {
-        [void]([FakeMsiDatabase]::new(@('SalmonEgg.exe'), '1.3.0')).OpenView($query)
+        [void]([FakeMsiDatabase]::new(@('SalmonEgg.exe', 'salmon-egg.exe'), '1.3.0')).OpenView($query)
     }
     catch
     {
@@ -328,7 +413,7 @@ Write-Host '[desktop-msi-gate] the File-table diagnostic survives empty, paired 
 # conforming package through -- a silent Get-* consumer would defeat the whole gate.
 try
 {
-    Assert-DesktopMsiContract -Database ([FakeMsiDatabase]::new(@('SalmonEgg.exe', 'SalmonEgg.dll'), '1.3.0'))
+    Assert-DesktopMsiContract -Database ([FakeMsiDatabase]::new(@('SalmonEgg.exe', 'salmon-egg.exe', 'SalmonEgg.dll'), '1.3.0'))
 }
 catch
 {
