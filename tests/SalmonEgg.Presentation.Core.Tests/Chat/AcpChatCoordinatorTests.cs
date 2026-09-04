@@ -3543,5 +3543,9 @@ public sealed class AcpChatCoordinatorTests
         public bool SupportsLocalTerminal => SupportsStdioTransport;
 
         public bool SupportsGamepadInput => false;
+
+        public bool SupportsCliCommandInspection => false;
+
+        public bool SupportsCliCommandLinking => false;
     }
 }

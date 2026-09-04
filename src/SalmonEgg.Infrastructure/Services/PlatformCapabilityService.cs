@@ -47,6 +47,10 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;
 
+    public bool SupportsCliCommandInspection => _runtimeProbe.IsDesktopProcessHost;
+
+    public bool SupportsCliCommandLinking => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.OSX);
+
     private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);
 
     private static bool IsBrowserRuntime => OperatingSystem.IsBrowser();
