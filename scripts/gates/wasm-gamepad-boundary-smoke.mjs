@@ -614,7 +614,7 @@ async function waitForControlText(page, options, pattern, label, timeoutMs = 30_
           && Number(style.opacity || "1") > 0;
       };
 
-      const start = document.querySelector('[aria-label="Diagnostics.GamepadStart"]');
+      const start = document.querySelector('[xamlautomationid="Diagnostics.GamepadStart"]');
       const scope =
         start?.closest(".uno-expander")
         ?? start?.closest("[class*='Expander']")
@@ -656,7 +656,9 @@ async function waitForControlText(page, options, pattern, label, timeoutMs = 30_
 }
 
 async function refreshGamepadDiagnostics(page, label) {
-  const refresh = page.locator('[aria-label="Diagnostics.GamepadRefresh"]:visible').first();
+  // Real Playwright click by id contract (xamlautomationid), not by name: this button carries no
+  // AutomationProperties.Name, so its aria-label only coincidentally equals the automation id.
+  const refresh = page.locator('[xamlautomationid="Diagnostics.GamepadRefresh"]:visible').first();
   await refresh.scrollIntoViewIfNeeded({ timeout: 15_000 });
   await refresh.click({ timeout: 15_000 });
   await waitForRefreshCompletion(refresh, label, 15_000);
@@ -727,14 +729,14 @@ async function revealGamepadDiagnosticsSection(page) {
     } catch {
       const togglePoint = await page.evaluate(() => {
         const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-        const start = document.querySelector('[aria-label="Diagnostics.GamepadStart"]');
+        const start = document.querySelector('[xamlautomationid="Diagnostics.GamepadStart"]');
         const expander =
           start?.closest(".uno-expander")
           ?? start?.closest("[class*='Expander']")
           ?? start?.closest("details")
           ?? null;
         const ownedToggle =
-          expander?.querySelector('[aria-label="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
+          expander?.querySelector('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
           ?? null;
         if (ownedToggle) {
           const rect = ownedToggle.getBoundingClientRect();
@@ -748,7 +750,7 @@ async function revealGamepadDiagnosticsSection(page) {
         }
 
         const toggles = Array.from(
-          document.querySelectorAll('[aria-label="ExpanderToggleButton"], button, [role="button"], summary'));
+          document.querySelectorAll('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], summary'));
         for (const toggle of toggles) {
           const text = normalize(toggle.textContent);
           if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
