@@ -3254,6 +3254,44 @@ public partial class ChatViewModelTests
             snapshot.SessionInfo?.AdditionalDirectories);
         Assert.Equal("remote-session-1", binding?.RemoteSessionId);
         Assert.Equal("profile-1", binding?.BoundProfileId);
+
+        // The import must register the cwd as a remote-directory project so the conversation
+        // survives a restart (issue #176): without it, recovery fails once the runtime session
+        // is gone and the path is unknown to project affinity.
+        var directory = Assert.Single(fixture.Preferences.AgentRemoteDirectories);
+        Assert.Equal("C:/remote/workspace", directory.RemotePath);
+        Assert.Contains(directory.DirectoryId, fixture.Preferences.NavigationRemoteDirectoryIds);
+    }
+
+    [Fact]
+    public async Task OpenDiscoveredRemoteSessionAsync_ImportingEquivalentCwdTwice_ReusesRegisteredDirectory()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
+
+        var first = await switcher.OpenDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest(
+                "remote-session-1",
+                "/home/user/project",
+                "profile-1",
+                "Remote Session",
+                null),
+            TestContext.Current.CancellationToken);
+        var second = await switcher.OpenDiscoveredRemoteSessionAsync(
+            new DiscoverRemoteSessionOpenRequest(
+                "remote-session-2",
+                "/home/user/project/",
+                "profile-1",
+                "Remote Session",
+                null),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        var directory = Assert.Single(fixture.Preferences.AgentRemoteDirectories);
+        Assert.Equal("/home/user/project", directory.RemotePath);
+        Assert.Single(fixture.Preferences.NavigationRemoteDirectoryIds);
     }
 
     [Fact]

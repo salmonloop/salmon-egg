@@ -1152,40 +1152,7 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
         return -1;
     }
 
-    private static bool PathsEqual(string? left, string? right)
-    {
-        var normalizedLeft = NormalizePath(left);
-        var normalizedRight = NormalizePath(right);
-        var comparison = UsesCaseInsensitivePathSemantics(normalizedLeft) || UsesCaseInsensitivePathSemantics(normalizedRight)
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        return string.Equals(normalizedLeft, normalizedRight, comparison);
-    }
-
-    private static string NormalizePath(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return string.Empty;
-        }
-
-        return path.Trim().Replace('\\', '/').TrimEnd('/');
-    }
-
-    private static bool UsesCaseInsensitivePathSemantics(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
-
-        return ProtocolPathRules.IsAbsolutePath(path)
-            && (path.StartsWith(@"\\", StringComparison.Ordinal)
-                || (path.Length >= 3
-                    && char.IsLetter(path[0])
-                    && path[1] == ':'
-                    && path[2] == '/'));
-    }
+    private static bool PathsEqual(string? left, string? right) => RemotePathEquivalence.Equals(left, right);
 
     private static ObservableCollection<AppLanguageOptionViewModel> CreateLanguageOptions()
         => new(AppLanguageCatalog.SupportedOptions.Select(option =>

@@ -1275,6 +1275,29 @@ public partial class ChatViewModel
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
+            // The conversation must survive restart on its own, so the cwd has to outlive the
+            // runtime session too: register it as a remote-directory project. Best-effort — a
+            // registration failure must not turn an otherwise successful import into an error.
+            try
+            {
+                var registeredDirectoryId = _remoteDirectoryRegistrar.EnsureRegistered(request.RemoteSessionCwd);
+                if (string.IsNullOrEmpty(registeredDirectoryId))
+                {
+                    Logger.LogWarning(
+                        "Skipped remote directory registration for imported session. remoteSessionId={RemoteSessionId} remoteCwd={RemoteCwd}",
+                        request.RemoteSessionId,
+                        request.RemoteSessionCwd);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(
+                    ex,
+                    "Failed to register remote directory for imported session. remoteSessionId={RemoteSessionId} remoteCwd={RemoteCwd}",
+                    request.RemoteSessionId,
+                    request.RemoteSessionCwd);
+            }
+
             return new DiscoverRemoteSessionOpenResult(true, localConversationId, null);
         }
         catch (OperationCanceledException)
