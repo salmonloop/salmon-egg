@@ -32,6 +32,7 @@ Options:
 
 Outputs (stdout and, when set, $GITHUB_OUTPUT):
   executable-path          Absolute path of the published executable.
+  executable-path-native   Same path in the host's native form (a Windows drive path under Git Bash).
   display-version          Three-part release version derived from the git tag by MinVer.
 USAGE
 }
@@ -130,12 +131,23 @@ fi
 
 chmod +x "$EXECUTABLE_PATH"
 
+# On a Windows runner this script runs under Git Bash, where the path above is an MSYS one
+# (/d/a/repo/...). MSBuild and WiX are native Windows processes and cannot open it, so the native form
+# is reported alongside it. Doing the conversion here rather than in each consuming workflow step keeps
+# one implementation: the same translation used to be inlined as a PowerShell regex per call site.
+NATIVE_EXECUTABLE_PATH="$EXECUTABLE_PATH"
+if command -v cygpath >/dev/null 2>&1; then
+  NATIVE_EXECUTABLE_PATH="$(cygpath -w "$EXECUTABLE_PATH")"
+fi
+
 echo "[cli-binary] executable: $EXECUTABLE_PATH"
+echo "[cli-binary] native:     $NATIVE_EXECUTABLE_PATH"
 echo "[cli-binary] version:    $DISPLAY_VERSION"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
     echo "executable-path=$EXECUTABLE_PATH"
+    echo "executable-path-native=$NATIVE_EXECUTABLE_PATH"
     echo "display-version=$DISPLAY_VERSION"
   } >> "$GITHUB_OUTPUT"
 fi

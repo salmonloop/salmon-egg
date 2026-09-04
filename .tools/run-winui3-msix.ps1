@@ -91,6 +91,28 @@ function Get-MSBuildPath {
     return $msbuild
 }
 
+# The bundled CLI is published by scripts/release/publish-cli-binary.sh, the same script the release
+# workflow runs, so this local package embeds the same binary users get. That means this script needs a
+# POSIX shell; Git for Windows provides one, and the repository's other gates already assume it.
+function Get-BashPath {
+    $onPath = Get-Command bash -ErrorAction SilentlyContinue
+    if ($onPath) {
+        return $onPath.Source
+    }
+
+    $candidates = @(
+        (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Git\bin\bash.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    throw "bash.exe not found. The MSIX package embeds the salmon-egg CLI, published by scripts/release/publish-cli-binary.sh; install Git for Windows so this script can run it."
+}
+
 function Get-CertificateFromStore {
     param(
         [Parameter(Mandatory = $true)] [string] $Subject,
@@ -751,6 +773,27 @@ foreach ($referenceProject in $referenceProjects) {
         -DisplayCommand "MSBuild Restore ($referenceProjectName, binlog: $referenceRestoreBinLogPath)"
 }
 
+# Package.appxmanifest registers cli\salmon-egg.exe as an app execution alias, so packaging fails without
+# this payload. Published before the app so a failure here is reported as a CLI publish failure rather
+# than as a missing package file several minutes into MakeAppx.
+$bundledCliLogPath = Join-Path $msixLogDir "$logStamp-bundled-cli.log"
+$publishCliScript = Join-Path $repoRoot 'scripts\release\publish-cli-binary.sh'
+Invoke-LoggedProcess `
+    -FilePath (Get-BashPath) `
+    -Arguments @(
+        $publishCliScript,
+        '--rid', 'win-x64',
+        '--configuration', $Configuration
+    ) `
+    -LogPath $bundledCliLogPath `
+    -StepName 'Publishing the bundled salmon-egg CLI' `
+    -DisplayCommand "bash publish-cli-binary.sh --rid win-x64 --configuration $Configuration"
+
+$bundledCli = Join-Path $repoRoot 'artifacts\cli-bin\win-x64\salmon-egg.exe'
+if (-not (Test-Path -LiteralPath $bundledCli)) {
+    throw "The bundled CLI was not produced at '$bundledCli'. See $bundledCliLogPath."
+}
+
 Invoke-LoggedProcess `
     -FilePath $msbuild `
     -Arguments @(
@@ -759,6 +802,7 @@ Invoke-LoggedProcess `
         "/p:Configuration=$Configuration",
         "/p:TargetFramework=$tfm",
         "/p:PublishProfile=$publishProfile",
+        "/p:SalmonEggBundledCliExecutable=$bundledCli",
         '/p:EnableWinUIBuild=true',
         '/p:IsolatedMsixBuild=true',
         '/p:BuildProjectReferences=true',
