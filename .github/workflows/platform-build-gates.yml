@@ -160,6 +160,22 @@ jobs:
             -f net10.0 `
             -v minimal
 
+      # Installing SalmonEgg installs the salmon-egg command, so the package carries the CLI binary and
+      # Package.appxmanifest registers it as an app execution alias. Published on this runner rather than
+      # taken from a cross-job artifact: the alias points at a path inside the package, and a stale
+      # binary passed between jobs would satisfy the packaging step while shipping a different command
+      # than this commit builds.
+      - name: Publish bundled CLI
+        id: bundled-cli
+        shell: bash
+        run: scripts/release/publish-cli-binary.sh --rid win-x64 --configuration ${{ env.CONFIGURATION }}
+
+      # A publish that produced a file is not evidence the file starts. This is the binary users will
+      # invoke, so exercise it before it is sealed into a package where nothing can run it again.
+      - name: Smoke the bundled CLI executable
+        shell: bash
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.bundled-cli.outputs.executable-path }}"
+
       - name: Publish unsigned Windows MSIX
         shell: pwsh
         run: |
@@ -173,6 +189,7 @@ jobs:
             /p:IsolatedMsixBuild=true `
             /p:BuildProjectReferences=false `
             /p:DisableCustomWinSdkXamlReferences=true `
+            /p:SalmonEggBundledCliExecutable="${{ steps.bundled-cli.outputs.executable-path-native }}" `
             /p:AppxPackageSigningEnabled=false `
             /p:Restore=false `
             /v:minimal

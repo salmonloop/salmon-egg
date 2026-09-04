@@ -2,11 +2,12 @@
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  IgnorableNamespaces="uap uap5 rescap com desktop">
+  IgnorableNamespaces="uap uap3 uap5 rescap com desktop">
 
   <Identity Name="SalmonEgg.SalmonEgg"
             Publisher="CN=0B694F0E-510C-433A-A6F7-1484D6A39E19"
@@ -46,6 +47,31 @@
         <uap:SplashScreen Image="Assets\Icons\Windows\SplashScreen.png" />
       </uap:VisualElements >
       <Extensions>
+        <!--
+          The `salmon-egg` command that ships inside this package. A packaged app cannot append to PATH:
+          the installer is the OS, and it writes no environment variables on the app's behalf. An app
+          execution alias is the mechanism Windows provides instead — it materializes a stub executable
+          under %LOCALAPPDATA%\Microsoft\WindowsApps, a directory the OS already keeps on the per-user
+          PATH, and launching the stub starts the real executable named below.
+
+          Executable is a package-relative path, so it can name a second executable in the package
+          rather than the app's own; EntryPoint marks it as a classic full-trust process rather than a
+          UWP activation, which is what preserves the caller's console, arguments and exit code. The
+          alias must end in .exe and is global to the machine, so it is the product's own command name:
+          if a later package registers the same alias, one of the two silently loses.
+
+          The payload it points at is added by the SalmonEggBundledCliExecutable content item in
+          SalmonEgg.csproj. Declaring the alias here is also what makes forgetting that item fail the
+          build rather than ship a package whose command is missing.
+        -->
+        <uap3:Extension Category="windows.appExecutionAlias"
+                        Executable="cli\salmon-egg.exe"
+                        EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="salmon-egg.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="s8p">
             <uap:Logo>Assets\Icons\Windows\iconLogo.png</uap:Logo>

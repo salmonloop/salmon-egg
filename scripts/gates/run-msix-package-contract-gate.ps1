@@ -15,6 +15,12 @@
     the manifest references is present as a package entry. It also asserts identity and a three-part
     numeric version so a manifest whose version token was never substituted cannot ship.
 
+    It asserts the same thing about the bundled CLI: the package registers exactly one app execution
+    alias, under the product's command name, entered as a full-trust process, pointing at an executable
+    the package really carries. That is the whole of "installing SalmonEgg puts salmon-egg on PATH" on
+    Windows, and each half of it fails silently — a package with the alias but no payload, or the payload
+    but no alias, installs and looks correct.
+
     Pure zip + XML inspection: no Windows APIs, no MSIX tooling, runs on any platform with pwsh. That is
     deliberate — the rule must be rehearsable off Windows, or it becomes another assertion nobody can
     test until a tag build.
@@ -74,6 +80,16 @@ $script:AssetAttributeNames = @(
     'Wide310x150Logo'
     'Image'
 )
+
+# The command the package puts on PATH. A packaged app cannot append to PATH -- the OS is the installer
+# and writes no environment variables on the app's behalf -- so Windows exposes the command through an
+# app execution alias, a stub it materializes under %LOCALAPPDATA%\Microsoft\WindowsApps, a directory
+# already on the per-user PATH. Three independent things have to hold for `salmon-egg` to work, and each
+# fails silently on its own: the alias name is what the user types, the entry point is what makes the
+# launch a classic full-trust process (a UWP activation loses the caller's console, arguments and exit
+# code), and the executable is a package-relative path that has to resolve to a file that is really there.
+$script:ExpectedExecutionAlias = 'salmon-egg.exe'
+$script:ExpectedAliasEntryPoint = 'Windows.FullTrustApplication'
 
 # An asset path can be an attribute value (uap:VisualElements Square44x44Logo="...") or element text
 # (<Logo>Assets\...\iconLogo.png</Logo> under Properties, which is how the real manifest declares the
@@ -173,6 +189,66 @@ function Test-PackageCarriesAsset
     return $false
 }
 
+# Asserts the package both registers the bundled CLI as an app execution alias and carries the executable
+# that alias names. Windows validates only that the referenced path exists in the package; the alias name,
+# the entry point and whether the extension is declared at all are ours to check, and every one of them
+# fails as "salmon-egg: command not found" on a user's machine rather than at packaging time.
+function Get-ExecutionAliasViolation
+{
+    param(
+        [Parameter(Mandatory = $true)][xml]$Manifest,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Entries
+    )
+
+    # Matched by local name: the manifest authors this as uap3:Extension, but uap5 and uap10 declare the
+    # same category, and a package moved to either of those must still satisfy the contract.
+    $extensions = @($Manifest.SelectNodes("//*[local-name()='Extension' and @Category='windows.appExecutionAlias']"))
+    if ($extensions.Count -eq 0)
+    {
+        return [pscustomobject]@{ Id = 'AppExecutionAliasMissing'; Detail = 'no windows.appExecutionAlias extension' }
+    }
+
+    # Windows allows one alias extension per Application. With more than one, which command the user ends
+    # up with is decided by registration order instead of by this manifest.
+    if ($extensions.Count -ne 1)
+    {
+        return [pscustomobject]@{ Id = 'AppExecutionAliasAmbiguous'; Detail = "$($extensions.Count) alias extensions" }
+    }
+
+    $extension = $extensions[0]
+    $entryPoint = $extension.GetAttribute('EntryPoint')
+    if ($entryPoint -cne $script:ExpectedAliasEntryPoint)
+    {
+        return [pscustomobject]@{ Id = 'AppExecutionAliasEntryPointMismatch'; Detail = $entryPoint }
+    }
+
+    $aliases = @($extension.SelectNodes(".//*[local-name()='ExecutionAlias']") | ForEach-Object { $_.GetAttribute('Alias') })
+    if ($aliases.Count -ne 1 -or $aliases[0] -ine $script:ExpectedExecutionAlias)
+    {
+        return [pscustomobject]@{ Id = 'AppExecutionAliasNameMismatch'; Detail = ($aliases -join ', ') }
+    }
+
+    $executable = $extension.GetAttribute('Executable')
+    if ([string]::IsNullOrWhiteSpace($executable))
+    {
+        return [pscustomobject]@{ Id = 'AppExecutionAliasTargetMissing'; Detail = '(no Executable attribute)' }
+    }
+
+    # The alias names a package-relative path with Windows separators while package entries use forward
+    # slashes. Exact match only: unlike a shell asset, an executable carries no resource qualifiers, so a
+    # name that merely resembles the target is a command that does not start.
+    $target = ConvertTo-PackagePath $executable
+    foreach ($entry in $Entries)
+    {
+        if ($entry -ieq $target)
+        {
+            return $null
+        }
+    }
+
+    return [pscustomobject]@{ Id = 'AppExecutionAliasTargetMissing'; Detail = $target }
+}
+
 function Get-MsixContractViolation
 {
     param(
@@ -246,6 +322,12 @@ function Get-MsixContractViolation
             return [pscustomobject]@{ Id = 'VersionPlaceholder'; Detail = $version }
         }
 
+        $aliasViolation = Get-ExecutionAliasViolation -Manifest $manifest -Entries $entries
+        if ($null -ne $aliasViolation)
+        {
+            return $aliasViolation
+        }
+
         $assetReferences = Get-ManifestAssetReference -Manifest $manifest
         if ($assetReferences.Count -eq 0)
         {
@@ -304,13 +386,38 @@ function New-TestManifest
         [string]$IdentityName = 'SalmonEgg.SalmonEgg',
         [string]$Publisher = 'CN=0B694F0E-510C-433A-A6F7-1484D6A39E19',
         [string]$Version = '1.2.0.0',
-        [string]$Logo = 'Assets\Icons\Windows\iconLogo.png'
+        [string]$Logo = 'Assets\Icons\Windows\iconLogo.png',
+        [string]$AliasExecutable = 'cli\salmon-egg.exe',
+        [string]$Alias = 'salmon-egg.exe',
+        [string]$AliasEntryPoint = 'Windows.FullTrustApplication',
+        [switch]$OmitAlias,
+        [switch]$DuplicateAlias
     )
+
+    $extensionsXml = ''
+    if (-not $OmitAlias)
+    {
+        $aliasBlock = @"
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="$AliasExecutable" EntryPoint="$AliasEntryPoint">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="$Alias" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+"@
+        $aliasBlocks = if ($DuplicateAlias) { "$aliasBlock`n$aliasBlock" } else { $aliasBlock }
+        $extensionsXml = @"
+      <Extensions>
+$aliasBlocks
+      </Extensions>
+"@
+    }
 
     return @"
 <?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10">
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10">
   <Identity Name="$IdentityName" Publisher="$Publisher" Version="$Version" />
   <Properties>
     <Logo>$Logo</Logo>
@@ -319,6 +426,7 @@ function New-TestManifest
     <Application Id="App" Executable="`$targetnametoken`$.exe">
       <uap:VisualElements Square44x44Logo="Assets\Icons\Windows\iconLogo44.png"
                           Square150x150Logo="Assets\Icons\Windows\iconLogo150.png" />
+$extensionsXml
     </Application>
   </Applications>
 </Package>
@@ -356,6 +464,7 @@ function Invoke-SelfTest
     {
         $allAssets = @{
             'AppxManifest.xml'                             = New-TestManifest
+            'cli/salmon-egg.exe'                           = 'MZ'
             'Assets/Icons/Windows/iconLogo.png'            = 'png'
             'Assets/Icons/Windows/iconLogo44.png'          = 'png'
             'Assets/Icons/Windows/iconLogo150.png'         = 'png'
@@ -367,6 +476,7 @@ function Invoke-SelfTest
         # regression from returning.
         $mrtAssets = @{
             'AppxManifest.xml'                                                   = New-TestManifest
+            'cli/salmon-egg.exe'                                                 = 'MZ'
             'Assets/Icons/Windows/iconLogo.scale-200.png'                         = 'png'
             'Assets/Icons/Windows/iconLogo.targetsize-32.png'                     = 'png'
             'Assets/Icons/Windows/iconLogo44.scale-200.png'                       = 'png'
@@ -391,6 +501,7 @@ function Invoke-SelfTest
                 Description = 'a family missing one variant but otherwise complete'
                 Entries     = @{
                     'AppxManifest.xml'                                = New-TestManifest
+                    'cli/salmon-egg.exe'                              = 'MZ'
                     'Assets/Icons/Windows/iconLogo.scale-200.png'      = 'png'
                     'Assets/Icons/Windows/iconLogo44.scale-100.png'    = 'png'
                     'Assets/Icons/Windows/iconLogo150.scale-400.png'   = 'png'
@@ -403,6 +514,7 @@ function Invoke-SelfTest
                 Description = 'a package whose entire qualified logo family was dropped'
                 Entries     = @{
                     'AppxManifest.xml'                                = New-TestManifest
+                    'cli/salmon-egg.exe'                              = 'MZ'
                     'Assets/Icons/Windows/iconLogo.scale-200.png'      = 'png'
                     'Assets/Icons/Windows/iconLogo150.scale-400.png'   = 'png'
                 }
@@ -414,6 +526,7 @@ function Invoke-SelfTest
                 Description = 'a package where a similarly-named asset stands in for a missing one'
                 Entries     = @{
                     'AppxManifest.xml'                                = New-TestManifest
+                    'cli/salmon-egg.exe'                              = 'MZ'
                     'Assets/Icons/Windows/iconLogo150.scale-200.png'   = 'png'
                     'Assets/Icons/Windows/iconLogo44.scale-200.png'    = 'png'
                 }
@@ -425,6 +538,7 @@ function Invoke-SelfTest
                 Description = 'a package whose declared shell logo was never included'
                 Entries     = @{
                     'AppxManifest.xml'                     = New-TestManifest
+                    'cli/salmon-egg.exe'                   = 'MZ'
                     'Assets/Icons/Windows/iconLogo44.png'   = 'png'
                     'Assets/Icons/Windows/iconLogo150.png'  = 'png'
                 }
@@ -434,10 +548,56 @@ function Invoke-SelfTest
                 Description = 'a package whose VisualElements tile logo was never included'
                 Entries     = @{
                     'AppxManifest.xml'                     = New-TestManifest
+                    'cli/salmon-egg.exe'                   = 'MZ'
                     'Assets/Icons/Windows/iconLogo.png'     = 'png'
                     'Assets/Icons/Windows/iconLogo44.png'   = 'png'
                 }
                 Expected    = 'DeclaredAssetMissing'
+            }
+            @{
+                # The alias resolves a package-relative path, so registering the command while the publish
+                # never carried the binary produces an alias that starts nothing.
+                Description = 'a package registering the alias whose CLI payload was never included'
+                Entries     = @{
+                    'AppxManifest.xml'                     = New-TestManifest
+                    'Assets/Icons/Windows/iconLogo.png'     = 'png'
+                    'Assets/Icons/Windows/iconLogo44.png'   = 'png'
+                    'Assets/Icons/Windows/iconLogo150.png'  = 'png'
+                }
+                Expected    = 'AppExecutionAliasTargetMissing'
+            }
+            @{
+                # Shipping the binary without the alias is the other half of the same defect: the package
+                # is complete and the command is still not on PATH.
+                Description = 'a package carrying the CLI but registering no alias for it'
+                Entries     = (Merge-TestEntries -Base $allAssets -Override @{ 'AppxManifest.xml' = New-TestManifest -OmitAlias })
+                Expected    = 'AppExecutionAliasMissing'
+            }
+            @{
+                Description = 'a package whose alias name drifted from the product command'
+                Entries     = (Merge-TestEntries -Base $allAssets -Override @{ 'AppxManifest.xml' = New-TestManifest -Alias 'salmonegg.exe' })
+                Expected    = 'AppExecutionAliasNameMismatch'
+            }
+            @{
+                # Without Windows.FullTrustApplication the alias becomes a UWP activation, which drops the
+                # caller's console, arguments and exit code: a command that appears to do nothing.
+                Description = 'a package whose alias activates the app instead of launching the command'
+                Entries     = (Merge-TestEntries -Base $allAssets -Override @{ 'AppxManifest.xml' = New-TestManifest -AliasEntryPoint 'SalmonEgg.App' })
+                Expected    = 'AppExecutionAliasEntryPointMismatch'
+            }
+            @{
+                # Two extensions mean registration order, not this manifest, decides which command the
+                # user ends up with.
+                Description = 'a package registering two alias extensions'
+                Entries     = (Merge-TestEntries -Base $allAssets -Override @{ 'AppxManifest.xml' = New-TestManifest -DuplicateAlias })
+                Expected    = 'AppExecutionAliasAmbiguous'
+            }
+            @{
+                # The content item's TargetPath and the manifest's Executable have to agree; a payload
+                # present under some other path packages cleanly and then fails to launch.
+                Description = 'a package whose alias path disagrees with where the CLI was placed'
+                Entries     = (Merge-TestEntries -Base $allAssets -Override @{ 'AppxManifest.xml' = New-TestManifest -AliasExecutable 'salmon-egg.exe' })
+                Expected    = 'AppExecutionAliasTargetMissing'
             }
             @{
                 Description = 'a package whose version token was never substituted'
@@ -543,4 +703,4 @@ if ($null -ne $violation)
     throw "MSIX package contract violated [$($violation.Id)]: $($violation.Detail) (package: $Package)"
 }
 
-Write-Host "[msix-gate] passed: $Package satisfies identity, version, and declared-asset presence"
+Write-Host "[msix-gate] passed: $Package satisfies identity, version, declared-asset presence, and the bundled CLI's execution alias"
