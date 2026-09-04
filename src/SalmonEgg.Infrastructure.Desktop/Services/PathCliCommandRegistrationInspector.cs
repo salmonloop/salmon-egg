@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -102,7 +101,7 @@ public sealed class PathCliCommandRegistrationInspector : ICliCommandRegistratio
             string candidate;
             try
             {
-                candidate = Path.Combine(directory, fileName);
+                candidate = _environment.Combine(directory, fileName);
             }
             catch (ArgumentException)
             {

@@ -38,6 +38,16 @@ public interface ICliCommandProbeEnvironment
     /// <summary>The command's file name on this platform.</summary>
     string CommandFileName { get; }
 
+    /// <summary>
+    /// Builds the path to look for inside one PATH entry, using this platform's path grammar.
+    /// </summary>
+    /// <remarks>
+    /// The directory comes from the PATH text and the file name from <see cref="CommandFileName"/>, but the
+    /// join is the host's syntax, which neither the PATH nor the name determines — so it rides along with
+    /// the rest of the machine facts instead of being hard-coded by the caller.
+    /// </remarks>
+    string Combine(string directory, string fileName);
+
     bool FileExists(string path);
 
     /// <summary>
@@ -66,6 +76,8 @@ public sealed class SystemCliCommandProbeEnvironment : ICliCommandProbeEnvironme
     public string CommandFileName => OperatingSystem.IsWindows()
         ? Domain.Models.Cli.CliCommandNames.WindowsFileName
         : Domain.Models.Cli.CliCommandNames.Command;
+
+    public string Combine(string directory, string fileName) => Path.Combine(directory, fileName);
 
     public bool FileExists(string path) => File.Exists(path);
 
