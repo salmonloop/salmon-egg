@@ -120,6 +120,9 @@ function focusVisibleNavigationTargetInPage(input) {
         element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
+        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
+        // case it carries the AutomationId there.
+        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -178,6 +181,9 @@ function clickVisibleNavigationTargetInPage(input) {
         element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
+        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
+        // case it carries the AutomationId there.
+        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -240,6 +246,7 @@ export async function scrollToVisibleNavigationTarget(page, options) {
           element.getAttribute("data-automation-id")
           ?? element.getAttribute("data-automationid")
           ?? element.getAttribute("automationid")
+          ?? element.getAttribute("id")
           ?? "";
         return automationIds.includes(aria)
           || automationIds.includes(automationId)
@@ -508,6 +515,9 @@ function scrollKnownControlCandidateIntoView(input) {
         element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
+        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
+        // case it carries the AutomationId there.
+        ?? element.getAttribute("id")
         ?? "";
       return normalizedAutomationIds.includes(normalize(aria))
         || normalizedAutomationIds.includes(normalize(automationId))
@@ -1014,6 +1024,9 @@ export function findVisibleNavigationTargetPoint(input) {
         element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
+        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
+        // case it carries the AutomationId there.
+        ?? element.getAttribute("id")
         ?? "";
 
       return {
@@ -1083,6 +1096,7 @@ export function collectVisibleNavigationTargetDebug() {
           ?? element.getAttribute("automationid")
           ?? "",
         role: element.getAttribute("role") ?? "",
+        id: element.getAttribute("id") ?? "",
         className: element.className?.toString?.() ?? "",
         rect: {
           left: Math.round(rect.left),
@@ -1112,6 +1126,9 @@ function collectVisibleNavigationTargetMatchDebug(input) {
         element.getAttribute("data-automation-id")
         ?? element.getAttribute("data-automationid")
         ?? element.getAttribute("automationid")
+        // Skia's semantic DOM publishes no data-automation-* attribute; probe the plain id last in
+        // case it carries the AutomationId there.
+        ?? element.getAttribute("id")
         ?? "";
       const clickable =
         element.closest(".uno-navigationviewitem")
@@ -1126,6 +1143,7 @@ function collectVisibleNavigationTargetMatchDebug(input) {
         aria,
         automationId,
         role: element.getAttribute("role") ?? "",
+        id: element.getAttribute("id") ?? "",
         className: element.className?.toString?.() ?? "",
         rect: {
           left: Math.round(rect.left),
