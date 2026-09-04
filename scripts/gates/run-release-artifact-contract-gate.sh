@@ -130,7 +130,10 @@ except Exception:
 
 value = data.get(key)
 if isinstance(value, str) and value:
-    print(value)
+    # Raw bytes, not print(): a Windows interpreter translates text-mode newlines to \r\n,
+    # and the command substitution that captures this output strips only the \n -- leaving a
+    # trailing \r on the executable name, which then never matches the file on disk.
+    sys.stdout.buffer.write(value.encode("utf-8"))
 ' "$plist" "$key"
 }
 
@@ -198,14 +201,15 @@ run_self_test() {
   expect() {
     local description="$1" expected="$2"
     shift 2
-    if "$@" >/dev/null 2>&1; then
-      local actual="pass"
-    else
-      local actual="fail"
-    fi
+    # The check's own output is hidden on the happy path, but shown when a case turns out
+    # unexpectedly: a verdict alone ("expected pass but got fail") cannot be diagnosed from a
+    # CI log, and this self-test exists so the gate never needs a debugger to fix.
+    local output
+    output="$("$@" 2>&1)" && actual="pass" || actual="fail"
 
     if [ "$actual" != "$expected" ]; then
       echo "[artifact-gate] FAIL self-test: $description expected $expected but got $actual"
+      [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/[artifact-gate]   /'
       failures=$((failures + 1))
     else
       echo "[artifact-gate] self-test: $description -> $actual (as intended)"
