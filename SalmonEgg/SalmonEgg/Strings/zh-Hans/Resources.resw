@@ -1750,4 +1750,52 @@
   <data name="ChatViewElicitationSubmitButton.Content" xml:space="preserve">
     <value>提交</value>
   </data>
+  <data name="CommandLine_PageTitle.Text" xml:space="preserve">
+    <value>命令行工具</value>
+  </data>
+  <data name="CommandLine_PageSummary.Text" xml:space="preserve">
+    <value>查看并管理随应用一起安装的 salmon-egg 命令。</value>
+  </data>
+  <data name="CommandLine_StatusSectionTitle.Text" xml:space="preserve">
+    <value>状态</value>
+  </data>
+  <data name="CommandLine_DetailsSectionTitle.Text" xml:space="preserve">
+    <value>解析详情</value>
+  </data>
+  <data name="CommandLine_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>PATH 命中的路径</value>
+  </data>
+  <data name="CommandLine_TargetPathLabel.Text" xml:space="preserve">
+    <value>链接指向</value>
+  </data>
+  <data name="CommandLine_ReportedVersionLabel.Text" xml:space="preserve">
+    <value>该命令报告的版本</value>
+  </data>
+  <data name="CommandLine_ExpectedVersionLabel.Text" xml:space="preserve">
+    <value>当前应用版本</value>
+  </data>
+  <data name="CommandLine_RefreshButton.Content" xml:space="preserve">
+    <value>重新检查</value>
+  </data>
+  <data name="CommandLine_ManageSectionTitle.Text" xml:space="preserve">
+    <value>管理</value>
+  </data>
+  <data name="CommandLine_LinkButton.Content" xml:space="preserve">
+    <value>链接到 /usr/local/bin</value>
+  </data>
+  <data name="CommandLine_UnlinkButton.Content" xml:space="preserve">
+    <value>移除链接</value>
+  </data>
+  <data name="CommandLine_LinkDescription.Text" xml:space="preserve">
+    <value>拖拽安装没有安装步骤，因此由应用来创建这个链接。macOS 会要求输入管理员密码。</value>
+  </data>
+  <data name="CommandLine_InstallerOwnedNotice.Title" xml:space="preserve">
+    <value>由安装包管理</value>
+  </data>
+  <data name="CommandLine_InstallerOwnedNotice.Message" xml:space="preserve">
+    <value>这个平台的命令由安装包注册和移除，应用不会改动它。重新安装即可恢复。</value>
+  </data>
+  <data name="CommandLine_UsageHintTitle.Text" xml:space="preserve">
+    <value>试一下</value>
+  </data>
 </root>

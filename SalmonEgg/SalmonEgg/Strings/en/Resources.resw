@@ -1855,4 +1855,52 @@
   <data name="ChatViewElicitationSubmitButton.Content" xml:space="preserve">
     <value>Submit</value>
   </data>
+  <data name="CommandLine_PageTitle.Text" xml:space="preserve">
+    <value>Command line tools</value>
+  </data>
+  <data name="CommandLine_PageSummary.Text" xml:space="preserve">
+    <value>Check and manage the salmon-egg command that ships with this app.</value>
+  </data>
+  <data name="CommandLine_StatusSectionTitle.Text" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="CommandLine_DetailsSectionTitle.Text" xml:space="preserve">
+    <value>Resolution details</value>
+  </data>
+  <data name="CommandLine_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>Resolved on PATH</value>
+  </data>
+  <data name="CommandLine_TargetPathLabel.Text" xml:space="preserve">
+    <value>Link target</value>
+  </data>
+  <data name="CommandLine_ReportedVersionLabel.Text" xml:space="preserve">
+    <value>Version it reports</value>
+  </data>
+  <data name="CommandLine_ExpectedVersionLabel.Text" xml:space="preserve">
+    <value>This app's version</value>
+  </data>
+  <data name="CommandLine_RefreshButton.Content" xml:space="preserve">
+    <value>Re-check</value>
+  </data>
+  <data name="CommandLine_ManageSectionTitle.Text" xml:space="preserve">
+    <value>Manage</value>
+  </data>
+  <data name="CommandLine_LinkButton.Content" xml:space="preserve">
+    <value>Link into /usr/local/bin</value>
+  </data>
+  <data name="CommandLine_UnlinkButton.Content" xml:space="preserve">
+    <value>Remove link</value>
+  </data>
+  <data name="CommandLine_LinkDescription.Text" xml:space="preserve">
+    <value>A dragged app has no install step, so the app can create the link itself. macOS will ask for your administrator password.</value>
+  </data>
+  <data name="CommandLine_InstallerOwnedNotice.Title" xml:space="preserve">
+    <value>Managed by the installer</value>
+  </data>
+  <data name="CommandLine_InstallerOwnedNotice.Message" xml:space="preserve">
+    <value>On this platform the installer registers and removes the command, so the app leaves it alone. Reinstall to restore it.</value>
+  </data>
+  <data name="CommandLine_UsageHintTitle.Text" xml:space="preserve">
+    <value>Try it</value>
+  </data>
 </root>

@@ -32,6 +32,7 @@ public static class SettingsSectionCatalog
     public const string AgentAcpKey = "AgentAcp";
     public const string McpKey = "Mcp";
     public const string DataStorageKey = "DataStorage";
+    public const string CommandLineKey = "CommandLine";
     public const string ShortcutsKey = "Shortcuts";
     public const string DiagnosticsKey = "Diagnostics";
     public const string AboutKey = "About";
@@ -43,6 +44,7 @@ public static class SettingsSectionCatalog
         new(AgentAcpKey, "SettingsSection_AgentAcp", "SettingsNav.AgentAcp"),
         new(McpKey, "SettingsSection_Mcp", "SettingsNav.Mcp"),
         new(DataStorageKey, "SettingsSection_DataStorage", "SettingsNav.DataStorage"),
+        new(CommandLineKey, "SettingsSection_CommandLine", "SettingsNav.CommandLine"),
         new(ShortcutsKey, "SettingsSection_Shortcuts", "SettingsNav.Shortcuts"),
         new(DiagnosticsKey, "SettingsSection_Diagnostics", "SettingsNav.Diagnostics"),
         new(AboutKey, "SettingsSection_About", "SettingsNav.About")
