@@ -323,6 +323,12 @@ scripts/gates/run-desktop-linux-package-smoke.sh artifacts/desktop/salmon-egg_<�
 
 `.dmg` 里也带命令（在 `SalmonEgg.app` 内），但拖拽安装没有安装钩子，用户需自行链接或改用 `.pkg`。
 
+### 应用内查看与管理
+
+设置 → **命令行工具** 会实时解析 PATH 并运行命中的那个可执行文件问版本，给出四种状态：命令可用 / PATH 上是另一个版本（另一个安装挡在前面）/ 命令不可用 / 无法确认。详情里分别列出 PATH 命中的路径与符号链接指向，后者用于发现指向已被替换的 app bundle 的陈旧链接。
+
+该页只在 macOS 提供「链接 / 移除」按钮，因为只有那里应用拥有 PATH 条目；Windows 与 Linux 上它是只读的，并明确说明注册由安装包拥有。这条边界与 AGENTS 第 11 节的「安装器拥有命令的 PATH 注册」规则一致。
+
 ### 支持矩阵
 
 事实源是 `src/SalmonEgg.Cli/SalmonEgg.Cli.csproj` 的 `SalmonEggCliSupportedRuntimeIdentifiers`；`publish-cli-binary.sh` 从该属性读回，不另行维护列表。

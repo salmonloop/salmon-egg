@@ -85,6 +85,9 @@ build.bat msix
 | macOS `.pkg` | 安装脚本把命令链接到 `/usr/local/bin`（macOS 默认 PATH），删除时手工 `rm /usr/local/bin/salmon-egg` |
 | macOS `.dmg` | 命令在 `SalmonEgg.app` 内，但拖拽安装没有安装钩子，需要自行链接或改用 `.pkg` |
 
+应用内可在 设置 → **命令行工具** 查看命令是否可用、PATH 命中哪一份、版本是否与当前应用一致；macOS 还可在该页一键链接或移除 `/usr/local/bin` 里的入口。
+
+
 `win-arm64`、`linux-arm64`、`osx-x64` 等不属于正式支持范围：可交叉编译，但没有真实机器验证。
 
 ```bash

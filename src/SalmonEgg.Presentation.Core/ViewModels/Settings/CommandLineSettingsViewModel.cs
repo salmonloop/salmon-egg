@@ -131,6 +131,13 @@ public sealed partial class CommandLineSettingsViewModel : ObservableObject
     private async Task RefreshAsync(CancellationToken cancellationToken)
     {
         IsBusy = true;
+
+        // The action message says what just happened. A fresh inspection is a new observation, so the
+        // previous action's result stops being "just now" -- leaving it would pair a new status with an old
+        // outcome, which reads as though the two describe the same moment.
+        ActionMessage = null;
+        OnPropertyChanged(nameof(HasActionMessage));
+
         try
         {
             // The whole projection changes together, so it is replaced in one assignment rather than

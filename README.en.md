@@ -90,6 +90,9 @@ separate to install, and no .NET runtime is required (the command is a self-cont
 | macOS `.pkg` | the installer links the command into `/usr/local/bin`, which is on the default macOS PATH; remove it with `rm /usr/local/bin/salmon-egg` |
 | macOS `.dmg` | the command is inside `SalmonEgg.app`, but a dragged app has no install hook, so link it yourself or use the `.pkg` |
 
+The app shows this too: **Settings → Command line** resolves PATH live, reports which copy it found and whether its version matches, and on macOS offers to link or unlink the `/usr/local/bin` entry.
+
+
 Other runtime identifiers — `win-arm64`, `linux-arm64`, `osx-x64` — are not officially supported: they can be cross-compiled, but nothing verifies them on a real machine.
 
 After installing, the command is available directly:
