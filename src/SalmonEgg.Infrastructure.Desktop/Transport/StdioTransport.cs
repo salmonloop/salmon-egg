@@ -140,7 +140,7 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 // 在启动进程前按同一份解析结果自查：命令根本不存在时，给用户一句能照着做的报错，
                 // 而不是转发 CreateProcess 的原始 Win32 异常。纯只读判定（解析期已判完），不 spawn。
-                if (StdioCommandPreflight.BuildMissingCommandError(_invocation, OperatingSystem.IsWindows()) is { } preflightError)
+                if (StdioCommandPreflight.BuildMissingCommandError(_invocation) is { } preflightError)
                 {
                     _logger.Warning(
                         "Agent command not found during preflight. Command={Command} SearchedDirectories={SearchedDirectories}",

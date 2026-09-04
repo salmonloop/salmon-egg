@@ -25,6 +25,7 @@ public sealed class StdioCommandResolverTests
 
             Assert.Equal(commandPath, resolution.Command);
             Assert.True(resolution.ResolvedToExistingFile);
+            Assert.True(resolution.SearchedOnPath);
             Assert.Equal([Path.GetTempPath(), commandDirectory], resolution.SearchedDirectories);
         }
         finally
@@ -50,6 +51,7 @@ public sealed class StdioCommandResolverTests
 
             Assert.Equal("absent-agent", resolution.Command);
             Assert.False(resolution.ResolvedToExistingFile);
+            Assert.True(resolution.SearchedOnPath);
             // The trail covers the current directory and every PATH entry, so a log line can say
             // where the name was looked for.
             Assert.Equal([Path.GetTempPath(), first, second], resolution.SearchedDirectories);
@@ -211,6 +213,9 @@ public sealed class StdioCommandResolverTests
 
         Assert.Equal(@"tools\agent.exe", resolution.Command);
         Assert.False(resolution.ResolvedToExistingFile);
+        // An explicit location is judged at that one place — no PATH was searched, so the
+        // preflight must say "does not exist", not "install the agent".
+        Assert.False(resolution.SearchedOnPath);
     }
 
     [Fact]

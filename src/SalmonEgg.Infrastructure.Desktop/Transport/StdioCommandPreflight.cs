@@ -21,18 +21,15 @@ internal static class StdioCommandPreflight
     /// <see cref="LauncherInvocation.FileName"/>: a batch launcher is wrapped in <c>cmd.exe</c>, which
     /// always exists, so the underlying command is the only thing worth judging.
     /// </remarks>
-    public static string? BuildMissingCommandError(LauncherInvocation invocation, bool isWindows)
+    public static string? BuildMissingCommandError(LauncherInvocation invocation)
     {
         if (invocation.ResolvedToExistingFile)
         {
             return null;
         }
 
-        return HasDirectoryComponent(invocation.ResolvedCommand, isWindows)
-            ? $"The configured agent command '{invocation.ResolvedCommand}' does not exist. Check the path in the agent configuration."
-            : $"Agent command '{invocation.ResolvedCommand}' was not found on PATH. Install the agent or configure the full path to its executable.";
+        return invocation.SearchedOnPath
+            ? $"Agent command '{invocation.ResolvedCommand}' was not found on PATH. Install the agent or configure the full path to its executable."
+            : $"The configured agent command '{invocation.ResolvedCommand}' does not exist. Check the path in the agent configuration.";
     }
-
-    private static bool HasDirectoryComponent(string command, bool isWindows)
-        => command.Contains('/') || (isWindows && command.Contains('\\'));
 }
