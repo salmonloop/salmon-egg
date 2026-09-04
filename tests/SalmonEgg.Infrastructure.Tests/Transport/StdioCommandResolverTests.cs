@@ -145,7 +145,12 @@ public sealed class StdioCommandResolverTests
     [Fact]
     public void TryResolve_NonWindowsBareName_CommandUnchangedButExistenceReported()
     {
-        var commandDirectory = CreateCommandDirectory();
+        // A Unix-grammar search must not be fed this machine's absolute paths: on Windows every absolute
+        // path carries the drive colon that the ':' split treats as a separator, which shredded the entry
+        // into fragments no File.Exists could hit. A relative entry is colon-free on every host and
+        // resolves against the process current directory, which is where the test creates it.
+        var commandDirectory = "stdio-command-resolver-tests-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(commandDirectory);
         var commandPath = Path.Combine(commandDirectory, "agent-bin");
         File.WriteAllText(commandPath, "#!/bin/sh\n");
 
