@@ -287,7 +287,10 @@ public sealed class StdioTransportConnectionTests
             var startInfo = transport.CreateProcessStartInfo();
 
             Assert.Equal("cmd.exe", startInfo.FileName);
-            Assert.Equal(["/c", Path.Combine(commandDirectory, "agent.cmd")], startInfo.ArgumentList);
+            // The resolved name echoes the machine's PATHEXT spelling, not the on-disk case, and
+            // Windows filenames compare case-insensitively -- so the assertion must too, or it pins
+            // the extension's case to whatever this runner's PATHEXT happens to be.
+            Assert.Equal(["/c", Path.Combine(commandDirectory, "agent.cmd")], startInfo.ArgumentList, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
