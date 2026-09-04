@@ -289,6 +289,18 @@
     <UseDefaultPublishRuntimeIdentifier>false</UseDefaultPublishRuntimeIdentifier>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <!--
+      Render the browser head with Skia, matching desktop. The legacy WebAssembly DOM backend stopped
+      projecting AutomationProperties.Name onto aria-label in Uno 6.7: the app still renders, but no
+      element carries an accessible name, which is a screen-reader regression and not only a broken
+      smoke locator. Every accessibility fix in that line targets the Skia WASM semantic DOM instead
+      (unoplatform/uno#23456, #23722, #24383), and Uno 7 removes the DOM backend outright, so this is
+      the direction of travel regardless.
+    -->
+    <UnoFeatures>SkiaRenderer;WebView;</UnoFeatures>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <UnoFeatures>SkiaRenderer;WebView;</UnoFeatures>
     <PlatformTarget Condition="'$(PlatformTarget)' == ''">AnyCPU</PlatformTarget>
