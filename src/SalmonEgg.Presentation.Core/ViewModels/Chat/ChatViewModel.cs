@@ -1359,6 +1359,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IAppLanguageService? _languageService;
     private readonly IUiInteractionService? _uiInteractionService;
     private readonly IAiContentReportLauncher? _aiContentReportLauncher;
+    private readonly IRemoteDirectoryRegistrar _remoteDirectoryRegistrar;
 
     public ChatViewModel(
         IChatStore chatStore,
@@ -1400,7 +1401,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IAppLanguageService? languageService = null,
         IUiInteractionService? uiInteractionService = null,
         IAiContentReportLauncher? aiContentReportLauncher = null,
-        IShellLayoutMetricsSink? shellLayoutMetricsSink = null)
+        IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
+        IRemoteDirectoryRegistrar? remoteDirectoryRegistrar = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1412,6 +1414,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _shellLayoutMetricsSink = shellLayoutMetricsSink;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _remoteDirectoryRegistrar = remoteDirectoryRegistrar ?? new RemoteDirectoryRegistrar(preferences);
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _miniWindowCoordinator = miniWindowCoordinator ?? throw new ArgumentNullException(nameof(miniWindowCoordinator));
