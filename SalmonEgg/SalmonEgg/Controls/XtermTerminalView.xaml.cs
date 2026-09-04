@@ -221,7 +221,11 @@ public sealed partial class XtermTerminalView : UserControl
         }
     }
 
-    private void OnNavigationCompleted(WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    // Qualify the control type: Uno 6.7 brings in the transitive WebView2Aot package, whose
+    // WebView2.dll declares a top-level "WebView2" namespace. A global-namespace namespace wins
+    // simple-name lookup over a using-imported type, so the bare name resolves to that namespace
+    // (CS0118). The handlers below are for the XAML control, so name it in full.
+    private void OnNavigationCompleted(Microsoft.UI.Xaml.Controls.WebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         if (!args.IsSuccess)
         {
@@ -229,7 +233,7 @@ public sealed partial class XtermTerminalView : UserControl
         }
     }
 
-    private void OnWebMessageReceived(WebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    private void OnWebMessageReceived(Microsoft.UI.Xaml.Controls.WebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
         _ = DispatchWebMessageAsync(args.WebMessageAsJson);
     }
