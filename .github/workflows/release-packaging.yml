@@ -408,6 +408,9 @@ jobs:
       MACOS_RID: osx-arm64
       MACOS_APP_CODESIGN_KEY: ${{ secrets.MACOS_APP_CODESIGN_KEY }}
       MACOS_DMG_CODESIGN_KEY: ${{ secrets.MACOS_DMG_CODESIGN_KEY }}
+      # A Developer ID Installer identity, which is a different certificate from the app and disk-image
+      # ones. Absent it, the .pkg is still built and installable after a Gatekeeper override.
+      MACOS_PKG_CODESIGN_KEY: ${{ secrets.MACOS_PKG_CODESIGN_KEY }}
       MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
     steps:
       - name: Checkout
@@ -420,8 +423,22 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Installing SalmonEgg installs the salmon-egg command. Uno builds the .app from the publish output,
+      # so the command reaches Contents/MacOS/cli/salmon-egg by being part of that publish -- and it has to
+      # be there before signing, since adding a Mach-O to a signed bundle invalidates the signature.
+      - name: Publish bundled CLI
+        id: bundled-cli
+        shell: bash
+        run: scripts/release/publish-cli-binary.sh --rid ${{ env.MACOS_RID }} --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the bundled CLI executable
+        shell: bash
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.bundled-cli.outputs.executable-path }}"
+
       - name: Publish macOS app bundle
         shell: pwsh
+        env:
+          BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path }}
         run: |
           cd SalmonEgg/SalmonEgg
           $codesignArgs = @()
@@ -436,6 +453,7 @@ jobs:
             -r $env:MACOS_RID `
             -p:PackageFormat=app `
             -p:RuntimeIdentifiers=$env:MACOS_RID `
+            -p:SalmonEggBundledCliExecutable=$env:BUNDLED_CLI `
             @codesignArgs
 
       - name: Collect macOS app bundle
@@ -452,6 +470,8 @@ jobs:
       - name: Publish macOS disk image
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
         shell: pwsh
+        env:
+          BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path }}
         run: |
           cd SalmonEgg/SalmonEgg
           $notaryArgs = @()
@@ -467,6 +487,7 @@ jobs:
             -p:SelfContained=true `
             -p:PackageFormat=dmg `
             -p:RuntimeIdentifiers=$env:MACOS_RID `
+            -p:SalmonEggBundledCliExecutable=$env:BUNDLED_CLI `
             -p:CodesignKey=$env:MACOS_APP_CODESIGN_KEY `
             -p:DiskImageSigningKey=$env:MACOS_DMG_CODESIGN_KEY `
             @notaryArgs
@@ -497,6 +518,37 @@ jobs:
             exit 1
           fi
           scripts/gates/run-release-artifact-contract-gate.sh macos-bundle "$APP_PATH"
+
+      # The .dmg is dragged, so nothing in it can register a command. This package carries a postinstall
+      # that symlinks the bundled CLI into /usr/local/bin, which is on the default macOS PATH. Built after
+      # the bundle contract check, so a bundle missing the command fails as a contract violation rather than
+      # inside pkgbuild.
+      - name: Build macOS installer package
+        id: build-pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find publish/macos-bundle -maxdepth 1 -name "*.app" -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle was collected." >&2
+            exit 1
+          fi
+
+          signing_args=()
+          if [ -n "${MACOS_PKG_CODESIGN_KEY:-}" ]; then
+            signing_args+=(--signing-key "$MACOS_PKG_CODESIGN_KEY")
+          fi
+
+          scripts/release/build-macos-pkg.sh --app-bundle "$APP_PATH" "${signing_args[@]}"
+
+      - name: Upload macOS installer package artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: desktop-macos-pkg
+          path: |
+            artifacts/macos/*.pkg
+            artifacts/macos/*.sha256
+          if-no-files-found: error
 
       - name: Upload macOS bundle artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -716,6 +768,13 @@ jobs:
           name: desktop-macos-bundle
           path: macos-bundle
 
+      - name: Download macOS installer package artifact
+        if: needs.package-macos.result == 'success'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: desktop-macos-pkg
+          path: macos-pkg
+
       - name: Download macOS .dmg artifact
         if: needs.package-macos.outputs.dmg-produced == 'true'
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
@@ -770,6 +829,12 @@ jobs:
             if [ -n "${MSI_PATH}" ]; then
               cp "${MSI_PATH}" release-assets/
             fi
+          fi
+
+          # Copy the macOS installer package and its checksum
+          if [ -d "macos-pkg" ]; then
+            find macos-pkg -maxdepth 1 -type f \( -name '*.pkg' -o -name '*.sha256' \) \
+              -exec cp {} release-assets/ \;
           fi
 
           # Copy DMG when signing is configured
