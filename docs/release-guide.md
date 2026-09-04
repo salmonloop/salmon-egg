@@ -10,8 +10,9 @@
 4. [Android 发布](#android-发布)
 5. [iOS 发布](#ios-发布)
 6. [macOS 发布](#macos-发布)
-7. [CLI 发布](#cli-发布)
-8. [持续集成发布](#持续集成发布)
+7. [Linux 发布](#linux-发布)
+8. [命令行工具（随主程序分发）](#命令行工具随主程序分发)
+9. [持续集成发布](#持续集成发布)
 
 ---
 
@@ -245,89 +246,136 @@ dotnet publish -f net10.0-desktop -c Release \
   -o ../../publish/macos-arm64
 ```
 
-### 创建 DMG 安装包
+### 打包 `.app` / `.dmg` / `.pkg`
 
-当前工程的 macOS desktop 产物来自 Uno `net10.0-desktop`，publish 输出为可执行文件目录；如需 `.app`/DMG，需要先在 macOS 上完成 `.app` bundle、签名和公证流程，再打包 DMG。
+`.app` bundle 与 `.dmg` 由 Uno 的打包目标产出（`PackageFormat=app` / `dmg`），签名与公证参数来自 workflow 的 secrets。**bundle 必须携带 CLI**，因此 publish 时要传 `-p:SalmonEggBundledCliExecutable=<CLI 路径>`：
 
 ```bash
-# 使用 create-dmg（需要安装）
-cd publish/macos-x64
-create-dmg \
-  --volname "SalmonEgg" \
-  --window-pos 200,120 \
-  --window-size 600,400 \
-  --icon-size 100 \
-  --app-drop-link 400,200 \
-  "SalmonEgg.dmg" \
-  "SalmonEgg.app"
+scripts/release/publish-cli-binary.sh --rid osx-arm64
+
+cd SalmonEgg/SalmonEgg
+dotnet publish -f net10.0-desktop -c Release -r osx-arm64 \
+  -p:PackageFormat=app \
+  -p:RuntimeIdentifiers=osx-arm64 \
+  -p:SalmonEggBundledCliExecutable=../../artifacts/cli-bin/osx-arm64/salmon-egg
 ```
+
+`.pkg` 不走 Uno：它的 `PackageAppBundle` 任务不接受 scripts 参数，而 `.pkg` 存在的唯一理由就是那个 postinstall——把 bundle 内的命令链接进 `/usr/local/bin`。所以由仓库脚本直接调 `pkgbuild`：
+
+```bash
+scripts/release/build-macos-pkg.sh \
+  --app-bundle publish/macos-bundle/SalmonEgg.app \
+  --signing-key "Developer ID Installer: ..."   # 可选，省略则产出未签名包
+```
+
+`--signing-key` 需要 **Developer ID Installer** 证书（与 app、dmg 的签名证书不是同一张）；workflow 通过 `MACOS_PKG_CODESIGN_KEY` 提供，缺失时仍产出未签名包。
+
+命令在 bundle 内的位置由 Uno 决定：实测 v1.4.2 的已发布 bundle，`GenerateAppBundle` 把 apphost、`deps.json`/`runtimeconfig.json` 与全部 `.dylib` 放进 `Contents/MacOS`（19 个文件），托管程序集、卫星资源与 `Assets/` 子目录放进 `Contents/Resources`（589 个文件，保留相对路径）。`cli/` 子目录里一个无扩展名的 Mach-O 不精确匹配任何一侧，且该切分不是文档化契约，因此 postinstall、`build-macos-pkg.sh` 与产物契约门禁**都同时探测两个位置并报告命中的那个**——第一次 tag 构建的日志即可定论。
 
 ---
 
-## CLI 发布
+## Linux 发布
 
-### 正式支持矩阵
-
-CLI 的支持矩阵事实源是 `src/SalmonEgg.Cli/SalmonEgg.Cli.csproj` 中的 `SalmonEggCliSupportedRuntimeIdentifiers`；发布脚本与工作流都从该属性读取，不另行维护列表。
-
-| Runtime identifier | 平台 | 安装包 | PATH 注册方式 |
-|---|---|---|---|
-| `linux-x64` | Linux x64 | `tar.gz` + `.deb` | `.deb` 安装到 `/usr/bin/salmon-egg`，由 dpkg 拥有 |
-| `win-x64` | Windows x64 | `zip` + per-user `.msi` | MSI 的 `Environment` 元素追加安装目录到**用户** PATH，卸载时自动移除 |
-| `osx-arm64` | macOS Apple Silicon | `tar.gz` + Homebrew formula | `brew install` 链接到 Homebrew `bin`，已在 PATH 上 |
-
-矩阵之外的 RID（`win-arm64`、`linux-arm64`、`osx-x64` 等）不进入正式支持：能交叉编译不等于有真实运行验证。`--allow-unsupported-rid` 仅供本机验证，产物不得发布。
-
-产物为 self-contained 单文件，用户无需预装 .NET；`scripts/gates/run-cli-release-artifact-smoke.sh` 会在移除可用 .NET 的环境下运行刚构建出的可执行文件来验证这一点。
-
-### 构建 CLI 产物
+Linux 只有一种安装物：同时包含 GUI 与 `salmon-egg` 命令的 `.deb`。
 
 ```bash
-# 单个 RID：发布、打包、生成 SHA-256
-scripts/release/build-cli-artifacts.sh --rid linux-x64
+scripts/release/publish-cli-binary.sh --rid linux-x64
 
-# Linux 安装包
-scripts/release/build-cli-deb.sh \
-  --executable artifacts/cli-publish/linux-x64/salmon-egg \
-  --architecture amd64
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  -c Release -f net10.0-desktop -r linux-x64 --self-contained true \
+  -p:SalmonEggBundledCliExecutable=$PWD/artifacts/cli-bin/linux-x64/salmon-egg \
+  -o publish/linux-desktop
 
-# Windows 安装包（需要 WiX Toolset）
-./scripts/release/build-cli-msi.ps1 -Executable artifacts/cli-publish/win-x64/salmon-egg.exe
+scripts/release/build-desktop-deb.sh --publish-dir publish/linux-desktop --architecture amd64
+
+# 安装 / PATH / .desktop / 卸载全链门禁（需要 root 或免密 sudo）
+scripts/gates/run-desktop-linux-package-smoke.sh artifacts/desktop/salmon-egg_<版本>_amd64.deb
 ```
 
-产物命名：
+包布局与理由：
 
-```text
-salmon-egg-cli-1.0.5-win-x64.zip
-salmon-egg-cli-1.0.5-linux-x64.tar.gz
-salmon-egg-cli-1.0.5-osx-arm64.tar.gz
-salmon-egg-cli_1.0.5_amd64.deb
-salmon-egg-cli-1.0.5-win-x64.msi
+| 路径 | 内容 | 说明 |
+|---|---|---|
+| `/opt/salmon-egg/` | self-contained publish 输出 | FHS 中 `/opt` 用于自带运行时的附加应用 |
+| `/opt/salmon-egg/cli/salmon-egg` | CLI 二进制 | 由 publish 目录的 `cli/` 子目录带入 |
+| `/usr/bin/salmon-egg` | 指向上一行的相对符号链接（`../../opt/...`） | `/usr/bin` 已在所有登录 PATH 上；链接由 dpkg 拥有，purge 时移除。少一级会解析成 `/usr/opt` 并悬空，而包的文件列表只显示链接文本、看不出这一点 |
+| `/usr/share/applications/salmon-egg.desktop` | 桌面项 | `Exec` 指向 GUI，`MimeType` 注册与 Windows 侧一致的 `s8p` scheme |
+| `/usr/share/icons/hicolor/{16,24,32,48,256}/apps/` | 应用图标 | 取自 Resizetizer 本次构建生成的标准尺寸；源图 200×200 不是 hicolor 尺寸，直接放会被二次缩放或忽略 |
+
+依赖列表无法从构建推导：`dpkg-shlibdeps` 与 `readelf -d` 只看链接期 NEEDED，而 X11、GL、GLib、GStreamer、ICU 都是运行时 `dlopen` 的。当前列表来自实测——headless 跑起已 publish 的应用，从 `/proc/<pid>/maps` 读出真实映射的库。写成备选依赖（`libicu76 | libicu74 | ...`）而非钉死版本：Microsoft 自家 .NET deb 敢钉死是因为每个发行版单独构建，而这个包只发一份。
+
+`.deb` 声明 `Conflicts`/`Replaces: salmon-egg-cli`，因为 `/usr/bin/salmon-egg` 现在归它所有。
+
+> **已知缺口**：GUI 依赖会把 X11/GL/WebKit 拉进依赖图，因此无 GUI 的服务器无法只装命令。若要恢复该场景，需要把 deb 拆成 CLI 子包与依赖它的 GUI 主包。
+
+---
+
+## 命令行工具（随主程序分发）
+
+`salmon-egg` 不再单独发布。**装了 SalmonEgg 就有这个命令**，四个安装包各用本平台的机制注册它：
+
+| 安装包 | 注册机制 | 由谁验证 |
+|---|---|---|
+| Windows MSIX | 清单里的 `windows.appExecutionAlias`；Windows 在 `%LOCALAPPDATA%\Microsoft\WindowsApps` 生成入口（该目录默认在用户 PATH 上）。打包应用无法改 PATH，这是系统提供的唯一途径 | `run-msix-package-contract-gate.ps1` 读真实包 |
+| Windows MSI（Skia Desktop） | WiX `Environment` 行把 `[CLIFOLDER]`（安装目录下的 `cli`）追加到用户 PATH，卸载时移除 | `DesktopMsiContract.ps1` 读真实包的 `File` 与 `Environment` 表 |
+| Linux `.deb` | dpkg 拥有的 `/usr/bin/salmon-egg` 符号链接 | `run-desktop-linux-package-smoke.sh` 真装真卸 |
+| macOS `.pkg` | postinstall 把命令链接进 `/usr/local/bin`（macOS 默认 PATH） | `run-macos-pkg-contract-gate.sh` 用假根跑真脚本 |
+
+`.dmg` 里也带命令（在 `SalmonEgg.app` 内），但拖拽安装没有安装钩子，用户需自行链接或改用 `.pkg`。
+
+### 支持矩阵
+
+事实源是 `src/SalmonEgg.Cli/SalmonEgg.Cli.csproj` 的 `SalmonEggCliSupportedRuntimeIdentifiers`；`publish-cli-binary.sh` 从该属性读回，不另行维护列表。
+
+| Runtime identifier | 消费它的安装包 |
+|---|---|
+| `win-x64` | MSIX、Skia Desktop MSI |
+| `linux-x64` | `.deb` |
+| `osx-arm64` | `.app`、`.dmg`、`.pkg` |
+
+矩阵之外的 RID（`win-arm64`、`linux-arm64`、`osx-x64` 等）不属于正式支持：能交叉编译不等于有真实运行验证，而且没有任何安装包会嵌入它。`--allow-unsupported-rid` 仅供本机验证，产物不得发布。
+
+产物为 self-contained 单文件，用户无需预装 .NET。
+
+### 构建 CLI 二进制
+
+```bash
+# 各打包链都调这一个脚本，所以四个安装包里的命令是同一个二进制
+scripts/release/publish-cli-binary.sh --rid linux-x64
+# 输出：artifacts/cli-bin/<rid>/salmon-egg[.exe]
 ```
 
-Homebrew formula 在 release 聚合阶段由 `scripts/release/build-cli-homebrew-formula.sh` 依据本次产物的 `.sha256` 旁文件生成，不手工维护校验和。
+在 Windows runner 上该脚本跑在 Git Bash 里，因此除 POSIX 路径外还输出 `executable-path-native`（`cygpath -w` 转换）：MSBuild 与 WiX 都是原生进程，打不开 `/d/a/...` 形式的路径。
+
+主程序侧通过 `-p:SalmonEggBundledCliExecutable=<路径>` 消费它（MSIX、macOS bundle、Linux deb 走这条），Windows Skia MSI 例外：它的 WiX 作者需要显式命名命令所在目录，而 heat harvest 生成的目录 ID 不稳定，所以 CLI 由 `Product.wxs` 直接声明、且发布目录里**不得**出现 `cli/`。
 
 ### 发布前门禁
 
 ```bash
 # 真实产物行为门禁（退出码契约、凭据边界、事务残留、无需 .NET 运行时）
-scripts/gates/run-cli-release-artifact-smoke.sh artifacts/cli-publish/linux-x64/salmon-egg
+scripts/gates/run-cli-release-artifact-smoke.sh artifacts/cli-bin/linux-x64/salmon-egg
 
-# 安装 / PATH / 卸载门禁（需要 root 或免密 sudo）
-scripts/gates/run-cli-linux-package-smoke.sh artifacts/cli/salmon-egg-cli-1.0.5_amd64.deb
+# Linux 安装 / PATH / .desktop / 卸载全链门禁（需要 root 或免密 sudo）
+scripts/gates/run-desktop-linux-package-smoke.sh artifacts/desktop/salmon-egg_<版本>_amd64.deb
 
-# Windows MSI PATH 注册规则的正反例门禁（纯字符串逻辑，任意平台可跑，无需 WiX）
+# macOS 安装脚本的 PATH 注册门禁（用假根跑真 postinstall，任意平台可跑）
+scripts/gates/run-macos-pkg-contract-gate.sh
+
+# MSI PATH 注册规则的正反例门禁（纯字符串逻辑，任意平台可跑，无需 WiX）
 pwsh -NoProfile -File scripts/gates/run-msi-path-contract-gate.ps1
+
+# MSIX 包契约（含 alias 与 CLI payload）的自检
+pwsh -NoProfile -File scripts/gates/run-msix-package-contract-gate.ps1 -SelfTest
 ```
 
-前两个门禁必须使用**本次构建产出**的产物；`dotnet run` 不是有效验证口径。第三个门禁验证的是规则本身而非产物，因此不受此限制。
+前两个门禁必须使用**本次构建产出**的产物；`dotnet run` 不是有效验证口径。后三个验证的是规则本身而非产物，因此不受此限制，也因此能在每次 push 上跑。
 
 ### PATH 与凭据约定
 
-- GUI 安装包不修改 PATH。全局 `salmon-egg` 命令只来自 CLI 安装包。
-- 不允许用脚本编辑 `.bashrc`、`.zshrc` 或用户 PATH 字符串：安装、升级、卸载必须由同一个包管理器拥有。
+- **GUI 安装包负责注册 PATH。** 这与 v1.4.x 之前相反：那时全局命令只来自独立 CLI 安装包，GUI 安装包不碰 PATH。
+- 不允许用脚本编辑 `.bashrc`、`.zshrc` 或用户 PATH 字符串：安装、升级、卸载必须由同一个安装器/包管理器拥有。macOS 是唯一例外——它的包格式没有卸载阶段，`/usr/local/bin/salmon-egg` 需要用户手工 `rm`。
 - CLI 凭据写入默认 fail-closed。平台安全存储不可用时写入失败而非降级为明文；需要明文降级必须显式传 `--allow-insecure-storage`。非凭据配置操作不受影响。该策略在 Linux（Secret Service）与 macOS（Keychain）上生效；Windows DPAPI 不依赖 keyring 守护进程、始终可用，因此该 flag 在 Windows 上无实际作用。
-- Windows MSI 的 PATH 注册由 `build-cli-msi.ps1` 直接读取本次构建产出的 MSI 的 `Environment` 表验证：表中必须恰好一行，且该行必须满足下表全部断言。
+- Windows MSI 的 PATH 注册由 `DesktopMsiContract.ps1` 读取本次构建产出的 MSI 的 `Environment` 表验证：表中必须恰好一行，且该行必须满足下表全部断言。
 
   | 断言 | 违规后果 |
   |---|---|
@@ -336,10 +384,13 @@ pwsh -NoProfile -File scripts/gates/run-msi-path-contract-gate.ps1
   | 前缀含 `-` | 卸载后安装目录永久留在 PATH 上 |
   | 前缀不含 `*` | 写的是机器环境而非当前用户 |
   | 值以 `[~]` + 分隔符开头 | 缺 `[~]` 会整体覆盖 PATH（MSI 文档明确警告可能导致机器无法启动）；`[~]` 出现在结尾则是前置插入，会遮蔽用户原有工具 |
-  | 值引用 `[INSTALLFOLDER]` | 加进 PATH 的不是本包的安装目录 |
+  | 值引用 `[CLIFOLDER]` | 加进 PATH 的不是命令所在目录（若写成 `[INSTALLFOLDER]`，等于把应用旁边所有 DLL 一起暴露，且命令仍然不可解析） |
 
-  规则本身在 `scripts/release/MsiPathContract.ps1`，与读取 MSI 的 COM 代码分离，因此 `scripts/gates/run-msi-path-contract-gate.ps1` 能在任意平台（含 Linux）直接用正反例跑这条规则；该门禁在 `ci-core.yml` 的每次 push / PR 上执行，不必等到打 tag 才发现规则被削弱。
-- 上述断言只覆盖包内表结构。真实安装 / 卸载需要交互式 Windows 会话，不在 CI 覆盖范围：发布 Windows 安装包前仍需手工确认安装后新开终端 `where salmon-egg` 命中安装目录、卸载后命令消失、且用户原有 PATH 条目完好无残留重复项。
+  规则本身在 `scripts/release/MsiPathContract.ps1`，与读取 MSI 的 COM 代码分离，目录 token 是参数，因此 `scripts/gates/run-msi-path-contract-gate.ps1` 能在任意平台（含 Linux）直接用正反例跑这条规则；该门禁在 `ci-core.yml` 的每次 push / PR 上执行，不必等到打 tag 才发现规则被削弱。
+- 上述断言只覆盖包内表结构。真实安装 / 卸载需要交互式会话，不在 CI 覆盖范围。发布前仍需手工确认：
+  - **Windows MSIX**：安装后新开终端 `where salmon-egg` 命中 `WindowsApps` 下的 alias，且命令继承控制台、退出码正确；卸载后 alias 消失。
+  - **Windows MSI**：安装后新开终端 `where salmon-egg` 命中 `...\SalmonEgg\cli`；卸载后命令消失、用户原有 PATH 条目完好无残留重复项。
+  - **macOS**：`.pkg` 安装后新登录 shell 里 `which salmon-egg` 命中 `/usr/local/bin`；且带 CLI 的 bundle 能通过公证（Mach-O 落在 Uno 选定的目录里，是否被签名覆盖需实测）。
 
 ---
 
@@ -364,8 +415,9 @@ git push origin v1.0.0
 发布前检查清单：
 
 - [ ] 所有测试通过
-- [ ] CLI 三个支持 RID 的产物均已构建
-- [ ] CLI 真实产物 smoke 与安装 / PATH 门禁通过
+- [ ] 四个安装包都嵌入了本次构建的 CLI（MSIX、Skia MSI、`.deb`、`.app`/`.pkg`）
+- [ ] CLI 真实产物 smoke 通过；Linux `.deb` 的安装 / PATH / 卸载门禁通过
+- [ ] 手工确认 Windows 与 macOS 安装后 `salmon-egg` 可解析（见「PATH 与凭据约定」末尾清单）
 - [ ] 确认 GitHub 自动生成的 release notes 或维护中的变更记录已覆盖本版本
 - [ ] 更新 README.md（如需要）
 - [ ] 构建发布版本
