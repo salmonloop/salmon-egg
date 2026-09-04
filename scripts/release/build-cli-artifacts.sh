@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# Publishes the SalmonEgg CLI as a self-contained single-file executable for one supported runtime
-# identifier and packages it as a release archive with a SHA-256 sidecar.
+# Packages the SalmonEgg CLI as a standalone release archive with a SHA-256 sidecar.
 #
-# The runtime identifier allow-list lives in src/SalmonEgg.Cli/SalmonEgg.Cli.csproj
-# (SalmonEggCliSupportedRuntimeIdentifiers). This script reads it back instead of repeating it so the
-# project stays the single source of truth for which platforms are officially supported.
+# The publish itself lives in publish-cli-binary.sh, because the same self-contained single-file
+# executable is embedded by every SalmonEgg installer. Duplicating the publish here would let the
+# standalone archive and the bundled command drift apart while both still built successfully.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLI_PROJECT="$REPO_ROOT/src/SalmonEgg.Cli/SalmonEgg.Cli.csproj"
-DOTNET_BIN="${DOTNET_BIN:-dotnet}"
 
 RID=""
 CONFIGURATION="Release"
@@ -49,16 +46,6 @@ if [ -z "$RID" ]; then
   exit 2
 fi
 
-read_project_property() {
-  "$DOTNET_BIN" msbuild "$CLI_PROJECT" "-getProperty:$1" -nologo | tr -d '\r' | tail -n 1
-}
-
-# Release identity is derived from the git tag by MinVer, so the property only holds a version once
-# the MinVer target has executed; a plain -getProperty evaluation would return the pre-MinVer default.
-read_release_version() {
-  "$DOTNET_BIN" msbuild "$CLI_PROJECT" -restore -t:MinVer "-getProperty:$1" -nologo | tr -d '\r' | tail -n 1
-}
-
 # macOS ships `shasum`, not GNU `sha256sum`. Both print "<hash>  <name>", so the sidecar format is
 # identical either way and `shasum -c` / `sha256sum -c` can both verify it.
 write_sha256() {
@@ -73,67 +60,48 @@ write_sha256() {
   fi
 }
 
-DISPLAY_VERSION="$(read_release_version SalmonEggDisplayVersion)"
-SUPPORTED_RIDS="$(read_project_property SalmonEggCliSupportedRuntimeIdentifiers)"
+# The publish step reports the executable path and release version through the same key=value protocol
+# GitHub Actions uses for step outputs, so pointing GITHUB_OUTPUT at a temporary file reads them back
+# without parsing human-readable log lines. The assignment is scoped to the child process, so this
+# script's own GITHUB_OUTPUT (when running in CI) is untouched.
+PUBLISH_METADATA="$(mktemp)"
+trap 'rm -f "$PUBLISH_METADATA"' EXIT
 
-case "$DISPLAY_VERSION" in
-  [0-9]*.[0-9]*.[0-9]*) ;;
-  *) echo "SalmonEggDisplayVersion must be a three-part numeric version, got: '$DISPLAY_VERSION'" >&2; exit 1 ;;
-esac
+publish_args=(
+  --rid "$RID"
+  --configuration "$CONFIGURATION"
+  --output "$REPO_ROOT/artifacts/cli-publish/$RID"
+)
+if [ "$ALLOW_UNSUPPORTED_RID" = "true" ]; then
+  publish_args+=(--allow-unsupported-rid)
+fi
+GITHUB_OUTPUT="$PUBLISH_METADATA" "$REPO_ROOT/scripts/release/publish-cli-binary.sh" "${publish_args[@]}"
 
-case ";$SUPPORTED_RIDS;" in
-  *";$RID;"*) ;;
-  *)
-    if [ "$ALLOW_UNSUPPORTED_RID" != "true" ]; then
-      echo "Unsupported runtime identifier '$RID'. Supported values: $SUPPORTED_RIDS" >&2
-      exit 1
-    fi
-    echo "[warn] '$RID' is outside the support matrix ($SUPPORTED_RIDS); output is for local verification only." >&2
-    ;;
-esac
+read_publish_metadata() {
+  local key="$1" value
+  value="$(sed -n "s/^$key=//p" "$PUBLISH_METADATA")"
+  if [ -z "$value" ]; then
+    echo "publish-cli-binary.sh did not report '$key'." >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
+}
+
+EXECUTABLE_PATH="$(read_publish_metadata executable-path)"
+DISPLAY_VERSION="$(read_publish_metadata display-version)"
+EXECUTABLE_NAME="$(basename "$EXECUTABLE_PATH")"
 
 case "$RID" in
-  win-*) EXECUTABLE_NAME="salmon-egg.exe"; ARCHIVE_FORMAT="zip" ;;
-  *) EXECUTABLE_NAME="salmon-egg"; ARCHIVE_FORMAT="tar.gz" ;;
+  win-*) ARCHIVE_FORMAT="zip" ;;
+  *) ARCHIVE_FORMAT="tar.gz" ;;
 esac
 
 PACKAGE_NAME="salmon-egg-cli-$DISPLAY_VERSION-$RID"
-PUBLISH_DIR="$REPO_ROOT/artifacts/cli-publish/$RID"
 STAGING_ROOT="$REPO_ROOT/artifacts/cli-staging/$RID"
 STAGING_DIR="$STAGING_ROOT/$PACKAGE_NAME"
 
-rm -rf "$PUBLISH_DIR" "$STAGING_ROOT"
-mkdir -p "$PUBLISH_DIR" "$STAGING_DIR" "$OUTPUT_DIR"
-
-echo "[cli-release] Publish $RID ($CONFIGURATION) version $DISPLAY_VERSION"
-publish_args=(
-  publish "$CLI_PROJECT"
-  -c "$CONFIGURATION"
-  -r "$RID"
-  -p:IsCliReleaseBuild=true
-  -o "$PUBLISH_DIR"
-  -v minimal
-)
-if [ "$ALLOW_UNSUPPORTED_RID" = "true" ]; then
-  publish_args+=(-p:SalmonEggCliAllowUnsupportedRuntimeIdentifier=true)
-fi
-"$DOTNET_BIN" "${publish_args[@]}"
-
-EXECUTABLE_PATH="$PUBLISH_DIR/$EXECUTABLE_NAME"
-if [ ! -f "$EXECUTABLE_PATH" ]; then
-  echo "Published executable not found: $EXECUTABLE_PATH" >&2
-  exit 1
-fi
-
-# A self-contained single-file publish must contain exactly the one executable: loose managed
-# assemblies, symbols or native libraries beside it would be a silent regression back to a
-# framework-style layout, and every install package below only ever carries that single file.
-unexpected="$(find "$PUBLISH_DIR" -mindepth 1 ! -name "$EXECUTABLE_NAME" -print)"
-if [ -n "$unexpected" ]; then
-  echo "Unexpected files in single-file publish output:" >&2
-  echo "$unexpected" >&2
-  exit 1
-fi
+rm -rf "$STAGING_ROOT"
+mkdir -p "$STAGING_DIR" "$OUTPUT_DIR"
 
 cp "$EXECUTABLE_PATH" "$STAGING_DIR/$EXECUTABLE_NAME"
 chmod +x "$STAGING_DIR/$EXECUTABLE_NAME"
