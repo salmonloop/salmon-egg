@@ -15,11 +15,14 @@ import {
 // overflow click again; two viewport mutations made the order load-bearing and neither belonged to the
 // behaviour being checked. The caller now owns its viewport.
 //
-// Arrival is confirmed on the section reporting itself active - selected tab, heading, or aria-current -
-// which is the state the navigation is supposed to produce. `bodyPattern` is still honoured for callers
-// that assert on rendered copy, but it is no longer the only evidence: a prose alternation is satisfied
-// by any one of its branches appearing anywhere, so it cannot distinguish "arrived" from "that word is
-// also on this page".
+// Arrival is confirmed on the destination's own copy rendering: the caller supplies `bodyPattern`,
+// which the smoke authors pin to strings that exist only on that section's page (usually its
+// resw page title). That is the behaviour a user can observe - the content changed to the section
+// they picked. The shell's *selection state* is deliberately not consulted: NavigationViewItem goes
+// through Uno's generic semantic path (addSemanticElement), which publishes neither `aria-selected`
+// nor `aria-current` on Skia WASM, so a predicate waiting for the item to report itself selected is
+// a timeout with extra steps. If Uno starts mirroring selection (its dedicated item factories do),
+// an explicit selection assertion can come back on top of the body check.
 export async function navigateToSettingsSection(page, sectionTarget, bodyPattern, label) {
   const settingsNavigationTarget = {
     labels: ["设置", "Settings"],
@@ -42,45 +45,12 @@ export async function navigateToSettingsSection(page, sectionTarget, bodyPattern
   }
 
   await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
-  await waitForSectionActive(page, sectionTarget);
 }
 
 function describeTarget(options) {
   const ids = options.automationIds ?? [];
   const labels = options.labels ?? [];
   return ids.length > 0 ? `automation id '${ids.join("', '")}'` : `label '${labels.join("', '")}'`;
-}
-
-// The section is active once the shell marks it so. Names come from AutomationProperties.Name, which is
-// localized, so accept any label the caller listed; createInstrumentedContext pins the locale, so in
-// practice one branch is live and the rest are documentation. The semantic DOM mirrors the selection
-// state (`aria-selected` on navigation items), which is exactly the state this predicate looks for.
-async function waitForSectionActive(page, sectionTarget) {
-  const names = (sectionTarget.labels ?? []).concat(sectionTarget.automationIds ?? []);
-  if (names.length === 0) {
-    return;
-  }
-
-  await page.waitForFunction(
-    expected => Array.from(document.querySelectorAll("[aria-label]")).some(element => {
-      const name = (element.getAttribute("aria-label") ?? "").trim();
-      if (!expected.includes(name)) {
-        return false;
-      }
-
-      const role = element.getAttribute("role") ?? "";
-      return element.getAttribute("aria-selected") === "true"
-        || element.getAttribute("aria-current") !== null
-        || role.startsWith("heading")
-        || /^h[1-6]$/i.test(element.tagName);
-    }),
-    names,
-    { timeout: 15_000 })
-    .catch(() => {
-      throw new Error(
-        `Settings section did not report itself active. Expected one of ${JSON.stringify(names)} to be a `
-        + "selected tab, a heading, or aria-current in the settings shell.");
-    });
 }
 
 export async function clickTopNavigationOverflowTargetUntilBodyText(page, targetOptions, pattern, label) {

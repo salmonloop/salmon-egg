@@ -12,10 +12,10 @@ import { navigateToSettingsSection } from "./wasm-smoke-lib/settings-shell.mjs";
 // overflow affordance, which is where the route is easiest to break.
 //
 // The route is not the assertion. navigateToSettingsSection owns choosing between a visible section
-// entry and the overflow menu, and confirms the section reports itself active. This file used to
-// re-run the viewport change and the overflow click that helper already performed, which made the
-// order of two viewport mutations load-bearing; the narrow window is now simply how this context is
-// created.
+// entry and the overflow menu, and confirms arrival on the destination's page title rendering. This
+// file used to re-run the viewport change and the overflow click that helper already performed,
+// which made the order of two viewport mutations load-bearing; the narrow window is now simply how
+// this context is created.
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-settings-navigation-smoke.mjs");
 const browser = await chromium.launch({ headless: true });
 
