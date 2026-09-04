@@ -6,7 +6,6 @@ import {
   assertNoFatalConsoleMessages
 } from "./wasm-smoke-lib/browser-app.mjs";
 import {
-  clickVisibleControl,
   waitForBodyText,
   waitForControlState
 } from "./wasm-smoke-lib/ui-affordances.mjs";
@@ -46,11 +45,13 @@ try {
     }
 
     // Activating the report card explains itself instead of sending anything: the tip copy is
-    // the behaviour, and it only exists after the card is activated. The role pin keeps the
-    // activation on the card button and off the title text that renders before its Name lands.
-    await clickVisibleControl(
-      page,
-      { labels: ["举报 AI 内容", "Report AI content"], automationIds: [], role: "button" });
+    // the behaviour, and it only exists after the card is activated. The activation is a real
+    // trusted click on the semantic node, not a synthetic element.click(): CI (the role-pin
+    // commit) showed the hero card's command never fires from the semantic activate path - the
+    // same BrowserWasm gap the expander and the gamepad refresh button already documented -
+    // while a trusted click through the same node the screen reader exposes is the closest
+    // thing to the user's gesture.
+    await page.locator('[role="button"][aria-label="Report AI content"]').click({ timeout: 15_000 });
     await waitForBodyText(
       page,
       /这张提示卡本身只是说明，不会发送举报|This tip card only explains the path and cannot send a report/,
