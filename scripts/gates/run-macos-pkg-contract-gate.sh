@@ -7,6 +7,14 @@
 # roots, and asserts both the link it creates and the situations in which it must refuse.
 set -euo pipefail
 
+# The gate's subject is symlink surgery, and an MSYS host (Git Bash on Windows) must be told to perform
+# real ones. Left alone, MSYS `ln -s` quietly copies the target when it exists -- producing the exact
+# "regular file on PATH" defect this gate exists to catch -- and errors out when the target is missing,
+# which is what the dangling-link case is made of. nativestrict makes `ln -s` either create a real
+# symlink (runners have Developer Mode, so no elevation is needed) or fail; the probe below turns that
+# failure into an honest skip. On a POSIX host this variable is inert.
+export MSYS=winsymlinks:nativestrict
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 POSTINSTALL="$REPO_ROOT/scripts/release/macos-pkg-postinstall.sh"
 
@@ -24,6 +32,20 @@ check() { checks=$((checks + 1)); }
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
+
+# If this host cannot create a real symlink at all, every assertion below would be measuring the
+# copy-or-fail substitute instead, and a green run would prove nothing about the postinstall. Say so
+# and stop, rather than rehearse a fiction. The conditional (not an early `ln` alone) is what keeps
+# `set -e` from treating the probe's own failure as a script-killing error.
+probe_target="$WORK_DIR/probe-target"
+probe_link="$WORK_DIR/probe-link"
+: > "$probe_target"
+if ! { ln -s "$probe_target" "$probe_link" 2>/dev/null &&
+       [ "$(readlink "$probe_link" 2>/dev/null)" = "$probe_target" ]; }; then
+  echo "[macos-pkg-gate] SKIP: this host cannot create real symlinks, so the PATH-link contract cannot be rehearsed here. Run this gate on POSIX or a Developer-Mode Windows host." >&2
+  exit 0
+fi
+rm -f "$probe_link" "$probe_target"
 
 # Builds the tree the installer would have laid down before postinstall runs: the app bundle in place, with
 # or without the bundled command.
