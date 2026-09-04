@@ -14,7 +14,7 @@ on:
       - "LICENSE"
       - ".github/FUNDING.yml"
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths-ignore:
       # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
       # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as

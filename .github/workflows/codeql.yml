@@ -11,7 +11,7 @@ on:
       - "global.json"
       - ".github/workflows/codeql.yml"
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "src/**"
       - "tests/**"
