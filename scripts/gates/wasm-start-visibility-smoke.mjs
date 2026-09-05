@@ -9,6 +9,7 @@ import {
   clickVisibleControl,
   clickVisibleControlWithTrustedPointer,
   readControlState,
+  scrollToVisibleControl,
   waitForControlEnabledState,
   waitForControlState
 } from "./wasm-smoke-lib/ui-affordances.mjs";
@@ -78,7 +79,14 @@ try {
       if (Date.now() > acknowledgeDeadline) {
         throw new Error("The notice acknowledgement did not return the page within 30s.");
       }
-      await clickVisibleControl(page, noticeAcknowledgement);
+
+      // Only press while the button is still there. The notice can be gone a beat before the page
+      // reports itself enabled again, and pressing into that gap fails on a control that has already
+      // done its job - which reads as "OK never appeared" and hides what actually happened.
+      if (await scrollToVisibleControl(page, noticeAcknowledgement, 1_000)) {
+        await clickVisibleControl(page, noticeAcknowledgement);
+      }
+
       await page.waitForTimeout(500);
     }
 
