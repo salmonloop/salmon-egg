@@ -290,11 +290,55 @@ function describeTarget(options) {
   return ids.length > 0 ? `automation id '${ids.join("', '")}'` : `label '${labels.join("', '")}'`;
 }
 
+// ---- collapsed sections ----------------------------------------------------------------------
+
+// Open a collapsed Expander and wait until what it holds is genuinely on screen.
+//
+// Two things make this its own helper. The section's contents are in the semantic tree even while the
+// Expander is shut - unhidden, but reporting a placeholder rect at the viewport origin - so "the
+// control exists" is not a usable signal for "the section is open"; the exit condition has to be that
+// the control is laid out. And the thing to click is the Expander's own header button (a real button
+// carrying aria-expanded and a real rect), not the header content inside it: that inner node comes
+// through as a role=group with a 0x0 rect, which cannot be activated and cannot be pointed at.
+//
+// A trusted pointer does the toggling, since BrowserWasm does not reliably expand an Expander from
+// synthetic activation. Clicking is skipped whenever the header already reports itself expanded, so a
+// slow layout can never be "fixed" by a second click that closes the section again.
+export async function revealCollapsedSection(page, toggleTargets, revealedControl, label, attempts = 4) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (isLaidOut(await readControlState(page, revealedControl))) {
+      return;
+    }
+
+    const toggleState = await readControlState(page, toggleTargets);
+    if (toggleState.expanded !== true) {
+      await clickVisibleControlWithTrustedPointer(page, toggleTargets, `${label} expander header`);
+    }
+
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (isLaidOut(await readControlState(page, revealedControl))) {
+        return;
+      }
+
+      await page.waitForTimeout(200);
+    }
+  }
+
+  throw new Error(
+    `Could not open the collapsed section for ${label} in ${attempts} attempts. `
+    + `Header=${JSON.stringify(await readControlState(page, toggleTargets))} `
+    + `Contents=${JSON.stringify(await readControlState(page, revealedControl))}`);
+}
+
 // ---- text entry ------------------------------------------------------------------------------
 
-// The semantic `<input>` forwards `input` events to the managed text box (OnTextInput), and Uno's
-// key handling suppresses native insertion for canvas input - assigning the value and dispatching
-// the event is the supported path, not a workaround.
+// Text goes in as real keystrokes. Uno mirrors a TextBox as a real <input>, so assigning `.value`
+// and dispatching an `input` event looks like it works - and for most fields it does - but the
+// managed side does not always pick it up: the ACP profile editor's Server URL sits inside a
+// conditionally visible container and keeps the ViewModel's old (empty) value while the DOM shows
+// the new one. The app then saves an empty field, the validation message blames the field, and the
+// smoke blames the save. Typing is the user's own path and lands in both cases.
 export async function typeIntoAutomationTextBox(page, automationId, value) {
   const options = { automationIds: [automationId], labels: [] };
   return await setSemanticInputValue(page, options, value, `text box '${automationId}'`, defaultTimeoutMs);
@@ -584,6 +628,7 @@ const findComboBox = (page, selectorAutomationId) => page.evaluate(
   selectorAutomationId);
 
 async function openComboBoxAligned(page, selectorAutomationId, label) {
+  await waitForControlState(page, { automationIds: [selectorAutomationId], labels: [] }, label);
   const deadline = Date.now() + COMBO_OPEN_TIMEOUT_MS;
   let beforeIds = null;
   let attempt = 0;
@@ -634,10 +679,14 @@ async function closeComboBox(page) {
 // Opens the dropdown (retrying through the F4 race), reads the highlighted option's label, then
 // closes it. The dropdown must end closed: a lingering popup would swallow the next gate's keys.
 async function readComboBoxSelectionLabel(page, selectorAutomationId) {
-  const combo = await findComboBox(page, selectorAutomationId);
-  if (!combo?.found) {
-    throw new Error(`combo box '${selectorAutomationId}' was not found in the semantic DOM.`);
-  }
+  // Wait for the combo rather than demanding it be there already: a settings page publishes its
+  // controls as it lays out, so a check made the instant navigation reports success can run before
+  // this one exists. It used to be a bare read, which turned a page still coming up into "the combo
+  // box does not exist".
+  await waitForControlState(
+    page,
+    { automationIds: [selectorAutomationId], labels: [] },
+    `combo box '${selectorAutomationId}'`);
 
   const state = await openComboBoxAligned(page, selectorAutomationId, `combo box '${selectorAutomationId}'`);
   const activeIndex = state.activeIndex;
