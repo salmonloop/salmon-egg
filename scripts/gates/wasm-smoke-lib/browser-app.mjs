@@ -133,54 +133,66 @@ const semanticRuntimeScript = `
     return { matched: true, editable: true, disabled: false, state };
   };
 
-  const matchComboBoxItem = expectedNames => {
-    // An open ComboBox popup contributes option nodes to the semantic DOM. Options carry no
-    // automation id of their own, so match on the accessible name, falling back to contained
-    // text so item templates with secondary copy still resolve.
-    const names = (expectedNames ?? []).map(normalize).filter(Boolean);
-    const nodes = semanticRoot()?.querySelectorAll("[id^='uno-semantics-'][role='option']");
-    if (!nodes) {
+  // Skia collapsed combo boxes mirror no selection text at all: the value only exists as the
+  // popup's highlighted option while the dropdown is open. The readable item names surface as
+  // fresh clean-label nodes outside the popup subtree, in document order matching the popup's
+  // option nodes - but only on the FIRST open of a dropdown: on reopen Uno reuses the same
+  // option nodes and never rebuilds the clean-label mirror. So the first aligned open seeds a
+  // posinset-to-label cache per automation id, and every later open reads labels back through
+  // the option nodes' aria-posinset. The count alignment is the ordering proof; a mismatch
+  // means the mirror has not caught up (or the popup is a half-open ghost) and the caller must
+  // retry. The cache lives in the page, so a shell reload (language switch) clears it.
+  const comboBoxLabelCache = new Map();
+  const comboBoxOpenState = (automationId, beforeIds) => {
+    const combo = matchNode({ automationIds: [automationId], labels: [] });
+    if (!combo) {
       return null;
     }
 
-    for (const element of nodes) {
-      if (element.hidden) {
-        continue;
-      }
+    const expanded = combo.getAttribute("aria-expanded") === "true";
+    const popupId = combo.getAttribute("aria-controls");
+    const popup = (popupId && document.getElementById(popupId))
+      ?? semanticRoot().querySelector("[role='listbox']")
+      ?? null;
+    const optionNodes = popup ? Array.from(popup.children) : [];
+    const activeId = combo.getAttribute("aria-activedescendant");
+    const activeIndex = activeId ? optionNodes.findIndex(node => node.id === activeId) : -1;
 
-      const aria = normalize(element.getAttribute("aria-label"));
-      const text = normalize(element.textContent);
-      if (names.includes(aria) || names.includes(text)) {
-        return element;
-      }
+    const freshLabels = Array.from(semanticRoot().querySelectorAll("[aria-label]"))
+      .filter(node => !beforeIds.includes(node.id)
+        && !node.hidden
+        && node.getAttribute("aria-label") !== "Popup"
+        && !(popup && (popup === node || popup.contains(node))))
+      .map(node => node.getAttribute("aria-label"));
+
+    if (optionNodes.length > 0 && freshLabels.length === optionNodes.length) {
+      const byPos = new Map();
+      optionNodes.forEach((node, index) => {
+        byPos.set(node.getAttribute("aria-posinset") ?? String(index + 1), freshLabels[index]);
+      });
+      comboBoxLabelCache.set(automationId, byPos);
     }
 
-    for (const element of nodes) {
-      if (element.hidden) {
-        continue;
-      }
+    const cached = comboBoxLabelCache.get(automationId);
+    const cacheUsable = cached !== undefined && cached.size === optionNodes.length;
+    const itemLabels = freshLabels.length === optionNodes.length
+      ? freshLabels
+      : optionNodes.map(node => cached?.get(node.getAttribute("aria-posinset")) ?? null);
 
-      const text = normalize(element.textContent);
-      if (names.some(name => text.includes(name))) {
-        return element;
-      }
-    }
-
-    return null;
+    return {
+      expanded,
+      optionCount: optionNodes.length,
+      activeIndex,
+      itemLabels,
+      aligned: expanded
+        && optionNodes.length > 0
+        && (freshLabels.length === optionNodes.length || cacheUsable)
+        && itemLabels.every(label => typeof label === "string")
+    };
   };
 
-  const comboBoxSelectionText = automationId => {
-    const element = matchNode({ automationIds: [automationId], labels: [] });
-    if (!element) {
-      return null;
-    }
-
-    // Prefer an explicit value mirror (inputs and sliders carry one) over template text, which
-    // can include the caret.
-    return element.value
-      ?? element.getAttribute("aria-label")
-      ?? ((element.textContent ?? "").trim() || null);
-  };
+  const comboBoxLabeledIds = () => Array.from(semanticRoot().querySelectorAll("[aria-label]"))
+    .map(node => node.id);
 
   const focusedSnapshot = () => {
     const element = document.activeElement;
@@ -245,6 +257,18 @@ const semanticRuntimeScript = `
     };
   };
 
+  // Real DOM focus on the semantic node. Uno forwards focus into the managed visual tree, which
+  // is the precondition for keyboard choreography (F4, arrows, Enter) on combos and lists.
+  const focusControl = input => {
+    const element = matchNode(input);
+    if (!element) {
+      return false;
+    }
+
+    element.focus();
+    return document.activeElement === element;
+  };
+
   const stateWithLegacyPointers = element => {
     const state = describeNode(element);
     return {
@@ -265,11 +289,9 @@ const semanticRuntimeScript = `
     },
     activate,
     setInput,
-    comboBoxItem: expectedNames => {
-      const element = matchComboBoxItem(expectedNames);
-      return element ? { activate: () => element.click(), state: describeNode(element) } : null;
-    },
-    comboBoxSelectionText,
+    comboBoxOpenState,
+    comboBoxLabeledIds,
+    focusControl,
     focusedSnapshot,
     readLocalTextFile,
     persistenceDebug,

@@ -310,72 +310,166 @@ export async function expectToggleSwitchValue(page, options, expectedValue, labe
 
 // ---- combo boxes -----------------------------------------------------------------------------
 
-// Expand-collapse and selection are both semantic clicks; the selector's accessible name tracks
-// the selected value, which is the verification. No keyboard choreography: the semantic layer
-// already programs Enter/Space/Escape onto the nodes.
+// Skia renders the app into a canvas and collapsed combo boxes mirror no selection text, so the
+// selection is only observable by opening the dropdown and reading which option is highlighted
+// (aria-activedescendant), mapped onto the clean item labels. Both helpers below share the
+// keyboard path because it is the only one that actually commits a selection: a semantic click
+// on an item merely collapses the dropdown.
+//
+// F4 is also racy on Skia: focus needs a settle beat before the key opens the popup, and the
+// popup has a half-open ghost state (expanded=true, no option nodes yet). So opening loops:
+// focus -> settle -> F4 -> poll for an aligned open state (option count matching the fresh
+// labeled nodes) -> Escape and retry while budget remains.
+
+const COMBO_SETTLE_MS = 300;
+const COMBO_OPEN_TIMEOUT_MS = 20_000;
+
+const findComboBox = (page, selectorAutomationId) => page.evaluate(
+  automationId => window.__salmoneggSmoke.semantic.describe({
+    automationIds: [automationId], labels: []
+  }),
+  selectorAutomationId);
+
+async function openComboBoxAligned(page, selectorAutomationId, label) {
+  const deadline = Date.now() + COMBO_OPEN_TIMEOUT_MS;
+  let beforeIds = null;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    beforeIds = await page.evaluate(() => window.__salmoneggSmoke.semantic.comboBoxLabeledIds());
+    attempt += 1;
+
+    await waitForControlState(
+      page,
+      { automationIds: [selectorAutomationId], labels: [] },
+      label,
+      5_000);
+    await page.evaluate(
+      automationId => window.__salmoneggSmoke.semantic.focusControl({
+        automationIds: [automationId], labels: []
+      }),
+      selectorAutomationId);
+    await page.waitForTimeout(COMBO_SETTLE_MS);
+    await page.keyboard.press("F4");
+
+    const openDeadline = Date.now() + 2_000;
+    while (Date.now() < openDeadline && Date.now() < deadline) {
+      const state = await page.evaluate(
+        input => window.__salmoneggSmoke.semantic.comboBoxOpenState(input.automationId, input.beforeIds),
+        { automationId: selectorAutomationId, beforeIds });
+      if (state?.aligned) {
+        return state;
+      }
+
+      await page.waitForTimeout(200);
+    }
+
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(
+    `${label} never produced an aligned open state after ${attempt} attempts. `
+    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+}
+
+async function closeComboBox(page) {
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+}
+
+// Opens the dropdown (retrying through the F4 race), reads the highlighted option's label, then
+// closes it. The dropdown must end closed: a lingering popup would swallow the next gate's keys.
+async function readComboBoxSelectionLabel(page, selectorAutomationId) {
+  const combo = await findComboBox(page, selectorAutomationId);
+  if (!combo?.found) {
+    throw new Error(`combo box '${selectorAutomationId}' was not found in the semantic DOM.`);
+  }
+
+  const state = await openComboBoxAligned(page, selectorAutomationId, `combo box '${selectorAutomationId}'`);
+  const activeIndex = state.activeIndex;
+  if (activeIndex < 0 || activeIndex >= state.itemLabels.length) {
+    await closeComboBox(page);
+    throw new Error(
+      `combo box '${selectorAutomationId}' open state has no highlighted option. `
+      + `State=${JSON.stringify(state)}`);
+  }
+
+  const selected = state.itemLabels[activeIndex];
+  await closeComboBox(page);
+  return selected;
+}
+
+// Keyboard-only selection: open (aligned), Home to reset to the first option, ArrowDown to the
+// target, Enter to commit. Skia's item click only collapses the popup, so keys are the only
+// commit path. The target name must match an item label exactly (case-insensitive) - a miss is
+// an error, never a silent no-op.
 export async function selectComboBoxItem(page, selectorAutomationId, expectedVisibleName, options = {}) {
   const expectedNames = Array.isArray(expectedVisibleName)
     ? expectedVisibleName
     : [expectedVisibleName];
   const label = `combo box '${selectorAutomationId}'`;
 
-  await activateWhenReady(page, { automationIds: [selectorAutomationId], labels: [] }, label, defaultTimeoutMs);
-
-  const deadline = Date.now() + 10_000;
-  let itemState = null;
-  while (Date.now() < deadline) {
-    itemState = await page.evaluate(
-      input => window.__salmoneggSmoke.semantic.comboBoxItem(input.expectedNames),
-      { expectedNames });
-    if (itemState) {
-      break;
-    }
-
-    await page.waitForTimeout(200);
-  }
-
-  if (!itemState) {
+  const state = await openComboBoxAligned(page, selectorAutomationId, label);
+  const targetIndex = state.itemLabels.findIndex(
+    item => expectedNames.some(name => name.toLowerCase() === item.toLowerCase()));
+  if (targetIndex < 0) {
+    await closeComboBox(page);
     throw new Error(
-      `${label} did not expose any item from ${JSON.stringify(expectedNames)} after expanding. `
-      + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+      `${label} open state exposed ${JSON.stringify(state.itemLabels)}; `
+      + `none matched ${JSON.stringify(expectedNames)}.`);
   }
 
-  await page.evaluate(
-    input => window.__salmoneggSmoke.semantic.comboBoxItem(input.expectedNames)?.activate(),
-    { expectedNames });
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(COMBO_SETTLE_MS);
+  for (let i = 0; i < targetIndex; i += 1) {
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(100);
+  }
+  await page.keyboard.press("Enter");
+  await closeComboBox(page);
 
   if (options.verifySelectionText !== false) {
-    await expectComboBoxSelectionText(page, selectorAutomationId, expectedNames, label);
+    const observed = await readComboBoxSelectionLabel(page, selectorAutomationId);
+    if (!expectedNames.some(name => name.toLowerCase() === observed.toLowerCase())) {
+      throw new Error(
+        `${label} selection read back as ${JSON.stringify(observed)}, expected ${JSON.stringify(expectedNames)}.`);
+    }
   }
 }
 
+// Reads the selection by reopening the dropdown and checking the highlighted option's label.
+// Despite the legacy name, no collapsed-state text is read - Skia mirrors none.
 export async function expectComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, label) {
   const expectedNames = Array.isArray(expectedVisibleNames)
     ? expectedVisibleNames
     : [expectedVisibleNames];
-  const deadline = Date.now() + 10_000;
-  let observedText = null;
+  const deadline = Date.now() + defaultTimeoutMs;
+  let observed = null;
+  let lastError = null;
 
   while (Date.now() < deadline) {
-    observedText = await readComboBoxSelectionText(page, selectorAutomationId);
-    if (observedText !== null
-      && expectedNames.some(name => observedText.toLowerCase().includes(name.toLowerCase()))) {
-      return;
+    try {
+      observed = await readComboBoxSelectionLabel(page, selectorAutomationId);
+      if (expectedNames.some(name => name.toLowerCase() === observed.toLowerCase())) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
     }
 
     await page.waitForTimeout(200);
   }
 
   throw new Error(
-    `${label ?? `combo box '${selectorAutomationId}'`} did not show one of ${JSON.stringify(expectedNames)}. `
-    + `Observed=${JSON.stringify(observedText)} `
+    `${label ?? `combo box '${selectorAutomationId}'`} selection never read back as `
+    + `${JSON.stringify(expectedNames)}. Last observed=${JSON.stringify(observed)} `
+    + `Last error=${String(lastError)} `
     + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
 }
 
 export async function readComboBoxSelectionText(page, selectorAutomationId) {
-  return await page.evaluate(
-    automationId => window.__salmoneggSmoke.semantic.comboBoxSelectionText(automationId),
-    selectorAutomationId);
+  return await readComboBoxSelectionLabel(page, selectorAutomationId);
 }
 
 // ---- focus -----------------------------------------------------------------------------------
