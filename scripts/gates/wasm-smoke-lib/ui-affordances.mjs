@@ -65,6 +65,29 @@ export async function expectControlEnabledState(page, options, expectedEnabled, 
   }
 }
 
+// Polls until the control's enabled state flips to the expected value. Skia renders the app into a
+// canvas, so "a dialog opened" is not observable as text or DOM - but modality is observable as
+// state: the semantic tree marks the page's controls disabled while the dialog is up and re-enables
+// them once it is dismissed. Waiting on that flip is how a smoke asserts dialog round-trips without
+// depending on how (or whether) the dialog itself is rendered.
+export async function waitForControlEnabledState(page, options, expectedEnabled, label, timeoutMs = defaultTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = notFoundState;
+
+  while (Date.now() < deadline) {
+    lastState = await readControlState(page, options);
+    if (lastState.found && lastState.enabled === expectedEnabled) {
+      return lastState;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${label} to become enabled=${expectedEnabled}. Last state=${JSON.stringify(lastState)} `
+    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+}
+
 // Naming note: this used to scroll - activation needed a hit-testable point, so out-of-viewport
 // controls had to be dragged into one first, and callers distinguished "found" from "scrolled" by
 // return value. Semantic activation has no such requirement, so what remains is waiting for the
@@ -126,6 +149,74 @@ export async function clickVisibleControl(page, options) {
 
 export async function clickVisibleNavigationTarget(page, options) {
   return await activateWhenReady(page, options, describeTarget(options), defaultTimeoutMs);
+}
+
+// A real Playwright mouse click at the semantic node's center. The two synthetic routes both fail
+// here and need different medicine:
+// - A raw locator click can never pass Playwright's actionability check: Uno bakes no `role`
+//   attribute into semantic elements (the `<button>`/`<input>` tag carries the semantics
+//   implicitly, and CSS attribute selectors match the attribute, not the ARIA role), and their
+//   `pointer-events` is `none` so the browser's hit test hands the pointer to the canvas below.
+// - `element.click()` on the node fires the peer's Invoke callback but does not always reach the
+//   XAML command (the hero cards, the Gamepad expander, and the gamepad refresh button all
+//   documented that gap).
+// Clicking the node's reported center is the user's actual gesture path: a trusted pointer goes
+// through Uno's canvas hit testing and raises the same pointer events a human click would.
+export async function clickVisibleControlWithTrustedPointer(page, options, label) {
+  const state = await waitForControlState(page, options, label);
+  if (!state.enabled) {
+    throw new Error(
+      `Control ${label} is disabled and cannot receive a pointer click. State=${JSON.stringify(state)} `
+      + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  }
+
+  // `getBoundingClientRect` and `page.mouse.click` share the viewport coordinate space, but a
+  // control Uno keeps laid out off-screen reports a center outside it; clicking there would miss
+  // the canvas. Surface that instead of silently no-oping.
+  const viewport = page.viewportSize();
+  if (state.x == null || state.y == null
+    || state.x < 0 || state.y < 0
+    || state.x > viewport.width || state.y > viewport.height) {
+    throw new Error(
+      `Control ${label} center (${state.x}, ${state.y}) is outside the `
+      + `${viewport.width}x${viewport.height} viewport, so a pointer click would miss it. `
+      + `State=${JSON.stringify(state)} Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  }
+
+  // A control that has just appeared can still be mid-entrance-animation, so the center read
+  // above describes where it was, not where the click lands. Wait for the reported center to
+  // stop moving, then give Uno's canvas hit test one more beat to catch up with the layout it
+  // just reported - both stillness and a settled hit test are part of what "clickable" means
+  // for a real pointer.
+  const deadline = Date.now() + defaultTimeoutMs;
+  let settledState = state;
+  let stableReads = 0;
+  while (stableReads < 3 && Date.now() < deadline) {
+    await page.waitForTimeout(200);
+    const nextState = await readControlState(page, options);
+    if (!nextState.found || !nextState.enabled) {
+      throw new Error(
+        `Control ${label} disappeared or became disabled while waiting for its layout to settle. `
+        + `Last state=${JSON.stringify(nextState)} `
+        + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+    }
+
+    stableReads = (nextState.x === settledState.x && nextState.y === settledState.y)
+      ? stableReads + 1
+      : 0;
+    settledState = nextState;
+  }
+
+  if (stableReads < 3) {
+    throw new Error(
+      `Control ${label} center never settled (first seen (${state.x}, ${state.y}), `
+      + `last seen (${settledState.x}, ${settledState.y})), so a pointer click could not be `
+      + `aimed reliably. Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  }
+
+  await page.waitForTimeout(500);
+  await page.mouse.click(settledState.x, settledState.y);
+  return settledState;
 }
 
 export async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label) {
@@ -525,7 +616,9 @@ export async function expectControlDoesNotEscapePage(page, options, stayOnPagePa
 
 async function dismissDialogIfPresent(page) {
   // The app's confirmation dialogs ship 确定/OK as their only button; activating a control that is
-  // not there is a no-op after the timeout, so no presence probe is needed first.
+  // not there is a no-op after the timeout, so no presence probe is needed first. The activate path
+  // (semantic invoke) needs no coordinates, which matters because Skia-rendered dialogs report
+  // garbage rects for their buttons - only their presence in the semantic tree is trustworthy.
   try {
     await activateWhenReady(
       page,
@@ -558,10 +651,19 @@ export async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) 
   const deadline = Date.now() + timeoutMs;
   let lastBodyText = "";
   while (Date.now() < deadline) {
-    await page.waitForFunction(
-      source => new RegExp(source).test(document.body?.innerText ?? ""),
-      pattern.source,
-      { timeout: Math.min(5_000, Math.max(250, deadline - Date.now())) });
+    try {
+      await page.waitForFunction(
+        source => new RegExp(source).test(document.body?.innerText ?? ""),
+        pattern.source,
+        { timeout: Math.min(5_000, Math.max(250, deadline - Date.now())) });
+    } catch (error) {
+      // The poll timing out is not fatal - the outer deadline owns that verdict. Without this
+      // catch a 5s poll timeout escapes the loop entirely and reports a raw Playwright
+      // TimeoutError before the caller's 30s ever elapsed, hiding the collected body text.
+      if (Date.now() >= deadline) {
+        break;
+      }
+    }
 
     lastBodyText = await page.locator("body").innerText();
     if (pattern.test(lastBodyText)) {
