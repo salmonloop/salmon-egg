@@ -1,32 +1,53 @@
 import { navigateToSettingsSection } from "./settings-shell.mjs";
+import { openApp } from "./browser-app.mjs";
 import {
   clickStartComposerSendButton,
   clickVisibleNavigationTarget,
-  clickVisibleNavigationTargetUntilBodyText,
   collectVisibleComboBoxDebug,
   collectVisibleInteractiveDebug,
   collectVisibleNavigationTargetDebug,
   escapeRegExp,
+  expectComboBoxSelectionText,
   readControlState,
   scrollToVisibleNavigationTarget,
   selectComboBoxItem,
-  typeIntoAutomationTextBox,
   typeIntoVisibleTextField,
-  waitForBodyText
+  waitForBodyText,
+  waitForControlState,
+  waitForSemanticText
 } from "./ui-affordances.mjs";
 
+const profilesAddAffordance = { labels: ["新建配置", "New profile"], automationIds: ["Acp.Profiles.Add"] };
+const profileEditorNameField = { labels: [], automationIds: ["Acp.ProfileEditor.Name"] };
+const profileEditorAttempts = 3;
+
+// The editor's arrival is the Name field turning up in the semantic tree, not its labels turning up
+// in body text: those labels reach the DOM only as the inputs' accessible names, so a body-text wait
+// for them can never pass on Skia. The activation is retried against that same proof - the page's
+// nodes are published before its ViewModel is ready, and an activation that arrives too early is
+// dropped by the command without the node ever reporting itself disabled, so the click reports
+// success and nothing opens.
 export async function createWebSocketProfile(page, profileName, serverUrl) {
-  await clickVisibleNavigationTargetUntilBodyText(
-    page,
-    { labels: ["新建配置", "New profile"], automationIds: ["Acp.Profiles.Add"] },
-    /名称|Name|服务器地址|Server URL/,
-    "agent profile editor");
+  let opened = false;
+  for (let attempt = 1; attempt <= profileEditorAttempts && !opened; attempt += 1) {
+    await clickVisibleNavigationTarget(page, profilesAddAffordance);
+    opened = Boolean(await scrollToVisibleNavigationTarget(page, profileEditorNameField, 8_000));
+  }
+
+  if (!opened) {
+    throw new Error(
+      `The ACP profile editor did not open after ${profileEditorAttempts} activations of its New affordance.`);
+  }
 
   await fillProfileEditorTextBoxes(page, profileName, serverUrl);
   await clickVisibleNavigationTarget(page, { labels: ["保存", "Save"], automationIds: [] });
   try {
-    await waitForBodyText(page, /ACP Agent|ACP 连接配置|ACP connection profiles/, "ACP Agent settings page after profile save");
-    await waitForBodyText(page, new RegExp(escapeRegExp(profileName)), "saved ACP profile");
+    // Saving must return the list with the new profile on it. Both halves are read from the semantic
+    // tree: the page's own affordance for "we are back on the list", and the profile's name wherever
+    // the tree carries it - a list item's title reaches the DOM as an accessible name, so waiting for
+    // it in body text would time out on a profile the user can plainly see.
+    await waitForControlState(page, profilesAddAffordance, "ACP Agent settings page after profile save");
+    await waitForSemanticText(page, new RegExp(escapeRegExp(profileName)), "saved ACP profile");
     return;
   } catch (error) {
     const debug = await page.evaluate(() => ({
@@ -64,25 +85,31 @@ export async function createWebSocketProfile(page, profileName, serverUrl) {
         .filter(candidate => candidate.visible),
       body: (document.body?.innerText ?? "").slice(0, 2_000)
     }));
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForSelector(
-      [
-        '[aria-label="StartView.Title"]',
-        '[aria-label="StartView.PromptBox"]',
-        '[aria-label="StartView.Suggestion.ReportGuidance"]',
-        '[aria-label="StartView.AgentSelector"]',
-        '[aria-label="MainNavView"]'
-      ].join(", "),
-      { timeout: 60_000 });
-    await navigateToSettingsSection(
-      page,
-      { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },
-      /ACP Agent|ACP 连接配置|ACP connection profiles/,
-      "ACP Agent settings page after forced reload");
-
-    const persistedAfterReload = await page.evaluate(
-      name => (document.body?.innerText ?? "").includes(name),
-      profileName);
+    // This whole block only exists to say *why* the save was not observable, so it must never become
+    // the reported failure itself: a reload that does not come back would otherwise replace the real
+    // error with a bare selector timeout, which is exactly what it used to do.
+    let persistedAfterReload = null;
+    try {
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+      await openApp(page, page.url());
+      await navigateToSettingsSection(
+        page,
+        { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },
+        /ACP Agent|ACP 连接配置|ACP connection profiles/,
+        "ACP Agent settings page after forced reload");
+      persistedAfterReload = await page.evaluate(
+        name => Array.from(document.querySelectorAll("#uno-semantics-root [id^='uno-semantics-']"))
+          .some(node => !node.hidden
+            && (`${node.getAttribute("aria-label") ?? ""}|${node.textContent ?? ""}`).includes(name)),
+        profileName);
+    } catch (diagnosticError) {
+      throw new Error(
+        `Saving the ACP profile was not observable: ${error?.message ?? error} `
+        + `The reload used to tell persistence apart from a UI hang also failed `
+        + `(${diagnosticError?.message ?? diagnosticError}), so which one it is stays unknown. `
+        + `Debug=${JSON.stringify(debug)}`,
+        { cause: error });
+    }
 
     if (persistedAfterReload) {
       throw new Error(
@@ -98,13 +125,30 @@ export async function createWebSocketProfile(page, profileName, serverUrl) {
 }
 
 export async function expectProfilePresence(page, profileName, label) {
-  await waitForBodyText(page, new RegExp(escapeRegExp(profileName)), label);
+  await waitForSemanticText(page, new RegExp(escapeRegExp(profileName)), label);
 }
 
+// Same shape as the profile editor above: the editor's own field is the arrival proof (its label
+// exists only as that input's accessible name), and the activation is retried against it because an
+// activation delivered before the row's ViewModel is ready is dropped without a trace.
+const remoteDirectoryAddAffordance = {
+  labels: ["新增远程项目", "Add remote project"],
+  automationIds: ["Acp.RemoteDirectories.Add"]
+};
+const remoteDirectoryNameField = { labels: [], automationIds: ["Acp.RemoteDirectories.DisplayName"] };
+
 export async function createRemoteDirectory(page, displayName, remotePath) {
-  await scrollToVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
-  await clickVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
-  await waitForBodyText(page, /显示名称|Project name|ACP 工作路径|ACP working path/, "remote directory editor");
+  await scrollToVisibleNavigationTarget(page, remoteDirectoryAddAffordance);
+  let opened = false;
+  for (let attempt = 1; attempt <= profileEditorAttempts && !opened; attempt += 1) {
+    await clickVisibleNavigationTarget(page, remoteDirectoryAddAffordance);
+    opened = Boolean(await scrollToVisibleNavigationTarget(page, remoteDirectoryNameField, 8_000));
+  }
+
+  if (!opened) {
+    throw new Error(
+      `The remote directory editor did not open after ${profileEditorAttempts} activations of its Add affordance.`);
+  }
 
   await typeIntoVisibleTextField(
     page,
@@ -121,8 +165,10 @@ export async function createRemoteDirectory(page, displayName, remotePath) {
 }
 
 export async function expectRemoteDirectoryPresence(page, displayName, remotePath, label) {
-  await waitForBodyText(page, new RegExp(escapeRegExp(displayName)), `${label} name`);
-  await waitForBodyText(page, new RegExp(escapeRegExp(remotePath)), `${label} path`);
+  // Read from the semantic tree for the same reason as the profile list above: a row's title and
+  // subtitle can exist only as accessible names.
+  await waitForSemanticText(page, new RegExp(escapeRegExp(displayName)), `${label} name`);
+  await waitForSemanticText(page, new RegExp(escapeRegExp(remotePath)), `${label} path`);
 }
 
 export async function expectPersistedProfileAfterReload(page, baseUrl, profileName) {
@@ -131,19 +177,13 @@ export async function expectPersistedProfileAfterReload(page, baseUrl, profileNa
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
       await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.waitForTimeout(500);
-      await page.waitForSelector(
-      [
-        '[aria-label="StartView.Title"]',
-        '[aria-label="StartView.PromptBox"]',
-        '[aria-label="StartView.Suggestion.ReportGuidance"]',
-        '[aria-label="StartView.AgentSelector"]',
-        '[aria-label="MainNavView"]'
-      ].join(", "),
-      { timeout: 60_000 });
+      // openApp owns what "the app is up" means - the shell's own landmarks, the splash being gone,
+      // and a readable failure when it is not. The hand-rolled selector wait here reported a bare
+      // 60s timeout on a blank page, which said nothing about whether the reload had even started
+      // rendering, and it did not wait out the splash that swallows the first pointer gestures.
+      await openApp(page, baseUrl);
       await navigateToSettingsSection(
         page,
         { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },
@@ -205,19 +245,29 @@ export async function expectPersistedProfileAfterReload(page, baseUrl, profileNa
     + `Cause=${lastError?.message ?? lastError}`);
 }
 
+// The row's ToggleSwitch carries no automation id of its own, so it is found by walking up from the
+// profile's name to the row and taking the switch inside it. Activation goes through the semantic
+// node's own click, which is what Uno programs the Toggle pattern onto; a real pointer at the
+// reported centre does not reach it, because the node has pointer-events: none and the canvas hit
+// test does not pick the switch up (measured: aria-checked stayed false and no connection started).
+//
+// One activation is all this does. The switch reflects IsConnected, not the request, so it stays off
+// until the connection is actually up - waiting for it to flip here would be waiting for the very
+// thing the caller is about to assert.
 export async function clickProfileConnectionToggle(page, profileName) {
-  await page.waitForFunction(
-    name => (document.body?.innerText ?? "").includes(name),
-    profileName,
-    { timeout: 30_000 });
+  await waitForSemanticText(page, new RegExp(escapeRegExp(profileName)), `profile row for '${profileName}'`);
 
-  const point = await page.evaluate(findProfileConnectionTogglePoint, profileName);
-  if (!point) {
+  const activated = await page.evaluate(activateProfileConnectionToggle, profileName);
+  if (!activated?.found) {
     const debug = await page.evaluate(collectVisibleInteractiveDebug);
     throw new Error(`No connection toggle found for profile '${profileName}'. Candidates: ${JSON.stringify(debug)}`);
   }
 
-  await page.mouse.click(point.x, point.y);
+  if (activated.disabled) {
+    throw new Error(
+      `The connection toggle for profile '${profileName}' is disabled, so the connection cannot be started.`);
+  }
+
   await page.waitForTimeout(500);
 }
 
@@ -260,17 +310,25 @@ export async function createSessionAndSendPromptFromStart(
   directoryPath,
   promptText,
   expectedAgentReply) {
-  const promptBoxSelector = '[aria-label="StartView.PromptBox"]';
+  // The composer is located by shape, not by id: StartView sets its automation id through an x:Bind
+  // on AutomationProperties.AutomationId, which never reaches the exported accessibility node on
+  // Skia - the node has no id and its accessible name is the localized placeholder. The Start shell
+  // has exactly one multi-line text box, which is stable in a way the placeholder wording is not.
+  const promptBoxSelector = "#uno-semantics-root textarea";
   await ensureStartPromptVisible(page, promptBoxSelector);
 
+  // Matched on the ComboBox's own x:Name, which Uno exports as the automation id when none is set
+  // explicitly. The ids the hosts pass in (StartView.AgentSelector and friends) are applied through an
+  // x:Bind on AutomationProperties.AutomationId and never reach the exported node, so nothing in the
+  // accessibility view carries them.
   await selectComboBoxItem(
     page,
-    "StartView.AgentSelector",
+    "AgentSelectorHost",
     profileName,
     { keyboardSelectVisibleItem: true });
   await selectComboBoxItem(
     page,
-    "StartView.ProjectSelector",
+    "ProjectSelectorHost",
     directoryName,
     { verifySelectionText: false, keyboardSelectVisibleItem: true });
   const sessionNewRequest = await waitForSessionNewWithDiagnostics(acpServer, page);
@@ -279,8 +337,15 @@ export async function createSessionAndSendPromptFromStart(
     throw new Error(`session/new used unexpected cwd. Expected=${directoryPath} Request=${JSON.stringify(sessionNewRequest)}`);
   }
 
-  await waitForBodyText(page, /Agent 01|Planner 01/, "ready ACP modes after remote directory selection", 30_000);
-  await typeIntoAutomationTextBox(page, "StartView.PromptBox", promptText);
+  // The mode selector is what shows the session's modes arrived, and a collapsed ComboBox on Skia
+  // mirrors no selection text at all - its value is only readable by opening the dropdown, which is
+  // what this helper does. Waiting for the mode names in body text could never pass here.
+  await expectComboBoxSelectionText(
+    page,
+    "ModeSelectorHost",
+    ["Agent 01", "Planner 01"],
+    "ready ACP modes after remote directory selection");
+  await typeIntoVisibleTextField(page, { selector: promptBoxSelector }, promptText, "start composer prompt");
   await clickStartComposerSendButton(page);
 
   const promptRequest = await waitForSessionPromptWithDiagnostics(acpServer, page);
@@ -289,8 +354,10 @@ export async function createSessionAndSendPromptFromStart(
     throw new Error(`session/prompt used unexpected text. Expected=${promptText} Request=${JSON.stringify(promptRequest)}`);
   }
 
-  await waitForBodyText(page, /ChatView\.MessagesList|Salmon Egg|WASM full chain agent reply/, "chat view after prompt", 30_000);
-  await waitForBodyText(page, new RegExp(escapeRegExp(expectedAgentReply)), "agent reply projected into chat UI", 30_000);
+  // Read from the semantic tree: chat turns reach the DOM as accessible names on their message nodes,
+  // never as body text, so the reply a user can read is invisible to a body-text wait on Skia.
+  await waitForSemanticText(page, /ChatView\.MessagesList|Salmon Egg|WASM full chain agent reply/, "chat view after prompt", 30_000);
+  await waitForSemanticText(page, new RegExp(escapeRegExp(expectedAgentReply)), "agent reply projected into chat UI", 30_000);
 }
 
 async function ensureStartPromptVisible(page, promptBoxSelector) {
@@ -396,54 +463,51 @@ function readAcpProfilesAnchorState() {
   return control ? { found: true } : null;
 }
 
-function findProfileConnectionTogglePoint(profileName) {
+// Runs inside the page, so the row walk is inlined: page.evaluate ships only this function's body,
+// and a helper referenced from module scope does not exist in the browser.
+function activateProfileConnectionToggle(profileName) {
+  const isOnScreen = rect => rect.width > 0
+    && rect.height > 0
+    && rect.left >= 0
+    && rect.top >= 0
+    && rect.left <= innerWidth
+    && rect.top <= innerHeight;
+
   const nameNode = Array.from(document.querySelectorAll("body *"))
-    .find(element => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0
-        && rect.height > 0
-        && rect.left >= 0
-        && rect.top >= 0
-        && rect.left <= innerWidth
-        && rect.top <= innerHeight
-        && (element.textContent ?? "").trim() === profileName;
-    });
+    .find(element => isOnScreen(element.getBoundingClientRect())
+      && (element.textContent ?? "").trim() === profileName);
 
   let container = nameNode;
   while (container && container !== document.body) {
-    const toggle = Array.from(container.querySelectorAll("input,[role='switch'],[aria-checked],.uno-toggleswitch,*"))
+    const toggle = Array.from(container.querySelectorAll("*"))
       .map(element => {
-        const rect = element.getBoundingClientRect();
         const className = element.className?.toString?.() ?? "";
         return {
           element,
-          rect,
-          className,
-          isToggle:
-            element.matches("input[type='checkbox']")
+          rect: element.getBoundingClientRect(),
+          isToggle: element.matches("input[type='checkbox']")
             || element.getAttribute("role") === "switch"
             || element.getAttribute("aria-checked") != null
             || className.toLowerCase().includes("toggle")
         };
       })
-      .filter(candidate =>
-        candidate.isToggle
-        && candidate.rect.width > 0
-        && candidate.rect.height > 0
-        && candidate.rect.left >= 0
-        && candidate.rect.top >= 0
-        && candidate.rect.left <= innerWidth
-        && candidate.rect.top <= innerHeight)
+      .filter(candidate => candidate.isToggle && isOnScreen(candidate.rect))
       .sort((left, right) => right.rect.right - left.rect.right)[0];
 
     if (toggle) {
-      return window.__salmoneggSmoke.resolveToggleClickPoint(toggle.element);
+      const element = toggle.element;
+      if (element.getAttribute("aria-disabled") === "true" || element.disabled === true) {
+        return { found: true, disabled: true };
+      }
+
+      element.click();
+      return { found: true, disabled: false, checked: element.getAttribute("aria-checked") };
     }
 
     container = container.parentElement;
   }
 
-  return null;
+  return { found: false };
 }
 
 function readProfileConnectionRowState(profileName) {
