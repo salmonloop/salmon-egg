@@ -479,13 +479,11 @@ function tryParseInteger(value) {
 }
 
 export async function readNumericControlValue(page, controlOptions, label) {
-  const editor = await waitForNumericEditor(page, controlOptions, label);
   const deadline = Date.now() + defaultTimeoutMs;
-  let lastValue = null;
-
+  let editor = null;
   while (Date.now() < deadline) {
-    lastValue = await editor.inputValue().catch(() => null);
-    const parsedValue = tryParseInteger(lastValue);
+    editor = await waitForNumericEditor(page, controlOptions, label);
+    const parsedValue = tryParseInteger(editor.value);
     if (parsedValue != null) {
       return parsedValue;
     }
@@ -493,46 +491,62 @@ export async function readNumericControlValue(page, controlOptions, label) {
     await page.waitForTimeout(200);
   }
 
-  throw new Error(
-    `Timed out reading a numeric value from ${label}. Last editor value=${JSON.stringify(lastValue)}`);
+  throw new Error(`Timed out reading a numeric value from ${label}. Last read=${JSON.stringify(editor)}`);
 }
 
 export async function focusNumericControl(page, controlOptions, label) {
-  const editor = await waitForNumericEditor(page, controlOptions, label);
-  // Bring the real editor row into view first: the focused-state contrast check below only sees
-  // visible inputs, and the spinbutton node's rect is a virtual layout coordinate that cannot be
-  // used for that.
-  await editor.scrollIntoViewIfNeeded();
-  await editor.focus();
-  const focused = await page.evaluate(
-    () => document.activeElement?.getAttribute?.("xamlautomationid") === "InputBox");
-  if (!focused) {
-    throw new Error(`The number box editor did not take focus for ${label}.`);
-  }
+  return await focusNumericEditor(page, controlOptions, label);
 }
 
 export async function setNumericControlValue(page, controlOptions, value, label) {
-  const editor = await waitForNumericEditor(page, controlOptions, label);
-  // A user path, not a synthetic one: focus, select all, type, blur. The TwoWay binding commits
-  // on blur - Enter steals focus without committing, and synthetic input events are ignored.
-  await editor.focus();
-  await page.keyboard.press("Control+a");
-  await page.keyboard.type(String(value), { delay: 40 });
-  await page.keyboard.press("Tab");
+  // The user's path, not a synthetic one: focus, select all, type on the real keyboard, then blur
+  // with Tab, because the TwoWay binding commits on blur and assigning `.value` with a synthetic
+  // input event never commits at all.
+  //
+  // What is verified here is delivery, not acceptance: the editor's value changed, it still holds
+  // focus, it is still the same node, and the blur actually happened. Whether the app accepted the
+  // value is the caller's assertion - re-reading it after leaving and re-entering the page is what
+  // shows the ViewModel's own state.
+  const attempts = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const focused = await focusNumericEditor(page, controlOptions, label);
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type(String(value), { delay: 40 });
+    const typed = await readNumericEditor(page);
+    if (typed.value !== String(value) || !typed.focused || typed.id !== focused.id) {
+      attempts.push(typed);
+      continue;
+    }
 
-  const deadline = Date.now() + 5_000;
-  let observedValue = null;
-  while (Date.now() < deadline) {
-    observedValue = await readNumericControlValue(page, controlOptions, `${label} after edit`);
-    if (observedValue === value) {
+    await page.keyboard.press("Tab");
+    const committed = await waitForNumericEditorBlur(page, label);
+    if (committed.value === String(value)) {
       return;
+    }
+
+    attempts.push(committed);
+  }
+
+  throw new Error(`Typing ${value} into ${label} did not land. Attempts=${JSON.stringify(attempts)}`);
+}
+
+// Tab is the commit gesture, so the blur it causes is the observable proof the key was delivered
+// rather than swallowed by the canvas.
+async function waitForNumericEditorBlur(page, label) {
+  const deadline = Date.now() + 5_000;
+  let editor = null;
+  while (Date.now() < deadline) {
+    editor = await readNumericEditor(page);
+    if (!editor.focused) {
+      return editor;
     }
 
     await page.waitForTimeout(100);
   }
 
   throw new Error(
-    `Failed to set ${label}. Expected ${value}, observed ${observedValue}.`);
+    `The number box editor for ${label} never lost focus after Tab, so the edit was not committed. `
+    + `Last read=${JSON.stringify(editor)}`);
 }
 
 export function selectAlternateCacheRetentionValue(currentValue) {

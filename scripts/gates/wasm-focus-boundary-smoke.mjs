@@ -7,6 +7,7 @@ import {
 } from "./wasm-smoke-lib/browser-app.mjs";
 import {
   focusVisibleControl,
+  revealCollapsedSection,
   readControlState,
   scrollToVisibleControl,
   waitForBodyText,
@@ -71,86 +72,13 @@ try {
 
 async function revealGamepadDiagnosticsSection(page) {
   await waitForBodyText(page, diagnosticsPagePattern, "diagnostics settings page before gamepad reveal");
-
-  const headerTargets = {
-    labels: ["Gamepad input", "手柄输入", "Compatibility monitor", "兼容性监测"],
-    automationIds: ["Diagnostics.GamepadMonitorHeader"]
-  };
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const state = await readControlState(page, gamepadStart);
-    if (state.found) {
-      return;
-    }
-
-    // Uno Expander does not reliably expand from synthetic element.click() in
-    // BrowserWasm. Use a real Playwright mouse click on the Gamepad expander
-    // toggle (or the nearest ExpanderToggleButton whose text mentions gamepad).
-    const togglePoint = await page.evaluate(() => {
-      const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      // Fallback rectangle scanner: match the id contract, not the name. These buttons carry no
-      // AutomationProperties.Name, so their aria-label only *coincidentally* equals the automation
-      // id (the nameless fallback); xamlautomationid keeps working whether or not a name is added.
-      const start = document.querySelector('[xamlautomationid="Diagnostics.GamepadStart"]');
-      const expander =
-        start?.closest(".uno-expander")
-        ?? start?.closest("[class*='Expander']")
-        ?? start?.closest("details")
-        ?? null;
-      const ownedToggle =
-        expander?.querySelector('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
-        ?? null;
-      if (ownedToggle) {
-        const rect = ownedToggle.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          return {
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-            source: "owned-toggle"
-          };
-        }
-      }
-
-      const toggles = Array.from(
-        document.querySelectorAll('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], summary'));
-      for (const toggle of toggles) {
-        const text = normalize(toggle.textContent);
-        if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
-          const rect = toggle.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0
-            && rect.left >= -1
-            && rect.top >= -1
-            && rect.left <= innerWidth
-            && rect.top <= innerHeight) {
-            return {
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-              source: "text-toggle"
-            };
-          }
-        }
-      }
-
-      return null;
-    });
-
-    if (togglePoint) {
-      await page.mouse.click(togglePoint.x, togglePoint.y);
-      await page.waitForTimeout(500);
-      const afterToggle = await readControlState(page, gamepadStart);
-      if (afterToggle.found) {
-        return;
-      }
-    }
-
-    await scrollToVisibleControl(page, headerTargets);
-    await scrollToVisibleControl(page, gamepadStart);
-    await page.mouse.wheel(0, 700);
-    await page.waitForTimeout(300);
-  }
-
-  const state = await readControlState(page, gamepadStart);
-  throw new Error(`Diagnostics gamepad section was not reachable in BrowserWasm. State=${JSON.stringify(state)}`);
+  await revealCollapsedSection(
+    page,
+    // The Expander header button, matched by the name a screen reader announces. Its automation id
+    // belongs to the header content inside it, which is a 0x0 group that cannot be toggled.
+    { labels: ["Gamepad input", "手柄输入"], automationIds: [] },
+    gamepadStart,
+    "gamepad diagnostics section");
 }
 
 
