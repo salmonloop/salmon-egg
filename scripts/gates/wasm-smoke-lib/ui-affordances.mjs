@@ -306,28 +306,53 @@ export async function typeIntoVisibleTextField(page, options, value, label, time
 
 async function setSemanticInputValue(page, options, value, label, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
-  let lastResult = null;
-
+  let resolved = null;
   while (Date.now() < deadline) {
-    lastResult = await page.evaluate(
-      input => window.__salmoneggSmoke.semantic.setInput(input.options, input.value),
-      { options, value });
-    if (lastResult?.editable && !lastResult?.disabled) {
-      return lastResult.state;
+    resolved = await page.evaluate(
+      input => window.__salmoneggSmoke.semantic.resolveEditableField(input),
+      options);
+    if (resolved?.id && !resolved.disabled) {
+      break;
     }
 
     await page.waitForTimeout(200);
   }
 
-  if (lastResult?.disabled) {
+  if (resolved?.disabled) {
     throw new Error(
-      `${label} is disabled. State=${JSON.stringify(lastResult.state)} `
+      `${label} is disabled. State=${JSON.stringify(resolved.state)} `
       + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
   }
 
-  throw new Error(
-    `No editable field found for ${label}. Options=${JSON.stringify(options)} `
-    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  if (!resolved?.id) {
+    throw new Error(
+      `No editable field found for ${label}. Options=${JSON.stringify(options)} `
+      + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  }
+
+  const field = page.locator(`#${resolved.id}`);
+  await field.focus();
+  const focusedId = await page.evaluate(() => document.activeElement?.id ?? null);
+  if (focusedId !== resolved.id) {
+    throw new Error(
+      `${label} did not take focus before typing (focus went to ${JSON.stringify(focusedId)}).`);
+  }
+
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type(String(value), { delay: 25 });
+  // Commit with Tab. Some fields update their binding per keystroke, but not all: the ACP profile
+  // editor's Server URL only pushes its value to the ViewModel when the field is left, so without
+  // this the app saves an empty URL while the DOM shows the typed one. It has to be the key, not a
+  // DOM blur() - measured, blur() alone does not commit, because the managed side is driven by Uno's
+  // keyboard pipeline rather than by DOM focus events.
+  await page.keyboard.press("Tab");
+
+  const observed = await field.inputValue().catch(() => null);
+  if (observed !== String(value)) {
+    throw new Error(`Typing into ${label} did not land. Expected ${JSON.stringify(String(value))}, observed ${JSON.stringify(observed)}.`);
+  }
+
+  return resolved.state;
 }
 
 // ---- numeric fields --------------------------------------------------------------------------
@@ -338,8 +363,22 @@ async function setSemanticInputValue(page, options, value, label, timeoutMs) {
 // the application root. That input is the control's actual text field - `.value` is live, focus
 // lands on it, and real keyboard events drive the TwoWay binding (synthetic input events do not
 // commit). The selector is only unambiguous while exactly one NumberBox is mounted, so every
-// helper requires the spinbutton anchor first and fails loudly if more than one editor exists.
+// helper anchors on the spinbutton first and fails loudly if more than one editor exists.
 const numericEditorSelector = '#uno-semantics-root input[xamlautomationid="InputBox"]';
+
+const readNumericEditor = page => page.evaluate(selector => {
+  const editors = Array.from(document.querySelectorAll(selector));
+  const editor = editors[0] ?? null;
+  const active = document.activeElement;
+  return {
+    count: editors.length,
+    id: editor?.id ?? null,
+    value: editor?.value ?? null,
+    focused: Boolean(editor) && active === editor,
+    activeId: active?.id ?? null,
+    activeAutomationId: active?.getAttribute?.("xamlautomationid") ?? null
+  };
+}, numericEditorSelector);
 
 async function waitForNumericEditor(page, controlOptions, label) {
   // The anchor proves the right page is mounted, so a stale editor from a previously visited page
@@ -347,23 +386,47 @@ async function waitForNumericEditor(page, controlOptions, label) {
   await waitForControlState(page, controlOptions, `number box anchor for ${label}`);
 
   const deadline = Date.now() + defaultTimeoutMs;
-  let editorCount = 0;
+  let editor = null;
   while (Date.now() < deadline) {
-    editorCount = await page.locator(numericEditorSelector).count();
-    if (editorCount === 1) {
-      return page.locator(numericEditorSelector).first();
+    editor = await readNumericEditor(page);
+    if (editor.count === 1) {
+      return editor;
     }
 
-    if (editorCount > 1) {
+    if (editor.count > 1) {
       throw new Error(
-        `Found ${editorCount} number box editors while resolving ${label}; `
+        `Found ${editor.count} number box editors while resolving ${label}; `
         + `the editor selector requires a single mounted NumberBox.`);
     }
 
     await page.waitForTimeout(200);
   }
 
-  throw new Error(`No number box editor input found for ${label}.`);
+  throw new Error(`No number box editor input found for ${label}. Last read=${JSON.stringify(editor)}`);
+}
+
+// Focus, then confirm the editor still holds focus. Navigating to a settings section hands focus to
+// the NavigationView's selected item asynchronously, a beat after the navigation itself is
+// observable (measured ~800ms later), so an editor focused before that hand-off loses focus to it
+// and every keystroke afterwards is dropped in silence - the input keeps its old value and nothing
+// reports a problem. Rather than guess how long that beat lasts, focus and check the editor kept
+// it; if something took it, focus again, since the hand-off happens once per navigation.
+async function focusNumericEditor(page, controlOptions, label) {
+  const attempts = [];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const editor = await waitForNumericEditor(page, controlOptions, label);
+    await page.locator(numericEditorSelector).first().focus();
+    await page.waitForTimeout(300);
+    const held = await readNumericEditor(page);
+    if (held.focused && held.id === editor.id) {
+      return held;
+    }
+
+    attempts.push(held);
+  }
+
+  throw new Error(
+    `The number box editor for ${label} kept losing focus. Attempts=${JSON.stringify(attempts)}`);
 }
 
 function tryParseInteger(value) {
