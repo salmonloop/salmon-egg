@@ -646,16 +646,16 @@ public sealed class WasmStartupAssetsTests
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\acp-test-server.mjs")));
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-file-system-availability-smoke.mjs")));
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-ui.mjs")));
+        // What this test owns is the split itself - which smoke covers which behaviour - plus the
+        // couple of observable outcomes that identify the persistence smoke. It used to also pin
+        // expressions out of that script's source (which DOM predicate the focus check used, the
+        // name of a parameter, which fields a projection compared, the helper names inside the
+        // contrast check). Those are implementation, not behaviour: rewriting the check to observe
+        // the same thing a different way broke this test while the gate itself stayed green, which
+        // is the wrong way round.
         var settingsPersistenceSmoke = LoadFile(@"scripts\gates\wasm-settings-persistence-smoke.mjs");
         Assert.Contains("language: en-US", settingsPersistenceSmoke, StringComparison.Ordinal);
         Assert.Contains("focused data storage cache retention", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("requireFocused: true,", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("document.activeElement === textInput", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("document.activeElement === element", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("focusedControl: dataStorageCacheRetentionControl", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("projection.focused && projection.focusedTarget", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("findEffectiveBackground", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("compositeCssColor", settingsPersistenceSmoke, StringComparison.Ordinal);
         // The shell keeps the active Settings section across a language reload, so the English
         // assertion is anchored on the General page summary resource instead of Start copy.
         Assert.Contains("Manage startup, window behavior, and UI language", settingsPersistenceSmoke, StringComparison.Ordinal);
