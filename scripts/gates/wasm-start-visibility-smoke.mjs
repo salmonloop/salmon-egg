@@ -64,9 +64,7 @@ try {
     // raw locator can never pass Playwright's actionability check against a semantic node (no
     // baked `role` attribute, pointer-events: none). A trusted pointer at the center Uno reports
     // is the user's actual gesture path through the canvas hit test.
-    await clickVisibleControlWithTrustedPointer(page, reportCard, "report suggestion card");
-
-    await waitForControlState(page, noticeAcknowledgement, "report notice acknowledgement button");
+    await activateReportCardUntilNoticeOpens(page, "report suggestion card");
     await waitForControlEnabledState(page, reportCard, false, "report suggestion card behind the notice");
 
     // The OK button's automation peer finishes wiring shortly after the node first surfaces, so an
@@ -92,8 +90,7 @@ try {
 
     // The affordance must survive its own use: a second activation reopens the notice instead of
     // leaving the card dead after one acknowledgement.
-    await clickVisibleControlWithTrustedPointer(page, reportCard, "report suggestion card again");
-    await waitForControlState(page, noticeAcknowledgement, "report notice acknowledgement button again");
+    await activateReportCardUntilNoticeOpens(page, "report suggestion card again");
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
     console.log("WASM start visibility smoke passed");
@@ -102,4 +99,32 @@ try {
   }
 } finally {
   await browser.close();
+}
+
+// Retried against the notice appearing, not against the click reporting success. A trusted pointer
+// goes through the canvas hit test, and that can miss: the card's reported centre is right, the click
+// is delivered, and the command still does not run - measured on CI, where one run in several opened
+// no notice at all while the same commit passed locally twice and on the previous CI run. Pressing
+// again is what a user does. The card's own enabled state decides whether to press: once the notice
+// is up the page reports its controls disabled, so a card that has gone disabled means the notice is
+// on its way and the only thing left to do is wait for it.
+async function activateReportCardUntilNoticeOpens(page, label) {
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (await scrollToVisibleControl(page, noticeAcknowledgement, 1_000)) {
+      return;
+    }
+
+    if ((await readControlState(page, reportCard)).enabled) {
+      await clickVisibleControlWithTrustedPointer(page, reportCard, label);
+    }
+
+    if (await scrollToVisibleControl(page, noticeAcknowledgement, 8_000)) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `Activating ${label} did not open its notice in ${attempts} attempts. `
+    + `Card=${JSON.stringify(await readControlState(page, reportCard))}`);
 }
