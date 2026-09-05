@@ -284,18 +284,53 @@ async function setSemanticInputValue(page, options, value, label, timeoutMs) {
 
 // ---- numeric fields --------------------------------------------------------------------------
 
+// NumberBox is the one control whose Skia semantics export splits in two: the spinbutton node
+// carries the automation id but only the two spin buttons as children, while the editable value
+// lives in a separate real `<input>` carrying Uno's template part id ("InputBox") directly under
+// the application root. That input is the control's actual text field - `.value` is live, focus
+// lands on it, and real keyboard events drive the TwoWay binding (synthetic input events do not
+// commit). The selector is only unambiguous while exactly one NumberBox is mounted, so every
+// helper requires the spinbutton anchor first and fails loudly if more than one editor exists.
+const numericEditorSelector = '#uno-semantics-root input[xamlautomationid="InputBox"]';
+
+async function waitForNumericEditor(page, controlOptions, label) {
+  // The anchor proves the right page is mounted, so a stale editor from a previously visited page
+  // can never be edited by mistake.
+  await waitForControlState(page, controlOptions, `number box anchor for ${label}`);
+
+  const deadline = Date.now() + defaultTimeoutMs;
+  let editorCount = 0;
+  while (Date.now() < deadline) {
+    editorCount = await page.locator(numericEditorSelector).count();
+    if (editorCount === 1) {
+      return page.locator(numericEditorSelector).first();
+    }
+
+    if (editorCount > 1) {
+      throw new Error(
+        `Found ${editorCount} number box editors while resolving ${label}; `
+        + `the editor selector requires a single mounted NumberBox.`);
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(`No number box editor input found for ${label}.`);
+}
+
 function tryParseInteger(value) {
   const match = String(value ?? "").match(/-?\d+/);
   return match ? Number.parseInt(match[0], 10) : null;
 }
 
-export async function readNumericControlValue(page, options, label) {
+export async function readNumericControlValue(page, controlOptions, label) {
+  const editor = await waitForNumericEditor(page, controlOptions, label);
   const deadline = Date.now() + defaultTimeoutMs;
-  let lastState = notFoundState;
+  let lastValue = null;
 
   while (Date.now() < deadline) {
-    lastState = await readControlState(page, options);
-    const parsedValue = tryParseInteger(lastState.value ?? lastState.text);
+    lastValue = await editor.inputValue().catch(() => null);
+    const parsedValue = tryParseInteger(lastValue);
     if (parsedValue != null) {
       return parsedValue;
     }
@@ -304,19 +339,36 @@ export async function readNumericControlValue(page, options, label) {
   }
 
   throw new Error(
-    `Timed out reading a numeric value from ${label}. Last state=${JSON.stringify(lastState)} `
-    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+    `Timed out reading a numeric value from ${label}. Last editor value=${JSON.stringify(lastValue)}`);
 }
 
-export async function setNumericControlValue(page, options, value, label) {
-  // The field's value path is the same input event as a text box; blur commits the edit, which the
-  // old keyboard path did by pressing Tab.
-  await setSemanticInputValue(page, options, String(value), label, 10_000);
+export async function focusNumericControl(page, controlOptions, label) {
+  const editor = await waitForNumericEditor(page, controlOptions, label);
+  // Bring the real editor row into view first: the focused-state contrast check below only sees
+  // visible inputs, and the spinbutton node's rect is a virtual layout coordinate that cannot be
+  // used for that.
+  await editor.scrollIntoViewIfNeeded();
+  await editor.focus();
+  const focused = await page.evaluate(
+    () => document.activeElement?.getAttribute?.("xamlautomationid") === "InputBox");
+  if (!focused) {
+    throw new Error(`The number box editor did not take focus for ${label}.`);
+  }
+}
+
+export async function setNumericControlValue(page, controlOptions, value, label) {
+  const editor = await waitForNumericEditor(page, controlOptions, label);
+  // A user path, not a synthetic one: focus, select all, type, blur. The TwoWay binding commits
+  // on blur - Enter steals focus without committing, and synthetic input events are ignored.
+  await editor.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type(String(value), { delay: 40 });
+  await page.keyboard.press("Tab");
 
   const deadline = Date.now() + 5_000;
   let observedValue = null;
   while (Date.now() < deadline) {
-    observedValue = await readNumericControlValue(page, options, `${label} after edit`);
+    observedValue = await readNumericControlValue(page, controlOptions, `${label} after edit`);
     if (observedValue === value) {
       return;
     }
@@ -325,8 +377,7 @@ export async function setNumericControlValue(page, options, value, label) {
   }
 
   throw new Error(
-    `Failed to set ${label}. Expected ${value}, observed ${observedValue}. `
-    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+    `Failed to set ${label}. Expected ${value}, observed ${observedValue}.`);
 }
 
 export function selectAlternateCacheRetentionValue(currentValue) {
