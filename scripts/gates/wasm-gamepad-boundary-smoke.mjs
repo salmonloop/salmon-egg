@@ -7,6 +7,7 @@ import {
 } from "./wasm-smoke-lib/browser-app.mjs";
 import {
   clickVisibleControl,
+  revealCollapsedSection,
   readControlState,
   scrollToVisibleControl,
   waitForBodyText,
@@ -587,93 +588,47 @@ async function expectControlText(page, options, pattern, label) {
   return state;
 }
 
+// Read the value off the field's own node. Skia's semantic tree is flat - the value is not a child of
+// the node carrying the automation id - so the value has to be on that node itself, which is what the
+// accessible name is for: these fields now bind their name to the text they render, so a screen reader
+// and this check read the same thing. The old version hunted for a laid-out leaf node containing the
+// text, which could not work, because value nodes are not laid out.
 async function waitForControlText(page, options, pattern, label, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   let lastState = null;
 
   while (Date.now() < deadline) {
-    await scrollToVisibleControl(page, options, 2_000).catch(() => false);
     lastState = await readControlState(page, options);
-    const text = (lastState?.text || lastState?.aria || "").trim();
+    const text = (lastState?.aria || lastState?.text || "").trim();
     if (lastState?.found && pattern.test(text)) {
       return lastState;
     }
 
-    // BrowserWasm TextBlocks often keep AutomationId off the DOM (no aria-label).
-    // Fall back to leaf text in the expanded Gamepad section for diagnostics projection.
-    // Do not require the leaf to already be in the viewport; scroll it into view first.
-    const fallback = await page.evaluate(({ patternSource, flags }) => {
-      const re = new RegExp(patternSource, flags);
-      const isLaidOut = element => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return rect.width > 0
-          && rect.height > 0
-          && style.display !== "none"
-          && style.visibility !== "hidden"
-          && Number(style.opacity || "1") > 0;
-      };
-
-      const start = document.querySelector('[xamlautomationid="Diagnostics.GamepadStart"]');
-      const scope =
-        start?.closest(".uno-expander")
-        ?? start?.closest("[class*='Expander']")
-        ?? document.body;
-      const leaves = Array.from(scope.querySelectorAll("*"))
-        .filter(element => element.children.length === 0)
-        .filter(isLaidOut);
-
-      for (const element of leaves) {
-        const text = (element.textContent || "").replace(/\s+/g, " ").trim();
-        if (!text || !re.test(text)) {
-          continue;
-        }
-
-        element.scrollIntoView({ block: "center", inline: "nearest" });
-        const rect = element.getBoundingClientRect();
-        return {
-          found: true,
-          enabled: true,
-          text,
-          aria: element.getAttribute("aria-label") || "",
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-          via: "leaf-text-fallback"
-        };
-      }
-
-      return { found: false, enabled: false };
-    }, { patternSource: pattern.source, flags: pattern.flags });
-
-    if (fallback?.found) {
-      return fallback;
-    }
-
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(200);
   }
 
   throw new Error(`Timed out waiting for ${label}. State=${JSON.stringify(lastState)}`);
 }
 
 async function refreshGamepadDiagnostics(page, label) {
-  // Real Playwright click by id contract (xamlautomationid), not by name: this button carries no
-  // AutomationProperties.Name, so its aria-label only coincidentally equals the automation id.
-  const refresh = page.locator('[xamlautomationid="Diagnostics.GamepadRefresh"]:visible').first();
-  await refresh.scrollIntoViewIfNeeded({ timeout: 15_000 });
-  await refresh.click({ timeout: 15_000 });
-  await waitForRefreshCompletion(refresh, label, 15_000);
+  // Semantic activation, measured against the effect: with a gamepad injected, activating this way
+  // moves the reported count from 0 to 1, while a trusted pointer at the button's own centre leaves it
+  // at 0 - the click never reaches the command even though the rect is real. A locator click cannot
+  // work either (the node has pointer-events: none, so actionability never resolves). Which route
+  // reaches a given control is not something to assume from the others; it has to be observed.
+  await clickVisibleControl(page, gamepadRefresh);
+  await waitForRefreshCompletion(page, label, 15_000);
 }
 
-async function waitForRefreshCompletion(refresh, label, timeoutMs) {
+async function waitForRefreshCompletion(page, label, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let lastState = null;
   let sawDisabled = false;
   let consecutiveEnabledReadings = 0;
 
   while (Date.now() < deadline) {
-    const found = await refresh.count() > 0;
-    const enabled = found && await refresh.isEnabled();
-    lastState = { found, enabled };
+    const state = await readControlState(page, gamepadRefresh);
+    lastState = { found: state.found, enabled: state.enabled };
     if (lastState?.found && !lastState.enabled) {
       sawDisabled = true;
       consecutiveEnabledReadings = 0;
@@ -707,86 +662,11 @@ async function setInjectedGamepadButtons(page, pressedButtons) {
 
 async function revealGamepadDiagnosticsSection(page) {
   await waitForBodyText(page, diagnosticsPagePattern, "diagnostics settings page before gamepad reveal");
-
-  const headerTargets = {
-    labels: ["Gamepad input", "手柄输入", "Compatibility monitor", "兼容性监测"],
-    automationIds: ["Diagnostics.GamepadMonitorHeader"]
-  };
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const state = await readControlState(page, gamepadStart);
-    if (state.found) {
-      return;
-    }
-
-    // The section hides behind an Expander, whose header is a ToggleButton; in the semantic DOM that
-    // maps to a node whose click the peer programs as Toggle, so semantic activation is the primary
-    // route. An earlier DOM-patching harness measured unreliable expansion from synthetic clicks and
-    // fell back to a real Playwright mouse click; that measurement predates the semantic activation
-    // contract, so the mouse click stays only as the fallback until CI confirms the primary route.
-    try {
-      await clickVisibleControl(page, headerTargets);
-    } catch {
-      const togglePoint = await page.evaluate(() => {
-        const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-        const start = document.querySelector('[xamlautomationid="Diagnostics.GamepadStart"]');
-        const expander =
-          start?.closest(".uno-expander")
-          ?? start?.closest("[class*='Expander']")
-          ?? start?.closest("details")
-          ?? null;
-        const ownedToggle =
-          expander?.querySelector('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
-          ?? null;
-        if (ownedToggle) {
-          const rect = ownedToggle.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            return {
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-              source: "owned-toggle"
-            };
-          }
-        }
-
-        const toggles = Array.from(
-          document.querySelectorAll('[xamlautomationid="ExpanderToggleButton"], button, [role="button"], summary'));
-        for (const toggle of toggles) {
-          const text = normalize(toggle.textContent);
-          if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
-            const rect = toggle.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0
-              && rect.left >= -1
-              && rect.top >= -1
-              && rect.left <= innerWidth
-              && rect.top <= innerHeight) {
-              return {
-                x: rect.left + rect.width / 2,
-                y: rect.top + rect.height / 2,
-                source: "text-toggle"
-              };
-            }
-          }
-        }
-
-        return null;
-      });
-
-      if (togglePoint) {
-        await page.mouse.click(togglePoint.x, togglePoint.y);
-      }
-    }
-
-    await page.waitForTimeout(500);
-    if ((await readControlState(page, gamepadStart)).found) {
-      return;
-    }
-
-    await scrollToVisibleControl(page, gamepadStart);
-    await page.mouse.wheel(0, 700);
-    await page.waitForTimeout(300);
-  }
-
-  const state = await readControlState(page, gamepadStart);
-  throw new Error(`Diagnostics gamepad section was not reachable in BrowserWasm. State=${JSON.stringify(state)}`);
+  await revealCollapsedSection(
+    page,
+    // The Expander header button, matched by the name a screen reader announces. Its automation id
+    // belongs to the header content inside it, which is a 0x0 group that cannot be toggled.
+    { labels: ["Gamepad input", "手柄输入"], automationIds: [] },
+    gamepadStart,
+    "gamepad diagnostics section");
 }
