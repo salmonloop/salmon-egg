@@ -18,6 +18,7 @@ import {
   selectComboBoxItem,
   expectComboBoxSelectionText,
   clickVisibleControl,
+  countVisibleControls,
   waitForControlState,
   scrollToVisibleControl,
   typeIntoVisibleTextField,
@@ -60,7 +61,10 @@ const sections = {
   },
   mcp: {
     target: { labels: ["MCP"], automationIds: ["SettingsNav.Mcp"] },
-    bodyPattern: /Service configuration|服务配置|Local services use stdio|本地服务使用 stdio|New|新建/,
+    // "New" used to be in this alternation, and it matches the navigation shell itself, so the
+    // arrival check passed while the page had not changed at all - every later step then ran against
+    // whichever section was still showing. Pinned to copy only this page renders.
+    bodyPattern: /Enable MCP services as needed|按需启用 MCP 服务|Service configuration|服务配置/,
     label: "MCP settings page"
   }
 };
@@ -78,6 +82,11 @@ const controls = {
   mcpServerEnabled: { labels: ["启用", "Enabled"], automationIds: ["Mcp.Server.Enabled"] }
 };
 
+const mcpEditorPanel = { labels: [], automationIds: ["Mcp.Editor.Panel"] };
+const mcpAddServerControl = {
+  labels: ["新建", "New"],
+  automationIds: ["Mcp.AddServer"]
+};
 const dataStorageCacheRetentionControl = {
   labels: ["缓存保留天数", "Cache retention (days)"],
   automationIds: ["DataStorage.CacheRetention"]
@@ -343,12 +352,19 @@ async function changeMcpSettings(page) {
     sections.mcp.target,
     sections.mcp.bodyPattern,
     sections.mcp.label);
-  // Locator actionability waits for AddServerCommand to re-enable after the page's async load.
-  const addServer = page.locator('[aria-label="Mcp.AddServer"]:visible').first();
-  await addServer.click({ timeout: 30_000 });
-  const editorClose = page.locator('[aria-label="Mcp.Editor.Close"]:visible').first();
-  await editorClose.waitFor({ state: "visible", timeout: 10_000 });
-  await waitForBodyText(page, /Launch command|启动命令/, "MCP server editor");
+  // The page's own affordance is the arrival proof that cannot be satisfied by the shell's text.
+  await waitForControlState(page, mcpAddServerControl, "MCP page");
+  // Matched through the semantic tree by automation id: the accessible name is the localized button
+  // text ("New"), so a locator keyed on the id as an aria-label matches nothing.
+  //
+  // Retried against the editor appearing rather than against the click's own return value. The
+  // page's semantic nodes show up before its layout and ViewModel are ready - the button is briefly
+  // reported at 16x6 in the top-left corner - and a command that is not ready yet drops the
+  // activation without the node ever reporting itself disabled, so the click "succeeds" and nothing
+  // opens. Pressing again is what a user does, and the editor becoming visible is the only honest
+  // proof it worked: its field labels reach the DOM solely as the inputs' accessible names, never as
+  // text, so no body-text wait can stand in for it on Skia.
+  await openMcpServerEditor(page);
   await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, "MCP server editor");
   await typeIntoVisibleTextField(
     page,
@@ -358,15 +374,29 @@ async function changeMcpSettings(page) {
   // Uno WASM does not activate this bound command through locator.click(), so use the proven control helper.
   await scrollToVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
   await clickVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
-  const savedServerToggles = page.locator('[aria-label="Mcp.Server.Enabled"]:visible');
-  await savedServerToggles.first().waitFor({ state: "visible", timeout: 30_000 });
-  const savedServerToggleCount = await savedServerToggles.count();
-  if (savedServerToggleCount !== 1) {
-    throw new Error(`Expected one saved MCP server row, found ${savedServerToggleCount}.`);
+  // Saving must add exactly one row - a duplicate would mean the editor saved twice, which the row
+  // count is the only way to notice. Counted in the semantic tree for the same reason as above.
+  await waitForControlState(page, controls.mcpServerEnabled, "saved MCP server row");
+  const savedServerRows = await countVisibleControls(page, controls.mcpServerEnabled);
+  if (savedServerRows !== 1) {
+    throw new Error(`Expected one saved MCP server row, found ${savedServerRows}.`);
   }
   await waitForBodyText(page, /new-mcp-server/, "saved MCP server");
   await setToggleSwitchValue(page, controls.mcpServerEnabled, false, "MCP server enabled");
   await verifyMcpSettings(page, "after edit");
+}
+
+async function openMcpServerEditor(page) {
+  const mcpEditorAttempts = 3;
+  for (let attempt = 1; attempt <= mcpEditorAttempts; attempt += 1) {
+    await clickVisibleControl(page, mcpAddServerControl);
+    if (await scrollToVisibleControl(page, mcpEditorPanel, 8_000)) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `The MCP server editor did not open after ${mcpEditorAttempts} activations of the New affordance.`);
 }
 
 async function verifyMcpSettings(page, suffix = "") {
@@ -379,9 +409,20 @@ async function verifyMcpSettings(page, suffix = "") {
   // while the page's async load is still in flight. That load clears the row collection before refilling
   // it, so the server name is briefly absent from the body text. Wait for the row control itself, the way
   // the save path above does, before asserting on text.
+  await waitForControlState(page, mcpAddServerControl, `MCP page ${suffix}`.trim());
   await waitForControlState(page, controls.mcpServerEnabled, `MCP server row control ${suffix}`.trim());
   await waitForBodyText(page, /new-mcp-server/, `MCP server row ${suffix}`.trim());
-  await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
+  try {
+    await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
+  } catch (error) {
+    // A wrong toggle state is ambiguous on its own: it can mean the change was never persisted, or
+    // that more than one row is present and the first one is a different server. Name which.
+    const rows = await countVisibleControls(page, controls.mcpServerEnabled);
+    const file = await readLocalTextFile(page, mcpSettingsPath);
+    throw new Error(
+      `${error.message} Rows=${rows} McpYaml=${JSON.stringify(file)}`,
+      { cause: error });
+  }
 }
 
 async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label, options = {}) {

@@ -598,10 +598,24 @@ export async function setToggleSwitchValue(page, options, expectedValue, label) 
     + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
 }
 
-export async function expectToggleSwitchValue(page, options, expectedValue, label) {
-  const actualValue = await readToggleSwitchValue(page, options, label);
+// Polls for the expected state rather than reading once. Settings pages refill their rows
+// asynchronously after navigation, so a row can surface carrying its default state a beat before the
+// persisted one lands - reading immediately after the row appears catches that default and fails on
+// a value the user never sees. A state that never arrives still fails when the budget runs out.
+export async function expectToggleSwitchValue(page, options, expectedValue, label, timeoutMs = defaultTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let actualValue = null;
+  while (Date.now() < deadline) {
+    actualValue = await readToggleSwitchValue(page, options, label, Math.max(1_000, deadline - Date.now()));
+    if (actualValue === expectedValue) {
+      return;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
   if (actualValue !== expectedValue) {
-    throw new Error(`Expected toggle ${label} to be ${expectedValue}, got ${actualValue}.`);
+    throw new Error(`Expected toggle ${label} to be ${expectedValue}, last read ${actualValue}.`);
   }
 }
 
