@@ -29,22 +29,55 @@ export async function navigateToSettingsSection(page, sectionTarget, bodyPattern
     automationIds: ["SettingsItem"]
   };
 
-  await ensureVisibleNavigationTarget(page, settingsNavigationTarget, {
-    labels: ["Toggle sidebar"],
-    automationIds: ["TitleBar.ToggleSidebar"]
-  });
-  await clickVisibleNavigationTargetUntilBodyText(
-    page,
-    settingsNavigationTarget,
-    /常规|General|外观|Appearance|ACP Agent|ACP \/ Agent/,
-    "settings shell");
+  // Only enter the shell when we are not already in it. The section entries exist in the semantic
+  // tree only while the settings shell is showing, so seeing the wanted one is proof enough - and
+  // activating the Settings entry when it is already open costs more than a wasted click: it starts
+  // a fresh navigation to the shell's default section, which lands asynchronously and can replace
+  // the section page a caller has already navigated to and started using.
+  if (!await scrollToVisibleControl(page, sectionTarget, 1_500)) {
+    await ensureVisibleNavigationTarget(page, settingsNavigationTarget, {
+      labels: ["Toggle sidebar"],
+      automationIds: ["TitleBar.ToggleSidebar"]
+    });
+    await clickVisibleNavigationTargetUntilBodyText(
+      page,
+      settingsNavigationTarget,
+      /常规|General|外观|Appearance|ACP Agent|ACP \/ Agent/,
+      "settings shell");
 
-  if (!await scrollToVisibleControl(page, sectionTarget, 3_000)) {
-    await clickTopNavigationOverflow(page);
-    await waitForControlState(page, sectionTarget, describeTarget(sectionTarget), 10_000);
+    if (!await scrollToVisibleControl(page, sectionTarget, 3_000)) {
+      await clickTopNavigationOverflow(page);
+      await waitForControlState(page, sectionTarget, describeTarget(sectionTarget), 10_000);
+    }
   }
 
-  await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
+  await clickSectionUntilItSticks(page, sectionTarget, bodyPattern, label);
+}
+
+// The shell hop above lands asynchronously: activating the Settings entry navigates the shell to its
+// default section, and that navigation can complete AFTER this section click, replacing the page we
+// just asked for. The symptom is brutal to read - the section's own controls appear, the step that
+// follows activates one of them, and only its effect goes missing, because by then the shell has
+// swapped the page back. So arrival is confirmed, given a beat, and confirmed again; if the shell
+// pulled the page out from under us, the section is simply activated again, which a navigation item
+// tolerates because activating it twice is idempotent.
+const sectionArrivalAttempts = 3;
+const sectionSettleMs = 800;
+
+async function clickSectionUntilItSticks(page, sectionTarget, bodyPattern, label) {
+  let lastBodyText = "";
+  for (let attempt = 1; attempt <= sectionArrivalAttempts; attempt += 1) {
+    await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
+    await page.waitForTimeout(sectionSettleMs);
+    lastBodyText = await page.locator("body").innerText();
+    if (bodyPattern.test(lastBodyText)) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `Navigated to ${label} but the shell replaced the page again each time `
+    + `(${sectionArrivalAttempts} attempts). Last body text=${JSON.stringify(lastBodyText.slice(0, 400))}`);
 }
 
 function describeTarget(options) {
