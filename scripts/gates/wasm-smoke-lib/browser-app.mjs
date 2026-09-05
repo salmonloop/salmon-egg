@@ -547,6 +547,45 @@ export async function openApp(page, baseUrl) {
   } catch (error) {
     throw new Error(`${error.message}\n${await describeUnrenderedPage(page)}`, { cause: error });
   }
+  await waitForSplashLoaderGone(page);
+}
+
+// The bootstrap keeps the `.uno-loader` splash mounted as `#loading` and unmounts it only from a
+// MutationObserver on #uno-body's child list (uno-bootstrap.js `initProgress`). The canvas, the
+// aria-live regions and the semantics root all land in #uno-body during boot, so the observer fires
+// within about a second of first paint - but openApp resolves the moment the semantic shell labels
+// appear, which can still be inside that window (measured: the splash was up for ~750ms after the
+// start cards were already queryable). While it is up it covers the whole viewport with
+// `pointer-events: auto` at z-index 5000, so a real pointer click aimed at the canvas lands on the
+// splash and is silently swallowed - the click reports success, nothing behind it reacts, and the
+// step times out on a body-text wait with no signal of what ate the click. Wait for the splash to
+// detach so pointer-driven steps start from a page a user could actually reach.
+//
+// If it is still mounted this deep into boot the observer never fired, which is itself a defect a
+// real user would see as a splash that never leaves; surface that instead of tearing it out here.
+async function waitForSplashLoaderGone(page) {
+  try {
+    await page.waitForFunction(
+      () => !document.getElementById("loading"),
+      undefined,
+      { timeout: 15_000, polling: 250 });
+  } catch (error) {
+    const splash = await page.evaluate(() => {
+      const element = document.getElementById("loading");
+      if (!element) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      return {
+        rect: `${rect.width}x${rect.height}@${rect.left},${rect.top}`,
+        pointerEvents: getComputedStyle(element).pointerEvents,
+        zIndex: getComputedStyle(element).zIndex
+      };
+    });
+    throw new Error(
+      `The bootstrap splash loader (#loading) never unmounted, so every real pointer click `
+      + `lands on it instead of the app. Splash state=${JSON.stringify(splash)}`, { cause: error });
+  }
 }
 
 // Skia paints into a <canvas>, so the accessibility tree is the only DOM Uno mirrors - and it builds
