@@ -36,6 +36,19 @@ const semanticRuntimeScript = `
 
   const normalize = value => (value ?? "").trim().toLowerCase();
 
+  // Prefer a laid-out candidate. Templated rows (a ListView's item template, an editor that is only
+  // realized for the row being edited) put several nodes carrying the SAME automation id into the
+  // tree; the ones belonging to unrealized rows report a placeholder rect a few pixels wide at the
+  // origin. They are indistinguishable by id, they are not hidden, and driving one does nothing a
+  // user could see - typing into it lands in a control that is not on screen and never reaches the
+  // ViewModel. Taking the first match is therefore a coin flip; taking the laid-out one is the
+  // control the user is actually looking at.
+  const laidOutMinimum = 12;
+  const looksLaidOut = element => {
+    const rect = element.getBoundingClientRect();
+    return rect.width >= laidOutMinimum && rect.height >= laidOutMinimum;
+  };
+
   const matchNode = input => {
     const automationIds = (input.automationIds ?? []).map(normalize).filter(Boolean);
     const labels = (input.labels ?? []).map(normalize).filter(Boolean);
@@ -46,7 +59,8 @@ const semanticRuntimeScript = `
       return null;
     }
 
-    let labelMatch = null;
+    const idMatches = [];
+    const labelMatches = [];
     for (const element of nodes) {
       if (element.hidden) {
         continue;
@@ -68,17 +82,21 @@ const semanticRuntimeScript = `
       if (automationIds.length > 0
         && ((automationId !== "" && automationIds.includes(automationId))
           || (aria !== "" && automationIds.includes(aria)))) {
-        return element;
+        idMatches.push(element);
+        continue;
       }
 
-      if (labelMatch === null
-        && labels.length > 0
+      if (labels.length > 0
         && (labels.includes(aria) || labels.includes(normalize(element.textContent)))) {
-        labelMatch = element;
+        labelMatches.push(element);
       }
     }
 
-    return labelMatch;
+    return idMatches.find(looksLaidOut)
+      ?? idMatches[0]
+      ?? labelMatches.find(looksLaidOut)
+      ?? labelMatches[0]
+      ?? null;
   };
 
   const activate = input => {
@@ -191,8 +209,57 @@ const semanticRuntimeScript = `
     };
   };
 
+  // Counting matches, not just finding one: a saved row appearing twice is only observable as a
+  // count, and matchNode deliberately returns the first hit.
+  const countMatches = input => {
+    const automationIds = (input.automationIds ?? []).map(normalize).filter(Boolean);
+    const labels = (input.labels ?? []).map(normalize).filter(Boolean);
+    const nodes = semanticRoot()?.querySelectorAll("[id^='uno-semantics-']") ?? [];
+    let count = 0;
+    for (const element of nodes) {
+      if (element.hidden) {
+        continue;
+      }
+
+      const automationId = normalize(element.getAttribute("xamlautomationid"));
+      const aria = normalize(element.getAttribute("aria-label"));
+      const matchesId = automationIds.length > 0
+        && ((automationId !== "" && automationIds.includes(automationId))
+          || (aria !== "" && automationIds.includes(aria)));
+      const matchesLabel = automationIds.length === 0
+        && labels.length > 0
+        && ((aria !== "" && labels.includes(aria))
+          || labels.includes(normalize(element.textContent)));
+      if (matchesId || matchesLabel) {
+        count += 1;
+      }
+    }
+
+    return count;
+  };
+
   const comboBoxLabeledIds = () => Array.from(semanticRoot().querySelectorAll("[aria-label]"))
     .map(node => node.id);
+
+  // Resolve the real <input> a control writes through, so the driver can put a keyboard on it.
+  // Returning the element id rather than the element itself is forced by page.evaluate: DOM nodes do
+  // not survive the round trip.
+  const resolveEditableField = input => {
+    // A CSS selector is accepted as an escape hatch for controls whose automation id never reaches
+    // the accessibility view. The composer is the standing case: its id is applied through an x:Bind
+    // on AutomationProperties.AutomationId, and the exported node carries no id at all, so there is
+    // nothing to match on - while the box itself is unmistakable in the DOM.
+    const element = input.selector
+      ? document.querySelector(input.selector)
+      : matchNode(input);
+    if (!element) {
+      return { matched: false, id: null, disabled: false, state: null };
+    }
+
+    const state = describeNode(element);
+    const editable = findEditable(element);
+    return { matched: true, id: editable?.id ?? null, disabled: state.disabled, state };
+  };
 
   const focusedSnapshot = () => {
     const element = document.activeElement;
@@ -289,8 +356,10 @@ const semanticRuntimeScript = `
     },
     activate,
     setInput,
+    resolveEditableField,
     comboBoxOpenState,
     comboBoxLabeledIds,
+    countMatches,
     focusControl,
     focusedSnapshot,
     readLocalTextFile,

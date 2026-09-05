@@ -58,6 +58,42 @@ export async function waitForControlState(page, options, label, timeoutMs = defa
     + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
 }
 
+export async function countVisibleControls(page, options) {
+  return await page.evaluate(input => window.__salmoneggSmoke.semantic.countMatches(input), options);
+}
+
+// A control inside a collapsed container is present and not hidden - Uno simply has not laid it out,
+// so it reports a placeholder rect a few pixels wide at the viewport origin. "Present in the
+// semantic tree" is therefore not the same as "on screen": anything a user has to see, point at, or
+// focus has to be checked for a real rect, or the smoke will happily drive a control that is not
+// there yet (and a pointer aimed at the placeholder lands on whatever occupies the top-left corner).
+const laidOutMinimumSize = 12;
+
+export function isLaidOut(state) {
+  return Boolean(state?.found)
+    && Boolean(state?.rect)
+    && state.rect.width >= laidOutMinimumSize
+    && state.rect.height >= laidOutMinimumSize;
+}
+
+export async function waitForLaidOutControl(page, options, label, timeoutMs = defaultTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = notFoundState;
+
+  while (Date.now() < deadline) {
+    lastState = await readControlState(page, options);
+    if (isLaidOut(lastState)) {
+      return lastState;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${label} to be laid out on screen. Last state=${JSON.stringify(lastState)} `
+    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+}
+
 export async function expectControlEnabledState(page, options, expectedEnabled, label) {
   const state = await waitForControlState(page, options, label);
   if (state.enabled !== expectedEnabled) {
@@ -168,6 +204,18 @@ export async function clickVisibleControlWithTrustedPointer(page, options, label
     throw new Error(
       `Control ${label} is disabled and cannot receive a pointer click. State=${JSON.stringify(state)} `
       + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
+  }
+
+  // A control Uno has not laid out yet reports a placeholder rect - a few pixels at the viewport's
+  // top-left - which is what a control inside a collapsed container looks like. Its centre is a
+  // perfectly clickable point belonging to whatever really sits there (the title bar's back button,
+  // in the case that surfaced this), so clicking it navigates away and the failure appears wherever
+  // the caller next looks. Refuse it and name it.
+  if (!isLaidOut(state)) {
+    throw new Error(
+      `Control ${label} reports an unlaid-out rect (${state.rect.width}x${state.rect.height} at `
+      + `${state.rect.left},${state.rect.top}), so it is not on screen for a pointer - it is most `
+      + `likely inside a collapsed container that has to be opened first. State=${JSON.stringify(state)}`);
   }
 
   // `getBoundingClientRect` and `page.mouse.click` share the viewport coordinate space, but a
@@ -691,6 +739,34 @@ export async function clickStartComposerSendButton(page) {
     { automationIds: ["ChatInputArea.Send"], labels: [] },
     "start composer send button",
     defaultTimeoutMs);
+}
+
+// The semantic tree's equivalent of a body-text wait. Skia mirrors much of what a user reads only as
+// an accessible name - list item titles, field labels, button captions on templated controls - so
+// text that is plainly on screen can be absent from every node's textContent. Matching against both
+// is what makes "the user can see this text" checkable on this renderer.
+export async function waitForSemanticText(page, pattern, label, timeoutMs = defaultTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastSample = [];
+  while (Date.now() < deadline) {
+    lastSample = await page.evaluate(source => {
+      const regex = new RegExp(source);
+      return Array.from(document.querySelectorAll("#uno-semantics-root [id^='uno-semantics-']"))
+        .filter(node => !node.hidden)
+        .map(node => `${node.getAttribute("aria-label") ?? ""}|${(node.textContent ?? "").trim()}`)
+        .filter(text => regex.test(text))
+        .slice(0, 5);
+    }, pattern.source);
+    if (lastSample.length > 0) {
+      return;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${label} in the semantic tree. Pattern=${pattern} `
+    + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
 }
 
 export async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
