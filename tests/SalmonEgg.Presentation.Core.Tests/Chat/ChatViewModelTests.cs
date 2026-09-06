@@ -7564,14 +7564,16 @@ public partial class ChatViewModelTests
 
         public async ValueTask Dispatch(ChatAction action)
         {
+            // 临界区不捕获环境上下文：与真实 ChatStore.Dispatch 的契约一致，
+            // 闸的释放绝不依赖外部泵（fire-and-forget 分发也必须能自完成）。
             _actions.Enqueue(action);
-            await _dispatchGate.WaitAsync();
+            await _dispatchGate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var currentState = LatestState;
                 var updatedState = ChatReducer.Reduce(currentState, action);
                 LatestState = updatedState;
-                await State.Update(_ => updatedState, CancellationToken.None);
+                await State.Update(_ => updatedState, CancellationToken.None).ConfigureAwait(false);
                 if (updatedState.Generation > currentState.Generation)
                 {
                     _workspaceWriter?.Enqueue(updatedState, scheduleSave: true);
@@ -7579,7 +7581,7 @@ public partial class ChatViewModelTests
 
                 if (AfterDispatch is { } afterDispatch)
                 {
-                    await afterDispatch(action);
+                    await afterDispatch(action).ConfigureAwait(false);
                 }
             }
             finally
@@ -7591,7 +7593,7 @@ public partial class ChatViewModelTests
         public async ValueTask SetStateAsync(ChatState state)
         {
             LatestState = state;
-            await State.Update(_ => state, CancellationToken.None);
+            await State.Update(_ => state, CancellationToken.None).ConfigureAwait(false);
         }
 
         public ValueTask<ChatState> GetCurrentStateAsync()
