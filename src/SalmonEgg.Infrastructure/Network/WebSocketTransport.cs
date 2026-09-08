@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.WebSockets;
 using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +17,7 @@ namespace SalmonEgg.Infrastructure.Network
     /// WebSocket transport implementation using Websocket.Client library.
     /// Provides message streaming using Reactive Extensions.
     /// </summary>
-    public class WebSocketTransport : ITransport, IDisposable
+    public class WebSocketTransport : ITransport, ITransportStateSource, IDisposable
     {
         private readonly ILogger _logger;
         private readonly ProxyConfig _proxyConfiguration;
@@ -27,7 +28,7 @@ namespace SalmonEgg.Infrastructure.Network
         private volatile IWebsocketClient? _client;
         private IDisposable? _clientSubscriptions;
         private readonly Subject<string> _messagesSubject;
-        private readonly BehaviorSubject<TransportState> _stateSubject;
+        private readonly BehaviorSubject<TransportStateChange> _stateSubject;
         private readonly TimeSpan _connectTimeout;
         private bool _disposed;
 
@@ -54,7 +55,7 @@ namespace SalmonEgg.Infrastructure.Network
             _proxyConfiguration = CloneProxyConfiguration(proxyConfiguration);
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
             _messagesSubject = new Subject<string>();
-            _stateSubject = new BehaviorSubject<TransportState>(TransportState.Disconnected);
+            _stateSubject = new BehaviorSubject<TransportStateChange>(new(TransportState.Disconnected));
             _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
         }
 
@@ -66,7 +67,9 @@ namespace SalmonEgg.Infrastructure.Network
         public IObservable<string> Messages => _messagesSubject;
 
         /// <inheritdoc />
-        public IObservable<TransportState> StateChanges => _stateSubject;
+        public IObservable<TransportState> StateChanges => _stateSubject.Select(static change => change.State);
+
+        IObservable<TransportStateChange> ITransportStateSource.StateTransitions => _stateSubject;
 
         /// <inheritdoc />
         public async Task ConnectAsync(string url, CancellationToken ct)
@@ -200,6 +203,7 @@ namespace SalmonEgg.Infrastructure.Network
         /// <inheritdoc />
         public async Task SendAsync(string message, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(message))
             {
                 throw new ArgumentException("Message cannot be null or empty", nameof(message));
@@ -229,7 +233,7 @@ namespace SalmonEgg.Infrastructure.Network
                 // connection intact. Mirrors StreamableHttpTransport.MarkTransportErrored.
                 if (IsFatalSendFailure(ex, client))
                 {
-                    PublishState(TransportState.Error);
+                    PublishState(TransportState.Error, TransportStateChangeOrigin.SendFailure, ex);
                 }
                 throw;
             }
@@ -300,9 +304,9 @@ namespace SalmonEgg.Infrastructure.Network
                         info.Exception?.GetType().FullName,
                         info.Exception?.Message);
 
-                    if (info.Type != DisconnectionType.Exit)
+                    if (info.Type != DisconnectionType.Exit && info.Type != DisconnectionType.ByUser)
                     {
-                        PublishState(TransportState.Error);
+                        PublishState(TransportState.Error, TransportStateChangeOrigin.ReceiveFailure);
                     }
                     else
                     {
@@ -366,14 +370,17 @@ namespace SalmonEgg.Infrastructure.Network
         /// <see cref="ObjectDisposedException"/> 顶替调用方真正要看的失败原因。
         /// 规则集中在这里，而不是散在每个发射点上。
         /// </summary>
-        private void PublishState(TransportState state)
+        private void PublishState(
+            TransportState state,
+            TransportStateChangeOrigin origin = TransportStateChangeOrigin.Connection,
+            Exception? exception = null)
         {
             if (_disposed)
             {
                 return;
             }
 
-            _stateSubject.OnNext(state);
+            _stateSubject.OnNext(new TransportStateChange(state, origin, exception));
         }
 
         /// <summary>

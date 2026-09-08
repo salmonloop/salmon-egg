@@ -41,6 +41,10 @@ public sealed class AcpClientRequestCancellationTests
     {
         _transportMock.SetupGet(t => t.IsConnected).Returns(true);
         _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, AcpTransportSendOptions, CancellationToken>((message, _, token) =>
+                _transportMock.Object.SendMessageAsync(message, token));
+        _transportMock
             .Setup(t => t.SendMessageAsync(It.IsRegex(@"cancel_request"), It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>((message, _) =>
             {
@@ -181,6 +185,37 @@ public sealed class AcpClientRequestCancellationTests
     }
 
     [Fact]
+    public async Task FailedCancelRequestSend_RequestsDiagnosticOnlyFailureOwnership()
+    {
+        using var client = await CreateInitializedClientAsync();
+        var errors = new ConcurrentQueue<string>();
+        client.ErrorOccurred += (_, error) => errors.Enqueue(error);
+        SetupSilentSend("session/new");
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex(@"cancel_request"), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, AcpTransportSendOptions, CancellationToken>((_, options, _) =>
+            {
+                if (options != AcpTransportSendOptions.DiagnosticOnly)
+                {
+                    _transportMock.Raise(t => t.ErrorOccurred += null,
+                        new AcpTransportErrorEventArgs("Failed to send message", new IOException("send failed"),
+                            AcpTransportErrorKind.SendFailed));
+                }
+                return Task.FromResult(false);
+            });
+        using var cancellation = new CancellationTokenSource();
+
+        var pending = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+        await WaitForSentMethodAsync("session/new");
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+
+        Assert.Empty(errors);
+        _transportMock.Verify(t => t.SendMessageAsync(It.IsRegex(@"cancel_request"),
+            AcpTransportSendOptions.DiagnosticOnly, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task FailedCancelRequestSend_DoesNotSurfaceAsAClientError()
     {
         // '$/' notifications are explicitly ignorable, so failing to deliver one is not a fault the
@@ -222,6 +257,176 @@ public sealed class AcpClientRequestCancellationTests
                 It.IsAny<string?>(),
                 It.IsAny<Exception?>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task ResponseReceivedBeforeSendObservesCancellation_WinsWithoutSendingCancelRequest()
+    {
+        using var client = await CreateInitializedClientAsync();
+        using var cancellation = new CancellationTokenSource();
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((message, token) =>
+            {
+                _sent.Enqueue(message);
+                using var request = JsonDocument.Parse(message);
+                RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+                    + ",\"result\":{\"sessionId\":\"completed-before-cancel\"}}");
+                cancellation.Cancel();
+                return Task.FromCanceled<bool>(token);
+            });
+
+        var response = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+
+        Assert.Equal("completed-before-cancel", response.SessionId);
+        Assert.Empty(SentNotifications(CancelRequestParams.Method));
+    }
+
+    [Fact]
+    public async Task CancellationNotification_WhenTransportWaits_ExpiresItsTokenAndCompletesWithoutError()
+    {
+        using var client = await CreateInitializedClientAsync();
+        SetupSilentSend("session/new");
+        var errors = new ConcurrentQueue<string>();
+        client.ErrorOccurred += (_, error) => errors.Enqueue(error);
+        var terminated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("cancel_request"), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, AcpTransportSendOptions, CancellationToken>(async (message, _, token) =>
+            {
+                _sent.Enqueue(message);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                    return true;
+                }
+                finally
+                {
+                    terminated.TrySetResult();
+                }
+            });
+        using var cancellation = new CancellationTokenSource();
+        var pending = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+        await WaitForSentMethodAsync("session/new");
+        await cancellation.CancelAsync();
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(
+            AcpClient.CancellationNotificationTimeout + TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        await terminated.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        Assert.Empty(errors);
+        Assert.Single(SentNotifications(CancelRequestParams.Method));
+    }
+
+    [Fact]
+    public async Task CancellationNotification_WhenLegacyTransportIgnoresToken_CallerStillFinishesAndLateFaultIsObserved()
+    {
+        using var client = await CreateInitializedClientAsync();
+        SetupSilentSend("session/new");
+        var lateSend = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errors = new ConcurrentQueue<string>();
+        client.ErrorOccurred += (_, error) => errors.Enqueue(error);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("cancel_request"), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(lateSend.Task);
+        using var cancellation = new CancellationTokenSource();
+        var pending = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+        await WaitForSentMethodAsync("session/new");
+        await cancellation.CancelAsync();
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(
+                AcpClient.CancellationNotificationTimeout + TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+            Assert.Empty(errors);
+            // Disposal must not wait for a legacy transport's uncooperative pending send either.
+            client.Dispose();
+        }
+        finally
+        {
+            // Even the deliberately non-cooperative fixture is completed before the test exits.
+            lateSend.TrySetException(new IOException("late best-effort send failure"));
+        }
+    }
+
+    [Fact]
+    public async Task TwoRequestsCancelledIndependently_EachRetainsItsOwnCorrelationUntilPeerSettlement()
+    {
+        using var client = await CreateInitializedClientAsync();
+        SetupSilentSend("session/new");
+        using var firstCancellation = new CancellationTokenSource();
+        using var secondCancellation = new CancellationTokenSource();
+        var first = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), firstCancellation.Token);
+        var second = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), secondCancellation.Token);
+        await WaitAsync(() => SentRequests("session/new").Length == 2, "both requests");
+
+        await firstCancellation.CancelAsync();
+        await secondCancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second);
+
+        var requests = SentRequests("session/new").Select(document => document.RootElement.GetProperty("id").GetRawText()).ToArray();
+        var notifications = SentNotifications(CancelRequestParams.Method);
+        Assert.Equal(2, notifications.Length);
+        Assert.Equal(requests.Order(), notifications.Select(document =>
+            document.RootElement.GetProperty("params").GetProperty("requestId").GetRawText()).Order());
+        foreach (var id in requests.Reverse())
+        {
+            RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + id
+                + ",\"error\":{\"code\":-32800,\"message\":\"Cancelled\"}}");
+        }
+        _loggerMock.Verify(logger => logger.Log(AcpClientLogLevel.Information, "CANCELLED_REQUEST_SETTLED",
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Exception?>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task DisconnectDuringCancellationNotification_CancelsItsSendAndClearsOtherPendingRequests()
+    {
+        using var client = await CreateInitializedClientAsync();
+        SetupSilentSend("session/new");
+        var notificationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notificationEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errors = new ConcurrentQueue<string>();
+        client.ErrorOccurred += (_, error) => errors.Enqueue(error);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("cancel_request"), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<string, AcpTransportSendOptions, CancellationToken>(async (_, _, token) =>
+            {
+                notificationStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                    return true;
+                }
+                finally
+                {
+                    notificationEnded.TrySetResult();
+                }
+            });
+        using var cancellation = new CancellationTokenSource();
+        var cancelled = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cancellation.Token);
+        var other = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+        await cancellation.CancelAsync();
+        await notificationStarted.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        _transportMock.SetupGet(t => t.IsConnected).Returns(false);
+        _transportMock.Raise(t => t.ErrorOccurred += null,
+            new AcpTransportErrorEventArgs("reader disconnected", kind: AcpTransportErrorKind.StdoutReadFailed));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => other);
+        Assert.Contains("reader disconnected", failure.Message, StringComparison.Ordinal);
+        await notificationEnded.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        Assert.False(client.IsInitialized);
+        Assert.Equal("reader disconnected", Assert.Single(errors));
+        foreach (var request in SentRequests("session/new"))
+        {
+            RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+                + ",\"error\":{\"code\":-32800,\"message\":\"Cancelled\"}}");
+        }
+        _loggerMock.Verify(logger => logger.Log(It.IsAny<AcpClientLogLevel>(), "CANCELLED_REQUEST_SETTLED",
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Exception?>()), Times.Never);
     }
 
     [Fact]

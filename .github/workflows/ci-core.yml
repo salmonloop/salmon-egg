@@ -43,6 +43,32 @@ env:
   SALMONEGG_ONEDRIVE_SCOPES: ${{ secrets.SALMONEGG_ONEDRIVE_SCOPES || vars.SALMONEGG_ONEDRIVE_SCOPES }}
 
 jobs:
+  acp-cancellation-transports:
+    name: ACP Cancellation Transports (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_PROCESSOR_COUNT: "2"
+      DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+      MSBUILDDISABLENODEREUSE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+      - name: Verify real cancellation transports without skips
+        run: bash scripts/gates/run-acp-cancellation-transport-gates.sh Release
+      - name: Upload cancellation evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: acp-cancellation-transports
+          path: artifacts/acp-cancellation/
+
   build-and-test:
     name: Build and Test
     runs-on: windows-latest

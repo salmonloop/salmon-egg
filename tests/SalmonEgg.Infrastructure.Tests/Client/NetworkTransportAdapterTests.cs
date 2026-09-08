@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using SalmonEgg.Infrastructure.Network;
 using Xunit;
 using TransportErrorEventArgs = SalmonEgg.Domain.Interfaces.Transport.TransportErrorEventArgs;
 using TransportErrorKind = SalmonEgg.Domain.Interfaces.Transport.TransportErrorKind;
+using TransportSendOptions = SalmonEgg.Domain.Interfaces.Transport.TransportSendOptions;
 
 namespace SalmonEgg.Infrastructure.Tests.Client;
 
@@ -86,6 +88,37 @@ public sealed class NetworkTransportAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_WhenCallerCancelsDuringSend_PreservesCancellationWithoutReportingFailure()
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportState>();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken token) =>
+            {
+                started.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            });
+        using var adapter = new NetworkTransportAdapter(inner.Object, "https://example.com/events");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+        using var cancellation = new CancellationTokenSource();
+
+        var send = adapter.SendMessageAsync("{}", cancellation.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await cancellation.CancelAsync();
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.Empty(errors);
+        Assert.True(adapter.IsConnected);
+    }
+
+    [Fact]
     public async Task ConnectAsync_Should_Return_False_And_Raise_Error_On_Exception()
     {
         var messages = new Subject<string>();
@@ -114,19 +147,20 @@ public sealed class NetworkTransportAdapterTests
         // ACP client faults its in-flight requests, and must report the break exactly once, tagged
         // SendFailed rather than the generic kind from the state subscription.
         var messages = new Subject<string>();
-        var states = new Subject<TransportState>();
+        var states = new Subject<TransportStateChange>();
         var inner = new Mock<ITransport>();
         inner.SetupGet(x => x.Messages).Returns(messages);
-        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.SetupGet(x => x.StateChanges).Returns(states.Select(static change => change.State));
         inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns((string _, CancellationToken _) =>
             {
-                states.OnNext(TransportState.Error);
-                throw new System.Net.WebSockets.WebSocketException("socket closed");
+                var failure = new System.Net.WebSockets.WebSocketException("socket closed");
+                states.OnNext(new(TransportState.Error, TransportStateChangeOrigin.SendFailure, failure));
+                throw failure;
             });
 
-        var adapter = new NetworkTransportAdapter(inner.Object, "wss://example.com/socket");
-        states.OnNext(TransportState.Connected);
+        var adapter = new NetworkTransportAdapter(new StateAwareTransport(inner.Object, states), "wss://example.com/socket");
+        states.OnNext(new(TransportState.Connected));
         var errors = new List<TransportErrorEventArgs>();
         adapter.ErrorOccurred += (_, args) => errors.Add(args);
 
@@ -146,20 +180,21 @@ public sealed class NetworkTransportAdapterTests
         // send resumes on another thread, or the break is reported twice: once as the generic kind by
         // the state subscription and once with the precise kind by the send catch.
         var messages = new Subject<string>();
-        var states = new Subject<TransportState>();
+        var states = new Subject<TransportStateChange>();
         var inner = new Mock<ITransport>();
         inner.SetupGet(x => x.Messages).Returns(messages);
-        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.SetupGet(x => x.StateChanges).Returns(states.Select(static change => change.State));
         inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(async (string _, CancellationToken _) =>
             {
                 await Task.Yield();
-                states.OnNext(TransportState.Error);
-                throw new System.Net.WebSockets.WebSocketException("socket closed");
+                var failure = new System.Net.WebSockets.WebSocketException("socket closed");
+                states.OnNext(new(TransportState.Error, TransportStateChangeOrigin.SendFailure, failure));
+                throw failure;
             });
 
-        var adapter = new NetworkTransportAdapter(inner.Object, "wss://example.com/socket");
-        states.OnNext(TransportState.Connected);
+        var adapter = new NetworkTransportAdapter(new StateAwareTransport(inner.Object, states), "wss://example.com/socket");
+        states.OnNext(new(TransportState.Connected));
         var errors = new List<TransportErrorEventArgs>();
         adapter.ErrorOccurred += (_, args) => errors.Add(args);
 
@@ -179,11 +214,11 @@ public sealed class NetworkTransportAdapterTests
         // finishes first would clear the other's claim and the suspended send's own break would then
         // also be reported as a generic transport error.
         var messages = new Subject<string>();
-        var states = new Subject<TransportState>();
+        var states = new Subject<TransportStateChange>();
         var suspended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var inner = new Mock<ITransport>();
         inner.SetupGet(x => x.Messages).Returns(messages);
-        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.SetupGet(x => x.StateChanges).Returns(states.Select(static change => change.State));
         inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(async (string message, CancellationToken _) =>
             {
@@ -193,12 +228,13 @@ public sealed class NetworkTransportAdapterTests
                 }
 
                 await suspended.Task.ConfigureAwait(false);
-                states.OnNext(TransportState.Error);
-                throw new System.Net.WebSockets.WebSocketException("socket closed");
+                var failure = new System.Net.WebSockets.WebSocketException("socket closed");
+                states.OnNext(new(TransportState.Error, TransportStateChangeOrigin.SendFailure, failure));
+                throw failure;
             });
 
-        var adapter = new NetworkTransportAdapter(inner.Object, "wss://example.com/socket");
-        states.OnNext(TransportState.Connected);
+        var adapter = new NetworkTransportAdapter(new StateAwareTransport(inner.Object, states), "wss://example.com/socket");
+        states.OnNext(new(TransportState.Connected));
         var errors = new List<TransportErrorEventArgs>();
         adapter.ErrorOccurred += (_, args) => errors.Add(args);
 
@@ -286,6 +322,128 @@ public sealed class NetworkTransportAdapterTests
     }
 
     [Fact]
+    public async Task DiagnosticOnlySend_WhenTransientFailure_ReturnsFalseWithoutErrorEvent()
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportState>();
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("send buffer busy"));
+        using var adapter = new NetworkTransportAdapter(inner.Object, "https://example.com/acp");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+
+        Assert.False(await adapter.SendMessageAsync("{}", TransportSendOptions.DiagnosticOnly,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(errors);
+        Assert.True(adapter.IsConnected);
+    }
+
+    [Fact]
+    public async Task DiagnosticOnlySend_WhenAnotherSendFails_ReportsOnlyTheOtherSend()
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportState>();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string message, CancellationToken token) =>
+            {
+                if (message == "cancel")
+                {
+                    await release.Task.WaitAsync(token);
+                }
+                throw new InvalidOperationException(message);
+            });
+        using var adapter = new NetworkTransportAdapter(inner.Object, "https://example.com/acp");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+
+        var cancel = adapter.SendMessageAsync("cancel", TransportSendOptions.DiagnosticOnly,
+            TestContext.Current.CancellationToken);
+        Assert.False(await adapter.SendMessageAsync("ordinary", TestContext.Current.CancellationToken));
+        release.TrySetResult();
+        Assert.False(await cancel);
+
+        Assert.Contains("ordinary", Assert.Single(errors).ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiagnosticOnlySend_WhenChildReaderFails_DoesNotHideInheritedExecutionContextError()
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportState>();
+        var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseReader = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSend = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? reader = null;
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken token) =>
+            {
+                // Matches HTTP initialize starting its long-lived SSE reader inside this send.
+                reader = Task.Run(async () =>
+                {
+                    readerStarted.TrySetResult();
+                    await releaseReader.Task.WaitAsync(token);
+                    states.OnNext(TransportState.Error);
+                }, token);
+                await releaseSend.Task.WaitAsync(token);
+            });
+        using var adapter = new NetworkTransportAdapter(inner.Object, "https://example.com/acp");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+
+        var send = adapter.SendMessageAsync("{}", TransportSendOptions.DiagnosticOnly,
+            TestContext.Current.CancellationToken);
+        await readerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        releaseReader.TrySetResult();
+        await reader!;
+        releaseSend.TrySetResult();
+        await send;
+
+        Assert.Equal(TransportErrorKind.General, Assert.Single(errors).Kind);
+        Assert.False(adapter.IsConnected);
+    }
+
+    [Fact]
+    public async Task DiagnosticOnlySend_WhenFatalSendFails_StillReportsDisconnect()
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportStateChange>();
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states.Select(static change => change.State));
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string _, CancellationToken _) =>
+            {
+                var failure = new System.Net.WebSockets.WebSocketException("closed socket");
+                states.OnNext(new(TransportState.Error, TransportStateChangeOrigin.SendFailure, failure));
+                throw failure;
+            });
+        using var adapter = new NetworkTransportAdapter(new StateAwareTransport(inner.Object, states), "wss://example.com/acp");
+        states.OnNext(new(TransportState.Connected));
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+
+        Assert.False(await adapter.SendMessageAsync("{}", TransportSendOptions.DiagnosticOnly,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(TransportErrorKind.SendFailed, Assert.Single(errors).Kind);
+        Assert.False(adapter.IsConnected);
+    }
+
+    [Fact]
     public async Task DisconnectAsync_OnException_ReportsDisconnectFailed()
     {
         var messages = new Subject<string>();
@@ -304,5 +462,16 @@ public sealed class NetworkTransportAdapterTests
         Assert.False(result);
         var error = Assert.Single(errors);
         Assert.Equal(TransportErrorKind.DisconnectFailed, error.Kind);
+    }
+
+    private sealed class StateAwareTransport(ITransport inner, IObservable<TransportStateChange> stateTransitions)
+        : ITransport, ITransportStateSource
+    {
+        public IObservable<TransportStateChange> StateTransitions => stateTransitions;
+        public IObservable<TransportState> StateChanges => inner.StateChanges;
+        public IObservable<string> Messages => inner.Messages;
+        public Task ConnectAsync(string url, CancellationToken ct) => inner.ConnectAsync(url, ct);
+        public Task DisconnectAsync() => inner.DisconnectAsync();
+        public Task SendAsync(string message, CancellationToken ct) => inner.SendAsync(message, ct);
     }
 }

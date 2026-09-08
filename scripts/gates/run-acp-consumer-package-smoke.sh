@@ -136,6 +136,7 @@ EOF2
 
 cat > "$console_dir/Program.cs" <<'EOF2'
 using System.Text.Json;
+using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
 
@@ -169,6 +170,16 @@ Require(
         && !initializeRoot.TryGetProperty("capabilities", out _),
     $"Default initialize wire payload must not include ACP v2 fields: {initializeJson}");
 
+// Old source implementations and two-argument default-literal calls must remain unambiguous.
+// The new default interface overload must dispatch to the old implementation without requiring
+// consumers to add members merely to pick up an SDK patch release.
+using var legacy = new LegacyTransport();
+IAcpTransport compatibleTransport = legacy;
+Require(await compatibleTransport.SendMessageAsync("legacy", default), "Legacy send failed.");
+Require(await compatibleTransport.SendMessageAsync("best-effort", AcpTransportSendOptions.DiagnosticOnly,
+    CancellationToken.None), "Default overload did not dispatch to the legacy transport.");
+Require(legacy.SendCount == 2, "Legacy/default dispatch must call the underlying send exactly once each.");
+
 Console.WriteLine(typeof(SessionListParams).FullName);
 
 static void Require(bool condition, string message)
@@ -177,6 +188,23 @@ static void Require(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+sealed class LegacyTransport : IAcpTransport
+{
+    public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived { add { } remove { } }
+    public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred { add { } remove { } }
+    public bool IsConnected => true;
+    public int SendCount { get; private set; }
+    public Task<bool> ConnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> DisconnectAsync() => Task.FromResult(true);
+    public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SendCount++;
+        return Task.FromResult(true);
+    }
+    public void Dispose() { }
 }
 EOF2
 
@@ -212,6 +240,84 @@ fi
 
 echo "[smoke] Runtime output: $smoke_output"
 echo "[smoke] Stable-surface consumer builds clean and runs"
+
+# A precompiled transport is a stronger compatibility check than recompiling old source against
+# the new interface: compile with the first published nupkg, then load that binary with this nupkg.
+legacy_dir="$smoke_dir/LegacyBinary"
+mkdir -p "$legacy_dir" "$smoke_dir/legacy-reference"
+cat > "$legacy_dir/NuGet.config" <<'EOF2'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources><clear /><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources>
+  <packageSourceMapping>
+    <packageSource key="nuget.org">
+      <package pattern="SalmonEgg.Acp" /><package pattern="Microsoft.*" /><package pattern="System.*" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>
+EOF2
+cat > "$legacy_dir/LegacyBinary.csproj" <<'EOF2'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><PackageReference Include="SalmonEgg.Acp" Version="1.0.0" /></ItemGroup>
+</Project>
+EOF2
+cat > "$legacy_dir/LegacyTransport.cs" <<'EOF2'
+using SalmonEgg.Acp.Client;
+
+public sealed class PrecompiledTransport : IAcpTransport
+{
+    public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived { add { } remove { } }
+    public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred { add { } remove { } }
+    public bool IsConnected => true;
+    public int SendCount { get; private set; }
+    public Task<bool> ConnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    public Task<bool> DisconnectAsync() => Task.FromResult(true);
+    public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SendCount++;
+        return Task.FromResult(true);
+    }
+    public void Dispose() { }
+}
+EOF2
+"$DOTNET_BIN" restore "$legacy_dir/LegacyBinary.csproj" --configfile "$legacy_dir/NuGet.config"
+"$DOTNET_BIN" build "$legacy_dir/LegacyBinary.csproj" --configuration "$CONFIGURATION" --no-restore -v minimal
+cp "$legacy_dir/bin/$CONFIGURATION/net10.0/LegacyBinary.dll" "$smoke_dir/legacy-reference/"
+
+binary_consumer_dir="$smoke_dir/BinaryConsumer"
+mkdir -p "$binary_consumer_dir"
+cat > "$binary_consumer_dir/BinaryConsumer.csproj" <<EOF2
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SalmonEgg.Acp" Version="$package_version" />
+    <Reference Include="LegacyBinary"><HintPath>../legacy-reference/LegacyBinary.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
+EOF2
+cat > "$binary_consumer_dir/Program.cs" <<'EOF2'
+using SalmonEgg.Acp.Client;
+
+using var legacy = new PrecompiledTransport();
+IAcpTransport transport = legacy;
+if (!await transport.SendMessageAsync("old-api", default)
+    || !await transport.SendMessageAsync("new-overload", AcpTransportSendOptions.DiagnosticOnly, CancellationToken.None)
+    || legacy.SendCount != 2)
+{
+    throw new InvalidOperationException("Precompiled 1.0.0 transport is not compatible with the new default interface overload.");
+}
+Console.WriteLine("legacy-binary-compatible");
+EOF2
+"$DOTNET_BIN" restore "$binary_consumer_dir/BinaryConsumer.csproj" --configfile "$smoke_dir/NuGet.config"
+"$DOTNET_BIN" build "$binary_consumer_dir/BinaryConsumer.csproj" --configuration "$CONFIGURATION" --no-restore -v minimal
+binary_output="$("$DOTNET_BIN" run --project "$binary_consumer_dir/BinaryConsumer.csproj" --configuration "$CONFIGURATION" --no-build --no-restore -v minimal)"
+if [ "$binary_output" != "legacy-binary-compatible" ]; then
+  echo "[smoke] Precompiled legacy transport did not pass: $binary_output" >&2
+  exit 1
+fi
+echo "[smoke] 1.0.0 transport binary runs against the current package and default interface overload"
 
 # --- Draft surface: every classified contract must refuse to compile unsuppressed -------------------
 # One type would be a sample, not a gate. The whole classified set is generated from the manifest so
