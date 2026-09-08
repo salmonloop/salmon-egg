@@ -133,6 +133,33 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task WebSocketTransport_LocalDisconnectAndPeerError_HaveDistinctStates()
+        {
+            using var reconnections = new Subject<ReconnectionInfo>();
+            using var disconnections = new Subject<DisconnectionInfo>();
+            using var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            using var transport = new WebSocketTransport(_mockLogger.Object, null, TimeSpan.FromSeconds(5), (_, _) => client.Object);
+            client.Setup(x => x.Start()).Returns(Task.CompletedTask).Callback(() =>
+            {
+                isRunning.Value = true;
+                reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+            });
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", TestContext.Current.CancellationToken);
+            var states = new List<TransportState>();
+            using var subscription = transport.StateChanges.Subscribe(states.Add);
+
+            disconnections.OnNext(new DisconnectionInfo(DisconnectionType.ByUser,
+                WebSocketCloseStatus.NormalClosure, "Client disconnecting", null!, null!));
+            Assert.DoesNotContain(TransportState.Error, states);
+            Assert.Equal(TransportState.Disconnected, states[^1]);
+
+            disconnections.OnNext(DisconnectionInfo.Create(DisconnectionType.Error, null!,
+                new WebSocketException("peer broke")));
+            Assert.Equal(TransportState.Error, states[^1]);
+        }
+
+        [Fact]
         public async Task WebSocketTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
         {
             // Arrange

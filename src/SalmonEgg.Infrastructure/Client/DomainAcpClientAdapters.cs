@@ -38,6 +38,16 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
     public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
         => _inner.SendMessageAsync(message, cancellationToken);
 
+    public Task<bool> SendMessageAsync(
+        string message,
+        AcpTransportSendOptions options,
+        CancellationToken cancellationToken)
+        => _inner.SendMessageAsync(message, options switch
+        {
+            AcpTransportSendOptions.DiagnosticOnly => TransportSendOptions.DiagnosticOnly,
+            _ => TransportSendOptions.Default
+        }, cancellationToken);
+
     public void Dispose()
     {
         if (_disposed)

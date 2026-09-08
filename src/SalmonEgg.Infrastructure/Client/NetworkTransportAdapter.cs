@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reactive.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using DomainTransport = SalmonEgg.Domain.Interfaces.Transport.ITransport;
@@ -19,14 +21,10 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
     // one they see; there is no invariant spanning it and another field, so no lock is needed.
     private volatile bool _isConnected;
     private bool _disposed;
-    // True for the duration of an in-flight send on this execution context. A fatal send fault makes
-    // the inner transport report the break as TransportState.Error from inside the send call, which
-    // would otherwise be reported twice: once as General by the state subscription and once with a
-    // precise kind by the send catch. The reentrant push is a causal child of the send, so the scope
-    // that identifies it is the execution context, not the thread — an async transport resumes the
-    // send on a different thread, and concurrent sends each need their own answer. An Error raised on
-    // the transport's own reader thread carries no send scope and still reports normally.
-    private readonly AsyncLocal<bool> _sendInProgress = new();
+    // Identity-only event deduplication, not connection state. Weak keys cannot retain faults from
+    // abandoned sends. The fatal transition must be reported immediately, before a quick reconnect
+    // can hide the disconnect from the SDK's pending-request cleanup.
+    private readonly ConditionalWeakTable<Exception, object> _reportedSendFailures = new();
 
     public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
 
@@ -49,16 +47,28 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
             },
             ex => RaiseError("Transport message stream error", ex, TransportErrorKind.General)));
 
-        _subscriptions.Add(_inner.StateChanges.Subscribe(
-            state =>
+        var stateChanges = _inner is ITransportStateSource stateSource
+            ? stateSource.StateTransitions
+            : _inner.StateChanges.Select(static state => new TransportStateChange(state));
+        _subscriptions.Add(stateChanges.Subscribe(
+            change =>
             {
+                var state = change.State;
                 _isConnected = state == TransportState.Connected;
                 if (state == TransportState.Error)
                 {
-                    // A push raised from inside the current send is that send's own failure; its catch
-                    // reports it with a precise kind, so do not also report it as General.
-                    if (_sendInProgress.Value)
+                    // ExecutionContext is not an ownership boundary:
+                    // a reader Task.Run started during initialize inherits the send's AsyncLocals.
+                    if (change.Origin == TransportStateChangeOrigin.SendFailure)
                     {
+                        if (change.Exception is not null)
+                        {
+                            if (!_reportedSendFailures.TryAdd(change.Exception, new object()))
+                            {
+                                return;
+                            }
+                        }
+                        RaiseError("Failed to send message", change.Exception, TransportErrorKind.SendFailed);
                         return;
                     }
                     RaiseError("Transport entered error state", null, TransportErrorKind.General);
@@ -98,36 +108,53 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
     }
 
-    public async Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+    public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+        => SendMessageAsync(message, TransportSendOptions.Default, cancellationToken);
+
+    public async Task<bool> SendMessageAsync(
+        string message,
+        TransportSendOptions options,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(message))
         {
             return false;
         }
 
-        // Claim the send so a reentrant Error push from the inner transport is attributed to this
-        // send rather than reported separately as General.
         var wasConnected = _isConnected;
-        _sendInProgress.Value = true;
         try
         {
             await _inner.SendAsync(message, cancellationToken).ConfigureAwait(false);
             return true;
         }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            // Preserve the caller's cancellation identity so the SDK can notify the peer. An actual
+            // break is still a connection failure even when cancellation races that failed write.
+            if (!_reportedSendFailures.Remove(ex) && wasConnected && !_isConnected)
+            {
+                RaiseError("Transport disconnected during send", null, TransportErrorKind.General);
+            }
+            throw;
+        }
         catch (Exception ex)
         {
+            if (_reportedSendFailures.Remove(ex))
+            {
+                return false;
+            }
             // Distinguish "there was no connection to send on" from "the send itself failed", the
             // same split the stdio transport reports. A fatal send fault also arrives as
             // TransportState.Error, which flips IsConnected to false so the ACP client faults its
             // in-flight requests instead of leaving them to hang; a transient fault leaves the
             // connection intact and only reports SendFailed.
             var kind = wasConnected ? TransportErrorKind.SendFailed : TransportErrorKind.NotConnected;
-            RaiseError("Failed to send message", ex, kind);
+            if (options != TransportSendOptions.DiagnosticOnly || !_isConnected)
+            {
+                RaiseError("Failed to send message", ex, kind);
+            }
             return false;
-        }
-        finally
-        {
-            _sendInProgress.Value = false;
         }
     }
 

@@ -22,6 +22,30 @@ namespace SalmonEgg.Acp.Client
         Task<bool> DisconnectAsync();
 
         Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends one message with explicit failure ownership. Implementations must honor cancellation.
+        /// The default preserves existing transports; override it to keep best-effort send failures
+        /// out of <see cref="ErrorOccurred"/> while still reporting connection and reader failures.
+        /// </summary>
+        Task<bool> SendMessageAsync(
+            string message,
+            AcpTransportSendOptions options,
+            CancellationToken cancellationToken)
+            => SendMessageAsync(message, cancellationToken);
+    }
+
+    /// <summary>Controls only errors caused by this individual send, never unrelated transport errors.</summary>
+    public enum AcpTransportSendOptions
+    {
+        /// <summary>Report send failures through the transport's normal error events.</summary>
+        Default,
+
+        /// <summary>
+        /// Return false or throw for a transient send failure so the caller can record diagnostics.
+        /// Connection loss, process exit, and reader failures must still raise normal error events.
+        /// </summary>
+        DiagnosticOnly
     }
 
     public sealed class AcpTransportMessageReceivedEventArgs : EventArgs

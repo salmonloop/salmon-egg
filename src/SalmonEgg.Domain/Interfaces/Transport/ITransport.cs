@@ -47,6 +47,23 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>是否成功发送</returns>
         Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Sends with failure ownership scoped to this operation. Independent reader failures and
+        /// connection loss must still be reported even for a diagnostic-only send.
+        /// </summary>
+        Task<bool> SendMessageAsync(
+            string message,
+            TransportSendOptions options,
+            CancellationToken cancellationToken)
+            => SendMessageAsync(message, cancellationToken);
+    }
+
+    /// <summary>Failure reporting for one transport send.</summary>
+    public enum TransportSendOptions
+    {
+        Default,
+        DiagnosticOnly
     }
 
     /// <summary>

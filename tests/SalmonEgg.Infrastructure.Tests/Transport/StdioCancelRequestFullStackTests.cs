@@ -41,7 +41,9 @@ public sealed class StdioCancelRequestFullStackTests
         try
         {
             using var transport = new StdioTransport("/bin/sh", [scriptPath]);
-            using var client = new AcpClient(new DomainAcpTransportAdapter(transport));
+            var probe = new CancellationTestProbe();
+            using var client = new AcpClient(new DomainAcpTransportAdapter(transport), probe);
+            client.ErrorOccurred += probe.RecordError;
             Assert.True(await transport.ConnectAsync(TestContext.Current.CancellationToken));
 
             await client.InitializeAsync(
@@ -64,12 +66,21 @@ public sealed class StdioCancelRequestFullStackTests
             var original = Assert.Single(frames, frame => frame.GetProperty("method").GetString() == "session/new");
             var cancel = Assert.Single(frames, frame => frame.GetProperty("method").GetString() == CancelRequestParams.Method);
 
-            Assert.False(cancel.TryGetProperty("id", out _));
-            Assert.Equal(
-                original.GetProperty("id").GetRawText(),
-                cancel.GetProperty("params").GetProperty("requestId").GetRawText());
+            CancellationTestProbe.AssertMatchingNotification(original, cancel);
+            await probe.Settlement.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-            await transport.DisconnectAsync();
+            var next = await client.CreateSessionAsync(new SessionNewParams(Path.GetFullPath(directory), null),
+                TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal("session-after-cancel", next.SessionId);
+            var abandoned = client.CreateSessionAsync(new SessionNewParams(Path.GetFullPath(directory), null),
+                TestContext.Current.CancellationToken);
+
+            await client.DisconnectAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
+            Assert.False(transport.IsConnected);
+            Assert.False(client.IsInitialized);
+            Assert.Empty(probe.Errors);
+
         }
         finally
         {
@@ -81,6 +92,7 @@ public sealed class StdioCancelRequestFullStackTests
     {
         var quotedPath = framesPath.Replace("'", "'\\''", StringComparison.Ordinal);
         return "#!/bin/sh\n"
+            + "new_count=0\n"
             + "while IFS= read -r frame; do\n"
             + "  printf '%s\\n' \"$frame\" >> '" + quotedPath + "'\n"
             + "  case \"$frame\" in\n"
@@ -88,9 +100,16 @@ public sealed class StdioCancelRequestFullStackTests
             + "      id=$(printf '%s' \"$frame\" | sed -n 's/.*\"id\":\\([0-9][0-9]*\\).*/\\1/p')\n"
             + "      printf '{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"test-agent\",\"version\":\"1.0\"},\"agentCapabilities\":{}}}\\n' \"$id\"\n"
             + "      ;;\n"
+            + "    *'\"method\":\"session/new\"'*)\n"
+            + "      new_count=$((new_count + 1))\n"
+            + "      if [ \"$new_count\" -eq 2 ]; then\n"
+            + "        id=$(printf '%s' \"$frame\" | sed -n 's/.*\"id\":\\([0-9][0-9]*\\).*/\\1/p')\n"
+            + "        printf '{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"sessionId\":\"session-after-cancel\"}}\\n' \"$id\"\n"
+            + "      fi\n"
+            + "      ;;\n"
             + "    *'\"method\":\"$/cancel_request\"'*)\n"
-            + "      # Keep the process open until the client tears it down. The production transport\n"
-            + "      # owns cleanup and kills the whole child tree at DisconnectAsync.\n"
+            + "      id=$(printf '%s' \"$frame\" | sed -n 's/.*\"requestId\":\\([0-9][0-9]*\\).*/\\1/p')\n"
+            + "      printf '{\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32800,\"message\":\"Cancelled\"}}\\n' \"$id\"\n"
             + "      ;;\n"
             + "  esac\n"
             + "done\n";
