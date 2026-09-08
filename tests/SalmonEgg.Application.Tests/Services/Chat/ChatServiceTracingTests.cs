@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Moq;
@@ -222,9 +223,18 @@ public sealed class ChatServiceTracingTests
 
         // Act
         List<Measurement<double>> measurements;
-        using (var collector = CreateDurationCollector())
+        using (var collector = CreateDurationCollector(parent.TraceId))
         {
-            await service.SendPromptAsync(new SessionPromptParams("session-42", []));
+            // MeterListener is process-wide: another test can record while this collector is alive.
+            // Exercise that overlap deterministically instead of depending on runner scheduling.
+            using (var unrelated = new Activity("test.chat.metric.other-trace")
+                .SetParentId(ActivityTraceId.CreateRandom(), ActivitySpanId.CreateRandom(), ActivityTraceFlags.None)
+                .Start())
+            {
+                await service.SendPromptAsync(new SessionPromptParams("other-session", []), TestContext.Current.CancellationToken);
+            }
+
+            await service.SendPromptAsync(new SessionPromptParams("session-42", []), TestContext.Current.CancellationToken);
             measurements = collector.Snapshot();
         }
 
@@ -240,7 +250,7 @@ public sealed class ChatServiceTracingTests
     {
         // Arrange：取消要进耗时分布且可分辨（error.type 归一化为 OperationCanceledException），
         // 但不得污染成功分布。
-        var cancellation = new CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var acpClient = new Mock<IAcpClient>();
         acpClient.Setup(client => client.AgentInfo)
@@ -259,7 +269,7 @@ public sealed class ChatServiceTracingTests
 
         // Act
         List<Measurement<double>> measurements;
-        using (var collector = CreateDurationCollector())
+        using (var collector = CreateDurationCollector(parent.TraceId))
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SendPromptAsync(
                 new SessionPromptParams("session-42", []),
@@ -278,11 +288,11 @@ public sealed class ChatServiceTracingTests
         measurement.Tags.ToArray().FirstOrDefault(tag => tag.Key == key).Value as string;
 
     /// <summary>
-    /// 挂一个只收 <c>gen_ai.invoke_agent.duration</c> 的 MeterListener；Dispose 即停。
+    /// Collects this test's duration measurements; other traces can run concurrently in the process.
     /// </summary>
     private sealed class DurationCollector : IDisposable
     {
-        private readonly List<Measurement<double>> _measurements = [];
+        private readonly ConcurrentQueue<Measurement<double>> _measurements = new();
         private readonly MeterListener _listener = new()
         {
             InstrumentPublished = (instrument, meterListener) =>
@@ -295,13 +305,14 @@ public sealed class ChatServiceTracingTests
             },
         };
 
-        public DurationCollector()
+        public DurationCollector(ActivityTraceId traceId)
         {
             _listener.SetMeasurementEventCallback<double>((instrument, measurement, tags, _) =>
             {
-                if (instrument.Name == ApplicationSemanticConventions.GenAi.InvokeAgentDurationMetric)
+                if (instrument.Name == ApplicationSemanticConventions.GenAi.InvokeAgentDurationMetric
+                    && Activity.Current?.TraceId == traceId)
                 {
-                    _measurements.Add(new Measurement<double>(measurement, tags.ToArray()));
+                    _measurements.Enqueue(new Measurement<double>(measurement, tags.ToArray()));
                 }
             });
             _listener.Start();
@@ -312,7 +323,7 @@ public sealed class ChatServiceTracingTests
         public void Dispose() => _listener.Dispose();
     }
 
-    private static DurationCollector CreateDurationCollector() => new();
+    private static DurationCollector CreateDurationCollector(ActivityTraceId traceId) => new(traceId);
 
     private static ActivityListener CreateListener(
         ActivityTraceId traceId,
