@@ -282,6 +282,65 @@ public sealed class AcpClientRequestCancellationTests
         Assert.Empty(SentNotifications(CancelRequestParams.Method));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RequestFromPreviousConnection_WhenSendObservesCancellationAfterReconnect_DoesNotCancelOnNewConnection(bool fatalDisconnect)
+    {
+        using var client = await CreateInitializedClientAsync();
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>(async (message, token) =>
+            {
+                _sent.Enqueue(message);
+                writeStarted.TrySetResult();
+                await releaseWrite.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                return true;
+            });
+        using var previousCancellation = new CancellationTokenSource();
+        var previous = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), previousCancellation.Token);
+        await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        try
+        {
+            if (fatalDisconnect)
+            {
+                _transportMock.SetupGet(t => t.IsConnected).Returns(false);
+                _transportMock.Raise(t => t.ErrorOccurred += null,
+                    new AcpTransportErrorEventArgs("old reader disconnected", kind: AcpTransportErrorKind.StdoutReadFailed));
+            }
+            else
+            {
+                await client.DisconnectAsync();
+            }
+            _transportMock.SetupGet(t => t.IsConnected).Returns(true);
+            await client.InitializeAsync(new InitializeParams(new ClientInfo("reconnected", "1.0"), new ClientCapabilities()),
+                TestContext.Current.CancellationToken);
+            await previousCancellation.CancelAsync();
+            releaseWrite.TrySetResult();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => previous);
+            Assert.Empty(SentNotifications(CancelRequestParams.Method));
+            Assert.True(client.IsInitialized);
+
+            SetupSilentSend("session/new");
+            using var currentCancellation = new CancellationTokenSource();
+            var current = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), currentCancellation.Token);
+            await currentCancellation.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => current);
+            var currentRequest = SentRequests("session/new").Last();
+            var cancel = Assert.Single(SentNotifications(CancelRequestParams.Method));
+            Assert.Equal(currentRequest.RootElement.GetProperty("id").GetRawText(),
+                cancel.RootElement.GetProperty("params").GetProperty("requestId").GetRawText());
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
     [Fact]
     public async Task CancellationNotification_WhenTransportWaits_ExpiresItsTokenAndCompletesWithoutError()
     {
@@ -317,6 +376,95 @@ public sealed class AcpClientRequestCancellationTests
         await terminated.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Empty(errors);
         Assert.Single(SentNotifications(CancelRequestParams.Method));
+    }
+
+    [Fact]
+    public async Task InitializeWhileAnotherHandshakeIsPending_RejectsDuplicateWithoutReplacingItsOwner()
+    {
+        using var client = new AcpClient(_transportMock.Object, _loggerMock.Object);
+        SetupSilentSend("initialize");
+        var parameters = new InitializeParams(new ClientInfo("handshake", "1.0"), new ClientCapabilities());
+        var pending = client.InitializeAsync(parameters, TestContext.Current.CancellationToken);
+        await WaitForSentMethodAsync("initialize");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.InitializeAsync(parameters,
+            TestContext.Current.CancellationToken));
+        var request = Assert.Single(SentRequests("initialize"));
+        RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+            + ",\"result\":{\"protocolVersion\":1,\"agentCapabilities\":{}}}");
+        await pending;
+        Assert.True(client.IsInitialized);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedInitialize_ReleasesConnectionOwnerSoAnotherHandshakeCanSucceed(bool callerCancels)
+    {
+        using var client = new AcpClient(_transportMock.Object, _loggerMock.Object);
+        using var cancellation = new CancellationTokenSource();
+        SetupSilentSend("initialize");
+        var parameters = new InitializeParams(new ClientInfo("handshake", "1.0"), new ClientCapabilities());
+        var pending = client.InitializeAsync(parameters, cancellation.Token);
+        await WaitForSentMethodAsync("initialize");
+        var request = Assert.Single(SentRequests("initialize"));
+        if (callerCancels)
+        {
+            await cancellation.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        }
+        else
+        {
+            RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+                + ",\"error\":{\"code\":-32603,\"message\":\"handshake rejected\"}}");
+            await Assert.ThrowsAsync<AcpException>(() => pending);
+        }
+
+        Assert.False(client.IsInitialized);
+        SetupInitializeResponse();
+        await client.InitializeAsync(parameters, TestContext.Current.CancellationToken);
+        RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+            + ",\"error\":{\"code\":-32800,\"message\":\"Cancelled\"}}");
+        _loggerMock.Verify(logger => logger.Log(It.IsAny<AcpClientLogLevel>(), "CANCELLED_REQUEST_SETTLED",
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Exception?>()), Times.Never);
+        Assert.True(client.IsInitialized);
+    }
+
+    [Fact]
+    public async Task PreviousInitializeCompletesAfterDisconnectAndNewHandshake_DoesNotReplaceTheNewConnection()
+    {
+        using var client = new AcpClient(_transportMock.Object, _loggerMock.Object);
+        var releaseOldWrite = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock
+            .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((message, _) =>
+            {
+                _sent.Enqueue(message);
+                using var request = JsonDocument.Parse(message);
+                RaiseTransportMessage("{\"jsonrpc\":\"2.0\",\"id\":" + request.RootElement.GetProperty("id").GetRawText()
+                    + ",\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"old-agent\",\"version\":\"1.0\"},\"agentCapabilities\":{}}}");
+                return releaseOldWrite.Task;
+            });
+        var initialized = 0;
+        client.Initialized += (_, _) => initialized++;
+        var parameters = new InitializeParams(new ClientInfo("handshake", "1.0"), new ClientCapabilities());
+        var old = client.InitializeAsync(parameters, TestContext.Current.CancellationToken);
+        await WaitForSentMethodAsync("initialize");
+        try
+        {
+            await client.DisconnectAsync();
+            SetupInitializeResponse();
+            await client.InitializeAsync(parameters, TestContext.Current.CancellationToken);
+            releaseOldWrite.TrySetResult(true);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => old);
+            Assert.True(client.IsInitialized);
+            Assert.Equal("TestAgent", client.AgentInfo!.Name);
+            Assert.Equal(1, initialized);
+        }
+        finally
+        {
+            releaseOldWrite.TrySetResult(true);
+        }
     }
 
     [Fact]
@@ -471,6 +619,20 @@ public sealed class AcpClientRequestCancellationTests
     private async Task<AcpClient> CreateInitializedClientAsync(AgentCapabilities? capabilities = null)
     {
         var client = new AcpClient(_transportMock.Object, _loggerMock.Object);
+        SetupInitializeResponse(capabilities);
+
+        await client.InitializeAsync(new InitializeParams(
+            new ClientInfo("Test", "1.0.0"),
+            new ClientCapabilities())
+        {
+            ProtocolVersion = AcpProtocolVersion.V1
+        });
+
+        return client;
+    }
+
+    private void SetupInitializeResponse(AgentCapabilities? capabilities = null)
+    {
         _transportMock
             .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>((message, _) =>
@@ -488,14 +650,6 @@ public sealed class AcpClientRequestCancellationTests
                 return Task.FromResult(true);
             });
 
-        await client.InitializeAsync(new InitializeParams(
-            new ClientInfo("Test", "1.0.0"),
-            new ClientCapabilities())
-        {
-            ProtocolVersion = AcpProtocolVersion.V1
-        });
-
-        return client;
     }
 
     /// <summary>
