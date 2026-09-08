@@ -41,6 +41,7 @@ public static class IconThemeKind
 
 /// <summary>An icon supplied by an Agent in v2 metadata.</summary>
 [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
+[JsonConverter(typeof(IconJsonConverter))]
 public sealed record Icon
 {
     /// <summary>URI of the icon resource. Required.</summary>
@@ -58,12 +59,18 @@ public sealed record Icon
     /// <summary>Preferred display theme, when any.</summary>
     [JsonPropertyName("theme")]
     public string? Theme { get; init; }
+
+    internal JsonElement? RawPayload { get; init; }
 }
 
 /// <summary>V2 command input specification for free text after the command name.</summary>
 [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
 public sealed record TextCommandInput : AcpProtocolObject
 {
+    /// <summary>ACP v2 text-input discriminator.</summary>
+    [JsonPropertyName("type")]
+    public string Type => "text";
+
     /// <summary>Input hint shown to the user. Required.</summary>
     [JsonPropertyName("hint")]
     public string Hint { get; init; } = string.Empty;

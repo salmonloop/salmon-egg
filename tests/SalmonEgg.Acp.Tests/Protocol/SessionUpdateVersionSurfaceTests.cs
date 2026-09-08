@@ -48,9 +48,9 @@ public sealed class SessionUpdateVersionSurfaceTests
 
     private static readonly (string Discriminator, string UpdateJson)[] s_shared =
     [
-        ("agent_message_chunk", """{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hi"}}"""),
-        ("user_message_chunk", """{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"ask"}}"""),
-        ("agent_thought_chunk", """{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"think"}}"""),
+        ("agent_message_chunk", """{"sessionUpdate":"agent_message_chunk","messageId":"m-1","content":{"type":"text","text":"hi"}}"""),
+        ("user_message_chunk", """{"sessionUpdate":"user_message_chunk","messageId":"m-2","content":{"type":"text","text":"ask"}}"""),
+        ("agent_thought_chunk", """{"sessionUpdate":"agent_thought_chunk","messageId":"m-3","content":{"type":"text","text":"think"}}"""),
         ("tool_call_update", """{"sessionUpdate":"tool_call_update","toolCallId":"tc-1","status":"completed"}"""),
         ("available_commands_update", """{"sessionUpdate":"available_commands_update","availableCommands":[]}"""),
         ("config_option_update", """{"sessionUpdate":"config_option_update","configOptions":[]}"""),

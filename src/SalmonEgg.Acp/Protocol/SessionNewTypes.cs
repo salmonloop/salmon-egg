@@ -61,26 +61,7 @@ namespace SalmonEgg.Acp.Protocol
     /// </summary>
     public sealed record SessionNewResponse : AcpProtocolObject
     {
-        /// <summary>
-        /// The ID of the newly created session.
-        /// </summary>
-        [JsonPropertyName("sessionId")]
-        public string SessionId { get; init; } = string.Empty;
-
-        /// <summary>
-        /// Session mode state (optional; the ACP standard shape is a SessionModeState object).
-        /// </summary>
-        [JsonPropertyName("modes")]
-        [JsonConverter(typeof(SessionModesStateJsonConverter))]
-        public SessionModesState? Modes { get; init; }
-
-
-        /// <summary>
-        /// List of available configuration options (optional).
-        /// </summary>
-        [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; init; }
-
+        private List<ConfigOption>? _configOptions;
 
         /// <summary>
         /// Creates a new SessionNewResponse instance.
@@ -101,6 +82,32 @@ namespace SalmonEgg.Acp.Protocol
             Modes = modes;
             ConfigOptions = configOptions;
         }
+
+        /// <summary>
+        /// The ID of the newly created session.
+        /// </summary>
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Session mode state (optional; the ACP standard shape is a SessionModeState object).
+        /// </summary>
+        [JsonPropertyName("modes")]
+        [JsonConverter(typeof(SessionModesStateJsonConverter))]
+        public SessionModesState? Modes { get; init; }
+
+
+        /// <summary>
+        /// List of available configuration options. V1 can omit the snapshot; V2 defaults it to an empty list.
+        /// </summary>
+        [JsonPropertyName("configOptions")]
+        public List<ConfigOption>? ConfigOptions
+        {
+            get => _configOptions;
+            init => _configOptions = value;
+        }
+
+        internal void SetDefaultConfigOptions() => _configOptions ??= new List<ConfigOption>();
     }
 
     /// <summary>

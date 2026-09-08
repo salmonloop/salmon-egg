@@ -12,7 +12,7 @@ public sealed class ConfigOptionV2Tests
     {
         var option = JsonSerializer.Deserialize<ConfigOption>(
             "{\"configId\":\"mode\",\"name\":\"Mode\",\"type\":\"boolean\",\"currentValue\":true}",
-            AcpJsonContext.Default.ConfigOption);
+            Wire.V2<ConfigOption>());
         Assert.Equal("mode", option!.Id);
     }
 
