@@ -127,14 +127,58 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Publish macOS Desktop
+      # Execute the release step on the host's Bash, including its unsigned path, before a costly publish.
+      - name: Verify macOS package build behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate_env="$(mktemp -d "$RUNNER_TEMP/macos-pkg-gate.XXXXXX")"
+          trap 'rm -rf "$gate_env"' EXIT
+          python3 -m venv "$gate_env"
+          "$gate_env/bin/python" -m pip install --disable-pip-version-check PyYAML==6.0.3
+          "$gate_env/bin/python" scripts/gates/macos_pkg_build_contract.py --bash /bin/bash
+
+      - name: Publish bundled CLI
+        id: bundled-cli
+        run: scripts/release/publish-cli-binary.sh --rid osx-arm64 --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the bundled CLI executable
+        env:
+          BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path }}
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "$BUNDLED_CLI"
+
+      # The release builds an app bundle with the CLI inside it; a loose publish never exercises that layout.
+      - name: Publish macOS app bundle
+        env:
+          BUNDLED_CLI: ${{ steps.bundled-cli.outputs.executable-path }}
         run: >-
           dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj
           --configuration ${{ env.CONFIGURATION }}
           --framework net10.0-desktop
           --runtime osx-arm64
-          --self-contained false
-          --output publish/macos-desktop
+          -p:SalmonEggTargetFrameworks=net10.0-desktop
+          -p:RuntimeIdentifiers=osx-arm64
+          -p:PackageFormat=app
+          -p:SalmonEggBundledCliExecutable="$BUNDLED_CLI"
+
+      - name: Build unsigned macOS installer package
+        id: build-pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find SalmonEgg/SalmonEgg/bin/${{ env.CONFIGURATION }}/net10.0-desktop/osx-arm64/publish -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in Uno publish output." >&2
+            exit 1
+          fi
+          scripts/gates/run-release-artifact-contract-gate.sh macos-bundle "$APP_PATH"
+          scripts/release/build-macos-pkg.sh --app-bundle "$APP_PATH"
+
+      - name: Verify macOS installer package
+        shell: bash
+        env:
+          PKG_PATH: ${{ steps.build-pkg.outputs.pkg-path }}
+        run: scripts/gates/run-macos-pkg-artifact-gate.sh "$PKG_PATH"
 
   windows-msix:
     # The MSIX package is the shipping Windows artifact, but until now it was only ever built by the

@@ -424,8 +424,8 @@ jobs:
           global-json-file: global.json
 
       # Installing SalmonEgg installs the salmon-egg command. Uno builds the .app from the publish output,
-      # so the command reaches Contents/MacOS/cli/salmon-egg by being part of that publish -- and it has to
-      # be there before signing, since adding a Mach-O to a signed bundle invalidates the signature.
+      # so the command reaches the bundle through that publish. Uno chooses its Contents subdirectory;
+      # it must be there before signing, since adding a Mach-O invalidates the signature.
       - name: Publish bundled CLI
         id: bundled-cli
         shell: bash
@@ -534,12 +534,19 @@ jobs:
             exit 1
           fi
 
-          signing_args=()
+          # macOS Bash 3.2 treats an empty array as unset under nounset. Keep mandatory arguments here.
+          pkg_args=(--app-bundle "$APP_PATH")
           if [ -n "${MACOS_PKG_CODESIGN_KEY:-}" ]; then
-            signing_args+=(--signing-key "$MACOS_PKG_CODESIGN_KEY")
+            pkg_args+=(--signing-key "$MACOS_PKG_CODESIGN_KEY")
           fi
 
-          scripts/release/build-macos-pkg.sh --app-bundle "$APP_PATH" "${signing_args[@]}"
+          scripts/release/build-macos-pkg.sh "${pkg_args[@]}"
+
+      - name: Verify macOS installer package
+        shell: bash
+        env:
+          PKG_PATH: ${{ steps.build-pkg.outputs.pkg-path }}
+        run: scripts/gates/run-macos-pkg-artifact-gate.sh "$PKG_PATH"
 
       - name: Upload macOS installer package artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0

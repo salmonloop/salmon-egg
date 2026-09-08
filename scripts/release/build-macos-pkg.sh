@@ -23,7 +23,7 @@ usage() {
 Usage: build-macos-pkg.sh --app-bundle <path> [options]
 
 Options:
-  --app-bundle <path>    The .app bundle to package. Must contain Contents/MacOS/cli/salmon-egg.
+  --app-bundle <path>    The .app bundle to package, with cli/salmon-egg under Contents/MacOS or Resources.
   --version <version>    Package version. Default: the repository display version.
   --output <dir>         Output directory. Default: artifacts/macos.
   --signing-key <name>   Developer ID Installer identity. Unsigned when omitted.
@@ -70,9 +70,19 @@ fi
 
 # The command the postinstall links. Without it the installer would run, succeed at copying the app, and
 # then fail in postinstall — a worse failure than not building the package.
-COMMAND_PATH="$APP_BUNDLE/Contents/MacOS/cli/salmon-egg"
-if [ ! -x "$COMMAND_PATH" ]; then
-  echo "The app bundle has no executable bundled CLI at Contents/MacOS/cli/salmon-egg." >&2
+# Uno's bundle split is not a documented contract; match the postinstall's candidates and preference.
+COMMAND_PATH=""
+for candidate in \
+  "$APP_BUNDLE/Contents/MacOS/cli/salmon-egg" \
+  "$APP_BUNDLE/Contents/Resources/cli/salmon-egg"
+do
+  if [ -x "$candidate" ]; then
+    COMMAND_PATH="$candidate"
+    break
+  fi
+done
+if [ -z "$COMMAND_PATH" ]; then
+  echo "The app bundle has no executable bundled CLI under Contents/MacOS/cli or Contents/Resources/cli." >&2
   echo "Publish it with scripts/release/publish-cli-binary.sh and pass -p:SalmonEggBundledCliExecutable." >&2
   exit 1
 fi
@@ -84,15 +94,16 @@ if [ ! -f "$PLIST" ]; then
   echo "The app bundle has no Contents/Info.plist." >&2
   exit 1
 fi
-IDENTIFIER="$(python3 -c "
+IDENTIFIER="$(python3 - "$PLIST" <<'PY'
 import plistlib, sys
-with open('$PLIST', 'rb') as handle:
+with open(sys.argv[1], 'rb') as handle:
     data = plistlib.load(handle)
 identifier = data.get('CFBundleIdentifier')
 if not identifier:
     sys.exit('Info.plist declares no CFBundleIdentifier')
 print(identifier)
-")"
+PY
+)"
 
 if [ -z "$VERSION" ]; then
   # -t:MinVer runs the MinVer target so the property holds the tag-derived version, not a default.
