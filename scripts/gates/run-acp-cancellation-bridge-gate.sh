@@ -15,7 +15,7 @@ log_file="$results_dir/bridge-gate.log"
 
 timeout --signal=TERM --kill-after=10s 180s "$dotnet_bin" test \
   --project tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj \
-  --configuration Release -p:UseSharedCompilation=false \
+  --configuration Release --no-ansi -p:UseSharedCompilation=false \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.ProductionBridgeCancellationTests \
   --minimum-expected-tests 1 --output Detailed > "$log_file" 2>&1 || {
     cat "$log_file"
