@@ -634,6 +634,8 @@ namespace SalmonEgg.Acp.Protocol
     public abstract record ContentChunkUpdate : SessionUpdate
     {
         [JsonPropertyName("messageId")]
+        // The unversioned generated contract is v1; the v2 resolver replaces this defaultable reader.
+        [JsonConverter(typeof(DefaultableStringJsonConverter))]
         public string? MessageId { get; init; }
     }
 

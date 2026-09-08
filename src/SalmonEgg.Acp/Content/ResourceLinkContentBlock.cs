@@ -1,3 +1,5 @@
+using System;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Content
@@ -6,6 +8,7 @@ namespace SalmonEgg.Acp.Content
     /// Resource link content block.
     /// Represents a reference to an external resource (a URI link).
     /// </summary>
+    [JsonConverter(typeof(ResourceLinkContentBlockJsonConverter))]
     public sealed record ResourceLinkContentBlock : ContentBlock
     {
         /// <summary>
@@ -52,6 +55,12 @@ namespace SalmonEgg.Acp.Content
         [JsonPropertyName("size")]
         public long? Size { get; init; }
 
+        [JsonIgnore]
+        internal JsonElement? RawIcons { get; init; }
+
+        [JsonIgnore]
+        internal bool HasDraftIcons { get; init; }
+
         /// <summary>
         /// Creates a new resource link content block instance.
         /// </summary>
@@ -83,5 +92,17 @@ namespace SalmonEgg.Acp.Content
             Description = description;
             Size = size;
         }
+    }
+
+    internal sealed class ResourceLinkContentBlockJsonConverter : JsonConverter<ResourceLinkContentBlock>
+    {
+        public override ResourceLinkContentBlock? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            return ContentBlockJsonConverter.ReadResourceLink(document.RootElement);
+        }
+
+        public override void Write(Utf8JsonWriter writer, ResourceLinkContentBlock value, JsonSerializerOptions options)
+            => ContentBlockJsonConverter.WriteResourceLink(writer, value, options);
     }
 }

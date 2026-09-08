@@ -103,7 +103,110 @@ namespace SalmonEgg.Acp.Serialization
                 ApplyNegotiatedSurface(info.PolymorphismOptions);
             }
 
+            if (info?.Kind == JsonTypeInfoKind.Object)
+            {
+                ApplyObjectContract(info);
+            }
+
             return info;
+        }
+
+        private void ApplyObjectContract(JsonTypeInfo info)
+        {
+            if (Version == AcpProtocolVersion.V2
+                && (typeof(ContentChunkUpdate).IsAssignableFrom(info.Type) || typeof(WholeMessageUpdate).IsAssignableFrom(info.Type)))
+            {
+                var messageId = FindProperty(info, "messageId");
+                messageId.IsRequired = true;
+                messageId.CustomConverter = null;
+                info.OnDeserialized = static value => RequireMessageId(value);
+                info.OnSerializing = static value => RequireMessageId(value);
+            }
+
+            if (Version != AcpProtocolVersion.V2)
+            {
+                return;
+            }
+
+            if (info.Type == typeof(SessionNewResponse) || info.Type == typeof(SessionResumeResponse))
+            {
+                IgnoreProperty(info, "modes", new IgnoredProtocolPropertyJsonConverter<SessionModesState>());
+                FindProperty(info, "configOptions").CustomConverter = new DefaultableConfigOptionsJsonConverter();
+                info.OnDeserialized = static value => NormalizeConfigOptions(value);
+            }
+            else if (info.Type == typeof(ConfigOptionUpdate) || info.Type == typeof(SessionSetConfigOptionResponse))
+            {
+                var configOptions = FindProperty(info, "configOptions");
+                configOptions.IsRequired = true;
+                configOptions.CustomConverter = new DefaultableConfigOptionsJsonConverter();
+                info.OnSerializing = static value => RequireConfigOptions(value);
+            }
+            else if (info.Type == typeof(AgentAuthCapabilities))
+            {
+                IgnoreProperty(info, "logout", new IgnoredProtocolPropertyJsonConverter<LogoutCapabilities>());
+            }
+            else if (info.Type == typeof(ClientCapabilities))
+            {
+                info.OnSerializing = static value => InitializeClientProtocolPolicy.Validate(AcpProtocolVersion.V2, (ClientCapabilities)value);
+                IgnoreProperty(info, "fs", new IgnoredProtocolPropertyJsonConverter<FsCapability>());
+                IgnoreProperty(info, "terminal", new IgnoredProtocolPropertyJsonConverter<bool?>());
+                IgnoreProperty(info, "session", new IgnoredProtocolPropertyJsonConverter<ClientSessionCapabilities>());
+            }
+        }
+
+        private static void RequireMessageId(object value)
+        {
+            var id = value is ContentChunkUpdate chunk ? chunk.MessageId : ((WholeMessageUpdate)value).MessageId;
+            if (id is null)
+            {
+                throw new JsonException("ACP v2 message update requires string 'messageId'.");
+            }
+        }
+
+        private static void NormalizeConfigOptions(object value)
+        {
+            // The v2 schema uses a defaultable array here, rather than v1's nullable snapshot.
+            if (value is SessionNewResponse created && created.ConfigOptions is null)
+            {
+                created.SetDefaultConfigOptions();
+            }
+            else if (value is SessionResumeResponse resumed && resumed.ConfigOptions is null)
+            {
+                resumed.SetDefaultConfigOptions();
+            }
+        }
+
+        private static void RequireConfigOptions(object value)
+        {
+            var options = value is ConfigOptionUpdate update
+                ? update.ConfigOptions
+                : ((SessionSetConfigOptionResponse)value).ConfigOptions;
+            if (options is null)
+            {
+                throw new JsonException("ACP v2 configuration update requires 'configOptions'.");
+            }
+        }
+
+        private static JsonPropertyInfo FindProperty(JsonTypeInfo info, string name)
+        {
+            foreach (var property in info.Properties)
+            {
+                if (property.Name == name)
+                {
+                    return property;
+                }
+            }
+
+            throw new InvalidOperationException($"The {info.Type.Name} contract has no '{name}' property.");
+        }
+
+        private static void IgnoreProperty(JsonTypeInfo info, string name, JsonConverter converter)
+        {
+            // Source-generated record constructors bind parameters to these properties. Retain that
+            // metadata while removing the older wire behavior, rather than breaking constructor binding.
+            var property = FindProperty(info, name);
+            property.CustomConverter = converter;
+            property.ShouldSerialize = static (_, _) => false;
         }
 
         /// <summary>
