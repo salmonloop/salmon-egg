@@ -174,15 +174,13 @@ verify_macos_bundle() {
   # exactly. The area is reported so the first real bundle settles the question.
   local command_path="" area=""
   for area in MacOS Resources; do
-    if [ -f "$app/Contents/$area/cli/salmon-egg" ]; then
+    # Match the postinstall: an unusable candidate cannot hide a later executable one.
+    if [ -f "$app/Contents/$area/cli/salmon-egg" ] && [ -x "$app/Contents/$area/cli/salmon-egg" ]; then
       command_path="$app/Contents/$area/cli/salmon-egg"
       break
     fi
   done
-  [ -n "$command_path" ] || { fail "the bundle carries no salmon-egg under Contents/MacOS/cli or Contents/Resources/cli"; return 1; }
-  # Executability, not just presence: the postinstall tests -x and refuses otherwise, so a mode bit dropped
-  # by a copy would fail the install rather than this gate.
-  [ -x "$command_path" ] || { fail "$command_path is present but not executable"; return 1; }
+  [ -n "$command_path" ] || { fail "the bundle carries no executable salmon-egg under Contents/MacOS/cli or Contents/Resources/cli"; return 1; }
 
   echo "[artifact-gate] macos-bundle: $(basename "$app") declares $identifier, executable '$executable' present, bundled salmon-egg under Contents/$area/cli"
 }
@@ -385,6 +383,16 @@ PLIST
   # the gate fail on a bundle that installs correctly.
   make_good_bundle "$work/ResourcesCli.app" SalmonEgg Resources
   expect "a bundle carrying salmon-egg under Contents/Resources" pass verify_macos_bundle "$work/ResourcesCli.app"
+
+  # An unusable first candidate must not hide the executable the postinstall would actually select.
+  make_good_bundle "$work/FallbackCli.app" SalmonEgg Resources
+  mkdir -p "$work/FallbackCli.app/Contents/MacOS/cli"
+  printf 'bin' > "$work/FallbackCli.app/Contents/MacOS/cli/salmon-egg"
+  chmod -x "$work/FallbackCli.app/Contents/MacOS/cli/salmon-egg"
+  expect "an unusable MacOS candidate with an executable Resources CLI" pass verify_macos_bundle "$work/FallbackCli.app"
+  chmod -x "$work/FallbackCli.app/Contents/Resources/cli/salmon-egg"
+  printf 'bin' > "$work/FallbackCli.app/Contents/Resources/cli/salmon-egg"
+  expect "a bundle whose CLI candidates are both not executable" fail verify_macos_bundle "$work/FallbackCli.app"
 
   # macos: the app is complete but the bundled command was never embedded. The .dmg would install an app
   # whose `salmon-egg` does not exist, and the .pkg's postinstall would fail after copying it.
