@@ -31,6 +31,30 @@ variants, permission subjects, config-option wire shapes, and JSON-RPC batches a
 and protected by a separate experimental feature flag. The modeled v2 contracts are marked
 `[Experimental("SEACP002")]`; see [ACP v2 draft surface](#acp-v2-draft-surface-seacp002).
 
+## Capability support boundaries
+
+The presence of a wire type does not advertise a capability or supply its host implementation.
+`ClientCapabilityDefaults.Create()` is the authority for the capabilities SalmonEgg advertises;
+hosts must enable optional capabilities only after implementing their interaction and lifecycle.
+
+| Surface | Current behavior | Remaining work |
+| --- | --- | --- |
+| Agent authentication | An eligibility check blocks `terminal` and other non-blank unknown method types before `authenticate`. | Blank and malformed discriminators still need correction in [#147](https://github.com/salmonloop/salmon-egg/issues/147). Interactive terminal authentication also needs a host implementation before advertising `auth.terminal`. |
+| Request cancellation | The SDK implements `$/cancel_request`, `-32800`, and late-response correlation. `session/cancel` remains a separate session operation. | Network adapter cancellation and cancel-send error handling still need correction in [#148](https://github.com/salmonloop/salmon-egg/issues/148). Peer cancellation is best effort. |
+| Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
+| URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
+| ACP v2 | Experimental wire contracts and version-specific serialization tests exist. Live initialization rejects v2. | Wire coverage and the runtime lifecycle remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+
+V2 wire coverage still needs grouped config-option identifiers (`groupId`), required message IDs
+on chunks, resource-link icons, command-input discriminators, and the treatment of v1-only fields
+and MCP variants. Its permission subject types are not connected to live request handling.
+Completing these contracts does not complete message upserts, streaming tool and terminal
+projections, or the acknowledgement-to-`state_update` completion lifecycle.
+
+Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
+both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
+lifecycle. Passing DTO tests or suppressing `SEACP002` does not satisfy that requirement.
+
 ## ACP v2 draft surface (SEACP002)
 
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is
