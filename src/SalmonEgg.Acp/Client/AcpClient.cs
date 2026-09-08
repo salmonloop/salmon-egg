@@ -231,11 +231,51 @@ namespace SalmonEgg.Acp.Client
 
             InitializeClientProtocolPolicy.Validate(@params.ProtocolVersion, @params.ClientCapabilities);
 
-            if (_isInitialized)
+            CancellationToken connectionToken;
+            lock (_lock)
             {
-                throw new InvalidOperationException("ACP client is already initialized.");
+                if (_isInitialized)
+                {
+                    throw new InvalidOperationException("ACP client is already initialized.");
+                }
+                if (_messageLoopCts is not null)
+                {
+                    throw new InvalidOperationException("ACP client initialization is already in progress.");
+                }
+                // The initialize request belongs to this connection too. Keep this same owner
+                // through the successful handshake instead of introducing it only afterwards.
+                _messageLoopCts = new CancellationTokenSource();
+                connectionToken = _messageLoopCts.Token;
             }
 
+            InitializeResponse initializeResponse;
+            try
+            {
+                initializeResponse = await InitializeConnectionAsync(@params, connectionToken, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                lock (_lock)
+                {
+                    if (_messageLoopCts?.Token == connectionToken)
+                    {
+                        ResetConnectionState();
+                        CancelPendingRequests();
+                    }
+                }
+                throw;
+            }
+
+            Initialized?.Invoke(this, initializeResponse);
+            return initializeResponse;
+        }
+
+        private async Task<InitializeResponse> InitializeConnectionAsync(
+            InitializeParams @params,
+            CancellationToken connectionToken,
+            CancellationToken cancellationToken)
+        {
             // Make sure the transport is connected.
             if (!_transport.IsConnected)
             {
@@ -252,7 +292,7 @@ namespace SalmonEgg.Acp.Client
                 Interlocked.Increment(ref _nextMessageId),
                 "initialize",
                 ToElement<InitializeParams>(@params));
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await SendRequestAsync(request, cancellationToken, connectionToken).ConfigureAwait(false);
 
             // Validate the response.
             var validationResult = _validator.ValidateResponse(response);
@@ -289,20 +329,23 @@ namespace SalmonEgg.Acp.Client
                     $"Protocol version mismatch. Expected by client: {clientVersion}, Server: {serverVersion}");
             }
 
-            // Store the agent information.
-            _wire = AcpWireFormat.For(serverVersion);
-            _agentInfo = initializeResponse.AgentInfo;
-            _agentCapabilities = initializeResponse.AgentCapabilities;
-            _authMethods = initializeResponse.AuthMethods;
-            _clientCapabilities = @params.ClientCapabilities;
-            _isInitialized = true;
-
-            // Start the transport disconnect watchdog.
-            _messageLoopCts = new CancellationTokenSource();
-            _ = MonitorTransportConnectionAsync(_messageLoopCts.Token);
-
-            // Raise the event.
-            Initialized?.Invoke(this, initializeResponse);
+            lock (_lock)
+            {
+                connectionToken.ThrowIfCancellationRequested();
+                // An old handshake may finish after a disconnect and a newer initialize. Its
+                // result cannot replace the newer connection's capabilities or cancellation owner.
+                if (_messageLoopCts?.Token != connectionToken)
+                {
+                    throw new OperationCanceledException("The ACP connection changed during initialization.");
+                }
+                _wire = AcpWireFormat.For(serverVersion);
+                _agentInfo = initializeResponse.AgentInfo;
+                _agentCapabilities = initializeResponse.AgentCapabilities;
+                _authMethods = initializeResponse.AuthMethods;
+                _clientCapabilities = @params.ClientCapabilities;
+                _isInitialized = true;
+                _ = MonitorTransportConnectionAsync(connectionToken);
+            }
 
             return initializeResponse;
         }
@@ -1145,8 +1188,18 @@ namespace SalmonEgg.Acp.Client
         /// Sends a request and awaits its response.
         /// </summary>
 
-        private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
+        private async Task<JsonRpcResponse> SendRequestAsync(
+            JsonRpcRequest request,
+            CancellationToken cancellationToken,
+            CancellationToken connectionToken = default)
         {
+            if (!connectionToken.CanBeCanceled)
+            {
+                lock (_lock)
+                {
+                    connectionToken = _messageLoopCts?.Token ?? CancellationToken.None;
+                }
+            }
             using var activity = AcpActivitySources.StartClientRequest(request.Method);
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1158,6 +1211,7 @@ namespace SalmonEgg.Acp.Client
             {
                 var json = _parser.SerializeMessage(request);
                 ClearLastTransportError();
+                connectionToken.ThrowIfCancellationRequested();
                 cancellationToken.ThrowIfCancellationRequested();
                 // Once the transport call begins, a pipe/socket implementation may have written
                 // some or all of the frame before observing its token. Treat it as potentially
@@ -1208,6 +1262,12 @@ namespace SalmonEgg.Acp.Client
                     }
                     return completed;
                 }
+                // A disconnection may have faulted the retained waiter while its original write
+                // was still in progress. Caller cancellation wins here, but observe that fault.
+                if (tcs.Task.IsFaulted)
+                {
+                    _ = tcs.Task.Exception;
+                }
                 AcpActivitySources.MarkCancelled(activity);
 
                 // A caller can abandon its own await immediately, but the matching response still
@@ -1218,7 +1278,7 @@ namespace SalmonEgg.Acp.Client
                 if (requestWriteStarted && AcpRequestId.TryFromEnvelopeId(request.Id, out var requestId))
                 {
                     retainPendingRequest = true;
-                    await SendCancelRequestNotificationAsync(requestId).ConfigureAwait(false);
+                    await SendCancelRequestNotificationAsync(requestId, connectionToken).ConfigureAwait(false);
                 }
 
                 throw new OperationCanceledException(cancellationToken);
@@ -1261,18 +1321,8 @@ namespace SalmonEgg.Acp.Client
         /// user-facing error. The original request remains pending until its terminal response or a
         /// disconnect resolves it.
         /// </remarks>
-        private async Task SendCancelRequestNotificationAsync(AcpRequestId requestId)
+        private async Task SendCancelRequestNotificationAsync(AcpRequestId requestId, CancellationToken connectionToken)
         {
-            if (!_transport.IsConnected)
-            {
-                return;
-            }
-
-            CancellationToken connectionToken;
-            lock (_lock)
-            {
-                connectionToken = _messageLoopCts?.Token ?? CancellationToken.None;
-            }
             using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(connectionToken);
             sendCancellation.CancelAfter(CancellationNotificationTimeout);
             Task<bool>? sendTask = null;
@@ -1282,10 +1332,20 @@ namespace SalmonEgg.Acp.Client
                     CancelRequestParams.Method,
                     ToElement<CancelRequestParams>(
                         new CancelRequestParams(requestId)));
-                sendTask = _transport.SendMessageAsync(
-                    _parser.SerializeMessage(notification),
-                    AcpTransportSendOptions.DiagnosticOnly,
-                    sendCancellation.Token);
+                var json = _parser.SerializeMessage(notification);
+                lock (_lock)
+                {
+                    if (connectionToken.IsCancellationRequested || _messageLoopCts?.Token != connectionToken
+                        || !_transport.IsConnected)
+                    {
+                        return;
+                    }
+                    // Validate ownership and begin the send before ResetConnectionState can hand
+                    // this same transport to a new initialize. Its token always belongs to the
+                    // original request's connection, never the connection current at catch time.
+                    sendTask = _transport.SendMessageAsync(json, AcpTransportSendOptions.DiagnosticOnly,
+                        sendCancellation.Token);
+                }
                 // The token bounds compliant transports; WaitAsync also bounds a legacy transport
                 // that ignores it. We retain only a fault observer for that legacy operation below.
                 var sent = await sendTask.WaitAsync(sendCancellation.Token).ConfigureAwait(false);
