@@ -13,6 +13,7 @@ import {
   selectComboBoxItem,
   typeIntoVisibleTextField,
   waitForBodyText,
+  waitForControlEnabledState,
   waitForControlState,
   waitForSemanticText
 } from "./ui-affordances.mjs";
@@ -150,6 +151,7 @@ export async function createRemoteDirectory(page, displayName, remotePath) {
       `The remote directory editor did not open after ${profileEditorAttempts} activations of its Add affordance.`);
   }
 
+  await waitForControlEnabledState(page, remoteDirectoryAddAffordance, false, "remote directory editor is active");
   await typeIntoVisibleTextField(
     page,
     { labels: ["项目名称", "Project name"], automationIds: ["Acp.RemoteDirectories.DisplayName"] },
@@ -161,6 +163,9 @@ export async function createRemoteDirectory(page, displayName, remotePath) {
     remotePath,
     "remote directory path");
   await clickVisibleNavigationTarget(page, { labels: ["保存", "Save"], automationIds: ["Acp.RemoteDirectories.Save"] });
+  // The command commits the row synchronously; Add becomes enabled only after editing ends.
+  // This proves the UI accepted Save, while the caller separately waits for durable persistence.
+  await waitForControlEnabledState(page, remoteDirectoryAddAffordance, true, "remote directory editor has closed");
   await expectRemoteDirectoryPresence(page, displayName, remotePath, "saved remote directory");
 }
 

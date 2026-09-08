@@ -311,6 +311,53 @@ const semanticRuntimeScript = `
     }
   };
 
+  // IDBFS writes reach the in-memory FS before syncfs commits them to IndexedDB. Read the
+  // existing mount's backing store without opening a database, flushing, or closing the app's
+  // connection: a reload gate must observe persistence, never perform it for the application.
+  // https://emscripten.org/docs/api_reference/Filesystem-API.html#filesystem-api-idbfs
+  const readPersistedLocalTextFile = async (filePath, timeoutMs) => {
+    const result = { path: filePath, content: null, error: null };
+    try {
+      const mount = globalThis.FS?.lookupPath(filePath)?.node?.mount;
+      const database = mount?.type?.dbs?.[mount.mountpoint];
+      const storeName = mount?.type?.DB_STORE_NAME;
+      if (!database || !storeName) {
+        result.error = "The persistent IDBFS database is not ready.";
+        return result;
+      }
+
+      result.content = await new Promise((resolve, reject) => {
+        const transaction = database.transaction(storeName, "readonly");
+        const request = transaction.objectStore(storeName).get(filePath);
+        const timer = setTimeout(() => {
+          try { transaction.abort(); } catch { /* The transaction may already have completed. */ }
+          reject(new Error("Timed out reading the persisted file from IndexedDB."));
+        }, timeoutMs);
+        transaction.oncomplete = () => {
+          clearTimeout(timer);
+          try {
+            const contents = request.result?.contents;
+            if (!contents) {
+              throw new Error("The file has not been persisted to IndexedDB.");
+            }
+
+            resolve(new TextDecoder("utf-8", { fatal: true }).decode(contents));
+          } catch (error) {
+            reject(error);
+          }
+        };
+        transaction.onabort = () => {
+          clearTimeout(timer);
+          reject(transaction.error ?? new Error("The persisted file read was aborted."));
+        };
+      });
+    } catch (error) {
+      result.error = error?.message ?? String(error);
+    }
+
+    return result;
+  };
+
   const persistenceDebug = input => {
     const element = matchNode(input.controlOptions);
     const editable = element ? findEditable(element) : null;
@@ -363,6 +410,7 @@ const semanticRuntimeScript = `
     focusControl,
     focusedSnapshot,
     readLocalTextFile,
+    readPersistedLocalTextFile,
     persistenceDebug,
     collectDebug: () => Array.from(semanticRoot()?.querySelectorAll("[id^='uno-semantics-']") ?? [])
       .map(describeNode)

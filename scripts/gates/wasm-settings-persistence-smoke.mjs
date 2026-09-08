@@ -23,6 +23,7 @@ import {
   scrollToVisibleControl,
   typeIntoVisibleTextField,
   waitForBodyText,
+  waitForPersistedLocalFileContains,
   readLocalTextFile
 } from "./wasm-smoke-lib/ui-affordances.mjs";
 import {
@@ -107,7 +108,7 @@ try {
     await verifyAcpSettings(page);
     await changeMcpSettings(page);
 
-    await waitForLocalFileContains(
+    await waitForPersistedLocalFileContains(
       page,
       appSettingsPath,
       [
@@ -120,7 +121,7 @@ try {
         "keyboard_shortcuts_enabled: false"
       ],
       "app settings YAML");
-    await waitForLocalFileContains(
+    await waitForPersistedLocalFileContains(
       page,
       mcpSettingsPath,
       [
@@ -606,24 +607,4 @@ function cssContrastRatio(foreground, background) {
   const lighter = Math.max(foregroundLuminance, backgroundLuminance);
   const darker = Math.min(foregroundLuminance, backgroundLuminance);
   return (lighter + 0.05) / (darker + 0.05);
-}
-
-async function waitForLocalFileContains(page, path, requiredSnippets, label, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
-  let lastResult = null;
-
-  while (Date.now() < deadline) {
-    lastResult = await readLocalTextFile(page, path);
-    const content = lastResult?.content ?? "";
-    if (!lastResult?.error && requiredSnippets.every(snippet => content.includes(snippet))) {
-      return content;
-    }
-
-    await page.waitForTimeout(250);
-  }
-
-  throw new Error(
-    `${label} did not contain expected settings. `
-    + `Expected=${JSON.stringify(requiredSnippets)} `
-    + `Actual=${JSON.stringify(lastResult)}`);
 }
