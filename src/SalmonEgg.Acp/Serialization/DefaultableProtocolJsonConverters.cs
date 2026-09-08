@@ -36,6 +36,32 @@ internal sealed class DefaultableStringJsonConverter : JsonConverter<string>
         => writer.WriteStringValue(value);
 }
 
+internal sealed class DefaultableObjectJsonConverter<T> : JsonConverter<T> where T : class
+{
+    public override T? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        return ReadValue(document.RootElement, options);
+    }
+
+    internal static T? ReadValue(JsonElement value, JsonSerializerOptions options)
+    {
+        try
+        {
+            return value.Deserialize((JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        }
+        catch (JsonException)
+        {
+            // Attach only to properties whose schema explicitly permits default-on-error.
+            // Typed root contracts remain strict, and valid sibling properties are retained.
+            return null;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+        => JsonSerializer.Serialize(writer, value, (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+}
+
 internal sealed class DefaultableConfigOptionsJsonConverter : JsonConverter<List<ConfigOption>>
 {
     public override bool HandleNull => true;

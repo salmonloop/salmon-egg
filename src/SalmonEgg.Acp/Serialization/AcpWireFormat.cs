@@ -145,8 +145,18 @@ namespace SalmonEgg.Acp.Serialization
             {
                 IgnoreProperty(info, "logout", new IgnoredProtocolPropertyJsonConverter<LogoutCapabilities>());
             }
+            else if (info.Type == typeof(AgentCapabilities))
+            {
+                FindProperty(info, "auth").CustomConverter = new DefaultableObjectJsonConverter<AgentAuthCapabilities>();
+            }
+            else if (info.Type == typeof(ElicitationCapabilities))
+            {
+                FindProperty(info, "form").CustomConverter = new DefaultableObjectJsonConverter<ElicitationFormCapabilities>();
+                FindProperty(info, "url").CustomConverter = new DefaultableObjectJsonConverter<ElicitationUrlCapabilities>();
+            }
             else if (info.Type == typeof(ClientCapabilities))
             {
+                FindProperty(info, "elicitation").CustomConverter = new DefaultableObjectJsonConverter<ElicitationCapabilities>();
                 info.OnSerializing = static value => InitializeClientProtocolPolicy.Validate(AcpProtocolVersion.V2, (ClientCapabilities)value);
                 IgnoreProperty(info, "fs", new IgnoredProtocolPropertyJsonConverter<FsCapability>());
                 IgnoreProperty(info, "terminal", new IgnoredProtocolPropertyJsonConverter<bool?>());
