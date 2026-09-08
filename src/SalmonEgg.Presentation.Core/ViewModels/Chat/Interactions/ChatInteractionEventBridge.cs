@@ -79,7 +79,7 @@ public sealed class ChatInteractionEventBridge
 
     public async Task<(string ConversationId, ElicitationRequestViewModel ViewModel)?> BuildElicitationRequestAsync(
         ElicitationRequestEventArgs args,
-        Func<string, Task> clearPendingRequestAsync,
+        Func<string, ElicitationRequestViewModel, Task> clearPendingRequestAsync,
         ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -89,19 +89,32 @@ public sealed class ChatInteractionEventBridge
         if (args.Request is not FormElicitationRequest || string.IsNullOrWhiteSpace(args.SessionId))
         {
             logger.LogWarning(
-                "Elicitation request ignored because it is not a session-scoped form. Mode={ElicitationMode}",
+                "Elicitation request cannot be displayed because it is not a session-scoped form. Mode={ElicitationMode}",
                 args.Request.Mode);
+            await CancelUndisplayedElicitationAsync(args, logger).ConfigureAwait(false);
             return null;
         }
 
-        var conversationId = await _authoritativeRemoteSessionRouter
-            .ResolveConversationIdAsync(args.SessionId)
-            .ConfigureAwait(false);
+        string? conversationId;
+        try
+        {
+            conversationId = await _authoritativeRemoteSessionRouter
+                .ResolveConversationIdAsync(args.SessionId)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Elicitation request could not be routed to its conversation");
+            await CancelUndisplayedElicitationAsync(args, logger).ConfigureAwait(false);
+            return null;
+        }
+
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             logger.LogWarning(
-                "Elicitation request ignored because no bound conversation matched remote session {RemoteSessionId}",
+                "Elicitation request cannot be displayed because no bound conversation matched remote session {RemoteSessionId}",
                 args.SessionId);
+            await CancelUndisplayedElicitationAsync(args, logger).ConfigureAwait(false);
             return null;
         }
 
@@ -109,8 +122,25 @@ public sealed class ChatInteractionEventBridge
             conversationId,
             ElicitationInteractionViewModelFactory.Create(
                 args,
-                () => clearPendingRequestAsync(conversationId),
+                viewModel => clearPendingRequestAsync(conversationId, viewModel),
                 _localizer));
+    }
+
+    internal static async Task CancelUndisplayedElicitationAsync(ElicitationRequestEventArgs args, ILogger logger)
+    {
+        // Request scope is valid ACP. This conversation surface cannot present it, so dismiss it
+        // explicitly instead of inventing a session or leaving the peer waiting for user input.
+        try
+        {
+            if (!await args.Cancel().ConfigureAwait(false))
+            {
+                logger.LogWarning("Could not send cancellation for undisplayed elicitation request {MessageId}", args.MessageId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not cancel undisplayed elicitation request {MessageId}", args.MessageId);
+        }
     }
 
     public async Task<(string ConversationId, ChatConversationPanelSelection Selection)?> BuildTerminalRequestSelectionAsync(

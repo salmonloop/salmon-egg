@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -417,6 +418,39 @@ public sealed class ChatAuthenticationCoordinatorTests
                 && arguments.Length == 1
                 && string.Equals(arguments[0] as string, "denied", StringComparison.Ordinal)),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TryAuthenticateAsync_WhenCancelled_PreservesRequirementWithoutFailure(bool remoteCancellation)
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(new AuthMethodDefinition { Id = "login", Name = "Login" }));
+        var coordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        using var cancellation = new CancellationTokenSource();
+        Exception failure = remoteCancellation
+            ? new AcpException(JsonRpcErrorCode.Cancelled, "Cancelled by agent")
+            : new OperationCanceledException(cancellation.Token);
+        service.Setup(x => x.AuthenticateAsync(It.IsAny<AuthenticateParams>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var notifications = new List<string>();
+        var formattedFailures = 0;
+
+        var result = await sut.TryAuthenticateAsync(service.Object, true, coordinator.Object,
+            NullLogger.Instance, notifications.Add, cancellation.Token,
+            requiredFallback: new AuthenticationHintPresentation("Please sign in"),
+            formatAuthenticationFailed: detail =>
+            {
+                formattedFailures++;
+                return new AuthenticationHintPresentation(detail);
+            });
+
+        Assert.False(result);
+        Assert.Equal(0, formattedFailures);
+        Assert.Equal(["Please sign in"], notifications);
+        coordinator.Verify(x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static readonly AuthenticationHintPresentation UnsupportedMethodTypeHint = new(

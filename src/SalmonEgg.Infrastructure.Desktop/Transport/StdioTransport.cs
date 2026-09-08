@@ -146,7 +146,7 @@ namespace SalmonEgg.Infrastructure.Transport
                         "Agent command not found during preflight. Command={Command} SearchedDirectories={SearchedDirectories}",
                         _invocation.ResolvedCommand,
                         _invocation.SearchedDirectories);
-                    OnErrorOccurred(new TransportErrorEventArgs(preflightError, kind: TransportErrorKind.ProcessStartFailed));
+                    OnErrorOccurred(preflightError);
                     return false;
                 }
 

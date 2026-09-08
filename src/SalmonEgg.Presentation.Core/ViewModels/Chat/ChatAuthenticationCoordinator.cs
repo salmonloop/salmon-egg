@@ -155,6 +155,14 @@ public sealed class ChatAuthenticationCoordinator
             ClearAuthenticationRequirement(coordinator);
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
+        {
+            return false;
+        }
         catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
         {
             MarkAuthenticationRequired(

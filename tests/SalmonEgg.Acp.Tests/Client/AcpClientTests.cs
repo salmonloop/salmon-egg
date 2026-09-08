@@ -659,26 +659,29 @@ namespace SalmonEgg.Acp.Tests.Client
             }
         }
 
-        [Fact]
-        public async Task InitializeAsync_WhenTransportConnectReturnsFalse_IncludesLastTransportError()
+        [Theory]
+        [InlineData("Unable to start process: stdio command not found")]
+        [InlineData("未找到 Agent 命令。请检查配置中的可执行文件路径。")]
+        public async Task InitializeAsync_WhenTransportConnectReturnsFalse_PreservesLastTransportError(string transportError)
         {
-            var parser = new MessageParser();
             _transportMock.SetupGet(t => t.IsConnected).Returns(false);
             _transportMock
                 .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
                 .Callback(() => _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new AcpTransportErrorEventArgs("Unable to start process: stdio command not found")))
+                    new AcpTransportErrorEventArgs(transportError, kind: AcpTransportErrorKind.ProcessStartFailed)))
                 .ReturnsAsync(false);
-            var client = CreateClient();
+            using var client = CreateClient();
+            var errors = new List<string>();
+            client.ErrorOccurred += (_, error) => errors.Add(error);
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
                     new ClientInfo("Test", "1.0.0"),
                     ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
-            Assert.Contains("Failed to connect to the transport", ex.Message, StringComparison.Ordinal);
-            Assert.Contains("Unable to start process: stdio command not found", ex.Message, StringComparison.Ordinal);
+            Assert.Equal(transportError, ex.Message);
+            Assert.Equal([transportError], errors);
         }
 
         [Fact]
@@ -950,24 +953,24 @@ namespace SalmonEgg.Acp.Tests.Client
             Assert.Equal("agent", root.GetProperty("authMethods")[0].GetProperty("type").GetString());
         }
 
-        [Fact]
-        public void TransportErrors_ForStdioBridgeFailures_ShouldAppendSshGuidance()
+        [Theory]
+        [InlineData(AcpTransportErrorKind.ProcessStartFailed, "Agent command was not found on PATH.")]
+        [InlineData(AcpTransportErrorKind.ProcessExited, "Process exited. ExitCode=1")]
+        [InlineData(AcpTransportErrorKind.StdoutReadFailed, "Could not read agent output.")]
+        [InlineData(AcpTransportErrorKind.General, "The stdout connection closed.")]
+        public void TransportErrors_WithoutSshIdentity_PreserveTheTransportMessage(AcpTransportErrorKind kind, string transportError)
         {
-            var parser = new MessageParser();
-            var client = CreateClient();
+            using var client = CreateClient();
             string? receivedError = null;
             client.ErrorOccurred += (_, error) => receivedError = error;
 
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
                 new AcpTransportErrorEventArgs(
-                    "Process exited immediately after start. ExitCode=255",
-                    kind: AcpTransportErrorKind.ProcessStartFailed));
+                    transportError,
+                    kind: kind));
 
-            Assert.NotNull(receivedError);
-            Assert.Contains("ssh -t", receivedError, StringComparison.Ordinal);
-            Assert.Contains("stdout", receivedError, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("BatchMode=yes", receivedError, StringComparison.Ordinal);
+            Assert.Equal(transportError, receivedError);
         }
 
         [Fact]
@@ -2252,6 +2255,84 @@ namespace SalmonEgg.Acp.Tests.Client
                 resultDoc.RootElement.GetProperty("outcome").GetProperty("outcome").GetString());
         }
 
+        [Theory]
+        [InlineData("session/request_permission")]
+        [InlineData("fs/read_text_file")]
+        public async Task CancelSessionAsync_WhenRequestIdIsReusedByAnotherSession_DoesNotCancelNewRequest(string method)
+        {
+            // Arrange: pause the first cancellation regardless of dictionary enumeration order.
+            var parser = new MessageParser();
+            using var client = await CreateInitializedClientAsync(
+                clientCapabilities: new ClientCapabilities(fs: new FsCapability()));
+            client.PermissionRequestReceived += (_, _) => { };
+            client.FileSystemRequestReceived += (_, _) => { };
+            var sentMessages = new ConcurrentQueue<string>();
+            var firstCancellation = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseCancellation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns<string, CancellationToken>((message, cancellationToken) =>
+                {
+                    sentMessages.Enqueue(message);
+                    if (parser.ParseMessage(message) is JsonRpcResponse response
+                        && firstCancellation.TrySetResult(response.Id!.ToString()!))
+                    {
+                        return releaseCancellation.Task.WaitAsync(cancellationToken);
+                    }
+
+                    return Task.FromResult(true);
+                });
+            RaisePendingRequestForCancellationTest(parser, method, 302, "session-1");
+            RaisePendingRequestForCancellationTest(parser, method, 303, "session-1");
+            var cancellation = client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
+
+            try
+            {
+                // Act: complete the other request and reuse its ID before cancellation resumes.
+                var cancellingId = await firstCancellation.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+                var reusedId = cancellingId == "302" ? 303L : 302L;
+                Assert.True(await CompleteRequestAsync(reusedId));
+                RaisePendingRequestForCancellationTest(parser, method, reusedId, "session-2");
+                releaseCancellation.TrySetResult(true);
+                await cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+                // Assert: cancellation leaves the new request pending and able to respond normally.
+                var previousResponse = Assert.Single(sentMessages.Select(parser.ParseMessage).OfType<JsonRpcResponse>(),
+                    response => response.Id?.ToString() == reusedId.ToString());
+                Assert.False(previousResponse.IsError);
+                Assert.True(await CompleteRequestAsync(reusedId));
+                var reusedResponses = sentMessages.Select(parser.ParseMessage).OfType<JsonRpcResponse>()
+                    .Where(response => response.Id?.ToString() == reusedId.ToString()).ToArray();
+                Assert.Equal(2, reusedResponses.Length);
+                var expectedResult = method == "session/request_permission"
+                    ? """{"outcome":{"outcome":"selected","optionId":"allow"}}"""
+                    : """{"content":"file content"}""";
+                Assert.All(reusedResponses, response => Assert.Equal(expectedResult, response.Result!.Value.GetRawText()));
+                var cancelledResponse = Assert.Single(sentMessages.Select(parser.ParseMessage).OfType<JsonRpcResponse>(),
+                    response => response.Id?.ToString() == cancellingId);
+                if (method == "session/request_permission")
+                {
+                    Assert.Equal("""{"outcome":{"outcome":"cancelled"}}""", cancelledResponse.Result!.Value.GetRawText());
+                }
+                else
+                {
+                    Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, cancelledResponse.Error!.Code);
+                }
+
+                Assert.Equal(4, sentMessages.Count);
+            }
+            finally
+            {
+                releaseCancellation.TrySetResult(true);
+                await cancellation.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            }
+
+            Task<bool> CompleteRequestAsync(long messageId)
+                => method == "session/request_permission"
+                    ? client.RespondToPermissionRequestAsync(messageId, "selected", "allow")
+                    : client.RespondToFileSystemRequestAsync(messageId, success: true, content: "file content");
+        }
+
         [Fact]
         public async Task CancelSessionAsync_SendsSessionCancelAsNotificationWithoutRequestId()
         {
@@ -3218,6 +3299,26 @@ namespace SalmonEgg.Acp.Tests.Client
             }
 
             throw new TimeoutException($"Timed out waiting for JSON-RPC response {responseId}.");
+        }
+
+        private void RaisePendingRequestForCancellationTest(MessageParser parser, string method, long messageId, string sessionId)
+        {
+            var requestParams = method == "session/request_permission"
+                ? ElementFromJson(
+                    $$"""
+                    {
+                      "sessionId": "{{sessionId}}",
+                      "toolCall": {
+                        "toolCallId": "call-1",
+                        "title": "Read file",
+                        "kind": "read",
+                        "status": "pending"
+                      },
+                      "options": [{ "optionId": "allow", "name": "Allow", "kind": "allow_once" }]
+                    }
+                    """)
+                : ElementFromJson($$"""{"sessionId":"{{sessionId}}","path":"/workspace/file.txt"}""");
+            RaiseTransportMessage(parser.SerializeMessage(new JsonRpcRequest(messageId, method, requestParams)));
         }
 
         private static JsonElement ElementFromJson(string json)

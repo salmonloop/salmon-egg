@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Infrastructure.Transport;
 using Xunit;
 
@@ -23,8 +24,9 @@ public sealed class StdioCommandPreflightTests
         var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
-        Assert.Contains("not found on PATH", error, StringComparison.Ordinal);
-        Assert.Contains("absent-agent", error, StringComparison.Ordinal);
+        Assert.Contains("not found on PATH", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("absent-agent", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(new StdioCommandResolutionFailure("absent-agent", SearchedOnPath: true), error.CommandResolutionFailure);
     }
 
     [Fact]
@@ -41,8 +43,9 @@ public sealed class StdioCommandPreflightTests
         var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
-        Assert.Contains("does not exist", error, StringComparison.Ordinal);
-        Assert.Contains(@"C:\tools\absent-agent.exe", error, StringComparison.Ordinal);
+        Assert.Contains("does not exist", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(@"C:\tools\absent-agent.exe", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(new StdioCommandResolutionFailure(@"C:\tools\absent-agent.exe", SearchedOnPath: false), error.CommandResolutionFailure);
     }
 
     [Fact]
@@ -62,7 +65,7 @@ public sealed class StdioCommandPreflightTests
         var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
-        Assert.Contains("does not exist", error, StringComparison.Ordinal);
+        Assert.Contains("does not exist", error.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -95,7 +98,8 @@ public sealed class StdioCommandPreflightTests
         var error = StdioCommandPreflight.BuildMissingCommandError(invocation);
 
         Assert.NotNull(error);
-        Assert.Contains("does not exist", error, StringComparison.Ordinal);
-        Assert.Contains(@"C:\tools\absent-agent.cmd", error, StringComparison.Ordinal);
+        Assert.Contains("does not exist", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(@"C:\tools\absent-agent.cmd", error.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(new StdioCommandResolutionFailure(@"C:\tools\absent-agent.cmd", SearchedOnPath: false), error.CommandResolutionFailure);
     }
 }

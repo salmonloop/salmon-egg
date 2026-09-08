@@ -26,6 +26,7 @@ using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Services;
 using SalmonEgg.Infrastructure.Storage;
 using SalmonEgg.Infrastructure.Transport;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Resources;
@@ -512,6 +513,7 @@ public static class DependencyInjection
                 ? new TerminalSessionManager()
                 : new UnsupportedTerminalSessionManager());
 #endif
+        services.AddSingleton<ITransportErrorMessageFormatter, TransportErrorMessageFormatter>();
         services.AddSingleton<IAcpClientFactory, AcpClientFactory>();
 
         // ACP setup wizard. The catalog is pure data and safe everywhere; every probing, installing and
@@ -942,6 +944,9 @@ public static class DependencyInjection
         services.AddSingleton<ICliCommandRegistrationInspector, UnsupportedCliCommandRegistrationInspector>();
         services.AddSingleton<ICliCommandLinkService, UnsupportedCliCommandLinkService>();
 #endif
+        // Intentional exception to coding-standards §3.1: these commands operate on one machine-wide
+        // registration. Settings page instances share the command owner and IsBusy so their buttons
+        // observe the same in-flight inspect/link operation instead of maintaining separate busy state.
         services.AddSingleton<CommandLineSettingsViewModel>();
         services.AddSingleton<McpSettingsViewModel>(sp =>
             new McpSettingsViewModel(

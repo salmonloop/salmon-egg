@@ -1,5 +1,4 @@
-using System;
-using System.IO;
+using SalmonEgg.Domain.Interfaces.Transport;
 
 namespace SalmonEgg.Infrastructure.Transport;
 
@@ -12,7 +11,7 @@ namespace SalmonEgg.Infrastructure.Transport;
 internal static class StdioCommandPreflight
 {
     /// <summary>
-    /// Returns an actionable error message when the invocation's resolved command does not name an
+    /// Returns an actionable error when the invocation's resolved command does not name an
     /// existing file, or null when the command is startable as resolved. Pure — the existence verdict
     /// was made by <see cref="StdioCommandResolver"/> at resolution time; nothing is probed here.
     /// </summary>
@@ -21,15 +20,21 @@ internal static class StdioCommandPreflight
     /// <see cref="LauncherInvocation.FileName"/>: a batch launcher is wrapped in <c>cmd.exe</c>, which
     /// always exists, so the underlying command is the only thing worth judging.
     /// </remarks>
-    public static string? BuildMissingCommandError(LauncherInvocation invocation)
+    public static TransportErrorEventArgs? BuildMissingCommandError(LauncherInvocation invocation)
     {
         if (invocation.ResolvedToExistingFile)
         {
             return null;
         }
 
-        return invocation.SearchedOnPath
+        var fallbackMessage = invocation.SearchedOnPath
             ? $"Agent command '{invocation.ResolvedCommand}' was not found on PATH. Install the agent or configure the full path to its executable."
             : $"The configured agent command '{invocation.ResolvedCommand}' does not exist. Check the path in the agent configuration.";
+        return new TransportErrorEventArgs(fallbackMessage, kind: TransportErrorKind.ProcessStartFailed)
+        {
+            CommandResolutionFailure = new StdioCommandResolutionFailure(
+                invocation.ResolvedCommand,
+                invocation.SearchedOnPath)
+        };
     }
 }

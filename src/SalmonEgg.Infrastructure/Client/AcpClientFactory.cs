@@ -11,20 +11,25 @@ public sealed class AcpClientFactory : IAcpClientFactory
     private readonly IErrorLogger _errorLogger;
     private readonly ISessionManager _sessionManager;
     private readonly ITerminalSessionManager _terminalSessionManager;
+    private readonly ITransportErrorMessageFormatter? _transportErrorMessageFormatter;
 
     public AcpClientFactory(
         IErrorLogger errorLogger,
         ISessionManager sessionManager,
-        ITerminalSessionManager terminalSessionManager)
+        ITerminalSessionManager terminalSessionManager,
+        ITransportErrorMessageFormatter? transportErrorMessageFormatter = null)
     {
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _terminalSessionManager = terminalSessionManager ?? throw new ArgumentNullException(nameof(terminalSessionManager));
+        _transportErrorMessageFormatter = transportErrorMessageFormatter;
     }
 
     public IAcpClient CreateClient(ITransport transport)
         => new SalmonEgg.Acp.Client.AcpClient(
-            new DomainAcpTransportAdapter(transport ?? throw new ArgumentNullException(nameof(transport))),
+            new DomainAcpTransportAdapter(
+                transport ?? throw new ArgumentNullException(nameof(transport)),
+                _transportErrorMessageFormatter),
             new DomainAcpClientLogger(_errorLogger),
             new DomainAcpClientSessionStore(_sessionManager),
             _terminalSessionManager);

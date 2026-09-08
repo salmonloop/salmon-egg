@@ -103,46 +103,28 @@ public sealed class SystemCliCommandProbeEnvironment : ICliCommandProbeEnvironme
 
     public async Task<CliVersionProbe> ProbeVersionAsync(string executablePath, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executablePath)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var startInfo = new ProcessStartInfo(executablePath);
         startInfo.ArgumentList.Add("--version");
 
         try
         {
-            using var process = Process.Start(startInfo);
-            if (process is null)
+            var result = await CliCommandProcessRunner.RunAsync(startInfo, ProbeTimeout, cancellationToken).ConfigureAwait(false);
+            if (result is null)
             {
                 return CliVersionProbe.Failure("the operating system did not start the process");
             }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(ProbeTimeout);
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            try
+            if (result.TimedOut)
             {
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                // The whole tree: the single-file host extracts to a temporary directory and can leave a
-                // child behind, and a probe must not outlive its own timeout.
-                TryKill(process);
                 return CliVersionProbe.Failure($"the command did not exit within {ProbeTimeout.TotalSeconds:0} seconds");
             }
 
-            var stdout = await stdoutTask.ConfigureAwait(false);
-            if (process.ExitCode != 0)
+            if (result.ExitCode != 0)
             {
-                return CliVersionProbe.Failure($"the command exited with code {process.ExitCode}");
+                return CliVersionProbe.Failure($"the command exited with code {result.ExitCode}");
             }
 
-            var version = stdout.Trim();
+            var version = result.StandardOutput.Trim();
             return string.IsNullOrEmpty(version)
                 ? CliVersionProbe.Failure("the command printed no version")
                 : CliVersionProbe.Success(version);
@@ -150,19 +132,6 @@ public sealed class SystemCliCommandProbeEnvironment : ICliCommandProbeEnvironme
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             return CliVersionProbe.Failure(ex.Message);
-        }
-    }
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-        {
-            // It exited on its own between the timeout and here, or the platform refused. Either way the
-            // probe's answer is already decided.
         }
     }
 }

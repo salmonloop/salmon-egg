@@ -843,6 +843,12 @@
   <data name="AcpConnection_TransportStdio" xml:space="preserve">
     <value>Stdio（子进程）</value>
   </data>
+  <data name="AcpConnection_CommandNotFoundOnPath" xml:space="preserve">
+    <value>在 PATH 中找不到 Agent 命令“{0}”。请安装该 Agent，或在配置中填写可执行文件的完整路径。</value>
+  </data>
+  <data name="AcpConnection_CommandPathMissing" xml:space="preserve">
+    <value>配置的 Agent 命令“{0}”不存在。请检查 Agent 配置中的路径。</value>
+  </data>
   <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
     <value>WebSocket</value>
   </data>
@@ -1312,6 +1318,9 @@
   </data>
   <data name="Elicitation_InvalidValue" xml:space="preserve">
     <value>这个值无效。</value>
+  </data>
+  <data name="Elicitation_UnsupportedRequiredFields" xml:space="preserve">
+    <value>此表单包含暂不支持的必填项。请选择拒绝或取消。</value>
   </data>
   <data name="SettingsSection_CommandLine" xml:space="preserve">
     <value>命令行工具</value>

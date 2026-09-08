@@ -151,42 +151,33 @@ public sealed class MacOsCliCommandLinkService : ICliCommandLinkService
             _ => CliCommandLinkResult.Failed(result.Detail ?? "the authorized command failed"),
         };
 
-    private static async Task<PrivilegedShellResult> RunOsaScriptAsync(string shellCommand, CancellationToken cancellationToken)
+    private static Task<PrivilegedShellResult> RunOsaScriptAsync(string shellCommand, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo("/usr/bin/osascript")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var startInfo = new ProcessStartInfo("/usr/bin/osascript");
         startInfo.ArgumentList.Add("-e");
         startInfo.ArgumentList.Add(MacOsPrivilegedShellScript.BuildOsaScriptStatement(shellCommand));
+        return RunAuthorizationProcessAsync(startInfo, AuthorizationTimeout, cancellationToken);
+    }
 
+    internal static async Task<PrivilegedShellResult> RunAuthorizationProcessAsync(
+        ProcessStartInfo startInfo,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            using var process = Process.Start(startInfo);
-            if (process is null)
+            var result = await CliCommandProcessRunner.RunAsync(startInfo, timeout, cancellationToken).ConfigureAwait(false);
+            if (result is null)
             {
                 return PrivilegedShellResult.Failed("the operating system did not start osascript");
             }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(AuthorizationTimeout);
-
-            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-            try
+            if (result.TimedOut)
             {
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                TryKill(process);
                 return PrivilegedShellResult.Failed("the authorization prompt was not answered in time");
             }
 
-            var stderr = await stderrTask.ConfigureAwait(false);
-            if (process.ExitCode == 0)
+            if (result.ExitCode == 0)
             {
                 return PrivilegedShellResult.Succeeded();
             }
@@ -194,25 +185,15 @@ public sealed class MacOsCliCommandLinkService : ICliCommandLinkService
             // osascript reports a dismissed authorization dialog as AppleScript error -128, the same code
             // any user cancellation produces. Treating it as a failure would show an error for a deliberate
             // choice, so it is matched on the code rather than on the localized message text.
-            return stderr.Contains("-128", StringComparison.Ordinal)
+            return result.StandardError.Contains("-128", StringComparison.Ordinal)
                 ? PrivilegedShellResult.Cancelled()
-                : PrivilegedShellResult.Failed(string.IsNullOrWhiteSpace(stderr) ? $"osascript exited with {process.ExitCode}" : stderr.Trim());
+                : PrivilegedShellResult.Failed(string.IsNullOrWhiteSpace(result.StandardError)
+                    ? $"osascript exited with {result.ExitCode}"
+                    : result.StandardError.Trim());
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             return PrivilegedShellResult.Failed(ex.Message);
-        }
-    }
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-        {
-            // Already gone, or the platform refused. The outcome is decided either way.
         }
     }
 }

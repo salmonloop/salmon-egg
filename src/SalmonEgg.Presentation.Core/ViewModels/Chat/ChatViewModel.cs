@@ -1732,6 +1732,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             NotifyComposerProjectionChanged();
             RaiseOverlayStateChanged();
             PendingAskUserRequest?.ReprojectLocalizedState();
+            PendingElicitationRequest?.ReprojectLocalizedState();
             ReprojectConversationOperationFailureMessage();
             // SessionActivationFailureMessage re-localizes from snapshot resource identity on get.
             NotifySessionActivationFailureProjectionChanged();

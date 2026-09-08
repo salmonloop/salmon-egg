@@ -126,6 +126,8 @@ namespace SalmonEgg.Domain.Interfaces.Transport
 
         public TransportErrorKind Kind { get; set; } = TransportErrorKind.General;
 
+        public StdioCommandResolutionFailure? CommandResolutionFailure { get; init; }
+
         /// <summary>
         /// 创建新的传输错误事件参数。
         /// </summary>

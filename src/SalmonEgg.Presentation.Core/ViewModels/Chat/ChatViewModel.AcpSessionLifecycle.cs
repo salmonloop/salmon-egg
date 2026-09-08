@@ -1769,37 +1769,52 @@ public partial class ChatViewModel
 
     private async Task ProcessElicitationRequestAsync(ElicitationRequestEventArgs e)
     {
+        var foregroundServiceGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
         try
         {
             var projection = await _interactionEventBridge.BuildElicitationRequestAsync(
                 e,
-                conversationId => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId)),
+                (conversationId, request) => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId, request)),
                 Logger).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
             }
 
+            var displayed = false;
             await PostToUiAsync(() =>
             {
-                _panelStateCoordinator.StoreElicitationRequest(projection.Value.ConversationId, projection.Value.ViewModel);
+                // Routing and dispatcher work may finish after the foreground owner was replaced.
+                // A stale form must not occupy the new connection's only interaction slot.
+                if (_disposed || foregroundServiceGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
+                {
+                    return;
+                }
+
+                displayed = _panelStateCoordinator.TryStoreElicitationRequest(projection.Value.ConversationId, projection.Value.ViewModel);
                 PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(CurrentSessionId);
             }).ConfigureAwait(true);
+            if (!displayed)
+            {
+                // This surface holds one form per conversation. Keep the visible request and cancel
+                // the unshown one instead of replacing an interaction the user still needs to answer.
+                await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error processing elicitation request");
+            await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
         }
     }
 
-    private void RemovePendingElicitationRequestState(string conversationId)
+    private void RemovePendingElicitationRequestState(string conversationId, ElicitationRequestViewModel request)
     {
-        if (string.IsNullOrWhiteSpace(conversationId))
+        if (!_panelStateCoordinator.RemoveElicitationRequest(conversationId, request))
         {
             return;
         }
 
-        _panelStateCoordinator.RemoveElicitationRequest(conversationId);
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(conversationId);

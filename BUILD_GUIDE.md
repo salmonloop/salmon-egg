@@ -371,7 +371,7 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - 设置持久化：通过 UI 切换应用语言并修改外观、数据与存储、快捷键、ACP 和 MCP 服务器状态，验证 shell 重载后的 `x:Uid` 与 singleton ViewModel 文案，并在刷新后从可见设置页确认状态仍存在；
 - ACP / 平台能力边界：保存 ACP WebSocket profile，验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
 - Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键进入 Diagnostics 的 pressed 槽位与 ActiveInputs 意图事实（`MoveDown` / `Activate`）。原生焦点由键盘/XYFocus 与控件 consumer 拥有；壳层不再对轮询手柄做全局 SendInput / FocusManager 焦点 bridge，避免双路径分发；
-- WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。
+- WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI；在 `session/new` 完成前验证请求级 elicitation 收到 `cancel`，再通过真实表单填写验证必填校验、字符串与布尔值回包，以及未知必填字段禁止提交且可取消。
 
 它补充 Windows FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
