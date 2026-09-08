@@ -385,7 +385,7 @@ namespace SalmonEgg.Acp.Mcp
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
-            var transport = ResolveTransport(root);
+            var transport = ResolveTransport(root, options);
 
             return transport switch
             {
@@ -429,22 +429,30 @@ namespace SalmonEgg.Acp.Mcp
             }
         }
 
-        private static McpServerTransport ResolveTransport(JsonElement root)
+        private static McpServerTransport ResolveTransport(JsonElement root, JsonSerializerOptions options)
         {
-            if (!root.TryGetProperty("type", out var typeElement)
-                || typeElement.ValueKind != JsonValueKind.String)
+            var version = AcpWireFormat.NegotiatedVersion(options);
+            if (!root.TryGetProperty("type", out var typeElement))
             {
+                if (version == AcpProtocolVersion.V2)
+                {
+                    throw new JsonException("ACP v2 MCP server requires a string 'type' discriminator.");
+                }
+
                 return McpServerTransport.Stdio;
+            }
+
+            if (typeElement.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException("MCP server 'type' must be a string when provided.");
             }
 
             return typeElement.GetString() switch
             {
                 "stdio" => McpServerTransport.Stdio,
                 "http" => McpServerTransport.Http,
-                "sse" => McpServerTransport.Sse,
-                // V2 schema "other" branch: any type value other than stdio/http/sse (including `_` extensions and
-                // future ACP variants) must preserve the raw payload for forward passthrough, leaving it to the Agent
-                // rather than the client to tighten. Read is purely tolerant and does not branch on version.
+                "sse" when version == AcpProtocolVersion.V1 => McpServerTransport.Sse,
+                // V2 removed SSE; it belongs to the same raw passthrough as future transports.
                 _ => McpServerTransport.Custom
             };
         }
@@ -630,7 +638,7 @@ namespace SalmonEgg.Acp.Mcp
         private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            // The V2 schema discriminates stdio/http/sse via the `type` field; V1 stdio has no type field and is
+            // The V2 schema discriminates stdio/http via the `type` field; V1 stdio has no type field and is
             // identified implicitly by its absence. Write type only when the negotiated version is V2, so a V1 Agent
             // is never sent a field it does not recognize.
             if (AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2)

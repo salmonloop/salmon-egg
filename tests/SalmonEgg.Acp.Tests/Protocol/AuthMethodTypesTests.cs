@@ -92,7 +92,7 @@ public sealed class AuthMethodTypesTests
             {"{{{idProperty}}}":"login","name":"Login","type":" ","args":["login"],"env":{"AUTH_MODE":"interactive"},"future":{"key":1}}
             """;
         var initializeJson = $$"""
-            {"protocolVersion":{{version}},"agentCapabilities":{},"capabilities":{},"authMethods":[{{methodJson}}]}
+            {"protocolVersion":{{version}},"info":{"name":"agent","version":"1"},"agentCapabilities":{},"capabilities":{},"authMethods":[{{methodJson}}]}
             """;
         var response = Assert.IsType<InitializeResponse>(
             JsonSerializer.Deserialize(initializeJson, AcpJsonContext.Default.InitializeResponse));

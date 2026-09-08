@@ -39,6 +39,7 @@ SalmonEgg.Acp.Content.EmbeddedResource stable
 SalmonEgg.Acp.Content.ImageContentBlock stable
 SalmonEgg.Acp.Content.ResourceContentBlock stable
 SalmonEgg.Acp.Content.ResourceLinkContentBlock stable
+SalmonEgg.Acp.Content.ResourceLinkDraftExtensions draft
 SalmonEgg.Acp.Content.TextContentBlock stable
 SalmonEgg.Acp.JsonRpc.AcpException stable
 SalmonEgg.Acp.JsonRpc.AcpFrame stable

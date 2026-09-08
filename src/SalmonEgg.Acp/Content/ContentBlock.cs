@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Content
 {
@@ -156,7 +157,7 @@ namespace SalmonEgg.Acp.Content
             return block;
         }
 
-        private static ResourceLinkContentBlock ReadResourceLink(JsonElement root)
+        internal static ResourceLinkContentBlock ReadResourceLink(JsonElement root)
         {
             var block = new ResourceLinkContentBlock
             {
@@ -166,6 +167,7 @@ namespace SalmonEgg.Acp.Content
                 Title = ReadString(root, "title"),
                 Description = ReadString(root, "description"),
                 Size = ReadInt64(root, "size"),
+                RawIcons = root.TryGetProperty("icons", out var icons) ? icons.Clone() : null,
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
             };
@@ -354,8 +356,13 @@ namespace SalmonEgg.Acp.Content
             writer.WriteEndObject();
         }
 
-        private static void WriteResourceLink(Utf8JsonWriter writer, ResourceLinkContentBlock value, JsonSerializerOptions options)
+        internal static void WriteResourceLink(Utf8JsonWriter writer, ResourceLinkContentBlock value, JsonSerializerOptions options)
         {
+            if (value.HasDraftIcons && AcpWireFormat.NegotiatedVersion(options) != AcpProtocolVersion.V2)
+            {
+                throw new JsonException("Authored resource icons require ACP v2 wire; received unknown fields remain passthrough.");
+            }
+
             writer.WriteStartObject();
             writer.WriteString("type", value.Type);
             WriteAnnotations(writer, value.Annotations, options);
@@ -365,6 +372,12 @@ namespace SalmonEgg.Acp.Content
             WriteNullableString(writer, "title", value.Title, options);
             WriteNullableString(writer, "description", value.Description, options);
             WriteNullableNumber(writer, "size", value.Size, options);
+            if (value.RawIcons is { } icons)
+            {
+                writer.WritePropertyName("icons");
+                writer.WriteRawValue(icons.GetRawText());
+            }
+
             AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }

@@ -38,6 +38,8 @@ public sealed record ConfigOption : AcpProtocolObject
 
     [JsonIgnore]
     public List<ConfigOptionGroup> OptionGroups { get; init; } = new();
+
+    internal JsonElement? RawPayload { get; init; }
 }
 
 public sealed record ConfigOptionValue : AcpProtocolObject
@@ -52,6 +54,7 @@ public sealed record ConfigOptionValue : AcpProtocolObject
     public string? Description { get; init; }
 }
 
+[JsonConverter(typeof(ConfigOptionGroupJsonConverter))]
 public sealed record ConfigOptionGroup : AcpProtocolObject
 {
     [JsonPropertyName("group")]
@@ -89,7 +92,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         if (string.Equals(type, "select", System.StringComparison.Ordinal))
         {
             currentValueText = ReadRequiredString(root, "currentValue");
-            ReadSelectOptions(root, selectOptions, optionGroups);
+            ReadSelectOptions(root, selectOptions, optionGroups, options);
         }
         else if (string.Equals(type, "boolean", System.StringComparison.Ordinal))
         {
@@ -104,9 +107,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
 
         return new ConfigOption
         {
-            // v1 calls this id; v2 renamed it configId. Reading accepts both versions, while writing
-            // branches on the negotiated context so neither peer sees the other's field.
-            Id = ReadRequiredString(root, "configId", "id"),
+            Id = ReadRequiredString(root, IdPropertyName(options)),
             Name = ReadRequiredString(root, "name"),
             Description = ReadOptionalString(root, "description"),
             Category = ReadOptionalString(root, "category"),
@@ -115,16 +116,21 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             CurrentBooleanValue = currentBoolean,
             Options = selectOptions,
             OptionGroups = optionGroups,
-            Meta = AcpMetaJson.Read(root)
+            Meta = AcpMetaJson.Read(root),
+            RawPayload = root.Clone()
         };
     }
 
     public override void Write(Utf8JsonWriter writer, ConfigOption value, JsonSerializerOptions options)
     {
+        if (value.Type is not "select" and not "boolean" && value.RawPayload is { } rawPayload)
+        {
+            writer.WriteRawValue(rawPayload.GetRawText());
+            return;
+        }
+
         writer.WriteStartObject();
-        writer.WriteString(
-            AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2 ? "configId" : "id",
-            value.Id);
+        writer.WriteString(IdPropertyName(options), value.Id);
         writer.WriteString("name", value.Name);
         WriteOptionalString(writer, "description", value.Description, options);
         WriteOptionalString(writer, "category", value.Category, options);
@@ -163,13 +169,61 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         }
 
         AcpMetaJson.Write(writer, value.Meta);
+        WriteUnknownFields(writer, value, options);
+        writer.WriteEndObject();
+    }
+
+    internal static string GroupPropertyName(JsonSerializerOptions options)
+        => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2 ? "groupId" : "group";
+
+    internal static ConfigOptionGroup ReadGroup(JsonElement element, JsonSerializerOptions options)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("options", out var optionsElement))
+        {
+            throw new JsonException("ACP session config option group requires an options array.");
+        }
+
+        var groupOptions = new List<ConfigOptionValue>();
+        if (optionsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in optionsElement.EnumerateArray())
+            {
+                try
+                {
+                    groupOptions.Add(ReadOption(item));
+                }
+                catch (JsonException)
+                {
+                    // Both schemas mark group.options as default-on-error and skip-invalid-items.
+                }
+            }
+        }
+
+        return new ConfigOptionGroup
+        {
+            Group = ReadRequiredString(element, GroupPropertyName(options)),
+            Name = ReadRequiredString(element, "name"),
+            Options = groupOptions,
+            Meta = AcpMetaJson.Read(element)
+        };
+    }
+
+    internal static void WriteGroup(Utf8JsonWriter writer, ConfigOptionGroup group, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString(GroupPropertyName(options), group.Group);
+        writer.WriteString("name", group.Name);
+        writer.WritePropertyName("options");
+        WriteOptions(writer, group.Options, options);
+        AcpMetaJson.Write(writer, group.Meta);
         writer.WriteEndObject();
     }
 
     private static void ReadSelectOptions(
         JsonElement root,
         List<ConfigOptionValue> options,
-        List<ConfigOptionGroup> optionGroups)
+        List<ConfigOptionGroup> optionGroups,
+        JsonSerializerOptions serializerOptions)
     {
         if (!root.TryGetProperty("options", out var optionsElement)
             || optionsElement.ValueKind != JsonValueKind.Array)
@@ -185,7 +239,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
                 throw new JsonException("ACP select option entries must be objects.");
             }
 
-            var isGroup = item.TryGetProperty("group", out _);
+            var isGroup = item.TryGetProperty(GroupPropertyName(serializerOptions), out _);
             if (grouped.HasValue && grouped.Value != isGroup)
             {
                 throw new JsonException("ACP select config options cannot mix grouped and ungrouped values.");
@@ -194,36 +248,13 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             grouped = isGroup;
             if (isGroup)
             {
-                optionGroups.Add(ReadGroup(item));
+                optionGroups.Add(ReadGroup(item, serializerOptions));
             }
             else
             {
                 options.Add(ReadOption(item));
             }
         }
-    }
-
-    private static ConfigOptionGroup ReadGroup(JsonElement element)
-    {
-        if (!element.TryGetProperty("options", out var optionsElement)
-            || optionsElement.ValueKind != JsonValueKind.Array)
-        {
-            throw new JsonException("ACP session config option group requires an options array.");
-        }
-
-        var groupOptions = new List<ConfigOptionValue>();
-        foreach (var item in optionsElement.EnumerateArray())
-        {
-            groupOptions.Add(ReadOption(item));
-        }
-
-        return new ConfigOptionGroup
-        {
-            Group = ReadRequiredString(element, "group"),
-            Name = ReadRequiredString(element, "name"),
-            Options = groupOptions,
-            Meta = AcpMetaJson.Read(element)
-        };
     }
 
     private static ConfigOptionValue ReadOption(JsonElement element)
@@ -235,18 +266,18 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             Meta = AcpMetaJson.Read(element)
         };
 
-    private static string ReadRequiredString(JsonElement root, params string[] propertyNames)
+    private static string IdPropertyName(JsonSerializerOptions options)
+        => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2 ? "configId" : "id";
+
+    private static string ReadRequiredString(JsonElement root, string propertyName)
     {
-        foreach (var propertyName in propertyNames)
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String)
         {
-            if (root.TryGetProperty(propertyName, out var property)
-                && property.ValueKind == JsonValueKind.String)
-            {
-                return property.GetString() ?? string.Empty;
-            }
+            return property.GetString()!;
         }
 
-        throw new JsonException($"ACP session config option requires string property '{propertyNames[0]}'.");
+        throw new JsonException($"ACP session config option requires string property '{propertyName}'.");
     }
 
     private static string? ReadOptionalString(JsonElement root, string propertyName)
@@ -258,7 +289,26 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
 
         return property.ValueKind == JsonValueKind.String
             ? property.GetString()
-            : throw new JsonException($"ACP session config option property '{propertyName}' must be a string or null.");
+            : null;
+    }
+
+    private static void WriteUnknownFields(Utf8JsonWriter writer, ConfigOption value, JsonSerializerOptions options)
+    {
+        if (value.RawPayload is not { } payload)
+        {
+            return;
+        }
+
+        var idProperty = IdPropertyName(options);
+        foreach (var property in payload.EnumerateObject())
+        {
+            if (property.Name != idProperty && property.Name is not "name" and not "description" and not "category"
+                and not "type" and not "currentValue" and not "options" and not "_meta")
+            {
+                writer.WritePropertyName(property.Name);
+                writer.WriteRawValue(property.Value.GetRawText());
+            }
+        }
     }
 
     private static void WriteGroups(
@@ -269,13 +319,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         writer.WriteStartArray();
         foreach (var group in groups)
         {
-            writer.WriteStartObject();
-            writer.WriteString("group", group.Group);
-            writer.WriteString("name", group.Name);
-            writer.WritePropertyName("options");
-            WriteOptions(writer, group.Options, serializerOptions);
-            AcpMetaJson.Write(writer, group.Meta);
-            writer.WriteEndObject();
+            WriteGroup(writer, group, serializerOptions);
         }
 
         writer.WriteEndArray();
@@ -316,4 +360,16 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             writer.WriteNull(propertyName);
         }
     }
+}
+
+internal sealed class ConfigOptionGroupJsonConverter : JsonConverter<ConfigOptionGroup>
+{
+    public override ConfigOptionGroup? Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        return ConfigOptionJsonConverter.ReadGroup(document.RootElement, options);
+    }
+
+    public override void Write(Utf8JsonWriter writer, ConfigOptionGroup value, JsonSerializerOptions options)
+        => ConfigOptionJsonConverter.WriteGroup(writer, value, options);
 }
