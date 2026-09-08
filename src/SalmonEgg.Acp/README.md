@@ -40,7 +40,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Surface | Current behavior | Remaining work |
 | --- | --- | --- |
 | Agent authentication | An eligibility check blocks `terminal` and other non-blank unknown method types before `authenticate`. | Blank and malformed discriminators still need correction in [#147](https://github.com/salmonloop/salmon-egg/issues/147). Interactive terminal authentication also needs a host implementation before advertising `auth.terminal`. |
-| Request cancellation | The SDK implements `$/cancel_request`, `-32800`, and late-response correlation. `session/cancel` remains a separate session operation. | Network adapter cancellation and cancel-send error handling still need correction in [#148](https://github.com/salmonloop/salmon-egg/issues/148). Peer cancellation is best effort. |
+| Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
 | ACP v2 | Experimental wire contracts and version-specific serialization tests exist. Live initialization rejects v2. | Wire coverage and the runtime lifecycle remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
@@ -54,6 +54,23 @@ projections, or the acknowledgement-to-`state_update` completion lifecycle.
 Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
 both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
 lifecycle. Passing DTO tests or suppressing `SEACP002` does not satisfy that requirement.
+
+### Cancellation transport integration
+
+Existing `IAcpTransport.SendMessageAsync(string, CancellationToken)` implementations remain source
+and binary compatible. The three-argument overload defaults to the original method. Implementations
+can override it to honor `AcpTransportSendOptions.DiagnosticOnly`: return false or throw for that
+send's transient failure without raising `ErrorOccurred`. Connection loss, process exit, and reader
+failures must still raise normal events and settle pending requests. Errors without operation
+ownership from legacy transports remain visible. Implementations must honor the supplied token;
+the SDK bounds its own wait even if an external transport ignores cancellation.
+
+`scripts/gates/run-acp-cancellation-transport-gates.sh` exercises real stdio, direct WebSocket,
+HTTP/2 and SSE traffic and checks that every required case passes without skips. The separate
+`scripts/gates/run-acp-cancellation-bridge-gate.sh` requires a deployed bridge fronting
+`scripts/gates/fixtures/cancellation-peer.py`, `SALMONEGG_ACP_CANCELLATION_BRIDGE_URL`, and a fresh
+absolute `SALMONEGG_ACP_CANCELLATION_PEER_LOG` path. Missing deployment evidence fails that gate;
+the ordinary test suite explicitly skips this external integration when it is unconfigured.
 
 ## ACP v2 draft surface (SEACP002)
 
