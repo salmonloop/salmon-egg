@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -41,7 +42,7 @@ namespace SalmonEgg.Acp.Protocol
         /// The effective discriminator, applying the ACP default: a method with no <c>type</c>
         /// is treated as <see cref="AgentType"/>.
         /// </summary>
-        public string ResolvedType => string.IsNullOrWhiteSpace(Type) ? AgentType : Type;
+        public string ResolvedType => Type ?? AgentType;
 
         /// <summary>
         /// Whether this method may be passed to <c>authenticate</c>.
@@ -58,6 +59,10 @@ namespace SalmonEgg.Acp.Protocol
 
         [JsonPropertyName("description")]
         public string? Description { get; init; }
+
+        // Unimplemented variants must survive initialization replay, including terminal args/env.
+        // Known properties remain owned by the typed model so edits do not replay stale values.
+        internal JsonElement? RawPayload { get; init; }
     }
 
     internal sealed class AuthMethodDefinitionJsonConverter : JsonConverter<AuthMethodDefinition>
@@ -66,35 +71,86 @@ namespace SalmonEgg.Acp.Protocol
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
+            var protocolVersion = AcpWireFormat.NegotiatedVersion(options);
 
             return new AuthMethodDefinition
             {
-                Id = ReadString(root, "methodId") ?? ReadString(root, "id") ?? string.Empty,
+                Id = ReadString(root, GetIdPropertyName(protocolVersion)) ?? string.Empty,
                 Name = ReadString(root, "name") ?? string.Empty,
-                Type = ReadString(root, "type"),
+                Type = ReadDiscriminator(root, protocolVersion),
                 Description = ReadString(root, "description"),
-                Meta = AcpMetaJson.Read(root)
+                Meta = AcpMetaJson.Read(root),
+                RawPayload = root.Clone()
             };
         }
 
         public override void Write(Utf8JsonWriter writer, AuthMethodDefinition value, JsonSerializerOptions options)
+            => WriteAuthMethod(writer, value, AcpWireFormat.NegotiatedVersion(options));
+
+        internal static void WriteAuthMethod(Utf8JsonWriter writer, AuthMethodDefinition value, int protocolVersion)
         {
             writer.WriteStartObject();
-            writer.WriteString("id", value.Id);
+            writer.WriteString(GetIdPropertyName(protocolVersion), value.Id);
             writer.WriteString("name", value.Name);
 
-            if (!string.IsNullOrWhiteSpace(value.Type))
+            if (protocolVersion != AcpProtocolVersion.V1 || value.Type is not null)
             {
-                writer.WriteString("type", value.Type);
+                writer.WriteString("type", value.ResolvedType);
             }
 
-            if (!string.IsNullOrWhiteSpace(value.Description))
+            if (value.Description is not null)
             {
                 writer.WriteString("description", value.Description);
             }
 
             AcpMetaJson.Write(writer, value.Meta);
+            WriteAdditionalProperties(writer, value.RawPayload, protocolVersion);
             writer.WriteEndObject();
+        }
+
+        private static string GetIdPropertyName(int protocolVersion)
+            => protocolVersion == AcpProtocolVersion.V1 ? "id" : "methodId";
+
+        private static string? ReadDiscriminator(JsonElement root, int protocolVersion)
+        {
+            if (!root.TryGetProperty("type", out var property))
+            {
+                if (protocolVersion != AcpProtocolVersion.V1)
+                {
+                    throw new JsonException("ACP v2 authentication method requires 'type'.");
+                }
+
+                return null;
+            }
+
+            // ACP defaults only an absent discriminator; an invalid JSON type must never gain
+            // the privileges of the default agent method. Unknown strings stay uninterpreted.
+            if (property.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException("ACP authentication method 'type' must be a string when provided.");
+            }
+
+            return property.GetString();
+        }
+
+        private static void WriteAdditionalProperties(Utf8JsonWriter writer, JsonElement? rawPayload, int protocolVersion)
+        {
+            if (rawPayload is not { ValueKind: JsonValueKind.Object } root)
+            {
+                return;
+            }
+
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Name == GetIdPropertyName(protocolVersion)
+                    || property.Name is "name" or "type" or "description" or "_meta")
+                {
+                    continue;
+                }
+
+                writer.WritePropertyName(property.Name);
+                writer.WriteRawValue(property.Value.GetRawText());
+            }
         }
 
         private static string? ReadString(JsonElement root, string propertyName)

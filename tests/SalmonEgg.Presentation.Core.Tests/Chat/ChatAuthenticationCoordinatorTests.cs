@@ -116,8 +116,14 @@ public sealed class ChatAuthenticationCoordinatorTests
     [Theory]
     [InlineData("_vendor_x")]
     [InlineData("future_thing")]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData("Agent")]
+    [InlineData("AGENT")]
     public async Task TryAuthenticateAsync_WhenOnlyMethodTypeIsUnknown_DoesNotCallAuthenticate(string methodType)
     {
+        // Arrange
         var sut = new ChatAuthenticationCoordinator();
         sut.CacheAuthMethods(CreateInitializeResponse(
             new AuthMethodDefinition
@@ -130,6 +136,7 @@ public sealed class ChatAuthenticationCoordinatorTests
         var service = new Mock<IChatService>();
         var notifications = new List<string>();
 
+        // Act
         var result = await sut.TryAuthenticateAsync(
             service.Object,
             true,
@@ -139,6 +146,7 @@ public sealed class ChatAuthenticationCoordinatorTests
             CancellationToken.None,
             unsupportedMethodTypeFallback: UnsupportedMethodTypeHint);
 
+        // Assert
         Assert.False(result);
         service.Verify(
             chatService => chatService.AuthenticateAsync(
@@ -146,6 +154,12 @@ public sealed class ChatAuthenticationCoordinatorTests
                 It.IsAny<CancellationToken>()),
             Times.Never);
         Assert.Equal(["无法使用的登录方式"], notifications);
+        connectionCoordinator.Verify(coordinator => coordinator.SetAuthenticationRequiredAsync(
+            "无法使用的登录方式",
+            "ChatAuth_UnsupportedMethodType",
+            "Unsupported sign-in method",
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -215,16 +229,25 @@ public sealed class ChatAuthenticationCoordinatorTests
             Times.Once);
     }
 
-    [Fact]
-    public async Task TryAuthenticateAsync_WhenTerminalMethodPrecedesAgentMethod_SkipsTerminalAndUsesAgent()
+    [Theory]
+    [InlineData("terminal")]
+    [InlineData("_vendor_x")]
+    [InlineData("future_thing")]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData("Agent")]
+    [InlineData("AGENT")]
+    public async Task TryAuthenticateAsync_WhenUnsupportedMethodPrecedesAgentMethod_SkipsItAndUsesAgent(string methodType)
     {
+        // Arrange
         var sut = new ChatAuthenticationCoordinator();
         sut.CacheAuthMethods(CreateInitializeResponse(
             new AuthMethodDefinition
             {
-                Id = "terminal-login",
-                Name = "Terminal login",
-                Type = AuthMethodDefinition.TerminalType
+                Id = "unsupported-login",
+                Name = "Unsupported login",
+                Type = methodType
             },
             new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }));
         var connectionCoordinator = CreateConnectionCoordinator();
@@ -235,6 +258,7 @@ public sealed class ChatAuthenticationCoordinatorTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AuthenticateResponse());
 
+        // Act
         var result = await sut.TryAuthenticateAsync(
             service.Object,
             true,
@@ -243,12 +267,18 @@ public sealed class ChatAuthenticationCoordinatorTests
             _ => { },
             CancellationToken.None);
 
+        // Assert
         Assert.True(result);
         service.Verify(
             chatService => chatService.AuthenticateAsync(
                 It.Is<AuthenticateParams>(p => p.MethodId == "agent-login"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+        service.Verify(
+            chatService => chatService.AuthenticateAsync(
+                It.Is<AuthenticateParams>(p => p.MethodId == "unsupported-login"),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

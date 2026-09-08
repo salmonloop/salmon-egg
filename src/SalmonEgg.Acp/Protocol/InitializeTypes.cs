@@ -867,13 +867,14 @@ namespace SalmonEgg.Acp.Protocol
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
+            var protocolVersion = ReadProtocolVersion(root);
 
             var result = new InitializeResponse
             {
-                ProtocolVersion = ReadProtocolVersion(root),
+                ProtocolVersion = protocolVersion,
                 AgentInfo = ReadAgentInfo(root, options),
                 AgentCapabilities = ReadAgentCapabilities(root, options),
-                AuthMethods = ReadAuthMethods(root, options),
+                AuthMethods = ReadAuthMethods(root, protocolVersion, options),
                 Meta = AcpMetaJson.Read(root)
             };
 
@@ -945,14 +946,19 @@ namespace SalmonEgg.Acp.Protocol
             return new AgentCapabilities();
         }
 
-        private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root, JsonSerializerOptions options)
+        private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root, int protocolVersion, JsonSerializerOptions options)
         {
             if (!root.TryGetProperty("authMethods", out var authMethods) || authMethods.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
                 return null;
             }
 
-            return JsonSerializer.Deserialize(authMethods.GetRawText(), (JsonTypeInfo<List<AuthMethodDefinition>>)options.GetTypeInfo(typeof(List<AuthMethodDefinition>)));
+            // Initialize selects the wire version before the client can bind its serializer to it.
+            // Its children must already observe that version's required discriminator contract.
+            var typeInfo = AcpProtocolVersion.IsSupported(protocolVersion)
+                ? AcpWireFormat.For(protocolVersion).TypeInfo<List<AuthMethodDefinition>>()
+                : (JsonTypeInfo<List<AuthMethodDefinition>>)options.GetTypeInfo(typeof(List<AuthMethodDefinition>));
+            return JsonSerializer.Deserialize(authMethods.GetRawText(), typeInfo);
         }
 
         private static AgentCapabilities ReadAgentCapabilitiesV2(JsonElement root, JsonSerializerOptions options)
@@ -1128,51 +1134,10 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteStartArray();
             foreach (var authMethod in authMethods)
             {
-                if (protocolVersion == AcpProtocolVersion.V1)
-                {
-                    WriteAuthMethodV1(writer, authMethod);
-                }
-                else
-                {
-                    WriteAuthMethodV2(writer, authMethod);
-                }
+                AuthMethodDefinitionJsonConverter.WriteAuthMethod(writer, authMethod, protocolVersion);
             }
 
             writer.WriteEndArray();
-        }
-
-        private static void WriteAuthMethodV1(Utf8JsonWriter writer, AuthMethodDefinition authMethod)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("id", authMethod.Id);
-            writer.WriteString("name", authMethod.Name);
-            if (!string.IsNullOrWhiteSpace(authMethod.Description))
-            {
-                writer.WriteString("description", authMethod.Description);
-            }
-
-            if (!string.IsNullOrWhiteSpace(authMethod.Type))
-            {
-                writer.WriteString("type", authMethod.Type);
-            }
-
-            AcpMetaJson.Write(writer, authMethod.Meta);
-            writer.WriteEndObject();
-        }
-
-        private static void WriteAuthMethodV2(Utf8JsonWriter writer, AuthMethodDefinition authMethod)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("methodId", authMethod.Id);
-            writer.WriteString("name", authMethod.Name);
-            writer.WriteString("type", authMethod.ResolvedType);
-            if (!string.IsNullOrWhiteSpace(authMethod.Description))
-            {
-                writer.WriteString("description", authMethod.Description);
-            }
-
-            AcpMetaJson.Write(writer, authMethod.Meta);
-            writer.WriteEndObject();
         }
     }
 }
