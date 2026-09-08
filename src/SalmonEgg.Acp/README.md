@@ -27,7 +27,7 @@ complete, and initializing a client with it throws. `AcpProtocolVersion.Latest` 
 former name of `HighestModeled` and is kept only so 1.0.0 consumers still compile.
 
 Do not enable live v2 connections until prompt acknowledgement/state updates, versioned update
-variants, permission subjects, config-option wire shapes, and JSON-RPC batches are implemented
+variants, permission-subject handling, configuration workflows, and JSON-RPC batches are implemented
 and protected by a separate experimental feature flag. The modeled v2 contracts are marked
 `[Experimental("SEACP002")]`; see [ACP v2 draft surface](#acp-v2-draft-surface-seacp002).
 
@@ -39,17 +39,19 @@ hosts must enable optional capabilities only after implementing their interactio
 
 | Surface | Current behavior | Remaining work |
 | --- | --- | --- |
-| Agent authentication | An eligibility check blocks `terminal` and other non-blank unknown method types before `authenticate`. | Blank and malformed discriminators still need correction in [#147](https://github.com/salmonloop/salmon-egg/issues/147). Interactive terminal authentication also needs a host implementation before advertising `auth.terminal`. |
+| Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. | Interactive terminal authentication still needs a host implementation before opting into `ClientCapabilities.Auth.Terminal`; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). |
 | Request cancellation | The SDK implements `$/cancel_request`, `-32800`, and late-response correlation. `session/cancel` remains a separate session operation. | Network adapter cancellation and cancel-send error handling still need correction in [#148](https://github.com/salmonloop/salmon-egg/issues/148). Peer cancellation is best effort. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Experimental wire contracts and version-specific serialization tests exist. Live initialization rejects v2. | Wire coverage and the runtime lifecycle remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit v2 contexts model grouped configuration IDs, message IDs, resource-link icons, command inputs, and version-specific initialization/session/MCP shapes. Live initialization rejects v2. | Runtime state, projections, permission handling, and batch processing remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
-V2 wire coverage still needs grouped config-option identifiers (`groupId`), required message IDs
-on chunks, resource-link icons, command-input discriminators, and the treatment of v1-only fields
-and MCP variants. Its permission subject types are not connected to live request handling.
-Completing these contracts does not complete message upserts, streaming tool and terminal
-projections, or the acknowledgement-to-`state_update` completion lifecycle.
+V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
+inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;
+default-on-error and skip-invalid-item behavior applies only where the upstream schema permits it.
+Resource-link icons are available through the experimental `ResourceLinkDraftExtensions` helper,
+so constructing them requires an explicit draft opt-in. Permission subject types are still not
+connected to live request handling. These contracts do not supply message upserts, streaming tool
+and terminal projections, or the acknowledgement-to-`state_update` completion lifecycle.
 
 Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
 both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
@@ -60,9 +62,10 @@ lifecycle. Passing DTO tests or suppressing `SEACP002` does not satisfy that req
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is
 a **compile error** by default rather than a warning. That is deliberate: v2 is still an upstream
 draft, no live client negotiates it (`AcpProtocolVersion.RuntimeServed` is v1), and code built on
-these types cannot reach a real Agent today. The 37 marked types are the `state_update` work-state
+these types cannot reach a real Agent today. The 38 marked types are the `state_update` work-state
 family, the whole-message upsert updates, the terminal updates, streaming tool-call content, the
-v2 `plan_update` envelope, permission subjects, the v2 capability markers, and the structured diff.
+v2 `plan_update` envelope, permission subjects, the v2 capability markers, the structured diff,
+and `ResourceLinkDraftExtensions` for resource-link icons.
 
 To evaluate them anyway, opt in explicitly:
 
