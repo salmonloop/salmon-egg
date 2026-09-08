@@ -80,6 +80,7 @@ SalmonEgg.Acp.Protocol.AskUserQuestion stable
 SalmonEgg.Acp.Protocol.AskUserRequest stable
 SalmonEgg.Acp.Protocol.AskUserRequestEventArgs stable
 SalmonEgg.Acp.Protocol.AskUserResponse stable
+SalmonEgg.Acp.Protocol.AuthCapabilities stable
 SalmonEgg.Acp.Protocol.AuthMethod stable
 SalmonEgg.Acp.Protocol.AuthMethodDefinition stable
 SalmonEgg.Acp.Protocol.AuthenticateParams stable

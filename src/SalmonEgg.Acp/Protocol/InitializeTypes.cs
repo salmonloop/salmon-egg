@@ -126,6 +126,13 @@ namespace SalmonEgg.Acp.Protocol
         public ClientSessionCapabilities? Session { get; init; }
 
         /// <summary>
+        /// Authentication-method extensions supported by the client. Omitted means no opt-in support.
+        /// </summary>
+        [JsonPropertyName("auth")]
+        [JsonConverter(typeof(DefaultableObjectJsonConverter<AuthCapabilities>))]
+        public AuthCapabilities? Auth { get; init; }
+
+        /// <summary>
         /// Elicitation capabilities, declaring which <c>elicitation/create</c> modes the agent may use.
         /// </summary>
         /// <remarks>
@@ -856,19 +863,7 @@ namespace SalmonEgg.Acp.Protocol
         private static void WriteClientCapabilitiesV2(Utf8JsonWriter writer, ClientCapabilities value, JsonSerializerOptions options)
         {
             writer.WritePropertyName("capabilities");
-            writer.WriteStartObject();
-
-            // elicitation is a root capability in the v2 schema too (unlike fs/terminal/session, which
-            // v2 dropped), so dropping it here would silently un-advertise a mode the client supports and
-            // make every standards-compliant agent fall back.
-            if (value.Elicitation is not null)
-            {
-                writer.WritePropertyName("elicitation");
-                JsonSerializer.Serialize(writer, value.Elicitation, (JsonTypeInfo<ElicitationCapabilities>)options.GetTypeInfo(typeof(ElicitationCapabilities)));
-            }
-
-            AcpMetaJson.Write(writer, value.Meta);
-            writer.WriteEndObject();
+            JsonSerializer.Serialize(writer, value, AcpWireFormat.For(AcpProtocolVersion.V2).TypeInfo<ClientCapabilities>());
         }
     }
 
@@ -990,9 +985,9 @@ namespace SalmonEgg.Acp.Protocol
                 sessionCapabilities = ReadSessionCapabilitiesV2(session);
             }
 
-            if (root.TryGetProperty("auth", out var authElement) && authElement.ValueKind == JsonValueKind.Object)
+            if (root.TryGetProperty("auth", out var authElement))
             {
-                auth = JsonSerializer.Deserialize(authElement.GetRawText(), (JsonTypeInfo<AgentAuthCapabilities>)options.GetTypeInfo(typeof(AgentAuthCapabilities)));
+                auth = DefaultableObjectJsonConverter<AgentAuthCapabilities>.ReadValue(authElement, options);
             }
 
             return new AgentCapabilities
