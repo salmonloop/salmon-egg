@@ -311,8 +311,15 @@ namespace SalmonEgg.Infrastructure.Transport
         /// <summary>
         /// 发送消息。
         /// </summary>
-        public async Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+        public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+            => SendMessageAsync(message, TransportSendOptions.Default, cancellationToken);
+
+        public async Task<bool> SendMessageAsync(
+            string message,
+            TransportSendOptions options,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // 检查连接状态（不使用锁，避免死锁）
             if (!IsConnected || _stdin == null)
             {
@@ -365,17 +372,20 @@ namespace SalmonEgg.Infrastructure.Transport
             catch (Exception ex)
             {
                 _logger.Error(ex, "[StdioTransport.SendMessage] Send failed");
-                OnErrorOccurred(new TransportErrorEventArgs(
-                    $"Failed to send message: {ex.Message}",
-                    ex,
-                    TransportErrorKind.SendFailed));
-
                 // Only a genuinely broken pipe / dead process is a permanent disconnect. A transient
                 // write conflict (e.g. InvalidOperationException from an overlapping write) is
                 // recoverable and must not zombify the transport or cancel all in-flight requests.
                 if (IsFatalSendFailure(ex))
                 {
                     IsConnected = false;
+                }
+
+                if (options != TransportSendOptions.DiagnosticOnly || !IsConnected)
+                {
+                    OnErrorOccurred(new TransportErrorEventArgs(
+                        "Failed to send message",
+                        ex,
+                        TransportErrorKind.SendFailed));
                 }
 
                 return false;

@@ -31,7 +31,9 @@ public sealed class WebSocketCancelRequestFullStackTests
         using var socket = new WebSocketTransport(Log.Logger, connectTimeout: TimeSpan.FromSeconds(10));
         using var network = new NetworkTransportAdapter(socket, peer.Url);
         using var transport = new DomainAcpTransportAdapter(network);
-        using var client = new AcpClient(transport);
+        var probe = new CancellationTestProbe();
+        using var client = new AcpClient(transport, probe);
+        client.ErrorOccurred += probe.RecordError;
 
         Assert.True(await network.ConnectAsync(TestContext.Current.CancellationToken));
         await client.InitializeAsync(
@@ -52,12 +54,20 @@ public sealed class WebSocketCancelRequestFullStackTests
 
         var original = peer.SingleFrame("session/new");
         var cancel = peer.SingleFrame(CancelRequestParams.Method);
-        Assert.False(cancel.TryGetProperty("id", out _));
-        Assert.Equal(
-            original.GetProperty("id").GetRawText(),
-            cancel.GetProperty("params").GetProperty("requestId").GetRawText());
+        CancellationTestProbe.AssertMatchingNotification(original, cancel);
+        await probe.Settlement.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        await network.DisconnectAsync();
+        var next = await client.CreateSessionAsync(new SessionNewParams(Path.GetFullPath(Path.GetTempPath()), null),
+            TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal("session-after-cancel", next.SessionId);
+        var abandoned = client.CreateSessionAsync(new SessionNewParams(Path.GetFullPath(Path.GetTempPath()), null),
+            TestContext.Current.CancellationToken);
+
+        await client.DisconnectAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandoned);
+        Assert.False(network.IsConnected);
+        Assert.False(client.IsInitialized);
+        Assert.Empty(probe.Errors);
     }
 
     private sealed class CancelRequestWebSocketPeer : IAsyncDisposable
@@ -67,6 +77,7 @@ public sealed class WebSocketCancelRequestFullStackTests
         private readonly TaskCompletionSource _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly CancellationTokenSource _stop = new();
         private readonly Task _serveTask;
+        private int _sessionRequests;
 
         public CancelRequestWebSocketPeer()
         {
@@ -140,6 +151,7 @@ public sealed class WebSocketCancelRequestFullStackTests
                     var received = await socket.ReceiveAsync(buffer, _stop.Token).ConfigureAwait(false);
                     if (received.MessageType == WebSocketMessageType.Close)
                     {
+                        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "closed", _stop.Token);
                         return;
                     }
 
@@ -157,6 +169,20 @@ public sealed class WebSocketCancelRequestFullStackTests
                             + ",\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"test-agent\",\"version\":\"1.0\"},\"agentCapabilities\":{}}}";
                         var bytes = Encoding.UTF8.GetBytes(response);
                         await socket.SendAsync(bytes, WebSocketMessageType.Text, true, _stop.Token).ConfigureAwait(false);
+                    }
+                    else if (string.Equals(method.GetString(), CancelRequestParams.Method, StringComparison.Ordinal))
+                    {
+                        var id = frame.GetProperty("params").GetProperty("requestId").GetRawText();
+                        var response = "{\"jsonrpc\":\"2.0\",\"id\":" + id
+                            + ",\"error\":{\"code\":-32800,\"message\":\"Cancelled\"}}";
+                        await socket.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, _stop.Token);
+                    }
+                    else if (string.Equals(method.GetString(), "session/new", StringComparison.Ordinal)
+                        && ++_sessionRequests == 2)
+                    {
+                        var response = "{\"jsonrpc\":\"2.0\",\"id\":" + frame.GetProperty("id").GetRawText()
+                            + ",\"result\":{\"sessionId\":\"session-after-cancel\"}}";
+                        await socket.SendAsync(Encoding.UTF8.GetBytes(response), WebSocketMessageType.Text, true, _stop.Token);
                     }
                 }
             }

@@ -25,6 +25,10 @@ namespace SalmonEgg.Acp.Client
         private const string StableV1RuntimeOnlyMessage =
             "ACP live client support is limited to stable protocolVersion 1 while newer modeled versions remain draft or incomplete.";
 
+        // A best-effort notification must never turn a user cancellation into an unbounded wait.
+        // Shared with behavioral tests so they validate the lifecycle, not a second timeout value.
+        internal static readonly TimeSpan CancellationNotificationTimeout = TimeSpan.FromSeconds(2);
+
         private sealed class PendingInboundRequest
         {
             public PendingInboundRequest(
@@ -1187,6 +1191,23 @@ namespace SalmonEgg.Acp.Client
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // A transport may accept a complete peer response before its write await notices
+                // cancellation. That terminal result already won the request; do not send a cancel
+                // for completed work. Otherwise also cancel the waiter for writes interrupted before
+                // the token registration, so a late peer response settles the retained correlation.
+                if (!tcs.TrySetCanceled(cancellationToken) && tcs.Task.IsCompletedSuccessfully)
+                {
+                    var completed = await tcs.Task.ConfigureAwait(false);
+                    if (completed.IsError)
+                    {
+                        AcpActivitySources.MarkProtocolError(activity, completed.Error!.Code);
+                    }
+                    else
+                    {
+                        AcpActivitySources.MarkSuccess(activity);
+                    }
+                    return completed;
+                }
                 AcpActivitySources.MarkCancelled(activity);
 
                 // A caller can abandon its own await immediately, but the matching response still
@@ -1247,19 +1268,33 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
+            CancellationToken connectionToken;
+            lock (_lock)
+            {
+                connectionToken = _messageLoopCts?.Token ?? CancellationToken.None;
+            }
+            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(connectionToken);
+            sendCancellation.CancelAfter(CancellationNotificationTimeout);
+            Task<bool>? sendTask = null;
             try
             {
                 var notification = new JsonRpcNotification(
                     CancelRequestParams.Method,
                     ToElement<CancelRequestParams>(
                         new CancelRequestParams(requestId)));
-                var sent = await _transport.SendMessageAsync(_parser.SerializeMessage(notification)).ConfigureAwait(false);
+                sendTask = _transport.SendMessageAsync(
+                    _parser.SerializeMessage(notification),
+                    AcpTransportSendOptions.DiagnosticOnly,
+                    sendCancellation.Token);
+                // The token bounds compliant transports; WaitAsync also bounds a legacy transport
+                // that ignores it. We retain only a fault observer for that legacy operation below.
+                var sent = await sendTask.WaitAsync(sendCancellation.Token).ConfigureAwait(false);
                 if (!sent)
                 {
                     _logger.Log(
                         AcpClientLogLevel.Warning,
                         "CANCEL_REQUEST_SEND_FAILED",
-                        $"Failed to send $/cancel_request for request {requestId}.",
+                        "Failed to send the best-effort $/cancel_request notification.",
                         nameof(SendCancelRequestNotificationAsync));
                 }
             }
@@ -1268,9 +1303,22 @@ namespace SalmonEgg.Acp.Client
                 _logger.Log(
                     AcpClientLogLevel.Warning,
                     "CANCEL_REQUEST_SEND_FAILED",
-                    $"Failed to send $/cancel_request for request {requestId}: {ex.Message}",
+                    "Failed to send the best-effort $/cancel_request notification.",
                     nameof(SendCancelRequestNotificationAsync),
                     ex);
+            }
+            finally
+            {
+                if (sendTask is not null)
+                {
+                    // There is no second running loop or timer. A non-cooperative external
+                    // transport owns finishing its operation; observe any eventual exception.
+                    _ = sendTask.ContinueWith(
+                        static task => _ = task.Exception,
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.OnlyOnFaulted,
+                        TaskScheduler.Default);
+                }
             }
         }
 

@@ -18,6 +18,7 @@ SalmonEgg.Acp.Client.AcpClientLogLevel stable
 SalmonEgg.Acp.Client.AcpTransportErrorEventArgs stable
 SalmonEgg.Acp.Client.AcpTransportErrorKind stable
 SalmonEgg.Acp.Client.AcpTransportMessageReceivedEventArgs stable
+SalmonEgg.Acp.Client.AcpTransportSendOptions stable
 SalmonEgg.Acp.Client.ElicitationCompletedEventArgs stable
 SalmonEgg.Acp.Client.ElicitationRequestEventArgs stable
 SalmonEgg.Acp.Client.FileSystemRequestEventArgs stable
