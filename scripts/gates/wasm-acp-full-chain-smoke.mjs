@@ -28,6 +28,7 @@ import {
   typeIntoVisibleTextField,
   waitForControlEnabledState,
   waitForLaidOutControl,
+  waitForPersistedLocalFileContains,
   waitForSemanticText
 } from "./wasm-smoke-lib/ui-affordances.mjs";
 
@@ -63,7 +64,8 @@ try {
     await createWebSocketProfile(page, profileName, acpServer.url);
     await expectProfilePresence(page, profileName, "saved ACP profile");
     await createRemoteDirectory(page, remoteDirectoryName, remoteDirectoryPath);
-    await page.waitForTimeout(1_500);
+    await waitForPersistedLocalFileContains(page, "/local/SalmonEgg/config/app.yaml",
+      [remoteDirectoryName, remoteDirectoryPath], "remote directory settings");
 
     await expectPersistedProfileAfterReload(page, baseUrl, profileName);
     await expectRemoteDirectoryPresence(page, remoteDirectoryName, remoteDirectoryPath, "persisted remote directory");

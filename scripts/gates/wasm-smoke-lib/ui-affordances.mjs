@@ -955,6 +955,27 @@ export async function readLocalTextFile(page, path) {
     path);
 }
 
+export async function waitForPersistedLocalFileContains(page, path, requiredSnippets, label, timeoutMs = defaultTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastResult = null;
+
+  while (Date.now() < deadline) {
+    lastResult = await page.evaluate(
+      input => window.__salmoneggSmoke.semantic.readPersistedLocalTextFile(input.path, input.timeoutMs),
+      { path, timeoutMs: Math.max(1, deadline - Date.now()) });
+    if (!lastResult.error && requiredSnippets.every(snippet => lastResult.content?.includes(snippet))) {
+      return lastResult.content;
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(
+    `${label} was not committed to IndexedDB before reload. Path=${path} `
+    + `Missing=${JSON.stringify(requiredSnippets.filter(snippet => !lastResult?.content?.includes(snippet)))} `
+    + `Read error=${lastResult?.error ?? "none"}`);
+}
+
 // ---- page-side callbacks (self-contained by contract; passed straight to page.evaluate) -------
 
 // The semantic DOM is the interactive set; these collectors are what the ACP fixture dumps on

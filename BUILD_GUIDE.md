@@ -373,6 +373,8 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键进入 Diagnostics 的 pressed 槽位与 ActiveInputs 意图事实（`MoveDown` / `Activate`）。原生焦点由键盘/XYFocus 与控件 consumer 拥有；壳层不再对轮询手柄做全局 SendInput / FocusManager 焦点 bridge，避免双路径分发；
 - WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI；在 `session/new` 完成前验证请求级 elicitation 收到 `cancel`，再通过真实表单填写验证必填校验、字符串与布尔值回包，以及未知必填字段禁止提交且可取消。
 
+设置持久化与 ACP 全链路在刷新前，只读等待本轮配置出现在 IDBFS 的 IndexedDB 已提交记录中，再从重载后的 UI 验证；内存 `FS.readFile`、按钮恢复可用或固定等待均不代表落盘完成，gate 不代应用调用 `syncfs`。
+
 它补充 Windows FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
 > Windows FlaUI/UIA3 gate（`scripts/gates/run-gui-smoke-gates.ps1`）目前是**本机门禁**：它需要真实 Windows 交互会话，而本仓库没有注册自托管 Windows runner。`gui-smoke-gates.yml` 里对应的 job 仍然保留接线，但由仓库变量 `WINDOWS_GUI_SELF_HOSTED_RUNNER=true` 显式启用；未启用时不会排队等待一个不存在的 runner。
