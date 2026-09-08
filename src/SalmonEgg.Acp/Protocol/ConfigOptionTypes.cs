@@ -42,6 +42,7 @@ public sealed record ConfigOption : AcpProtocolObject
     internal JsonElement? RawPayload { get; init; }
 }
 
+[JsonConverter(typeof(ConfigOptionValueJsonConverter))]
 public sealed record ConfigOptionValue : AcpProtocolObject
 {
     [JsonPropertyName("value")]
@@ -52,6 +53,8 @@ public sealed record ConfigOptionValue : AcpProtocolObject
 
     [JsonPropertyName("description")]
     public string? Description { get; init; }
+
+    internal JsonElement? RawPayload { get; init; }
 }
 
 [JsonConverter(typeof(ConfigOptionGroupJsonConverter))]
@@ -65,6 +68,8 @@ public sealed record ConfigOptionGroup : AcpProtocolObject
 
     [JsonPropertyName("options")]
     public List<ConfigOptionValue> Options { get; init; } = new();
+
+    internal JsonElement? RawPayload { get; init; }
 }
 
 internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
@@ -169,7 +174,8 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         }
 
         AcpMetaJson.Write(writer, value.Meta);
-        WriteUnknownFields(writer, value, options);
+        WriteUnknownFields(writer, value.RawPayload,
+            IdPropertyName(options), "name", "description", "category", "type", "currentValue", "options", "_meta");
         writer.WriteEndObject();
     }
 
@@ -204,7 +210,8 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             Group = ReadRequiredString(element, GroupPropertyName(options)),
             Name = ReadRequiredString(element, "name"),
             Options = groupOptions,
-            Meta = AcpMetaJson.Read(element)
+            Meta = AcpMetaJson.Read(element),
+            RawPayload = element.Clone()
         };
     }
 
@@ -216,6 +223,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         writer.WritePropertyName("options");
         WriteOptions(writer, group.Options, options);
         AcpMetaJson.Write(writer, group.Meta);
+        WriteUnknownFields(writer, group.RawPayload, GroupPropertyName(options), "name", "options", "_meta");
         writer.WriteEndObject();
     }
 
@@ -257,14 +265,26 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         }
     }
 
-    private static ConfigOptionValue ReadOption(JsonElement element)
+    internal static ConfigOptionValue ReadOption(JsonElement element)
         => new()
         {
             Value = ReadRequiredString(element, "value"),
             Name = ReadRequiredString(element, "name"),
             Description = ReadOptionalString(element, "description"),
-            Meta = AcpMetaJson.Read(element)
+            Meta = AcpMetaJson.Read(element),
+            RawPayload = element.Clone()
         };
+
+    internal static void WriteOption(Utf8JsonWriter writer, ConfigOptionValue value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("value", value.Value);
+        writer.WriteString("name", value.Name);
+        WriteOptionalString(writer, "description", value.Description, options);
+        AcpMetaJson.Write(writer, value.Meta);
+        WriteUnknownFields(writer, value.RawPayload, "value", "name", "description", "_meta");
+        writer.WriteEndObject();
+    }
 
     private static string IdPropertyName(JsonSerializerOptions options)
         => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2 ? "configId" : "id";
@@ -292,18 +312,16 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             : null;
     }
 
-    private static void WriteUnknownFields(Utf8JsonWriter writer, ConfigOption value, JsonSerializerOptions options)
+    private static void WriteUnknownFields(Utf8JsonWriter writer, JsonElement? rawPayload, params string[] knownPropertyNames)
     {
-        if (value.RawPayload is not { } payload)
+        if (rawPayload is not { } payload)
         {
             return;
         }
 
-        var idProperty = IdPropertyName(options);
         foreach (var property in payload.EnumerateObject())
         {
-            if (property.Name != idProperty && property.Name is not "name" and not "description" and not "category"
-                and not "type" and not "currentValue" and not "options" and not "_meta")
+            if (System.Array.IndexOf(knownPropertyNames, property.Name) < 0)
             {
                 writer.WritePropertyName(property.Name);
                 writer.WriteRawValue(property.Value.GetRawText());
@@ -333,12 +351,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         writer.WriteStartArray();
         foreach (var option in configOptions)
         {
-            writer.WriteStartObject();
-            writer.WriteString("value", option.Value);
-            writer.WriteString("name", option.Name);
-            WriteOptionalString(writer, "description", option.Description, serializerOptions);
-            AcpMetaJson.Write(writer, option.Meta);
-            writer.WriteEndObject();
+            WriteOption(writer, option, serializerOptions);
         }
 
         writer.WriteEndArray();
@@ -360,6 +373,18 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             writer.WriteNull(propertyName);
         }
     }
+}
+
+internal sealed class ConfigOptionValueJsonConverter : JsonConverter<ConfigOptionValue>
+{
+    public override ConfigOptionValue? Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        return ConfigOptionJsonConverter.ReadOption(document.RootElement);
+    }
+
+    public override void Write(Utf8JsonWriter writer, ConfigOptionValue value, JsonSerializerOptions options)
+        => ConfigOptionJsonConverter.WriteOption(writer, value, options);
 }
 
 internal sealed class ConfigOptionGroupJsonConverter : JsonConverter<ConfigOptionGroup>
