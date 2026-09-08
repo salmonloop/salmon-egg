@@ -96,7 +96,7 @@ public sealed class ChatServiceTracingTests
             new SessionManager());
 
         // Act
-        await service.SendPromptAsync(new SessionPromptParams("session-42", []));
+        await service.SendPromptAsync(new SessionPromptParams("session-42", []), TestContext.Current.CancellationToken);
 
         // Assert
         var activity = Assert.Single(stoppedActivities);
@@ -138,7 +138,7 @@ public sealed class ChatServiceTracingTests
             new SessionManager());
 
         // Act
-        await service.SendPromptAsync(new SessionPromptParams("session-7", []));
+        await service.SendPromptAsync(new SessionPromptParams("session-7", []), TestContext.Current.CancellationToken);
 
         // Assert
         var activity = Assert.Single(stoppedActivities);
@@ -165,7 +165,7 @@ public sealed class ChatServiceTracingTests
             new SessionManager());
 
         // Act
-        await service.SendPromptAsync(new SessionPromptParams(string.Empty, []));
+        await service.SendPromptAsync(new SessionPromptParams(string.Empty, []), TestContext.Current.CancellationToken);
 
         // Assert
         var activity = Assert.Single(stoppedActivities);
@@ -192,7 +192,7 @@ public sealed class ChatServiceTracingTests
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.SendPromptAsync(
-            new SessionPromptParams("session-9", [])));
+            new SessionPromptParams("session-9", []), TestContext.Current.CancellationToken));
 
         // Assert
         var activity = Assert.Single(stoppedActivities);
@@ -200,7 +200,7 @@ public sealed class ChatServiceTracingTests
         Assert.Equal(
             typeof(InvalidOperationException).FullName,
             activity.GetTagItem(OtelErrorAttributes.Type));
-        Assert.True(activity.Events.Any(@event => @event.Name == "exception"));
+        Assert.Contains(activity.Events, @event => @event.Name == "exception");
     }
 
     [Fact]
