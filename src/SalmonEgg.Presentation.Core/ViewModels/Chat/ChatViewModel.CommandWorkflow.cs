@@ -1749,6 +1749,8 @@ public partial class ChatViewModel
         _observedPendingElicitationRequest = value;
         if (_observedPendingElicitationRequest != null)
         {
+            // A background conversation may retain a form across a language change.
+            _observedPendingElicitationRequest.ReprojectLocalizedState();
             _observedPendingElicitationRequest.PropertyChanged += OnPendingElicitationRequestPropertyChanged;
         }
 

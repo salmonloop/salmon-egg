@@ -51,6 +51,10 @@ namespace SalmonEgg.Acp.Client
 
             public CreateElicitationRequest? ElicitationRequest { get; }
 
+            public bool IsElicitationResponseInFlight { get; set; }
+
+            public bool IsElicitationCancellationRequested { get; set; }
+
             public PendingInboundRequest WithSessionId(string sessionId)
                 => new(Method, MessageId, sessionId, AskUserRequest, ElicitationRequest);
 
@@ -61,14 +65,6 @@ namespace SalmonEgg.Acp.Client
                     request.SessionId,
                     request,
                     ElicitationRequest);
-
-            public PendingInboundRequest WithElicitationRequest(CreateElicitationRequest request)
-                => new(
-                    string.IsNullOrWhiteSpace(Method) ? ElicitationMethods.Create : Method,
-                    MessageId,
-                    request.Scope.SessionId ?? SessionId,
-                    AskUserRequest,
-                    request);
         }
         private readonly IAcpTransport _transport;
         private readonly MessageParser _parser;
@@ -81,6 +77,9 @@ namespace SalmonEgg.Acp.Client
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
+        // URL completion outlives the JSON-RPC response. Both indexes refer to the same request identity;
+        // the lock also protects response claims and connection teardown from stale callbacks.
+        private readonly Dictionary<string, PendingInboundRequest> _pendingUrlElicitations = new(StringComparer.Ordinal);
 
         private readonly object _lock = new();
         private bool _disposed;
@@ -97,7 +96,7 @@ namespace SalmonEgg.Acp.Client
 
         // Projection rather than a second field: a copy could drift from the contract actually in use,
         // and the two disagreeing is exactly the class of defect this refactor exists to remove.
-        private int _protocolVersion => _wire.Version;
+        private int ProtocolVersion => _wire.Version;
         private AgentInfo? _agentInfo;
         private AgentCapabilities? _agentCapabilities;
         private IReadOnlyList<AuthMethodDefinition>? _authMethods;
@@ -111,10 +110,10 @@ namespace SalmonEgg.Acp.Client
         private bool SupportsSessionAdditionalDirectories => _agentCapabilities?.SupportsSessionAdditionalDirectories == true;
         private bool SupportsAuthenticationSurface => _authMethods is { Count: > 0 };
         private bool SupportsAdvertisedTerminalExecution =>
-            _protocolVersion == AcpProtocolVersion.V1
+            ProtocolVersion == AcpProtocolVersion.V1
                 && _clientCapabilities?.Terminal == true;
         private bool SupportsLogout =>
-            _protocolVersion == AcpProtocolVersion.V2
+            ProtocolVersion == AcpProtocolVersion.V2
                 ? SupportsAuthenticationSurface
                 : _agentCapabilities?.SupportsLogout == true;
 
@@ -400,7 +399,7 @@ namespace SalmonEgg.Acp.Client
         {
             EnsureInitialized();
             ArgumentNullException.ThrowIfNull(@params);
-            if (_protocolVersion == AcpProtocolVersion.V1 && @params.ReplayFrom is not null)
+            if (ProtocolVersion == AcpProtocolVersion.V1 && @params.ReplayFrom is not null)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.InvalidParams,
@@ -772,7 +771,7 @@ namespace SalmonEgg.Acp.Client
                     $"Authentication method '{@params.MethodId}' has type '{advertised.ResolvedType}', which must not be passed to authenticate");
             }
 
-            var methodName = _protocolVersion == AcpProtocolVersion.V2 ? "auth/login" : "authenticate";
+            var methodName = ProtocolVersion == AcpProtocolVersion.V2 ? "auth/login" : "authenticate";
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
@@ -809,7 +808,7 @@ namespace SalmonEgg.Acp.Client
                     "Agent does not support logout capability");
             }
 
-            var methodName = _protocolVersion == AcpProtocolVersion.V2 ? "auth/logout" : "logout";
+            var methodName = ProtocolVersion == AcpProtocolVersion.V2 ? "auth/logout" : "logout";
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
@@ -894,32 +893,126 @@ namespace SalmonEgg.Acp.Client
                 new ElicitationCancelResponse()).ConfigureAwait(false);
         }
 
-        private async Task<bool> TrySendElicitationResponseAsync(
+        private Task<bool> TrySendElicitationResponseAsync(
             object messageId,
             CreateElicitationResponse response)
         {
             var idStr = messageId?.ToString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return false;
-            }
-
-            // Taking the pending entry is what makes the three actions mutually exclusive: whichever one
-            // runs first removes the correlation, so a late second action cannot answer the same request
-            // twice.
-            if (!TryTakePendingInboundRequest(idStr, out var pending)
-                || pending.ElicitationRequest == null)
-            {
-                return false;
-            }
-
-            return await SendResponseAsync(
-                new JsonRpcResponse(
-                    messageId!,
-                    ToElement<CreateElicitationResponse>(response))).ConfigureAwait(false);
+            return TryGetPendingInboundRequest(idStr, out var pending)
+                ? TrySendElicitationResponseAsync(pending, response)
+                : Task.FromResult(false);
         }
 
-        private async Task<bool> TrySendPermissionOutcomeResponseAsync(object? messageId, string outcome, string? optionId)
+        private async Task<bool> TrySendElicitationResponseAsync(
+            PendingInboundRequest pending,
+            CreateElicitationResponse response,
+            bool cancelForSession = false)
+        {
+            var idStr = pending.MessageId?.ToString() ?? string.Empty;
+            CancellationToken connectionCancellation;
+            lock (_lock)
+            {
+                if (_disposed || !_transport.IsConnected || pending.ElicitationRequest is null
+                    || !TryGetPendingInboundRequest(idStr, out var current)
+                    || !ReferenceEquals(current, pending))
+                {
+                    return false;
+                }
+
+                if (cancelForSession)
+                {
+                    pending.IsElicitationCancellationRequested = true;
+                }
+
+                if (pending.IsElicitationResponseInFlight
+                    || (pending.IsElicitationCancellationRequested && response is not ElicitationCancelResponse))
+                {
+                    return false;
+                }
+
+                // Claim without removing: a failed send must remain retryable, while a second action
+                // cannot race the first one onto the wire. The callback owns this exact request object,
+                // so reusing its JSON-RPC id never lets an old form answer a later request.
+                pending.IsElicitationResponseInFlight = true;
+                connectionCancellation = _messageLoopCts?.Token ?? CancellationToken.None;
+            }
+
+            var sent = false;
+            try
+            {
+                sent = await SendResponseAsync(new JsonRpcResponse(
+                    pending.MessageId,
+                    ToElement<CreateElicitationResponse>(response)), connectionCancellation).ConfigureAwait(false);
+                return sent;
+            }
+            finally
+            {
+                if (CompleteElicitationResponse(pending, response, sent))
+                {
+                    await SendPendingElicitationCancellationAsync(pending, connectionCancellation).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private bool CompleteElicitationResponse(PendingInboundRequest pending, CreateElicitationResponse response, bool sent)
+        {
+            var idStr = pending.MessageId?.ToString() ?? string.Empty;
+            lock (_lock)
+            {
+                if (sent)
+                {
+                    _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(idStr, pending));
+                    if (response is not ElicitationAcceptResponse)
+                    {
+                        RemovePendingUrlElicitation(pending);
+                    }
+                }
+                else if (pending.IsElicitationCancellationRequested && response is not ElicitationCancelResponse
+                    && !_disposed && _transport.IsConnected
+                    && TryGetPendingInboundRequest(idStr, out var current) && ReferenceEquals(current, pending))
+                {
+                    // Session cancellation must survive a failed in-flight answer. Keep the claim
+                    // for exactly one cancel send; another user action cannot overtake this intent.
+                    return true;
+                }
+
+                pending.IsElicitationResponseInFlight = false;
+                return false;
+            }
+        }
+
+        private async Task SendPendingElicitationCancellationAsync(PendingInboundRequest pending, CancellationToken cancellationToken)
+        {
+            var response = new ElicitationCancelResponse();
+            var sent = false;
+            try
+            {
+                sent = await SendResponseAsync(new JsonRpcResponse(
+                    pending.MessageId,
+                    ToElement<CreateElicitationResponse>(response)), cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                // A failed cancellation remains explicitly retryable; it never schedules another send.
+                CompleteElicitationResponse(pending, response, sent);
+            }
+        }
+
+        private void RemovePendingUrlElicitation(PendingInboundRequest pending)
+        {
+            if (pending.ElicitationRequest is UrlElicitationRequest url
+                && _pendingUrlElicitations.TryGetValue(url.ElicitationId, out var current)
+                && ReferenceEquals(current, pending))
+            {
+                _pendingUrlElicitations.Remove(url.ElicitationId);
+            }
+        }
+
+        private async Task<bool> TrySendPermissionOutcomeResponseAsync(
+            object? messageId,
+            string outcome,
+            string? optionId,
+            PendingInboundRequest? expectedRequest = null)
         {
             if (messageId == null)
             {
@@ -929,8 +1022,15 @@ namespace SalmonEgg.Acp.Client
             // Only respond once per inbound request id. Unknown or stale ids are not a
             // protocol payload, so they should not fail ACP schema validation.
             var idStr = messageId.ToString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(idStr)
-                || !TryTakePendingInboundRequest(idStr, out _))
+            if (string.IsNullOrWhiteSpace(idStr))
+            {
+                return false;
+            }
+
+            var claimed = expectedRequest is null
+                ? TryTakePendingInboundRequest(idStr, out _)
+                : _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(idStr, expectedRequest));
+            if (!claimed)
             {
                 return false;
             }
@@ -1030,7 +1130,7 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public async Task<bool> DisconnectAsync()
         {
-            _messageLoopCts?.Cancel();
+            ResetConnectionState();
             CancelPendingRequests();
 
             await _transport.DisconnectAsync();
@@ -1213,13 +1313,17 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Sends a response (used to answer inbound requests).
         /// </summary>
-        private async Task<bool> SendResponseAsync(JsonRpcResponse response)
+        private async Task<bool> SendResponseAsync(JsonRpcResponse response, CancellationToken cancellationToken = default)
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var json = _parser.SerializeMessage(response);
-                await _transport.SendMessageAsync(json).ConfigureAwait(false);
-                return true;
+                return await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return false;
             }
             catch (Exception ex)
             {
@@ -1401,11 +1505,6 @@ namespace SalmonEgg.Acp.Client
                         break;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requestIdStr))
-                    {
-                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                    }
-
                     HandleElicitationRequest(request);
                     break;
                 case ClientCapabilityMetadata.AskUserExtensionMethod:
@@ -1432,7 +1531,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         private bool SupportsAdvertisedFileSystemCapability(string method)
-            => _protocolVersion == AcpProtocolVersion.V1
+            => ProtocolVersion == AcpProtocolVersion.V1
                 && (method switch
                 {
                     "fs/read_text_file" => _clientCapabilities?.Fs?.ReadTextFile == true,
@@ -1444,16 +1543,6 @@ namespace SalmonEgg.Acp.Client
             => _clientCapabilities?.SupportsExtension(method) == true;
 
         /// <summary>
-        /// Whether the client advertised the elicitation mode the agent asked for.
-        /// </summary>
-        /// <remarks>
-        /// Unlike the fs and terminal gates, an un-advertised mode is answered with
-        /// <c>-32602 Invalid params</c> rather than <c>-32601</c>: the elicitation specification names that
-        /// code explicitly, because the method itself exists and only the requested mode is unavailable.
-        /// A request whose mode this client does not model at all is never advertised, so it lands here
-        /// too instead of being rendered as a known mode.
-        /// </remarks>
-        /// <summary>
         /// Whether the client advertised elicitation at all.
         /// </summary>
         /// <remarks>
@@ -1464,6 +1553,16 @@ namespace SalmonEgg.Acp.Client
         /// </remarks>
         private bool SupportsAdvertisedElicitation => _clientCapabilities?.Elicitation is not null;
 
+        /// <summary>
+        /// Whether the client advertised the elicitation mode the agent asked for.
+        /// </summary>
+        /// <remarks>
+        /// Unlike the fs and terminal gates, an un-advertised mode is answered with
+        /// <c>-32602 Invalid params</c> rather than <c>-32601</c>: the elicitation specification names that
+        /// code explicitly, because the method itself exists and only the requested mode is unavailable.
+        /// A request whose mode this client does not model at all is never advertised, so it lands here
+        /// too instead of being rendered as a known mode.
+        /// </remarks>
         private bool SupportsAdvertisedElicitationMode(CreateElicitationRequest request)
             => request switch
             {
@@ -1793,16 +1892,11 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandleElicitationRequest(JsonRpcRequest request)
         {
-            var requestIdStr = request.Id?.ToString() ?? string.Empty;
-
             try
             {
                 if (!request.Params.HasValue)
                 {
-                    RemovePendingInboundTracking(requestIdStr);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        request.Id,
-                        JsonRpcError.CreateInvalidParams("Missing params")));
+                    FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams("Missing params"));
                     return;
                 }
 
@@ -1810,72 +1904,55 @@ namespace SalmonEgg.Acp.Client
                     request.Params.Value);
                 if (elicitationRequest == null)
                 {
-                    RemovePendingInboundTracking(requestIdStr);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        request.Id,
-                        JsonRpcError.CreateInvalidParams("Failed to deserialize elicitation/create request.")));
+                    FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams("Failed to deserialize elicitation/create request."));
                     return;
                 }
 
                 if (request.Id == null)
                 {
-                    RemovePendingInboundTracking(requestIdStr);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        request.Id,
-                        JsonRpcError.CreateInvalidRequest("Missing request id")));
+                    _ = SendResponseAsync(new JsonRpcResponse(null, JsonRpcError.CreateInvalidRequest("Missing request id")));
                     return;
                 }
 
                 if (!SupportsAdvertisedElicitationMode(elicitationRequest))
                 {
-                    RemovePendingInboundTracking(requestIdStr);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        request.Id,
+                    FailPendingInboundRequest(request,
                         JsonRpcError.CreateInvalidParams(
-                            $"Elicitation mode '{elicitationRequest.Mode}' was not advertised by the client.")));
+                            $"Elicitation mode '{elicitationRequest.Mode}' was not advertised by the client."));
                     return;
                 }
 
-                var messageId = request.Id!;
-                if (!string.IsNullOrWhiteSpace(requestIdStr))
+                var handler = ElicitationRequestReceived;
+                if (handler == null)
                 {
-                    SetPendingInboundElicitationRequest(requestIdStr, elicitationRequest);
+                    FailPendingInboundRequest(request,
+                        new JsonRpcError(JsonRpcErrorCode.CapabilityNotSupported, "Elicitation requests are not supported."));
+                    return;
                 }
 
-                if (ElicitationRequestReceived == null)
+                var pending = TrackInboundElicitationRequest(request.Id, elicitationRequest);
+                if (pending is null)
                 {
-                    RemovePendingInboundTracking(requestIdStr);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        messageId,
-                        new JsonRpcError(
-                            JsonRpcErrorCode.CapabilityNotSupported,
-                            "Elicitation requests are not supported.")));
                     return;
                 }
 
                 var eventArgs = new ElicitationRequestEventArgs(
-                    messageId,
+                    request.Id,
                     elicitationRequest,
-                    content => RespondToElicitationRequestAsync(messageId, content),
-                    () => DeclineElicitationRequestAsync(messageId),
-                    () => CancelElicitationRequestAsync(messageId));
+                    content => TrySendElicitationResponseAsync(pending, new ElicitationAcceptResponse { Content = content?.ToWireContent() }),
+                    () => TrySendElicitationResponseAsync(pending, new ElicitationDeclineResponse()),
+                    () => TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse()));
 
-                ElicitationRequestReceived.Invoke(this, eventArgs);
+                handler.Invoke(this, eventArgs);
             }
             catch (JsonException ex)
             {
-                RemovePendingInboundTracking(requestIdStr);
-                _ = SendResponseAsync(new JsonRpcResponse(
-                    request.Id,
-                    JsonRpcError.CreateInvalidParams(ex.Message)));
+                FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams(ex.Message));
             }
             catch (Exception ex)
             {
-                RemovePendingInboundTracking(requestIdStr);
                 OnErrorOccurred($"Failed to process elicitation/create request: {ex.Message}");
-                _ = SendResponseAsync(new JsonRpcResponse(
-                    request.Id,
-                    JsonRpcError.CreateInternalError(ex.Message)));
+                FailPendingInboundRequest(request, JsonRpcError.CreateInternalError(ex.Message));
             }
         }
 
@@ -1906,12 +1983,18 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            if (completion == null || string.IsNullOrWhiteSpace(completion.ElicitationId))
+            lock (_lock)
             {
-                return;
-            }
+                // IDs are opaque, and only outstanding URL interactions on this connection qualify.
+                // Removing before publication makes duplicate notifications harmless even on re-entry.
+                if (_disposed || !_transport.IsConnected || completion?.ElicitationId is not { } id
+                    || !_pendingUrlElicitations.Remove(id))
+                {
+                    return;
+                }
 
-            ElicitationCompleted?.Invoke(this, new ElicitationCompletedEventArgs(completion.ElicitationId));
+                ElicitationCompleted?.Invoke(this, new ElicitationCompletedEventArgs(id));
+            }
         }
 
         /// <summary>
@@ -2129,32 +2212,36 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            var pendingIds = _pendingInboundRequests
+            // Each awaited send lets the peer finish and reuse other request ids. Cancellation
+            // belongs to these request instances, never to a later request with the same id.
+            var pendingRequests = _pendingInboundRequests
                 .Where(pair => string.Equals(pair.Value.SessionId, sessionId, StringComparison.Ordinal))
-                .Select(pair => pair.Key)
                 .ToArray();
 
-            foreach (var pendingId in pendingIds)
+            foreach (var (pendingId, pending) in pendingRequests)
             {
-                if (!TryGetPendingInboundRequest(pendingId, out var pending))
+                if (pending.ElicitationRequest is not null)
                 {
-                    RemovePendingInboundTracking(pendingId);
-                    continue;
-                }
-
-                if (pending.MessageId == null)
-                {
-                    RemovePendingInboundTracking(pendingId);
+                    await TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse(), cancelForSession: true).ConfigureAwait(false);
                     continue;
                 }
 
                 if (string.Equals(pending.Method, "session/request_permission", StringComparison.Ordinal))
                 {
-                    await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null).ConfigureAwait(false);
+                    await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending).ConfigureAwait(false);
                     continue;
                 }
 
-                RemovePendingInboundTracking(pendingId);
+                if (!_pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(pendingId, pending)))
+                {
+                    continue;
+                }
+
+                if (pending.MessageId == null)
+                {
+                    continue;
+                }
+
                 await SendResponseAsync(new JsonRpcResponse(
                     pending.MessageId,
                     new JsonRpcError(
@@ -2170,7 +2257,13 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            _pendingInboundRequests.TryRemove(idStr, out _);
+            lock (_lock)
+            {
+                if (_pendingInboundRequests.TryRemove(idStr, out var pending))
+                {
+                    RemovePendingUrlElicitation(pending);
+                }
+            }
         }
 
         private void FailPendingInboundRequest(JsonRpcRequest request, JsonRpcError error)
@@ -2233,22 +2326,31 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private void SetPendingInboundElicitationRequest(string idStr, CreateElicitationRequest request)
+        private PendingInboundRequest? TrackInboundElicitationRequest(object messageId, CreateElicitationRequest request)
         {
-            if (string.IsNullOrWhiteSpace(idStr))
+            lock (_lock)
             {
-                return;
-            }
+                if (_disposed || !_transport.IsConnected)
+                {
+                    return null;
+                }
 
-            _pendingInboundRequests.AddOrUpdate(
-                idStr,
-                _ => new PendingInboundRequest(
+                var pending = new PendingInboundRequest(
                     ElicitationMethods.Create,
-                    null,
+                    messageId,
                     request.Scope.SessionId,
                     null,
-                    request),
-                (_, existing) => existing.WithElicitationRequest(request));
+                    request);
+                if (request is UrlElicitationRequest url && !_pendingUrlElicitations.TryAdd(url.ElicitationId, pending))
+                {
+                    _ = SendResponseAsync(new JsonRpcResponse(messageId,
+                        JsonRpcError.CreateInvalidParams("The elicitationId is already outstanding on this connection.")));
+                    return null;
+                }
+
+                _pendingInboundRequests[messageId.ToString() ?? string.Empty] = pending;
+                return pending;
+            }
         }
 
         private void SetPendingInboundAskUserRequest(string idStr, AskUserRequest request)
@@ -2296,12 +2398,12 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            var enrichedErrorMessage = EnrichTransportErrorMessage(e.ErrorMessage, e.Kind);
-            _lastTransportErrorMessage = enrichedErrorMessage;
-            OnErrorOccurred(enrichedErrorMessage);
+            _lastTransportErrorMessage = e.ErrorMessage;
+            OnErrorOccurred(e.ErrorMessage);
             if (!_transport.IsConnected)
             {
-                CancelPendingRequests(enrichedErrorMessage);
+                ResetConnectionState();
+                CancelPendingRequests(e.ErrorMessage);
             }
         }
 
@@ -2314,34 +2416,6 @@ namespace SalmonEgg.Acp.Client
             ErrorOccurred?.Invoke(this, errorMessage);
         }
 
-        private static string EnrichTransportErrorMessage(string errorMessage, AcpTransportErrorKind kind)
-        {
-            if (string.IsNullOrWhiteSpace(errorMessage))
-            {
-                return errorMessage;
-            }
-
-            if (!ShouldAppendStdioBridgeGuidance(errorMessage, kind))
-            {
-                return errorMessage;
-            }
-
-            const string sshBridgeGuidance =
-                " If this is an SSH stdio bridge, avoid ssh -t, ensure stdout emits only ACP frames, and prefer BatchMode=yes.";
-
-            return errorMessage.Contains("ssh -t", StringComparison.Ordinal)
-                ? errorMessage
-                : errorMessage + sshBridgeGuidance;
-        }
-
-        private static bool ShouldAppendStdioBridgeGuidance(string errorMessage, AcpTransportErrorKind kind)
-        {
-            return kind is AcpTransportErrorKind.ProcessStartFailed
-                    or AcpTransportErrorKind.ProcessExited
-                    or AcpTransportErrorKind.StdoutReadFailed
-                || errorMessage.Contains("stdout", StringComparison.OrdinalIgnoreCase);
-        }
-
         private void ClearLastTransportError()
         {
             _lastTransportErrorMessage = null;
@@ -2352,7 +2426,7 @@ namespace SalmonEgg.Acp.Client
             var transportErrorMessage = _lastTransportErrorMessage;
             return string.IsNullOrWhiteSpace(transportErrorMessage)
                 ? "Failed to connect to the transport."
-                : "Failed to connect to the transport: " + transportErrorMessage;
+                : transportErrorMessage;
         }
 
         private string CreateTransportSendFailureMessage(string method)
@@ -2390,9 +2464,35 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            if (!cancellationToken.IsCancellationRequested)
+            lock (_lock)
             {
+                // A previous watchdog can finish after explicit disconnect and reinitialization.
+                // Only the token still owned by this connection may clear its request state.
+                if (cancellationToken.IsCancellationRequested || _messageLoopCts?.Token != cancellationToken)
+                {
+                    return;
+                }
+
+                ResetConnectionState();
                 CancelPendingRequests(_lastTransportErrorMessage ?? "The transport is no longer connected.");
+            }
+        }
+
+        private void ResetConnectionState()
+        {
+            lock (_lock)
+            {
+                _messageLoopCts?.Cancel();
+                _messageLoopCts?.Dispose();
+                _messageLoopCts = null;
+                _pendingInboundRequests.Clear();
+                _pendingUrlElicitations.Clear();
+                _clientCapabilities = null;
+                _agentInfo = null;
+                _agentCapabilities = null;
+                _authMethods = null;
+                _wire = AcpWireFormat.For(AcpProtocolVersion.Default);
+                _isInitialized = false;
             }
         }
 
@@ -2511,7 +2611,7 @@ namespace SalmonEgg.Acp.Client
             }
 
             _disposed = true;
-            _messageLoopCts?.Cancel();
+            ResetConnectionState();
 
             // Detach the transport events first so callbacks during teardown cannot re-enter disposed
             // handlers, then fault every pending request. Otherwise callers awaiting tcs.Task would hang

@@ -13,6 +13,17 @@
     AllowDrop="False">
 
     <Page.Resources>
+        <!-- Form grouping follows the existing chat card rhythm; keep these dimensions in one
+             resource scope so theme/layout changes do not require editing individual controls. -->
+        <Thickness x:Key="ChatElicitationMargin">12,0,12,8</Thickness>
+        <Thickness x:Key="ChatElicitationPadding">16</Thickness>
+        <Thickness x:Key="ChatElicitationBorderThickness">1</Thickness>
+        <Thickness x:Key="ChatElicitationFieldMargin">0,0,0,12</Thickness>
+        <CornerRadius x:Key="ChatElicitationCornerRadius">12</CornerRadius>
+        <x:Double x:Key="ChatElicitationSectionSpacing">16</x:Double>
+        <x:Double x:Key="ChatElicitationHeadingSpacing">4</x:Double>
+        <x:Double x:Key="ChatElicitationFieldSpacing">6</x:Double>
+        <x:Double x:Key="ChatElicitationActionSpacing">8</x:Double>
     </Page.Resources>
 
     <Grid>
@@ -465,14 +476,14 @@
                                                 Visibility="{x:Bind ViewModel.HasPendingElicitationRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
                         <Border x:Name="ElicitationHost"
-                                Margin="12,0,12,8"
-                                Padding="16"
-                                CornerRadius="12"
+                                Margin="{StaticResource ChatElicitationMargin}"
+                                Padding="{StaticResource ChatElicitationPadding}"
+                                CornerRadius="{StaticResource ChatElicitationCornerRadius}"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="1">
-                            <StackPanel Spacing="16">
-                                <StackPanel Spacing="4">
+                                BorderThickness="{StaticResource ChatElicitationBorderThickness}">
+                            <StackPanel Spacing="{StaticResource ChatElicitationSectionSpacing}">
+                                <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
                                     <TextBlock x:Uid="ChatViewElicitationTitle"
                                                FontSize="14"
                                                FontWeight="SemiBold"
@@ -485,7 +496,8 @@
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.ElicitationFields, Mode=OneWay}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="elicitationVm:ElicitationFieldViewModel">
-                                            <StackPanel Spacing="6" Margin="0,0,0,12">
+                                            <StackPanel Spacing="{StaticResource ChatElicitationFieldSpacing}"
+                                                        Margin="{StaticResource ChatElicitationFieldMargin}">
                                                 <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
                                                 <TextBlock Text="{x:Bind Description}"
                                                            TextWrapping="WrapWholeWords"
@@ -523,7 +535,8 @@
                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                            TextWrapping="WrapWholeWords"/>
 
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                            Spacing="{StaticResource ChatElicitationActionSpacing}">
                                     <Button x:Uid="ChatViewElicitationCancelButton"
                                             Command="{x:Bind ViewModel.ElicitationCancelCommand, Mode=OneWay}"/>
                                     <Button x:Uid="ChatViewElicitationDeclineButton"

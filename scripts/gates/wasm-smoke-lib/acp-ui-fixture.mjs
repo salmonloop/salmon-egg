@@ -309,7 +309,8 @@ export async function createSessionAndSendPromptFromStart(
   directoryName,
   directoryPath,
   promptText,
-  expectedAgentReply) {
+  expectedAgentReply,
+  options = {}) {
   // The composer is located by shape, not by id: StartView sets its automation id through an x:Bind
   // on AutomationProperties.AutomationId, which never reaches the exported accessibility node on
   // Skia - the node has no id and its accessible name is the localized placeholder. The Start shell
@@ -335,6 +336,12 @@ export async function createSessionAndSendPromptFromStart(
   const requestedCwd = sessionNewRequest?.params?.cwd;
   if (requestedCwd !== directoryPath) {
     throw new Error(`session/new used unexpected cwd. Expected=${directoryPath} Request=${JSON.stringify(sessionNewRequest)}`);
+  }
+
+  // Request-scoped elicitation belongs before the session exists. Let the caller answer that
+  // interaction while the server deliberately keeps this real session/new request in flight.
+  if (options.beforeSessionNewResponse) {
+    await options.beforeSessionNewResponse(sessionNewRequest);
   }
 
   // The mode selector is what shows the session's modes arrived, and a collapsed ComboBox on Skia

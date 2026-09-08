@@ -43,6 +43,7 @@ using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Start;
@@ -696,6 +697,27 @@ public partial class ChatViewModelTests
         {
             SynchronizationContext.SetSynchronizationContext(previousContext);
         }
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenElicitationErrorIsHeld_ReprojectsLocalizedMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "Elicitation_InvalidValue", "请检查填写内容");
+        localizer.Set("en-US", "Elicitation_InvalidValue", "Check this value");
+        var languageService = new Mock<IAppLanguageService>();
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer, languageService: languageService.Object);
+        var field = new ElicitationStringFieldViewModel("name", new StringPropertySchema(), true, localizer);
+        fixture.ViewModel.PendingElicitationRequest = new ElicitationRequestViewModel("form", "session", "Choose", [field], localizer);
+        Assert.False(field.Validate());
+        Assert.Equal("请检查填写内容", field.ErrorMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+        syncContext.RunAll();
+
+        Assert.Equal("Check this value", field.ErrorMessage);
     }
 
     [Fact]
@@ -6168,6 +6190,7 @@ public partial class ChatViewModelTests
     {
         await using var fixture = CreateViewModel();
         using var cts = new CancellationTokenSource();
+        var closeCalled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities)
             .Returns(new AgentCapabilities(sessionCapabilities: new SessionCapabilities
@@ -6183,6 +6206,7 @@ public partial class ChatViewModelTests
         chatService.Setup(service => service.CloseSessionAsync(
                 It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
                 It.IsAny<CancellationToken>()))
+            .Callback(() => closeCalled.TrySetResult(null))
             .ReturnsAsync(SessionCloseResponse.Completed);
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
@@ -6193,8 +6217,10 @@ public partial class ChatViewModelTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             fixture.ViewModel.EnsureNewSessionDraftAsync(@"C:\Repo\App", cts.Token));
 
-        await WaitForConditionAsync(async () =>
-            (await fixture.GetConnectionStateAsync()).NewSessionDraft is null);
+        // The draft is cleared before asynchronous remote cleanup. Wait for this operation's close,
+        // rather than treating the empty local projection as evidence that cleanup has finished.
+        await closeCalled.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.Null((await fixture.GetConnectionStateAsync()).NewSessionDraft);
         chatService.Verify(service => service.CloseSessionAsync(
             It.Is<SessionCloseParams>(p => p.SessionId == "remote-draft"),
             It.IsAny<CancellationToken>()), Times.Once);

@@ -17,6 +17,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 public sealed partial class ElicitationRequestViewModel : ObservableObject
 {
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly bool _hasUnsupportedRequiredFields;
     private string? _errorResourceKey;
 
     public ElicitationRequestViewModel(
@@ -24,17 +25,24 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
         string? sessionId,
         string prompt,
         IEnumerable<ElicitationFieldViewModel> fields,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        bool hasUnsupportedRequiredFields = false)
     {
         MessageId = messageId ?? throw new ArgumentNullException(nameof(messageId));
         SessionId = sessionId;
         Prompt = prompt ?? string.Empty;
         _localizer = localizer;
+        _hasUnsupportedRequiredFields = hasUnsupportedRequiredFields;
 
         foreach (var field in fields)
         {
             field.Changed += OnFieldChanged;
             Fields.Add(field);
+        }
+
+        if (_hasUnsupportedRequiredFields)
+        {
+            SetUnsupportedRequiredFieldsError();
         }
     }
 
@@ -62,7 +70,7 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
-    public bool CanSubmit => !IsSubmitting && ValidateFields();
+    public bool CanSubmit => !IsSubmitting && !_hasUnsupportedRequiredFields && ValidateFields();
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]
     private async Task SubmitAsync()
@@ -75,7 +83,14 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
         if (!ValidateFields())
         {
-            SetLocalizedError("Elicitation_InvalidForm", "Check the highlighted fields before submitting.");
+            if (_hasUnsupportedRequiredFields)
+            {
+                SetUnsupportedRequiredFieldsError();
+            }
+            else
+            {
+                SetLocalizedError("Elicitation_InvalidForm", "Check the highlighted fields before submitting.");
+            }
             return;
         }
 
@@ -155,6 +170,11 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
     private bool ValidateFields()
     {
+        if (_hasUnsupportedRequiredFields)
+        {
+            return false;
+        }
+
         var valid = true;
         foreach (var field in Fields)
         {
@@ -167,6 +187,10 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
     private void OnFieldChanged(object? sender, EventArgs e)
     {
         ClearError();
+        if (_hasUnsupportedRequiredFields)
+        {
+            SetUnsupportedRequiredFieldsError();
+        }
         OnPropertyChanged(nameof(CanSubmit));
         SubmitCommand.NotifyCanExecuteChanged();
     }
@@ -176,6 +200,10 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
         _errorResourceKey = resourceKey;
         ErrorMessage = Localize(resourceKey, fallback);
     }
+
+    private void SetUnsupportedRequiredFieldsError()
+        => SetLocalizedError("Elicitation_UnsupportedRequiredFields",
+            "This form contains required fields that cannot be displayed. Decline or cancel the request.");
 
     private void SetRawError(string message)
     {
@@ -263,6 +291,10 @@ public abstract partial class ElicitationFieldViewModel : ObservableObject
 
     public virtual void ReprojectLocalizedState()
     {
+        if (HasError)
+        {
+            Validate();
+        }
     }
 
     protected void RaiseChanged()
@@ -669,7 +701,7 @@ public static class ElicitationInteractionViewModelFactory
 {
     public static ElicitationRequestViewModel Create(
         ElicitationRequestEventArgs args,
-        Func<Task> clearPendingRequestAsync,
+        Func<ElicitationRequestViewModel, Task> clearPendingRequestAsync,
         IStringLocalizer<CoreStrings>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -688,10 +720,14 @@ public static class ElicitationInteractionViewModelFactory
             }
         }
 
-        var viewModel = new ElicitationRequestViewModel(args.MessageId, args.SessionId, args.Request.Message, fields, localizer);
-        viewModel.OnAccept = async content => await RespondAndClearAsync(() => args.Accept(content), clearPendingRequestAsync).ConfigureAwait(true);
-        viewModel.OnDecline = async () => await RespondAndClearAsync(args.Decline, clearPendingRequestAsync).ConfigureAwait(true);
-        viewModel.OnCancel = async () => await RespondAndClearAsync(args.Cancel, clearPendingRequestAsync).ConfigureAwait(true);
+        // Preserve unknown schemas in the SDK, but never submit a form missing a required input.
+        // A required name absent from properties is equally unrenderable; optional unknowns may be omitted.
+        var hasUnsupportedRequiredFields = required.Except(fields.Select(static field => field.Name), StringComparer.Ordinal).Any();
+        var viewModel = new ElicitationRequestViewModel(args.MessageId, args.SessionId, args.Request.Message,
+            fields, localizer, hasUnsupportedRequiredFields);
+        viewModel.OnAccept = async content => await RespondAndClearAsync(() => args.Accept(content), () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
+        viewModel.OnDecline = async () => await RespondAndClearAsync(args.Decline, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
+        viewModel.OnCancel = async () => await RespondAndClearAsync(args.Cancel, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
         return viewModel;
     }
 

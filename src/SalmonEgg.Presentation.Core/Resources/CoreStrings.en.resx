@@ -837,6 +837,12 @@ Create the corresponding Markdown file in:
   <data name="AcpConnection_TransportStdio" xml:space="preserve">
     <value>Stdio (subprocess)</value>
   </data>
+  <data name="AcpConnection_CommandNotFoundOnPath" xml:space="preserve">
+    <value>Agent command '{0}' was not found on PATH. Install the agent or configure the full path to its executable.</value>
+  </data>
+  <data name="AcpConnection_CommandPathMissing" xml:space="preserve">
+    <value>The configured agent command '{0}' does not exist. Check the path in the agent configuration.</value>
+  </data>
   <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
     <value>WebSocket</value>
   </data>
@@ -1306,6 +1312,9 @@ Create the corresponding Markdown file in:
   </data>
   <data name="Elicitation_InvalidValue" xml:space="preserve">
     <value>This value is not valid.</value>
+  </data>
+  <data name="Elicitation_UnsupportedRequiredFields" xml:space="preserve">
+    <value>This form contains required fields that cannot be displayed. Decline or cancel the request.</value>
   </data>
   <data name="SettingsSection_CommandLine" xml:space="preserve">
     <value>Command line</value>

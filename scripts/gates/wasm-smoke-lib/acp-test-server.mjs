@@ -8,7 +8,11 @@ export async function startAcpWebSocketServer(options = {}) {
 
   let initializeRequest;
   let sessionNewRequest;
+  let sessionNewSocket;
+  let deferNextSessionNewResponse = options.deferSessionNewResponse === true;
+  let deferredSessionNew;
   let sessionPromptRequest;
+  let clientRequestSequence = 0;
   let resolveInitialize;
   let resolveSessionNew;
   let resolveSessionPrompt;
@@ -22,6 +26,48 @@ export async function startAcpWebSocketServer(options = {}) {
     resolveSessionPrompt = resolve;
   });
   const sockets = new Set();
+  const clientRequests = new Map();
+
+  const sendSessionNewResponse = (socket, request) => {
+    if (!request || !socket || socket.destroyed) {
+      throw new Error("No live session/new request is available to complete.");
+    }
+
+    writeJsonRpc(socket, {
+      jsonrpc: "2.0",
+      id: request.id,
+      result: {
+        sessionId,
+        modes: {
+          currentModeId: "planner",
+          availableModes: [
+            { id: "agent", name: "Agent 01", description: "General conversation mode" },
+            { id: "planner", name: "Planner 01", description: "Structured planning mode" }
+          ]
+        },
+        configOptions: [{
+          id: "mode",
+          name: "Mode",
+          description: "Conversation mode",
+          type: "select",
+          currentValue: "planner",
+          options: [
+            { value: "agent", name: "Agent 01" },
+            { value: "planner", name: "Planner 01" }
+          ]
+        }]
+      }
+    });
+    writeSessionUpdate(socket, sessionId, {
+      sessionUpdate: "session_info_update",
+      title: sessionTitle
+    });
+  };
+
+  const finishClientRequest = (entry, outcome) => {
+    clearTimeout(entry.timeoutId);
+    entry.resolve(outcome);
+  };
 
   const server = createServer();
   server.on("upgrade", (request, socket) => {
@@ -53,6 +99,13 @@ export async function startAcpWebSocketServer(options = {}) {
 
       for (const text of result.messages) {
         const message = JSON.parse(text);
+        const clientRequest = clientRequests.get(message.id);
+        if (message.method === undefined && clientRequest?.socket === socket) {
+          clientRequest.responses.push(message);
+          finishClientRequest(clientRequest, { response: message });
+          continue;
+        }
+
         if (message.method === "initialize") {
           initializeRequest = message;
           resolveInitialize(message);
@@ -73,53 +126,19 @@ export async function startAcpWebSocketServer(options = {}) {
         }
 
         if (message.method === "session/new") {
-          sessionNewRequest = message;
-          resolveSessionNew(message);
-          writeJsonRpc(socket, {
-            jsonrpc: "2.0",
-            id: message.id,
-            result: {
-              sessionId,
-              modes: {
-                currentModeId: "planner",
-                availableModes: [
-                  {
-                    id: "agent",
-                    name: "Agent 01",
-                    description: "General conversation mode"
-                  },
-                  {
-                    id: "planner",
-                    name: "Planner 01",
-                    description: "Structured planning mode"
-                  }
-                ]
-              },
-              configOptions: [
-                {
-                  id: "mode",
-                  name: "Mode",
-                  description: "Conversation mode",
-                  type: "select",
-                  currentValue: "planner",
-                  options: [
-                    {
-                      value: "agent",
-                      name: "Agent 01"
-                    },
-                    {
-                      value: "planner",
-                      name: "Planner 01"
-                    }
-                  ]
-                }
-              ]
-            }
-          });
-          writeSessionUpdate(socket, sessionId, {
-            sessionUpdate: "session_info_update",
-            title: sessionTitle
-          });
+          if (!sessionNewRequest) {
+            sessionNewRequest = message;
+            resolveSessionNew(message);
+          }
+          sessionNewSocket = socket;
+          if (deferNextSessionNewResponse) {
+            // Only the first request is held for the request-scoped elicitation exercise.
+            // Retain its connection and id even if another session/new arrives before completion.
+            deferNextSessionNewResponse = false;
+            deferredSessionNew = { socket, request: message };
+          } else {
+            sendSessionNewResponse(socket, message);
+          }
           continue;
         }
 
@@ -144,7 +163,14 @@ export async function startAcpWebSocketServer(options = {}) {
         }
       }
     });
-    socket.on("close", () => sockets.delete(socket));
+    socket.on("close", () => {
+      sockets.delete(socket);
+      for (const entry of clientRequests.values()) {
+        if (entry.socket === socket) {
+          finishClientRequest(entry, { error: new Error("ACP socket closed before the client replied.") });
+        }
+      }
+    });
     socket.on("error", () => sockets.delete(socket));
   });
 
@@ -154,6 +180,45 @@ export async function startAcpWebSocketServer(options = {}) {
 
   return {
     url: `ws://127.0.0.1:${port}/acp`,
+    sessionId,
+    completeSessionNew: () => {
+      if (!deferredSessionNew) {
+        throw new Error("No deferred session/new request remains to complete.");
+      }
+      const pending = deferredSessionNew;
+      deferredSessionNew = undefined;
+      sendSessionNewResponse(pending.socket, pending.request);
+    },
+    requestClient: (method, params) => {
+      const socket = deferredSessionNew?.socket ?? sessionNewSocket;
+      if (!socket || socket.destroyed) {
+        throw new Error("No live ACP session/new connection is available for a client request.");
+      }
+
+      const id = `wasm-smoke-client-request-${++clientRequestSequence}`;
+      let resolve;
+      // Store an outcome instead of a rejecting promise: a GUI assertion may fail before the
+      // caller reaches waitForResponse, and cleanup must not produce an unhandled rejection.
+      const outcome = new Promise(settle => { resolve = settle; });
+      const entry = { socket, resolve, responses: [], timeoutId: null };
+      entry.timeoutId = setTimeout(() => finishClientRequest(entry, {
+        error: new Error(`Timed out waiting for client response to ${method} (${id}).`)
+      }), 30_000);
+      clientRequests.set(id, entry);
+      writeJsonRpc(socket, { jsonrpc: "2.0", id, method, params });
+
+      return {
+        id,
+        responses: () => [...entry.responses],
+        waitForResponse: async () => {
+          const result = await outcome;
+          if (result.error) {
+            throw result.error;
+          }
+          return result.response;
+        }
+      };
+    },
     waitForInitialize: async () => {
       if (initializeRequest) {
         return initializeRequest;
@@ -185,6 +250,11 @@ export async function startAcpWebSocketServer(options = {}) {
         30_000);
     },
     close: async () => {
+      deferredSessionNew = undefined;
+      for (const entry of clientRequests.values()) {
+        finishClientRequest(entry, { error: new Error("ACP smoke server closed.") });
+      }
+      clientRequests.clear();
       for (const socket of sockets) {
         socket.destroy();
       }

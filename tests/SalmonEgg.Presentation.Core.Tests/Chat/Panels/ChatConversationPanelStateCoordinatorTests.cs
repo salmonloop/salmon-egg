@@ -1,4 +1,5 @@
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using Xunit;
 
@@ -57,5 +58,22 @@ public sealed class ChatConversationPanelStateCoordinatorTests
         Assert.Empty(selection.TerminalSessions);
         Assert.Null(selection.SelectedTerminal);
         Assert.Null(selection.PendingAskUserRequest);
+    }
+
+    [Fact]
+    public void RemoveElicitationRequest_WhenPreviousOwnerCompletes_DoesNotRemoveReusedId()
+    {
+        var sut = new ChatConversationPanelStateCoordinator();
+        var previous = new ElicitationRequestViewModel("same-id", "remote", "First", []);
+        var current = new ElicitationRequestViewModel("same-id", "remote", "Second", []);
+        Assert.True(sut.TryStoreElicitationRequest("conversation", previous));
+        sut.ClearElicitationRequests();
+        Assert.True(sut.TryStoreElicitationRequest("conversation", current));
+
+        Assert.False(sut.RemoveElicitationRequest("conversation", previous));
+
+        Assert.Same(current, sut.GetPendingElicitationRequest("conversation"));
+        Assert.True(sut.RemoveElicitationRequest("conversation", current));
+        Assert.Null(sut.GetPendingElicitationRequest("conversation"));
     }
 }

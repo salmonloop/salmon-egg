@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Logging;
@@ -11,11 +12,13 @@ namespace SalmonEgg.Infrastructure.Client;
 internal sealed class DomainAcpTransportAdapter : IAcpTransport
 {
     private readonly ITransport _inner;
+    private readonly ITransportErrorMessageFormatter? _messageFormatter;
     private bool _disposed;
 
-    public DomainAcpTransportAdapter(ITransport inner)
+    public DomainAcpTransportAdapter(ITransport inner, ITransportErrorMessageFormatter? messageFormatter = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _messageFormatter = messageFormatter;
         _inner.MessageReceived += OnMessageReceived;
         _inner.ErrorOccurred += OnErrorOccurred;
     }
@@ -62,7 +65,7 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
         ErrorOccurred?.Invoke(
             this,
             new AcpTransportErrorEventArgs(
-                e.ErrorMessage,
+                _messageFormatter?.Format(e) ?? e.ErrorMessage,
                 e.Exception,
                 MapErrorKind(e.Kind)));
     }

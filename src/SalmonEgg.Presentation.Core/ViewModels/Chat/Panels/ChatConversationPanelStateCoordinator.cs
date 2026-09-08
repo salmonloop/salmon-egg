@@ -77,21 +77,24 @@ public sealed class ChatConversationPanelStateCoordinator
             : null;
     }
 
-    public void StoreElicitationRequest(string conversationId, ElicitationRequestViewModel request)
+    public bool TryStoreElicitationRequest(string conversationId, ElicitationRequestViewModel request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
         ArgumentNullException.ThrowIfNull(request);
-        _pendingElicitationRequestsByConversation[conversationId] = request;
+        return _pendingElicitationRequestsByConversation.TryAdd(conversationId, request);
     }
 
-    public void RemoveElicitationRequest(string conversationId)
+    public bool RemoveElicitationRequest(string conversationId, ElicitationRequestViewModel request)
     {
-        if (string.IsNullOrWhiteSpace(conversationId))
+        // A response can finish after disconnect and another form's arrival, even with the same id.
+        // Only its original projection may be removed by that response callback.
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !ReferenceEquals(GetPendingElicitationRequest(conversationId), request))
         {
-            return;
+            return false;
         }
 
-        _pendingElicitationRequestsByConversation.Remove(conversationId);
+        return _pendingElicitationRequestsByConversation.Remove(conversationId);
     }
 
     public void ClearElicitationRequests()
