@@ -711,6 +711,9 @@
   <data name="Acp_ProfileMore.ToolTipService.ToolTip" xml:space="preserve">
     <value>更多</value>
   </data>
+  <data name="Acp_ProfileMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>更多</value>
+  </data>
   <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>重新连接</value>
   </data>
