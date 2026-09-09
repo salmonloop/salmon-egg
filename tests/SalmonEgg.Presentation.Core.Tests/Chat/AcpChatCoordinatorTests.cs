@@ -30,7 +30,7 @@ using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
-public sealed class AcpChatCoordinatorTests
+public sealed partial class AcpChatCoordinatorTests
 {
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport = true)
         => new TransportSupportPolicy(new TestPlatformCapabilities(supportsStdioTransport));

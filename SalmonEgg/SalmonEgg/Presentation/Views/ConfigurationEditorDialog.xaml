@@ -81,6 +81,49 @@
             <TextBlock x:Uid="ConfigurationEditorDialogHint"
                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                        TextWrapping="Wrap"/>
+            <Expander Header="{x:Bind ViewModel.CredentialBindingTitle, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="{x:Bind ViewModel.CredentialKeepHint, Mode=OneWay}"
+                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                               TextWrapping="Wrap"/>
+                    <PasswordBox x:Uid="AgentProfileEditorToken"
+                                 Password="{x:Bind ViewModel.Token, Mode=TwoWay}"
+                                 IsEnabled="{x:Bind ViewModel.IsCredentialInputEnabled, Mode=OneWay}"/>
+                    <PasswordBox x:Uid="AgentProfileEditorApiKey"
+                                 Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"
+                                 IsEnabled="{x:Bind ViewModel.IsCredentialInputEnabled, Mode=OneWay}"/>
+                    <CheckBox Content="{x:Bind ViewModel.CredentialClearLabel, Mode=OneWay}"
+                              IsChecked="{x:Bind ViewModel.ClearCredentialsOnSave, Mode=TwoWay}"/>
+                    <TextBlock Text="{x:Bind ViewModel.CredentialBindingHint, Mode=OneWay}"
+                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                               TextWrapping="Wrap"/>
+                    <ComboBox Header="{x:Bind ViewModel.CredentialSourceLabel, Mode=OneWay}"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{x:Bind ViewModel.CredentialSourceOptions, Mode=OneWay}"
+                              SelectedItem="{x:Bind ViewModel.SelectedCredentialSourceOption, Mode=TwoWay}"
+                              IsFocusEngagementEnabled="True">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CredentialSourceOption">
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBox Header="{x:Bind ViewModel.CredentialNameLabel, Mode=OneWay}"
+                             Text="{x:Bind ViewModel.CredentialName, Mode=TwoWay}"/>
+                    <TextBox Header="{x:Bind ViewModel.CredentialSchemeLabel, Mode=OneWay}"
+                             Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                             Text="{x:Bind ViewModel.CredentialScheme, Mode=TwoWay}"/>
+                    <Button Content="{x:Bind ViewModel.CredentialBindLabel, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.BindCredentialCommand}"/>
+                    <TextBlock Text="{x:Bind ViewModel.CredentialBindingSummary, Mode=OneWay}"
+                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                               TextWrapping="Wrap"/>
+                    <Button Content="{x:Bind ViewModel.CredentialUnbindLabel, Mode=OneWay}"
+                            Command="{x:Bind ViewModel.RemoveCredentialBindingCommand}"/>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </ScrollViewer>
     </Grid>

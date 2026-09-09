@@ -112,10 +112,16 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
 
+        profile = profile.Clone();
+        using var applyScope = EnterApplyScope(cancellationToken);
+        var applyToken = applyScope.Token;
+        applyToken.ThrowIfCancellationRequested();
         EnsureTransportSupported(profile.Transport);
-        sink.SetCurrentMcpServers(
-            await _mcpServerProvider.GetMcpServersAsync(cancellationToken).ConfigureAwait(false));
-        await sink.SelectProfileAsync(profile, cancellationToken).ConfigureAwait(false);
+        var mcpServers = await _mcpServerProvider.GetMcpServersAsync(applyToken).ConfigureAwait(false);
+        applyToken.ThrowIfCancellationRequested();
+        sink.SetCurrentMcpServers(mcpServers);
+        await sink.SelectProfileAsync(profile.Clone(), applyToken).ConfigureAwait(false);
+        applyToken.ThrowIfCancellationRequested();
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
 
         return await ApplyTransportConfigurationCoreAsync(
@@ -125,6 +131,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             profileForServiceCreation: profile,
             profile.Id,
             ResolveInitializeTimeout(profile),
+            applyScope,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -144,14 +151,18 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         AcpConnectionContext connectionContext,
         CancellationToken cancellationToken = default)
-        => await ApplyTransportConfigurationCoreAsync(
+    {
+        using var applyScope = EnterApplyScope(cancellationToken);
+        return await ApplyTransportConfigurationCoreAsync(
             transportConfiguration,
             sink,
             connectionContext,
             profileForServiceCreation: null,
             selectedProfileIdOverride: null,
             ResolveInitializeTimeout(profile: null),
+            applyScope,
             cancellationToken).ConfigureAwait(false);
+    }
 
     private async Task<AcpTransportApplyResult> ApplyTransportConfigurationCoreAsync(
         IAcpTransportConfiguration transportConfiguration,
@@ -160,33 +171,38 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ServerConfiguration? profileForServiceCreation,
         string? selectedProfileIdOverride,
         TimeSpan initializeTimeout,
+        ApplyScope applyScope,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var applyToken = applyScope.Token;
+        applyToken.ThrowIfCancellationRequested();
         EnsureTransportSupported(transportConfiguration.SelectedTransportType);
 
         var (isValid, errorMessage) = transportConfiguration.Validate();
         if (!isValid)
         {
-            await _connectionCoordinator.SetConnectionInstanceIdAsync(null, cancellationToken).ConfigureAwait(false);
-            await _connectionCoordinator.SetDisconnectedAsync(errorMessage, cancellationToken).ConfigureAwait(false);
+            await _connectionCoordinator.SetConnectionInstanceIdAsync(null, applyToken).ConfigureAwait(false);
+            await _connectionCoordinator.SetDisconnectedAsync(errorMessage, applyToken).ConfigureAwait(false);
             throw new InvalidOperationException(errorMessage ?? "Invalid ACP transport configuration.");
         }
 
         var selectedProfileId = string.IsNullOrWhiteSpace(selectedProfileIdOverride)
             ? sink.SelectedProfileId
             : selectedProfileIdOverride;
+        var credentialSnapshot = await ResolveCredentialSnapshotAsync(
+            profileForServiceCreation, sink, applyToken).ConfigureAwait(false);
         var dependencySnapshot = await _connectionDependencySnapshotProvider
-            .GetSnapshotAsync(cancellationToken)
+            .GetSnapshotAsync(applyToken)
             .ConfigureAwait(false);
         var cleanupResult = await _connectionPoolManager
             .CleanupBeforeApplyAsync(
                 sink.CurrentChatService,
                 dependencySnapshot,
-                cancellationToken)
+                applyToken)
             .ConfigureAwait(false);
         if (cleanupResult.RemovedCount > 0 || cleanupResult.DisposeFailureCount > 0)
         {
@@ -196,9 +212,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 cleanupResult.DisposeFailureCount);
         }
 
-        using var applyScope = EnterApplyScope(cancellationToken);
-        var applyToken = applyScope.Token;
-        var currentConnectionReuseKey = BuildConnectionReuseKey(transportConfiguration);
+        var currentConnectionReuseKey = BuildConnectionReuseKey(transportConfiguration, profileForServiceCreation);
 
         var previousConnectionState = await CaptureConnectionStateAsync(sink, applyToken).ConfigureAwait(false);
         await _connectionCoordinator.SetConnectingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
@@ -209,7 +223,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         if (_connectionPoolManager.TryGetReusableSession(
                 selectedProfileId,
                 currentConnectionReuseKey,
-                out var cachedSession))
+                out var cachedSession)
+            && cachedSession.Service.UsesCredentialSnapshot(credentialSnapshot))
         {
             applyToken.ThrowIfCancellationRequested();
 
@@ -260,7 +275,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 connectionContext.PreserveConversation);
             applyToken.ThrowIfCancellationRequested();
 
-            wrappedService = WrapChatService(candidateService, sink, applyToken);
+            wrappedService = WrapChatService(candidateService, sink, applyToken, credentialSnapshot);
             await _connectionCoordinator.SetInitializingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
 
             var initializeResponse = await InitializeCandidateAsync(
@@ -533,24 +548,30 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         cancellationToken.ThrowIfCancellationRequested();
 
+        profile = profile.Clone();
         EnsureTransportSupported(profile.Transport);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
-        var reuseKey = BuildConnectionReuseKey(transportConfiguration);
+        var reuseKey = BuildConnectionReuseKey(transportConfiguration, profile);
         var requestGeneration = GetPoolProfileDisconnectGeneration(profile.Id);
+        var credentialSnapshot = await ResolveCredentialSnapshotAsync(
+            profile, sink: null, cancellationToken).ConfigureAwait(false);
 
-        if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out var cachedSession))
+        if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out var cachedSession)
+            && cachedSession.Service.UsesCredentialSnapshot(credentialSnapshot))
         {
             ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
             _sessionRegistry.Touch(profile.Id);
             return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
         }
 
-        var requestKey = new PoolConnectionRequestKey(profile.Id, reuseKey);
+        // Different revisions and credentials for one profile must also serialize through one gate.
+        var requestKey = new PoolConnectionRequestKey(profile.Id);
         await using var poolGate = await AcquirePoolConnectionGateAsync(requestKey, cancellationToken)
             .ConfigureAwait(false);
         ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
 
-        if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out cachedSession))
+        if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out cachedSession)
+            && cachedSession.Service.UsesCredentialSnapshot(credentialSnapshot))
         {
             ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
             _sessionRegistry.Touch(profile.Id);
@@ -563,7 +584,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             requestGeneration,
             cancellationToken);
         var service = _chatServiceFactory.CreateChatService(profile);
-        var wrapped = WrapChatService(service, sink: null, attempt.Token);
+        var wrapped = WrapChatService(service, sink: null, attempt.Token, credentialSnapshot);
         attempt.AttachService(wrapped);
         try
         {
@@ -770,7 +791,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private AcpChatServiceAdapter WrapChatService(
         IChatService chatService,
         IAcpChatCoordinatorSink? sink,
-        CancellationToken applyScopeToken)
+        CancellationToken applyScopeToken,
+        ResolvedCredentialBinding? credentialSnapshot)
     {
         ArgumentNullException.ThrowIfNull(chatService);
 
@@ -790,7 +812,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             AcpEventAdapter.DefaultHydrationReplayBufferLimit,
             logger: null,
             resyncRequiredAsync: resyncCallback);
-        wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter);
+        wrappedService = new AcpChatServiceAdapter(chatService, eventAdapter, credentialSnapshot);
         return wrappedService;
     }
 
@@ -1083,8 +1105,39 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             && !string.Equals(currentProfileId, targetProfileId, StringComparison.Ordinal);
     }
 
-    private static AcpConnectionReuseKey BuildConnectionReuseKey(IAcpTransportConfiguration transportConfiguration)
-        => AcpConnectionReuseKey.FromTransportConfiguration(transportConfiguration);
+    private static AcpConnectionReuseKey BuildConnectionReuseKey(
+        IAcpTransportConfiguration transportConfiguration,
+        ServerConfiguration? profile)
+        => AcpConnectionReuseKey.FromTransportConfiguration(transportConfiguration, profile);
+
+    private async Task<ResolvedCredentialBinding?> ResolveCredentialSnapshotAsync(
+        ServerConfiguration? profile,
+        IAcpChatCoordinatorSink? sink,
+        CancellationToken cancellationToken)
+    {
+        if (profile is null)
+        {
+            return null;
+        }
+
+        var result = CredentialBindingResolver.Resolve(profile);
+        if (!result.IsSuccess)
+        {
+            // Saving a profile leaves its current connection alone. At the next connect intent,
+            // a cleared/invalid binding must retire that profile's old credential-bearing session.
+            if (sink?.CurrentChatService is { } current
+                && _sessionRegistry.TryGetProfileId(current, out var currentProfileId)
+                && string.Equals(currentProfileId, profile.Id, StringComparison.Ordinal))
+            {
+                await DisconnectAsync(sink, cancellationToken).ConfigureAwait(false);
+            }
+
+            await DisconnectProfileInPoolAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(result.Error);
+        }
+
+        return result.Value!.HasHeader || result.Value.Environment.Count > 0 ? result.Value : null;
+    }
 
     private void EnsureTransportSupported(TransportType transport)
     {
@@ -1182,9 +1235,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         public string PhaseName => IsConnected ? "Connected" : "Disconnected";
     }
 
-    private readonly record struct PoolConnectionRequestKey(
-        string ProfileId,
-        AcpConnectionReuseKey ReuseKey);
+    private readonly record struct PoolConnectionRequestKey(string ProfileId);
 
     private sealed class PoolConnectionRequestGate
     {

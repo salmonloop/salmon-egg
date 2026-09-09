@@ -1397,4 +1397,21 @@
   <data name="CommandLine_Action_InspectFailed" xml:space="preserve">
     <value>检查命令状态时出错。</value>
   </data>
+  <data name="AgentProfileEditor_CredentialKeepHint" xml:space="preserve"><value>留空会保留已保存的凭据。填写令牌或 API 密钥之一可替换凭据；旧值不会回显。</value></data>
+  <data name="AgentProfileEditor_CredentialClear" xml:space="preserve"><value>保存时清除凭据</value></data>
+  <data name="AgentProfileEditor_CredentialBindingTitle" xml:space="preserve"><value>凭据发送方式</value></data>
+  <data name="AgentProfileEditor_CredentialSource" xml:space="preserve"><value>使用哪种凭据</value></data>
+  <data name="AgentProfileEditor_CredentialToken" xml:space="preserve"><value>令牌</value></data>
+  <data name="AgentProfileEditor_CredentialApiKey" xml:space="preserve"><value>API 密钥</value></data>
+  <data name="AgentProfileEditor_CredentialEnvironmentName" xml:space="preserve"><value>Agent 要求的环境变量名</value></data>
+  <data name="AgentProfileEditor_CredentialHeaderName" xml:space="preserve"><value>Agent 要求的 HTTP 请求头名称</value></data>
+  <data name="AgentProfileEditor_CredentialScheme" xml:space="preserve"><value>请求头前缀（如 Bearer；留空直接发送凭据）</value></data>
+  <data name="AgentProfileEditor_CredentialBind" xml:space="preserve"><value>绑定到当前目标</value></data>
+  <data name="AgentProfileEditor_CredentialUnbind" xml:space="preserve"><value>解除绑定</value></data>
+  <data name="AgentProfileEditor_CredentialBindingHint" xml:space="preserve"><value>按 Agent 文档填写名称，再点“绑定到当前目标”。更改地址或启动命令后需要重新绑定，保存才生效。</value></data>
+  <data name="AgentProfileEditor_CredentialWebSocketUnsupported" xml:space="preserve"><value>此平台的 WebSocket 无法添加请求头凭据。请改用 Agent 提供的 HTTP 地址；凭据不会放进网址。</value></data>
+  <data name="AgentProfileEditor_CredentialBoundFormat" xml:space="preserve"><value>已绑定：{0} → {1}。保存后应用。</value></data>
+  <data name="AgentProfileEditor_CredentialUnbound" xml:space="preserve"><value>未绑定；不会自动发送已保存的凭据。</value></data>
+  <data name="AgentProfileEditor_CredentialUnsupported" xml:space="preserve"><value>不支持的凭据类型</value></data>
+  <data name="AgentProfileEditor_CredentialSaveFailed" xml:space="preserve"><value>无法保存配置。请检查安全存储是否可用，然后重试。</value></data>
 </root>

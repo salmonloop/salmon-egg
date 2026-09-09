@@ -10,6 +10,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -21,14 +22,54 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
 {
     private readonly IChatService _inner;
     private readonly AcpEventAdapter _eventAdapter;
+    private ResolvedCredentialBinding? _connectionCredentials;
     private bool _disposed;
 
     public AcpChatServiceAdapter(IChatService inner, AcpEventAdapter eventAdapter)
+        : this(inner, eventAdapter, connectionCredentials: null)
+    {
+    }
+
+    internal AcpChatServiceAdapter(
+        IChatService inner,
+        AcpEventAdapter eventAdapter,
+        ResolvedCredentialBinding? connectionCredentials)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _eventAdapter = eventAdapter ?? throw new ArgumentNullException(nameof(eventAdapter));
+        _connectionCredentials = connectionCredentials;
 
         _inner.SessionUpdateReceived += OnInnerSessionUpdateReceived;
+    }
+
+    // Secret imports can change credentials without changing the profile revision. Compare the
+    // actual connection snapshots in memory; never put secrets or their hashes in cache keys/logs.
+    internal bool UsesCredentialSnapshot(ResolvedCredentialBinding? snapshot)
+    {
+        var current = _connectionCredentials;
+        if (current is null || snapshot is null)
+        {
+            return current is null && snapshot is null;
+        }
+
+        if (!Equals(current.Endpoint, snapshot.Endpoint)
+            || !string.Equals(current.HeaderName, snapshot.HeaderName, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(current.HeaderValue, snapshot.HeaderValue, StringComparison.Ordinal)
+            || current.Environment.Count != snapshot.Environment.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in current.Environment)
+        {
+            if (!snapshot.Environment.TryGetValue(pair.Key, out var value)
+                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public string? CurrentSessionId => _inner.CurrentSessionId;
@@ -195,6 +236,7 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
         }
 
         _disposed = true;
+        _connectionCredentials = null;
         _inner.SessionUpdateReceived -= OnInnerSessionUpdateReceived;
 
         // 本适配器是链最外层装饰器，独占其内层 IChatService（进而独占 ACP 客户端/传输）。
