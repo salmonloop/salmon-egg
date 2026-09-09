@@ -118,6 +118,78 @@ public sealed class NetworkTransportAdapterTests
         Assert.True(adapter.IsConnected);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendMessageAsync_WhenCancellationCompletesAfterTransportTransition_ReportsOnlyActualFailure(bool failed)
+    {
+        using var messages = new Subject<string>();
+        using var states = new Subject<TransportState>();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken token) =>
+            {
+                started.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled.TrySetResult();
+                    await release.Task.WaitAsync(TestContext.Current.CancellationToken);
+                    throw;
+                }
+            });
+        inner.Setup(x => x.DisconnectAsync()).Returns(() =>
+        {
+            states.OnNext(TransportState.Disconnecting);
+            states.OnNext(TransportState.Disconnected);
+            return Task.CompletedTask;
+        });
+        using var adapter = new NetworkTransportAdapter(inner.Object, "https://example.com/acp");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, error) => errors.Add(error);
+        using var cancellation = new CancellationTokenSource();
+        var send = adapter.SendMessageAsync("{}", cancellation.Token);
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await cancellation.CancelAsync();
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            if (failed)
+            {
+                states.OnNext(TransportState.Error);
+            }
+            else
+            {
+                Assert.True(await adapter.DisconnectAsync());
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.False(adapter.IsConnected);
+        if (failed)
+        {
+            Assert.Equal(TransportErrorKind.General, Assert.Single(errors).Kind);
+        }
+        else
+        {
+            Assert.Empty(errors);
+        }
+    }
+
     [Fact]
     public async Task ConnectAsync_Should_Return_False_And_Raise_Error_On_Exception()
     {
