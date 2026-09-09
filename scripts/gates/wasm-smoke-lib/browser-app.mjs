@@ -669,11 +669,21 @@ export function normalizeBaseUrl(value, usageName = "wasm smoke") {
 
 export async function openApp(page, baseUrl) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await enableSemanticDom(page);
-  // StartView.Title is a gradient TextBlock; on BrowserWasm it may not project
-  // AutomationId into aria-label. Prefer any stable Start shell marker instead.
-  // Cold Mono/Uno first paint on aarch64 Debug can exceed 60s after framework download.
+  // Keep first paint and semantic activation within the existing cold-boot budget.
+  const bootDeadline = Date.now() + 180_000;
+  const remainingBootTimeout = () => Math.max(1, bootDeadline - Date.now());
   try {
+    await page.waitForFunction(
+      () => {
+        const canvas = document.getElementById("uno-canvas");
+        return canvas && canvas.width > 0 && canvas.height > 0;
+      },
+      undefined,
+      { timeout: remainingBootTimeout(), polling: 250 });
+    await waitForSplashLoaderGone(page, remainingBootTimeout());
+    await enableSemanticDom(page, remainingBootTimeout());
+    // StartView.Title is a gradient TextBlock; on BrowserWasm it may not project
+    // AutomationId into aria-label. Prefer any stable Start shell marker instead.
     await page.waitForSelector(
       [
         '[aria-label="StartView.Title"]',
@@ -682,32 +692,24 @@ export async function openApp(page, baseUrl) {
         '[aria-label="StartView.AgentSelector"]',
         '[aria-label="MainNavView"]'
       ].join(", "),
-      { timeout: 180_000 });
+      { timeout: remainingBootTimeout() });
   } catch (error) {
     throw new Error(`${error.message}\n${await describeUnrenderedPage(page)}`, { cause: error });
   }
-  await waitForSplashLoaderGone(page);
 }
 
-// The bootstrap keeps the `.uno-loader` splash mounted as `#loading` and unmounts it only from a
-// MutationObserver on #uno-body's child list (uno-bootstrap.js `initProgress`). The canvas, the
-// aria-live regions and the semantics root all land in #uno-body during boot, so the observer fires
-// within about a second of first paint - but openApp resolves the moment the semantic shell labels
-// appear, which can still be inside that window (measured: the splash was up for ~750ms after the
-// start cards were already queryable). While it is up it covers the whole viewport with
-// `pointer-events: auto` at z-index 5000, so a real pointer click aimed at the canvas lands on the
-// splash and is silently swallowed - the click reports success, nothing behind it reacts, and the
-// step times out on a body-text wait with no signal of what ate the click. Wait for the splash to
-// detach so pointer-driven steps start from a page a user could actually reach.
-//
-// If it is still mounted this deep into boot the observer never fired, which is itself a defect a
-// real user would see as a splash that never leaves; surface that instead of tearing it out here.
-async function waitForSplashLoaderGone(page) {
+// Uno 6.7.103 removes the Skia splash after fonts, layout and the first composed frame
+// (WebAssemblyWindowWrapper.ShowCore, upstream cd452e3ee242c9a2a8dee5e65ad8088b6f5dbf83).
+// Enabling accessibility before that point can freeze sibling bounds at their initial shared
+// position: ancestor layout moves do not necessarily re-emit the pruned descendants' bounds.
+// Wait for the native first-paint signal before creating the semantic tree. A still-visible
+// splash also intercepts pointer input; leave it intact and report a failed boot.
+async function waitForSplashLoaderGone(page, timeoutMs) {
   try {
     await page.waitForFunction(
       () => !document.getElementById("loading"),
       undefined,
-      { timeout: 15_000, polling: 250 });
+      { timeout: timeoutMs, polling: 250 });
   } catch (error) {
     const splash = await page.evaluate(() => {
       const element = document.getElementById("loading");
@@ -736,10 +738,10 @@ async function waitForSplashLoaderGone(page) {
 // The affordance carries role="button" and tabindex="0" but renders empty, so it has no hit box:
 // dispatch the activation on the element instead of letting Playwright aim a real pointer at it.
 // A missing affordance is not a failure - the DOM-rendered heads never had one.
-async function enableSemanticDom(page) {
+async function enableSemanticDom(page, timeoutMs) {
   const toggle = page.locator("#uno-enable-accessibility");
   try {
-    await toggle.waitFor({ state: "attached", timeout: 30_000 });
+    await toggle.waitFor({ state: "attached", timeout: Math.min(30_000, timeoutMs) });
   } catch {
     return;
   }
@@ -747,7 +749,6 @@ async function enableSemanticDom(page) {
   await toggle.evaluate(element => {
     element.focus();
     element.click();
-    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   });
 }
 
