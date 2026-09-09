@@ -10,6 +10,94 @@ public sealed class AcpPermissionResponseOwnershipTests
 {
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
+    [Fact]
+    public async Task TryRespondAsync_LegacyConstructor_UsesOriginalTaskCallback()
+    {
+        // Arrange
+        var responses = new List<(string Outcome, string? OptionId)>();
+        var request = new PermissionRequestEventArgs("permission", "session", null, [], (outcome, optionId) =>
+        {
+            responses.Add((outcome, optionId));
+            return Task.CompletedTask;
+        });
+
+        // Act
+        var sent = await request.TryRespondAsync("selected", "allow");
+        await request.Respond("cancelled", null);
+
+        // Assert
+        Assert.True(sent);
+        Assert.True(request.CanRespond);
+        Assert.Equal([("selected", "allow"), ("cancelled", (string?)null)], responses);
+    }
+
+    [Fact]
+    public async Task TryRespondAsync_LegacyCallbackFails_PreservesException()
+    {
+        // Arrange
+        var error = new InvalidOperationException("Host send failed.");
+        var request = new PermissionRequestEventArgs("permission", "session", null, [], (_, _) => Task.FromException(error));
+
+        // Act / Assert
+        Assert.Same(error, await Assert.ThrowsAsync<InvalidOperationException>(() => request.TryRespondAsync("cancelled")));
+    }
+
+    [Fact]
+    public async Task TryRespondAsync_FailedSend_PreservesRetryableOwnerAndReportsActualSuccess()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.Request();
+        var request = Assert.Single(peer.Permissions);
+        peer.ResponseSend = (_, _) => Task.FromResult(false);
+
+        // Act / Assert
+        Assert.True(request.CanRespond);
+        Assert.False(await request.TryRespondAsync("selected", "allow"));
+        Assert.True(request.CanRespond);
+        Assert.Empty(peer.Responses);
+        peer.ResponseSend = null;
+        Assert.True(await request.TryRespondAsync("selected", "allow"));
+        Assert.False(request.CanRespond);
+        Assert.False(await request.TryRespondAsync("selected", "allow"));
+        Assert.Equal("allow", Selected(Assert.Single(peer.Responses)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CanRespond_DisconnectOrIdReuse_InvalidatesOnlyOriginalRequest(bool reconnect)
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.Request();
+        var old = Assert.Single(peer.Permissions);
+
+        // Act
+        if (reconnect)
+        {
+            await peer.Client.DisconnectAsync();
+            Assert.False(old.CanRespond);
+            await peer.InitializeAsync();
+        }
+        else
+        {
+            Assert.True(await old.TryRespondAsync("cancelled"));
+        }
+        peer.Request(sessionId: "replacement");
+        var current = peer.Permissions[^1];
+        var responsesBeforeOldCallback = peer.Responses.Count;
+
+        // Assert
+        Assert.False(old.CanRespond);
+        Assert.True(current.CanRespond);
+        Assert.False(await old.TryRespondAsync("selected", "allow"));
+        Assert.Equal(responsesBeforeOldCallback, peer.Responses.Count);
+        Assert.True(await current.TryRespondAsync("selected", "allow"));
+        Assert.False(current.CanRespond);
+        Assert.Equal(responsesBeforeOldCallback + 1, peer.Responses.Count);
+    }
+
     [Theory]
     [InlineData("selected", null)]
     [InlineData("selected", "not-offered")]

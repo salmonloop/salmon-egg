@@ -1298,6 +1298,16 @@ namespace SalmonEgg.Acp.Client
                     ? _messageLoopCts?.Token == pending.ConnectionToken
                     : _messageLoopCts is null);
 
+        private bool CanRespondToPermissionRequest(PendingInboundRequest pending)
+        {
+            lock (_lock)
+            {
+                return IsInboundRequestCurrent(pending)
+                    && TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                    && ReferenceEquals(current, pending);
+            }
+        }
+
         private async Task<bool> TrySendFileSystemResponseAsync(object messageId, bool success, string? content, string? message)
         {
             var idStr = messageId?.ToString() ?? string.Empty;
@@ -2051,7 +2061,7 @@ namespace SalmonEgg.Acp.Client
 
                 if (!TryGetPendingInboundRequest(requestId, out pendingPermission)) return;
                 pendingPermission.PermissionOptionIds = optionsList.Select(static option => option.OptionId).ToHashSet(StringComparer.Ordinal);
-                var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>
+                var permissionResponseFunc = new Func<string, string?, Task<bool>>((outcome, optionId) =>
                     TrySendPermissionOutcomeResponseAsync(messageId, outcome, optionId, pendingPermission));
 
                 eventArgs = new PermissionRequestEventArgs(
@@ -2059,7 +2069,8 @@ namespace SalmonEgg.Acp.Client
                     sessionId,
                     toolCall,
                     optionsList,
-                    permissionResponseFunc);
+                    permissionResponseFunc,
+                    () => CanRespondToPermissionRequest(pendingPermission));
 
             }
             catch (Exception ex)

@@ -74,6 +74,21 @@ HTTP/2 and SSE traffic and checks that every required case passes without skips.
 absolute `SALMONEGG_ACP_CANCELLATION_PEER_LOG` path. Missing deployment evidence fails that gate;
 the ordinary test suite explicitly skips this external integration when it is unconfigured.
 
+### Permission response ownership
+
+Hosts should retain the `PermissionRequestEventArgs` they receive and answer through
+`TryRespondAsync(outcome, optionId)`. It reports whether the original request's response was sent;
+`CanRespond` checks whether that exact pending request still belongs to its receiving client.
+Disconnecting, completing a request, or reusing its ID invalidates the old event. Failed sends
+remain retryable while the original request is still current. A host must dismiss only the prompt
+associated with the successful response, even if the active conversation or connection has changed.
+
+The existing public constructor and `Respond` callback retain their signatures. For events created
+through that constructor, the SDK cannot query a client lifetime: `CanRespond` returns true, and
+normal completion of the supplied `Task` callback makes `TryRespondAsync` return true. Exceptions
+from that callback remain observable. Callbacks received from `AcpClient` retain the actual send
+result without casting a `Task` to `Task<bool>`.
+
 ## ACP v2 draft surface (SEACP002)
 
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is

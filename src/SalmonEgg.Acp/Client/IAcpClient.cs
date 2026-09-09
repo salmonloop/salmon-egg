@@ -310,6 +310,44 @@ namespace SalmonEgg.Acp.Client
     /// </summary>
     public sealed class PermissionRequestEventArgs : EventArgs
     {
+        private readonly Func<string, string?, Task<bool>>? _tryRespond;
+        private readonly Func<bool>? _canRespond;
+
+        /// <summary>
+        /// Creates new permission request event arguments.
+        /// </summary>
+        /// <param name="messageId">The message ID</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="toolCall">The tool call</param>
+        /// <param name="options">The permission options</param>
+        /// <param name="respond">The response callback</param>
+        public PermissionRequestEventArgs(
+            object messageId,
+            string sessionId,
+            object? toolCall,
+            List<PermissionOption> options,
+            Func<string, string?, Task> respond)
+        {
+            MessageId = messageId;
+            SessionId = sessionId;
+            ToolCall = toolCall;
+            Options = options;
+            Respond = respond;
+        }
+
+        internal PermissionRequestEventArgs(
+            object messageId,
+            string sessionId,
+            object? toolCall,
+            List<PermissionOption> options,
+            Func<string, string?, Task<bool>> tryRespond,
+            Func<bool> canRespond)
+            : this(messageId, sessionId, toolCall, options, (outcome, optionId) => tryRespond(outcome, optionId))
+        {
+            _tryRespond = tryRespond;
+            _canRespond = canRespond;
+        }
+
         /// <summary>
         /// The message ID of the original request.
         /// </summary>
@@ -335,26 +373,25 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public Func<string, string?, Task> Respond { get; init; } = null!;
 
-        /// <summary>
-        /// Creates new permission request event arguments.
-        /// </summary>
-        /// <param name="messageId">The message ID</param>
-        /// <param name="sessionId">The session ID</param>
-        /// <param name="toolCall">The tool call</param>
-        /// <param name="options">The permission options</param>
-        /// <param name="respond">The response callback</param>
-        public PermissionRequestEventArgs(
-            object messageId,
-            string sessionId,
-            object? toolCall,
-            List<PermissionOption> options,
-            Func<string, string?, Task> respond)
+        /// <summary>Whether the receiving client still owns this exact unanswered request.</summary>
+        /// <remarks>Events created by the legacy public constructor have no client lifetime query.</remarks>
+        public bool CanRespond => _canRespond?.Invoke() ?? true;
+
+        /// <summary>Responds through the original request owner and reports whether sending succeeded.</summary>
+        /// <remarks>
+        /// A false result does not confirm completion; consult <see cref="CanRespond"/> before retrying.
+        /// For events created with the legacy public constructor, successful completion of its Task
+        /// callback is treated as a successful response.
+        /// </remarks>
+        public async Task<bool> TryRespondAsync(string outcome, string? optionId = null)
         {
-            MessageId = messageId;
-            SessionId = sessionId;
-            ToolCall = toolCall;
-            Options = options;
-            Respond = respond;
+            if (_tryRespond is not null)
+            {
+                return await _tryRespond(outcome, optionId).ConfigureAwait(false);
+            }
+
+            await Respond(outcome, optionId).ConfigureAwait(false);
+            return true;
         }
     }
 
