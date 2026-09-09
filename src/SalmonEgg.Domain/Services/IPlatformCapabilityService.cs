@@ -12,6 +12,7 @@ public interface IPlatformCapabilityService
     bool SupportsWebSocketRequestHeaders => false;
     bool SupportsInteractiveTerminalSurface { get; }
     bool SupportsLocalTerminal { get; }
+    bool SupportsTerminalAuthentication => false;
     bool SupportsGamepadInput { get; }
 
     /// <summary>

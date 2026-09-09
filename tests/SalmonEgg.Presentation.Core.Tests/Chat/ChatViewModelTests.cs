@@ -86,7 +86,8 @@ public partial class ChatViewModelTests
         IUiInteractionService? uiInteractionService = null,
         IAiContentReportLauncher? aiContentReportLauncher = null,
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
-        bool enableWorkspacePersistence = false)
+        bool enableWorkspacePersistence = false,
+        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null)
     {
         var stateOwner = new object();
         var connectionStateOwner = new object();
@@ -236,7 +237,8 @@ public partial class ChatViewModelTests
                 languageService: languageService,
                 uiInteractionService: uiInteractionService,
                 aiContentReportLauncher: aiContentReportLauncher,
-                shellLayoutMetricsSink: shellLayoutMetricsSink);
+                shellLayoutMetricsSink: shellLayoutMetricsSink,
+                terminalAuthenticationCoordinator: terminalAuthenticationCoordinator);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,

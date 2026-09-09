@@ -32,6 +32,13 @@ public partial class ChatViewModel
         string? cwd,
         string? requiredProfileId,
         CancellationToken cancellationToken = default)
+        => await EnsureNewSessionDraftCoreAsync(cwd, requiredProfileId, allowAuthentication: true, cancellationToken).ConfigureAwait(false);
+
+    private async Task EnsureNewSessionDraftCoreAsync(
+        string? cwd,
+        string? requiredProfileId,
+        bool allowAuthentication,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_disposed)
@@ -197,7 +204,8 @@ public partial class ChatViewModel
                     normalizedCwd,
                     requestVersion,
                     chatService,
-                    cancellationToken);
+                    cancellationToken,
+                    allowAuthentication);
                 inFlightRequestTask = StartInFlightNewSessionDraftRequest(request);
             }
         }
@@ -1009,6 +1017,20 @@ public partial class ChatViewModel
         try
         {
             var response = await CreateNewSessionDraftResponseAsync(request).ConfigureAwait(false);
+            if (response is null)
+            {
+                // A terminal login restarted the connection. Let the same draft owner resolve its
+                // new identity, replace the request key and create the session exactly once.
+                if (IsDesiredNewSessionDraftRequest(request.RequestKey)
+                    && string.Equals(request.ProfileId, SelectedProfileId, StringComparison.Ordinal))
+                {
+                    await EnsureNewSessionDraftCoreAsync(
+                        request.Cwd, request.ProfileId, allowAuthentication: false, request.CancellationToken).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
             await CompleteSuccessfulNewSessionDraftRequestAsync(request, response).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_disposed)
@@ -1030,7 +1052,7 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task<SessionNewResponse> CreateNewSessionDraftResponseAsync(
+    private async Task<SessionNewResponse?> CreateNewSessionDraftResponseAsync(
         PendingNewSessionDraftRequest request)
     {
         var operationCancellationToken = _disposed ? CancellationToken.None : _disposeCts.Token;
@@ -1043,7 +1065,7 @@ public partial class ChatViewModel
                     request.Cwd,
                     McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
+        catch (Exception ex) when (request.AllowAuthentication && ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
         {
             var authenticated = await TryAuthenticateAsync(operationCancellationToken).ConfigureAwait(false);
             if (!authenticated)
@@ -1051,6 +1073,7 @@ public partial class ChatViewModel
                 throw new OperationCanceledException("Authentication was not completed.", operationCancellationToken);
             }
 
+            if (!ReferenceEquals(request.ChatService, _chatService)) return null;
             var mcpServers = await ResolveCurrentMcpServersAsync(operationCancellationToken).ConfigureAwait(false);
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
@@ -1266,7 +1289,8 @@ public partial class ChatViewModel
         string Cwd,
         long RequestVersion,
         SalmonEgg.Application.Services.Chat.IChatService ChatService,
-        CancellationToken CancellationToken);
+        CancellationToken CancellationToken,
+        bool AllowAuthentication);
 
     private enum RequiredProfileIdentityWaitStatus
     {

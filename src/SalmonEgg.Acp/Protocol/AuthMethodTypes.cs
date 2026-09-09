@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Serialization;
@@ -60,7 +61,13 @@ namespace SalmonEgg.Acp.Protocol
         [JsonPropertyName("description")]
         public string? Description { get; init; }
 
-        // Unimplemented variants must survive initialization replay, including terminal args/env.
+        /// <summary>Arguments appended to the configured agent invocation for terminal sign-in.</summary>
+        public IReadOnlyList<string>? Args { get; init; }
+
+        /// <summary>Environment overrides for terminal sign-in, keyed by variable name.</summary>
+        public IReadOnlyDictionary<string, string>? Env { get; init; }
+
+        // Unimplemented variants must survive initialization replay without interpretation.
         // Known properties remain owned by the typed model so edits do not replay stale values.
         internal JsonElement? RawPayload { get; init; }
     }
@@ -72,13 +79,17 @@ namespace SalmonEgg.Acp.Protocol
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
             var protocolVersion = AcpWireFormat.NegotiatedVersion(options);
+            var discriminator = ReadDiscriminator(root, protocolVersion);
+            var isTerminal = discriminator == AuthMethodDefinition.TerminalType;
 
             return new AuthMethodDefinition
             {
                 Id = ReadString(root, GetIdPropertyName(protocolVersion)) ?? string.Empty,
                 Name = ReadString(root, "name") ?? string.Empty,
-                Type = ReadDiscriminator(root, protocolVersion),
+                Type = discriminator,
                 Description = ReadString(root, "description"),
+                Args = isTerminal ? ReadArguments(root) : null,
+                Env = isTerminal ? ReadEnvironment(root, protocolVersion) : null,
                 Meta = AcpMetaJson.Read(root),
                 RawPayload = root.Clone()
             };
@@ -104,7 +115,12 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             AcpMetaJson.Write(writer, value.Meta);
-            WriteAdditionalProperties(writer, value.RawPayload, protocolVersion);
+            if (value.ResolvedType == AuthMethodDefinition.TerminalType)
+            {
+                WriteTerminalInvocation(writer, value, protocolVersion);
+            }
+
+            WriteAdditionalProperties(writer, value, protocolVersion);
             writer.WriteEndObject();
         }
 
@@ -133,9 +149,9 @@ namespace SalmonEgg.Acp.Protocol
             return property.GetString();
         }
 
-        private static void WriteAdditionalProperties(Utf8JsonWriter writer, JsonElement? rawPayload, int protocolVersion)
+        private static void WriteAdditionalProperties(Utf8JsonWriter writer, AuthMethodDefinition value, int protocolVersion)
         {
-            if (rawPayload is not { ValueKind: JsonValueKind.Object } root)
+            if (value.RawPayload is not { ValueKind: JsonValueKind.Object } root)
             {
                 return;
             }
@@ -143,13 +159,107 @@ namespace SalmonEgg.Acp.Protocol
             foreach (var property in root.EnumerateObject())
             {
                 if (property.Name == GetIdPropertyName(protocolVersion)
-                    || property.Name is "name" or "type" or "description" or "_meta")
+                    || property.Name is "name" or "type" or "description" or "_meta"
+                    || (value.ResolvedType == AuthMethodDefinition.TerminalType && property.Name is "args" or "env"))
                 {
                     continue;
                 }
 
                 writer.WritePropertyName(property.Name);
                 writer.WriteRawValue(property.Value.GetRawText());
+            }
+        }
+
+        private static IReadOnlyList<string>? ReadArguments(JsonElement root)
+        {
+            if (!root.TryGetProperty("args", out var args)) return null;
+            var result = new List<string>();
+            // The schema explicitly defaults malformed args and skips malformed items.
+            if (args.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in args.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String) result.Add(item.GetString()!);
+                }
+            }
+
+            return result;
+        }
+
+        private static IReadOnlyDictionary<string, string>? ReadEnvironment(JsonElement root, int protocolVersion)
+        {
+            if (!root.TryGetProperty("env", out var env)) return null;
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (protocolVersion == AcpProtocolVersion.V1)
+            {
+                if (env.ValueKind != JsonValueKind.Object) return result;
+                foreach (var property in env.EnumerateObject())
+                {
+                    // V1 defaults the whole field on error; it does not permit per-entry recovery.
+                    if (property.Value.ValueKind != JsonValueKind.String) return new Dictionary<string, string>();
+                    result[property.Name] = property.Value.GetString()!;
+                }
+            }
+            else if (env.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in env.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object
+                        && ReadString(item, "name") is { } name && ReadString(item, "value") is { } value)
+                    {
+                        result.TryAdd(name, value);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static void WriteTerminalInvocation(Utf8JsonWriter writer, AuthMethodDefinition value, int protocolVersion)
+        {
+            if (value.Args is { } arguments)
+            {
+                writer.WriteStartArray("args");
+                foreach (var argument in arguments) writer.WriteStringValue(argument);
+                writer.WriteEndArray();
+            }
+
+            if (value.Env is not { } environment) return;
+            if (protocolVersion == AcpProtocolVersion.V1)
+            {
+                writer.WriteStartObject("env");
+                foreach (var entry in environment) writer.WriteString(entry.Key, entry.Value);
+                writer.WriteEndObject();
+                return;
+            }
+
+            writer.WriteStartArray("env");
+            foreach (var entry in environment)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("name", entry.Key);
+                writer.WriteString("value", entry.Value);
+                WriteEnvironmentExtensions(writer, value.RawPayload, entry.Key);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        }
+
+        private static void WriteEnvironmentExtensions(Utf8JsonWriter writer, JsonElement? raw, string name)
+        {
+            if (raw is not { ValueKind: JsonValueKind.Object } root
+                || !root.TryGetProperty("env", out var env) || env.ValueKind != JsonValueKind.Array) return;
+            foreach (var item in env.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object || ReadString(item, "name") != name
+                    || ReadString(item, "value") is null) continue;
+                foreach (var property in item.EnumerateObject())
+                {
+                    if (property.Name is not ("name" or "value")) property.WriteTo(writer);
+                }
+
+                return;
             }
         }
 

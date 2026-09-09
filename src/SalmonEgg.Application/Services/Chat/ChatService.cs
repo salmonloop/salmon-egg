@@ -9,6 +9,7 @@ using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Application.Observability;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
@@ -18,11 +19,13 @@ using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Application.Services.Chat
 {
-    public class ChatService : IChatService
+    public class ChatService : IChatService, IStdioInvocationSource
     {
         private readonly IAcpClient _acpClient;
         private readonly IErrorLogger _errorLogger;
         private readonly ISessionManager _sessionManager;
+        private readonly IStdioInvocationSource? _stdioInvocationSource;
+        private readonly ITerminalAuthenticationSessionFactory? _terminalAuthentication;
         // 保护下列四个共享可变态的所有读写:pump 线程(传输读线程续体)与请求-响应续体
         // (线程池)并发触碰它们。锁内只做同步内存读写与 HashSet 操作,绝不跨 await、
         // 绝不在锁内做协议 I/O 或调用可能重入的 _sessionManager 路径。
@@ -54,6 +57,7 @@ namespace SalmonEgg.Application.Services.Chat
         public bool IsConnected => _acpClient.IsConnected;
         public AgentInfo? AgentInfo => _acpClient.AgentInfo;
         public AgentCapabilities? AgentCapabilities => _acpClient.AgentCapabilities;
+        public StdioInvocationSnapshot? StdioInvocation => _stdioInvocationSource?.StdioInvocation;
 
         // 返回快照而非 live List:pump 会并发向同一会话追加历史,直接把内部 List
         // 交给 UI 枚举会触发并发修改异常。Session.SnapshotHistory 在会话自己的锁下拷贝。
@@ -97,11 +101,18 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
         public event EventHandler<string>? ErrorOccurred;
 
-        public ChatService(IAcpClient acpClient, IErrorLogger errorLogger, ISessionManager sessionManager)
+        public ChatService(
+            IAcpClient acpClient,
+            IErrorLogger errorLogger,
+            ISessionManager sessionManager,
+            IStdioInvocationSource? stdioInvocationSource = null,
+            ITerminalAuthenticationSessionFactory? terminalAuthentication = null)
         {
             _acpClient = acpClient ?? throw new ArgumentNullException(nameof(acpClient));
             _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
             _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
+            _stdioInvocationSource = stdioInvocationSource;
+            _terminalAuthentication = terminalAuthentication;
 
             _acpClient.SessionUpdateReceived += OnSessionUpdateReceived;
             _acpClient.PermissionRequestReceived += OnPermissionRequestReceived;
@@ -550,6 +561,17 @@ namespace SalmonEgg.Application.Services.Chat
                 ActivityKind.Internal);
             try
             {
+                if (_stdioInvocationSource is not null && _terminalAuthentication?.IsSupported == true)
+                {
+                    @params = @params with
+                    {
+                        ClientCapabilities = @params.ClientCapabilities with
+                        {
+                            Auth = new AuthCapabilities { Terminal = true }
+                        }
+                    };
+                }
+
                 var response = await _acpClient.InitializeAsync(@params);
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;

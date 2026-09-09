@@ -15,7 +15,7 @@ namespace SalmonEgg.Application.Services.Chat;
 /// Decorates <see cref="IChatService"/> so GUI smoke tests can deterministically
 /// stretch the session/load round-trip without touching ViewModel logic.
 /// </summary>
-public sealed class DelayedLoadChatService : IChatService
+public sealed class DelayedLoadChatService : IChatService, IStdioInvocationSource
 {
     private readonly IChatService _inner;
     private readonly TimeSpan _loadSessionDelay;
@@ -33,6 +33,9 @@ public sealed class DelayedLoadChatService : IChatService
     public bool IsInitialized => _inner.IsInitialized;
 
     public bool IsConnected => _inner.IsConnected;
+
+    public SalmonEgg.Domain.Models.StdioInvocationSnapshot? StdioInvocation
+        => (_inner as IStdioInvocationSource)?.StdioInvocation;
 
     public AgentInfo? AgentInfo => _inner.AgentInfo;
 

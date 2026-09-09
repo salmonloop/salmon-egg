@@ -67,6 +67,20 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 
 Windows 原生路径必须用 MSIX 脚本；Linux/macOS 桌面版走 Skia；WASM 必须使用 BrowserWasm 目标。不要用一个目标的成功替代其他平台验证。
 
+### Windows 终端登录门禁
+
+ACP `auth.terminal` 当前仅在 Windows 桌面进程宿主且具备交互终端界面时启用。用户同意后，应用根据当前 Agent 进程的启动快照创建独立 ConPTY；只有正常退出码 `0` 才重新连接并初始化，再重试原操作。关闭窗口、取消或退出应用会回收登录进程及其子孙进程。
+
+Windows 主机运行：
+
+```powershell
+./scripts/gates/run-terminal-auth-windows-gate.ps1
+```
+
+该门禁使用 `tests/SalmonEgg.TerminalAuth.Windows.Tests`，实际启动 Agent 与 ConPTY，至少执行四项测试，禁止跳过；验证输入输出、参数边界、环境覆盖、退出码和进程树回收。GHA 的 `Windows Terminal Authentication` job 在 hosted Windows 上执行相同命令，日志与提交来源保存在 `artifacts/terminal-auth-windows`。Linux 交叉编译不能替代这项运行验证；原生登录对话框仍需 Windows UI 验收。
+
+Linux/macOS 暂不广告终端登录：当前 Porta.Pty 对 Unix 信号退出不能提供可靠的正常退出结果。普通会话终端不受此能力限制影响。SDK 默认能力与远程 WebSocket/HTTP 连接也不会广告 `auth.terminal`。
+
 ## 快速开始
 
 ### Windows 用户

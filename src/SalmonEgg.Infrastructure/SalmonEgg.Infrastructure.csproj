@@ -34,6 +34,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SalmonEgg.Infrastructure.Tests" />
     <InternalsVisibleTo Include="SalmonEgg.Acp.Desktop.Tests" />
+    <InternalsVisibleTo Include="SalmonEgg.TerminalAuth.Windows.Tests" />
   </ItemGroup>
 
 </Project>

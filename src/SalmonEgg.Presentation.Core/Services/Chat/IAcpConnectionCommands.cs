@@ -29,6 +29,21 @@ public readonly record struct AcpConnectionContext(
     public static AcpConnectionContext None { get; } = new(null, PreserveConversation: false);
 
     public bool HasConversationTarget => !string.IsNullOrWhiteSpace(ConversationId);
+
+    /// <summary>Interactive sign-in changes the agent's credentials; an existing pooled process cannot observe them.</summary>
+    public bool ForceReconnect { get; init; }
+
+    public IChatService? ExpectedChatService { get; init; }
+
+    public string? ExpectedConnectionInstanceId { get; init; }
+
+    public string? ExpectedProfileId { get; init; }
+
+    public bool MatchesExpectedConnection(IAcpChatCoordinatorSink sink)
+        => !ForceReconnect || (ReferenceEquals(ExpectedChatService, sink.CurrentChatService)
+            && string.Equals(ExpectedConnectionInstanceId, sink.ConnectionInstanceId, System.StringComparison.Ordinal)
+            && string.Equals(ExpectedProfileId, sink.SelectedProfileId, System.StringComparison.Ordinal)
+            && string.Equals(ConversationId, sink.CurrentSessionId, System.StringComparison.Ordinal));
 }
 
 /// <summary>

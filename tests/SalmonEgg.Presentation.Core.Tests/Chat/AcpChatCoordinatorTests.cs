@@ -386,6 +386,103 @@ public sealed partial class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectToProfileAsync_AfterTerminalAuthentication_BypassesWarmPoolAndReinitializes()
+    {
+        // Arrange
+        var oldService = CreateChatService();
+        var freshService = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        factory.SetupSequence(x => x.CreateChatService(It.IsAny<ServerConfiguration>()))
+            .Returns(oldService.Object).Returns(freshService.Object);
+        var sink = new FakeSink();
+        var transport = new FakeTransportConfiguration();
+        var profile = new ServerConfiguration { Id = "profile-auth", Name = "Agent", Transport = TransportType.Stdio, StdioCommand = "agent" };
+        var coordinator = CreateCoordinator(factory.Object, NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var first = await coordinator.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
+        sink.ConnectionInstanceId = "connection-before-auth";
+
+        // Act
+        var second = await coordinator.ConnectToProfileAsync(profile, transport, sink,
+            new AcpConnectionContext(sink.CurrentSessionId, PreserveConversation: true)
+            {
+                ForceReconnect = true,
+                ExpectedChatService = first.ChatService,
+                ExpectedConnectionInstanceId = sink.ConnectionInstanceId,
+                ExpectedProfileId = profile.Id
+            }, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotSame(first.ChatService, second.ChatService);
+        freshService.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
+        oldService.Verify(x => x.DisconnectAsync(), Times.Once);
+        Assert.Equal(ServiceReplaceIntent.PoolOnly, sink.ReplaceChatServiceIntents[^1]);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_AuthenticationSnapshotIsStale_DoesNotChangeSelectionOrCreateProcess()
+    {
+        // Arrange
+        var service = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var sink = new FakeSink { CurrentChatService = service.Object, SelectedProfileId = "profile-current", ConnectionInstanceId = "new" };
+        var coordinator = CreateCoordinator(factory.Object, NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var profile = new ServerConfiguration { Id = "profile-old", Transport = TransportType.Stdio, StdioCommand = "agent" };
+
+        // Act / Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.ConnectToProfileAsync(
+            profile, new FakeTransportConfiguration(), sink, new AcpConnectionContext(null, true)
+            {
+                ForceReconnect = true,
+                ExpectedChatService = service.Object,
+                ExpectedConnectionInstanceId = "old",
+                ExpectedProfileId = profile.Id
+            }, TestContext.Current.CancellationToken));
+        Assert.Equal("profile-current", sink.SelectedProfileId);
+        factory.Verify(x => x.CreateChatService(It.IsAny<ServerConfiguration>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_AuthenticationIdentityChangesDuringInitialize_DiscardsWithoutRestoringStaleState()
+    {
+        // Arrange
+        var oldService = CreateChatService();
+        var candidate = CreateChatService();
+        var initialized = new TaskCompletionSource<InitializeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        candidate.Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>())).Returns(initialized.Task);
+        var factory = new Mock<IAcpChatServiceFactory>();
+        factory.Setup(x => x.CreateChatService(It.IsAny<ServerConfiguration>())).Returns(candidate.Object);
+        var state = new Mock<IAcpConnectionCoordinator>();
+        var sink = new FakeSink { CurrentChatService = oldService.Object, SelectedProfileId = "profile-old", ConnectionInstanceId = "old", IsConnected = true };
+        var coordinator = CreateCoordinator(factory.Object, NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider, connectionCoordinator: state.Object);
+        var context = new AcpConnectionContext(null, true)
+        {
+            ForceReconnect = true,
+            ExpectedChatService = oldService.Object,
+            ExpectedConnectionInstanceId = "old",
+            ExpectedProfileId = "profile-old"
+        };
+
+        // Act: a newer intent arrives without entering another apply scope.
+        var pending = coordinator.ConnectToProfileAsync(
+            new ServerConfiguration { Id = "profile-old", Transport = TransportType.Stdio, StdioCommand = "agent" },
+            new FakeTransportConfiguration(), sink, context, TestContext.Current.CancellationToken);
+        sink.SelectedProfileId = "profile-new";
+        sink.ConnectionInstanceId = "new";
+        initialized.SetResult(new InitializeResponse());
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.Empty(sink.ReplaceChatServiceCalls);
+        Assert.Equal("profile-new", sink.SelectedProfileId);
+        state.Verify(x => x.SetConnectedAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        state.Verify(x => x.SetConnectionInstanceIdAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        candidate.Verify(x => x.DisconnectAsync(), Times.Once);
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenCanceledDuringInitialize_ReturnsAndDisposesCandidate()
     {
         var transport = new FakeTransportConfiguration();

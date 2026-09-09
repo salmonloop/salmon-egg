@@ -6,6 +6,22 @@ namespace SalmonEgg.Infrastructure.Tests.Services;
 
 public sealed class PlatformCapabilityServiceTests
 {
+    [Theory]
+    [InlineData(true, true, true, true)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, true, true, false)]
+    public void SupportsTerminalAuthentication_RequiresWindowsProcessHostAndInteractiveSurface(
+        bool windows, bool desktop, bool terminalSurface, bool expected)
+    {
+        // Arrange
+        var service = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(desktop, true, terminalSurface),
+            platform => windows && platform == OSPlatform.Windows);
+
+        // Act / Assert
+        Assert.Equal(expected, service.SupportsTerminalAuthentication);
+    }
+
     [Fact]
     public void SupportsLocalTerminal_RequiresTransportAndInteractiveSurface()
     {

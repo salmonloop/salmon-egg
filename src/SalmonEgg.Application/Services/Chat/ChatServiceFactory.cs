@@ -24,6 +24,7 @@ public class ChatServiceFactory
     private readonly IAcpClientFactory _acpClientFactory;
     private readonly ILogger _logger;
     private readonly Func<IChatService, IChatService> _decorateChatService;
+    private readonly ITerminalAuthenticationSessionFactory? _terminalAuthentication;
 
     /// <summary>
     /// 创建 <see cref="ChatServiceFactory"/> 的新实例。
@@ -37,7 +38,8 @@ public class ChatServiceFactory
         ISessionManager sessionManager,
         IAcpClientFactory acpClientFactory,
         ILogger logger,
-        Func<IChatService, IChatService>? decorateChatService = null)
+        Func<IChatService, IChatService>? decorateChatService = null,
+        ITerminalAuthenticationSessionFactory? terminalAuthentication = null)
     {
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
@@ -45,6 +47,7 @@ public class ChatServiceFactory
         _acpClientFactory = acpClientFactory ?? throw new ArgumentNullException(nameof(acpClientFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _decorateChatService = decorateChatService ?? (service => service);
+        _terminalAuthentication = terminalAuthentication;
     }
 
     /// <summary>
@@ -79,7 +82,8 @@ public class ChatServiceFactory
             var acpClient = _acpClientFactory.CreateClient(transport);
 
             // 3. 创建 Chat 服务
-            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager,
+                transport as IStdioInvocationSource, _terminalAuthentication));
 
             activity?.SetStatus(ActivityStatusCode.Ok);
             activity?.SetTag(ApplicationSemanticConventions.Chat.ServiceType, chatService.GetType().Name);
@@ -126,7 +130,8 @@ public class ChatServiceFactory
 
             var transport = _transportFactory.CreateTransport(configuration);
             var acpClient = _acpClientFactory.CreateClient(transport);
-            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager));
+            var chatService = _decorateChatService(new ChatService(acpClient, _errorLogger, _sessionManager,
+                transport as IStdioInvocationSource, _terminalAuthentication));
 
             activity?.SetStatus(ActivityStatusCode.Ok);
 

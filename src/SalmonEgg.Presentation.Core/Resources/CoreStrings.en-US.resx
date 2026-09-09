@@ -1435,4 +1435,19 @@ Create the corresponding Markdown file in:
   <data name="CredentialBinding_InvalidHeaderScheme" xml:space="preserve">
     <value>Use one HTTP token for the header scheme, or leave it empty for a raw value.</value>
   </data>
+  <data name="ChatAuth_TerminalTitle" xml:space="preserve">
+    <value>Sign in to agent</value>
+  </data>
+  <data name="ChatAuth_TerminalConsent" xml:space="preserve">
+    <value>Open {0}'s interactive sign-in ({1})? This starts a separate agent process. Its output stays in this sign-in window.</value>
+  </data>
+  <data name="ChatAuth_TerminalRunning" xml:space="preserve">
+    <value>Complete sign-in below. The agent will reconnect when sign-in succeeds.</value>
+  </data>
+  <data name="ChatAuth_TerminalContinue" xml:space="preserve">
+    <value>Open sign-in</value>
+  </data>
+  <data name="ChatAuth_TerminalCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
 </root>
