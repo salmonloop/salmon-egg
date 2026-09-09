@@ -1063,7 +1063,8 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The agent did not return a session/new response.");
         }
         catch (Exception ex) when (request.AllowAuthentication && ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
         {
@@ -1078,7 +1079,8 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The agent did not return a session/new response.");
         }
     }
 
