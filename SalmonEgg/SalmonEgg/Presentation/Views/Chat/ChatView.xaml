@@ -227,7 +227,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto,Auto,Auto">
+            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
                 <!-- 消息列表 -->
                 <controls:ResponsiveContentHost x:Name="TranscriptHost"
                                                 Grid.Row="0"
@@ -550,8 +550,57 @@
                     </controls:ResponsiveContentHost.Child>
                 </controls:ResponsiveContentHost>
 
-                <!-- 输入区域 -->
                 <controls:ResponsiveContentHost Grid.Row="5"
+                                                MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+                                                Visibility="{x:Bind ViewModel.HasStandalonePermissionRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <controls:ResponsiveContentHost.Child>
+                        <ContentControl Content="{x:Bind ViewModel.StandalonePermissionRequest, Mode=OneWay}"
+                                        HorizontalContentAlignment="Stretch"
+                                        IsTabStop="False">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="chatVm:PermissionRequestViewModel">
+                                    <InfoBar AutomationProperties.AutomationId="ChatView.PermissionRequest"
+                                             Title="{x:Bind Title, Mode=OneWay}"
+                                             Message="{x:Bind Description, Mode=OneWay}"
+                                             Severity="Warning"
+                                             IsOpen="True"
+                                             IsClosable="False"
+                                             Margin="{StaticResource ChatElicitationMargin}">
+                                        <InfoBar.Content>
+                                            <ItemsControl ItemsSource="{x:Bind Options, Mode=OneWay}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="{StaticResource ChatElicitationActionSpacing}" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="chatVm:PermissionOptionViewModel">
+                                                        <Button Command="{x:Bind SelectCommand, Mode=OneWay}"
+                                                                AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch">
+                                                            <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
+                                                                <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                                                           TextWrapping="WrapWholeWords" />
+                                                                <TextBlock Text="{x:Bind Description, Mode=OneWay}"
+                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                           TextWrapping="WrapWholeWords"
+                                                                           Visibility="{x:Bind HasDescription, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </InfoBar.Content>
+                                    </InfoBar>
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
+                    </controls:ResponsiveContentHost.Child>
+                </controls:ResponsiveContentHost>
+
+                <!-- 输入区域 -->
+                <controls:ResponsiveContentHost Grid.Row="6"
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.ShouldShowConversationInputSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>

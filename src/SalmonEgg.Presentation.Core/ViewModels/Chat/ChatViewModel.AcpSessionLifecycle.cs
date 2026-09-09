@@ -1886,35 +1886,21 @@ public partial class ChatViewModel
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(conversationId) || binding is null
-                    || !await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(true))
+                if (string.IsNullOrWhiteSpace(conversationId) || binding is null)
                 {
                     await CancelUndisplayedPermissionAsync(request).ConfigureAwait(true);
                     return;
                 }
 
+                var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
                 if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
                 {
                     return;
                 }
 
-                PermissionRequestViewModel? viewModel = null;
-                viewModel = _interactionEventBridge.CreatePermissionRequestViewModel(
-                    request,
-                    async (_, outcome, optionId) =>
-                    {
-                        if (!await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(false)
-                            || !IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
-                        {
-                            return false;
-                        }
-
-                        return await request.TryRespondAsync(outcome, optionId).ConfigureAwait(false);
-                    },
-                    () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
-                viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
-                viewModel.IsRequestAvailable = () => IsPermissionSourceCurrent(service, foregroundGeneration) && request.CanRespond;
+                var viewModel = CreateOwnedPermissionRequest(service, foregroundGeneration, request, conversationId, binding);
                 _panelStateCoordinator.StorePermissionRequest(conversationId, viewModel);
+                ReconcilePermissionBindings(currentState.Bindings);
                 SyncPermissionRequestProjection();
             }).ConfigureAwait(false);
         }
@@ -1928,6 +1914,39 @@ public partial class ChatViewModel
         }
     }
 
+    private PermissionRequestViewModel CreateOwnedPermissionRequest(
+        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        string conversationId, ConversationBindingSlice binding)
+    {
+        PermissionRequestViewModel? viewModel = null;
+        viewModel = _interactionEventBridge.CreatePermissionRequestViewModel(
+            request,
+            async (_, outcome, optionId) =>
+            {
+                var bindingCurrent = await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(false);
+                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                {
+                    return false;
+                }
+
+                // A binding change withdraws the old choice, but the original request still
+                // requires an answer. Its callback keeps that cancellation on its own client.
+                var canSelect = bindingCurrent && viewModel?.BindingCancellationAttempted != true;
+                return await request.TryRespondAsync(canSelect ? outcome : "cancelled",
+                    canSelect ? optionId : null).ConfigureAwait(false);
+            },
+            () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
+        viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
+        viewModel.RequestTitle = request.ToolCall is JsonElement toolCall && toolCall.ValueKind == JsonValueKind.Object
+            && toolCall.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String
+            ? title.GetString() : null;
+        viewModel.Title = string.IsNullOrWhiteSpace(viewModel.RequestTitle)
+            ? ResolveLocalizerText("Permission_DefaultTitle", "Permission required") : viewModel.RequestTitle;
+        viewModel.Binding = binding;
+        viewModel.IsRequestAvailable = () => IsPermissionSourceCurrent(service, foregroundGeneration) && request.CanRespond;
+        return viewModel;
+    }
+
     private bool IsPermissionSourceCurrent(IChatService service, int foregroundGeneration)
         // A PoolOnly replacement can leave the original service live for its background conversation.
         // Its request callback remains authoritative even while another service is in the foreground.
@@ -1936,6 +1955,52 @@ public partial class ChatViewModel
 
     private async Task<bool> IsPermissionBindingCurrentAsync(string conversationId, ConversationBindingSlice binding)
         => (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false)).ResolveBinding(conversationId) == binding;
+
+    private void ReconcilePermissionBindings(IImmutableDictionary<string, ConversationBindingSlice>? bindings)
+    {
+        foreach (var (conversationId, request) in _panelStateCoordinator.GetObsoletePermissionRequests(bindings))
+        {
+            if (!request.BindingCancellationAttempted && request.BindingCancellationTask is not { IsCompleted: false })
+            {
+                request.BindingCancellationTask = CancelObsoletePermissionAsync(conversationId, request);
+            }
+        }
+    }
+
+    private async Task CancelObsoletePermissionAsync(string conversationId, PermissionRequestViewModel request)
+    {
+        try
+        {
+            if (request.Binding is null || !request.IsAvailable || request.OnRespond is null
+                || await IsPermissionBindingCurrentAsync(conversationId, request.Binding).ConfigureAwait(true))
+            {
+                return;
+            }
+            // Once the store withdraws this permission, returning to the old binding must not
+            // resurrect consent. The in-flight physical write may still be the single reply.
+            request.ShowCancellationRetry(
+                ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
+                ResolveLocalizerText("Permission_BindingChanged",
+                    "This request is no longer valid because the conversation changed. Retry cancellation to dismiss it."));
+            SyncPermissionRequestProjection();
+            // If a physical answer is already being written it must settle first. A successful
+            // answer consumes the original owner; a failed answer can still be cancelled below.
+            if (request.RespondCommand.ExecutionTask is { IsCompleted: false } responseTask)
+            {
+                await responseTask.ConfigureAwait(true);
+            }
+            if (request.IsAvailable)
+            {
+                // One best-effort cancellation on invalidation; failure remains available to the
+                // user's command instead of making every store update an unbounded retry loop.
+                await request.OnRespond("cancelled", null).ConfigureAwait(true);
+            }
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning("Could not cancel an obsolete permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
+        }
+    }
 
     private async Task CancelUndisplayedPermissionAsync(PermissionRequestEventArgs request)
     {
@@ -1961,6 +2026,10 @@ public partial class ChatViewModel
     {
         PendingPermissionRequest = _panelStateCoordinator.GetPendingPermissionRequest(CurrentSessionId);
         ShowPermissionDialog = PendingPermissionRequest is not null;
+        StandalonePermissionRequest = PendingPermissionRequest is { } pending
+            && (pending.ToolCallId is null || !string.Equals(_visibleTranscriptConversationId, CurrentSessionId, StringComparison.Ordinal)
+                || !MessageHistory.ContainsToolCall(pending.ToolCallId))
+            ? pending : null;
         MessageHistory.UpdateCachedItems(message =>
         {
             // CurrentSessionId changes before the transcript is replaced. Do not briefly attach

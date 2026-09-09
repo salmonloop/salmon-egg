@@ -300,6 +300,9 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         return _matchesSnapshot(item, _transcript[index]);
     }
 
+    internal bool ContainsToolCall(string toolCallId)
+        => _transcript.Any(message => string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
+
     internal void UpdateCachedItems(Action<ChatMessageViewModel> update)
     {
         ArgumentNullException.ThrowIfNull(update);

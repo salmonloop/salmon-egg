@@ -1310,6 +1310,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private PermissionRequestViewModel? _pendingPermissionRequest;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStandalonePermissionRequest))]
+    private PermissionRequestViewModel? _standalonePermissionRequest;
+
+    public bool HasStandalonePermissionRequest => StandalonePermissionRequest is not null;
+
+    [ObservableProperty]
     private bool _showFileSystemDialog;
 
     [ObservableProperty]
@@ -1736,6 +1742,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             ReprojectConversationOperationFailureMessage();
             // SessionActivationFailureMessage re-localizes from snapshot resource identity on get.
             NotifySessionActivationFailureProjectionChanged();
+            await PostToUiAsync(() => _panelStateCoordinator.ReprojectPermissionLocalizedText(
+                ResolveLocalizerText("Permission_DefaultTitle", "Permission required"),
+                ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
+                ResolveLocalizerText("Permission_BindingChanged",
+                    "This request is no longer valid because the conversation changed. Retry cancellation to dismiss it."))).ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // New-session draft lives on the connection store and is not part of the chat-store
@@ -1814,12 +1825,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try
         {
             ApplySessionIdentityProjection(projection, out sessionChanged);
+            ReconcilePermissionBindings(projection.Bindings);
             ApplyPromptAndProfileProjection(projection, sessionChanged);
             ApplyTranscriptAndPlanProjection(projection, sessionChanged);
             ApplyConversationStatusProjection(projection);
             ApplyConnectionAndAgentProjection(projection);
             ApplySessionToolingProjection(projection);
             ApplyConversationChromeProjection(projection);
+            SyncPermissionRequestProjection();
         }
         finally
         {

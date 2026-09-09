@@ -28,6 +28,24 @@ public class ChatStateProjectorTests
     }
 
     [Fact]
+    public void Apply_RetainsBindingsForBackgroundPermissionOwnership()
+    {
+        // Arrange
+        var bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+            .Add("active", new("active", "remote-active", "profile"))
+            .Add("background", new("background", "remote-background", "profile"));
+        var state = ChatState.Empty with { HydratedConversationId = "active", Bindings = bindings };
+
+        // Act
+        var projection = new ChatStateProjector().Apply(state, ChatConnectionState.Empty, "active",
+            new ConversationRemoteBindingState("active", "remote-active", "profile"));
+
+        // Assert
+        Assert.Same(bindings, projection.Bindings);
+        Assert.Equal("remote-background", projection.Bindings!["background"].RemoteSessionId);
+    }
+
+    [Fact]
     public void Apply_SetsSelectedProfileIntentIdSeparatelyFromChatOwner()
     {
         var projector = new ChatStateProjector();

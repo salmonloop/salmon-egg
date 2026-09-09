@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Panels;
@@ -110,8 +112,10 @@ public sealed class ChatConversationPanelStateCoordinator
         }
 
         requests.RemoveAll(static request => !request.IsAvailable);
-        return requests.FirstOrDefault(request => toolCallId is null
+        var candidates = requests.Where(request => toolCallId is null
             || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal));
+        return candidates.FirstOrDefault(static request => !request.BindingCancellationAttempted)
+            ?? candidates.FirstOrDefault();
     }
 
     public void StorePermissionRequest(string conversationId, PermissionRequestViewModel request)
@@ -134,7 +138,33 @@ public sealed class ChatConversationPanelStateCoordinator
         => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
             && requests.Remove(request);
 
+    internal IReadOnlyList<(string ConversationId, PermissionRequestViewModel Request)> GetObsoletePermissionRequests(
+        IImmutableDictionary<string, ConversationBindingSlice>? bindings)
+    {
+        var obsolete = new List<(string, PermissionRequestViewModel)>();
+        foreach (var (conversationId, requests) in _pendingPermissionRequestsByConversation)
+        {
+            var currentBinding = bindings?.GetValueOrDefault(conversationId);
+            foreach (var request in requests)
+            {
+                if (request.Binding is not null && request.Binding != currentBinding && request.IsAvailable)
+                {
+                    obsolete.Add((conversationId, request));
+                }
+            }
+        }
+        return obsolete;
+    }
+
     public void ClearPermissionRequests() => _pendingPermissionRequestsByConversation.Clear();
+
+    internal void ReprojectPermissionLocalizedText(string defaultTitle, string cancellationTitle, string cancellationDescription)
+    {
+        foreach (var request in _pendingPermissionRequestsByConversation.Values.SelectMany(static requests => requests))
+        {
+            request.ReprojectLocalizedText(defaultTitle, cancellationTitle, cancellationDescription);
+        }
+    }
 
     public TerminalPanelSessionViewModel GetOrCreateTerminalSession(string conversationId, string terminalId)
     {
