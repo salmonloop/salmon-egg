@@ -62,12 +62,16 @@ jobs:
           global-json-file: global.json
       - name: Verify real cancellation transports without skips
         run: bash scripts/gates/run-acp-cancellation-transport-gates.sh Release
-      - name: Upload cancellation evidence
+      - name: Verify bound credentials on real transports without skips
+        run: bash scripts/gates/run-acp-credential-transport-gates.sh Release
+      - name: Upload transport evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: acp-cancellation-transports
-          path: artifacts/acp-cancellation/
+          path: |
+            artifacts/acp-cancellation/
+            artifacts/acp-credentials/
 
   build-and-test:
     name: Build and Test

@@ -116,6 +116,29 @@ printf '%s\n' "$AGENT_TOKEN" | salmon-egg set-credential <server-id> --token-std
 printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credential <server-id> --token-stdin
 ```
 
+#### Credential injection
+
+Stored credentials need an explicit injection binding. Use the environment variable or header name
+documented by the Agent. A binding approves the current stdio command and arguments, or the complete
+network endpoint; editing that destination requires binding it again.
+
+```bash
+# Inject an API key only into the configured stdio child process.
+salmon-egg config server update <server-id> --credential-source api_key --credential-env AGENT_API_KEY
+
+# Send Authorization: Bearer ... to the configured HTTP or desktop WebSocket endpoint.
+salmon-egg config server update <server-id> --credential-source token --credential-header Authorization --credential-scheme Bearer
+
+# Remove injection while retaining the stored credential.
+salmon-egg config server update <server-id> --clear-credential-binding
+```
+
+The app's profile editor exposes the same binding. Empty credential fields preserve the stored value;
+the explicit clear option removes it. Saved changes take effect on reconnect. A binding with a missing
+credential prevents connection until the credential is set or the binding is removed. Browser WebSocket
+cannot set request headers; use an HTTP endpoint supported by the Agent. Bound network requests do not
+follow redirects to prevent forwarding credentials to another destination.
+
 #### Running from source
 
 The examples below use `dotnet run` so they work in a checkout without installing anything. Replace the `dotnet run --project ... --` prefix with `salmon-egg` when using an installed build.
