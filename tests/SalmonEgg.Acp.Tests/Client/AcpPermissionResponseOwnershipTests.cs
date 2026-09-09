@@ -244,6 +244,157 @@ public sealed class AcpPermissionResponseOwnershipTests
         Assert.Equal("content", Assert.Single(peer.Responses).Result!.Value.GetProperty("content").GetString());
     }
 
+    [Fact]
+    public async Task PermissionRequestReceived_SubscriberThrowsAfterAnswer_DoesNotSendAnotherResponse()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        Task? answer = null;
+        peer.Client.PermissionRequestReceived += (_, request) =>
+        {
+            answer = request.Respond("selected", "allow");
+            throw new JsonException("Host failed after answering.");
+        };
+
+        // Act
+        peer.Request();
+        Assert.NotNull(answer);
+        await answer.WaitAsync(TestToken);
+
+        // Assert
+        Assert.Equal("allow", Selected(Assert.Single(peer.Responses)));
+        Assert.Contains("Host failed after answering.", Assert.Single(peer.Errors), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PermissionRequestReceived_SubscriberThrowsWithAnswerInFlight_PreservesTheResponseClaim()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.ResponseSend = (_, token) => release.Task.WaitAsync(token);
+        Task? answer = null;
+        peer.Client.PermissionRequestReceived += (_, request) =>
+        {
+            answer = request.Respond("selected", "allow");
+            throw new InvalidOperationException("Host failed with an answer in flight.");
+        };
+
+        try
+        {
+            // Act
+            peer.Request();
+            Assert.NotNull(answer);
+
+            // Assert
+            Assert.Empty(peer.Responses);
+            Assert.Single(peer.Attempts);
+            release.TrySetResult(true);
+            await answer.WaitAsync(TestToken);
+            Assert.Equal("allow", Selected(Assert.Single(peer.Responses)));
+            Assert.False(await peer.Client.RespondToPermissionRequestAsync(51L, "selected", "allow"));
+        }
+        finally
+        {
+            release.TrySetResult(true);
+            if (answer is not null) await answer.WaitAsync(TestToken);
+        }
+    }
+
+    [Fact]
+    public async Task PermissionRequestReceived_SubscriberThrowsAfterReplacement_DoesNotDeleteNewRequest()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        Task? cancelled = null;
+        peer.Client.PermissionRequestReceived += (_, request) =>
+        {
+            if (request.SessionId != "one") return;
+            cancelled = request.Respond("cancelled", null);
+            peer.Request(sessionId: "replacement");
+            throw new InvalidOperationException("Old host callback failed.");
+        };
+
+        // Act
+        peer.Request();
+        Assert.NotNull(cancelled);
+        await cancelled.WaitAsync(TestToken);
+
+        // Assert
+        Assert.Equal("cancelled", Outcome(Assert.Single(peer.Responses)));
+        await peer.Permissions[^1].Respond("selected", "allow");
+        Assert.Equal(2, peer.Responses.Count);
+        Assert.Equal("allow", Selected(peer.Responses[^1]));
+    }
+
+    [Fact]
+    public async Task PermissionRequestReceived_FailureResponseDelayedAcrossReconnect_DoesNotWriteToNewConnection()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var interrupted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.ResponseSend = async (_, token) =>
+        {
+            try
+            {
+                return await release.Task.WaitAsync(token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                interrupted.TrySetResult(true);
+                throw;
+            }
+        };
+        peer.Client.PermissionRequestReceived += (_, request) =>
+        {
+            if (request.SessionId == "one") throw new InvalidOperationException("Host display failed.");
+        };
+        peer.Request();
+        Assert.Single(peer.Attempts);
+
+        try
+        {
+            // Act
+            await peer.Client.DisconnectAsync();
+            await peer.InitializeAsync();
+            var interruptedBeforeRelease = await Task.WhenAny(interrupted.Task, release.Task)
+                .WaitAsync(TimeSpan.FromSeconds(2), TestToken);
+            Assert.Same(interrupted.Task, interruptedBeforeRelease);
+            release.TrySetResult(true);
+
+            // Assert
+            Assert.Empty(peer.Responses);
+            peer.ResponseSend = null;
+            peer.Request(sessionId: "replacement");
+            await peer.Permissions[^1].Respond("selected", "allow");
+            Assert.Equal("allow", Selected(Assert.Single(peer.Responses)));
+        }
+        finally
+        {
+            release.TrySetResult(false);
+        }
+    }
+
+    [Fact]
+    public async Task PermissionRequestReceived_SubscriberFailureSendFails_RequestRemainsRetryable()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.ResponseSend = (_, _) => Task.FromResult(false);
+        peer.Client.PermissionRequestReceived += (_, _) => throw new InvalidOperationException("Host display failed.");
+
+        // Act
+        peer.Request();
+
+        // Assert
+        Assert.Equal(JsonRpcErrorCode.InternalError, Assert.Single(peer.Attempts).Error!.Code);
+        Assert.Empty(peer.Responses);
+        peer.ResponseSend = null;
+        await Assert.Single(peer.Permissions).Respond("cancelled", null);
+        Assert.Equal("cancelled", Outcome(Assert.Single(peer.Responses)));
+    }
+
     private static string? Outcome(JsonRpcResponse response)
         => response.Result!.Value.GetProperty("outcome").GetProperty("outcome").GetString();
 
