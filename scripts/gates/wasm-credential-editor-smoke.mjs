@@ -51,6 +51,7 @@ try {
     socket.close();
   });
   page.on("console", message => { credentialLogged ||= message.text().includes(credentialCanary); });
+  page.on("pageerror", error => { credentialLogged ||= (error.stack ?? error.message).includes(credentialCanary); });
   try {
     await openApp(page, baseUrl);
     await navigateToSettingsSection(page,
