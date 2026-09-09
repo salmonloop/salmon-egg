@@ -245,8 +245,35 @@ expect_exit 0 "has-credential succeeds"
 expect_contains "$LAST_OUT" "token:" "has-credential reports token presence"
 expect_not_contains "$LAST_OUT" "$SECRET" "has-credential never prints the value"
 
+echo "[artifact-smoke] 6a. explicit credential destination and retargeting"
+run_cli --allow-insecure-storage config server update "$SERVER_ID" \
+  --credential-source token --credential-header X-Agent-Key --credential-scheme Bearer
+expect_exit 0 "explicit header binding succeeds"
+run_cli config server show "$SERVER_ID"
+expect_exit 0 "show of a credential-bound profile succeeds"
+expect_contains "$LAST_OUT" "token -> header X-Agent-Key" "show reports the non-secret destination"
+expect_contains "$LAST_OUT" "scheme:     Bearer" "show reports the explicit scheme"
+expect_not_contains "$LAST_OUT$LAST_ERR" "$SECRET" "show does not expose the bound credential"
+
+run_cli config server update "$SERVER_ID" --url "https://unapproved.example/acp"
+expect_exit 2 "changing the destination requires an explicit new binding"
+run_cli config server show "$SERVER_ID"
+expect_not_contains "$LAST_OUT" "unapproved.example" "a refused retarget leaves the stored destination intact"
+
+run_cli --allow-insecure-storage config server update "$SERVER_ID" --url "https://approved.example/acp" \
+  --credential-source token --credential-header X-Agent-Key --credential-scheme Bearer
+expect_exit 0 "explicit rebinding approves the new destination"
+
 run_cli clear-credential "$SERVER_ID"
 expect_exit 0 "clear-credential succeeds"
+run_cli config server show "$SERVER_ID"
+expect_contains "$LAST_OUT" "token -> header X-Agent-Key" "clearing the secret keeps its destination binding"
+expect_contains "$LAST_OUT" "credential: unavailable" "cleared bound credentials cannot fall back to another value"
+
+run_cli config server update "$SERVER_ID" --clear-credential-binding
+expect_exit 0 "explicit unbinding succeeds"
+run_cli config server show "$SERVER_ID"
+expect_not_contains "$LAST_OUT" "binding:" "unbinding removes the injection target"
 check
 if grep -rqF "$SECRET" "$APP_DATA_ROOT" 2>/dev/null; then
   fail "clear-credential left the secret on disk"
