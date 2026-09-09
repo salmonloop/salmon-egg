@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
 import {
   normalizeBaseUrl,
@@ -8,6 +9,7 @@ import {
   assertNoFatalConsoleMessages
 } from "./wasm-smoke-lib/browser-app.mjs";
 import { startAcpWebSocketServer } from "./wasm-smoke-lib/acp-test-server.mjs";
+import { verifyStandalonePermissionQueue } from "./wasm-smoke-lib/permission-flow.mjs";
 import {
   navigateToSettingsSection
 } from "./wasm-smoke-lib/settings-shell.mjs";
@@ -38,7 +40,10 @@ const remoteDirectoryName = `WASM remote project ${Date.now()}`;
 const remoteDirectoryPath = `/remote/wasm-full-chain-${Date.now()}`;
 const fullChainPromptText = `WASM full chain prompt ${Date.now()}`;
 const fullChainAgentReplyText = `WASM full chain agent reply ${Date.now()}`;
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
+});
 let acpServer;
 const submitButton = { labels: ["Submit"], role: "button" };
 const cancelButton = { labels: ["Cancel"], role: "button" };
@@ -103,6 +108,19 @@ try {
 
     elicitationRequests.push(await verifyKnownFormSubmission(page, acpServer));
     elicitationRequests.push(await verifyUnknownRequiredFieldCancellation(page, acpServer));
+    elicitationRequests.push(...await verifyStandalonePermissionQueue(page, acpServer));
+  } catch (error) {
+    const artifacts = process.env.WASM_SMOKE_ARTIFACTS_DIR;
+    if (artifacts) {
+      await mkdir(artifacts, { recursive: true });
+      await page.screenshot({ path: `${artifacts}/interaction-failure.png` });
+      await writeFile(`${artifacts}/interaction-failure.json`, JSON.stringify({
+        error: String(error),
+        semantic: await page.evaluate(collectVisibleInteractiveDebug),
+        fatalConsoleMessages
+      }, null, 2));
+    }
+    throw error;
   } finally {
     await context.close();
   }
