@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using SalmonEgg.Domain.Interfaces.Transport;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Infrastructure.Transport
@@ -17,7 +19,7 @@ namespace SalmonEgg.Infrastructure.Transport
     /// Stdio 传输层实现。
     /// 通过标准输入/输出与 Agent 进程通信。
     /// </summary>
-    public class StdioTransport : ITransport, IDisposable
+    public class StdioTransport : ITransport, IStdioInvocationSource, IDisposable
     {
         private static readonly ILogger _logger = Log.ForContext<StdioTransport>();
 
@@ -33,6 +35,7 @@ namespace SalmonEgg.Infrastructure.Transport
         private readonly Encoding _encoding;
         private readonly string _workingDirectory;
         private readonly IReadOnlyDictionary<string, string> _environment;
+        private StdioInvocationSnapshot? _runningInvocation;
         private bool _disposed;
         private readonly object _lock = new();
 
@@ -55,6 +58,17 @@ namespace SalmonEgg.Infrastructure.Transport
         /// 判断传输是否已连接。
         /// </summary>
         public bool IsConnected { get; private set; }
+
+        public StdioInvocationSnapshot? StdioInvocation
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return IsConnected ? _runningInvocation : null;
+                }
+            }
+        }
 
         /// <summary>
         /// 创建新的 StdioTransport 实例。
@@ -176,6 +190,13 @@ namespace SalmonEgg.Infrastructure.Transport
                         // "a child exists" by construction, which is what lets both kill sites stay
                         // free of defensive checks.
                         _process = starting;
+                        _runningInvocation = new StdioInvocationSnapshot(
+                            processInfo.FileName,
+                            processInfo.ArgumentList.ToArray(),
+                            processInfo.Environment.Where(static entry => entry.Value is not null)
+                                .ToDictionary(static entry => entry.Key, static entry => entry.Value!),
+                            processInfo.WorkingDirectory,
+                            OperatingSystem.IsWindows());
                         _logger.Information("[StdioTransport.Connect] Process started. PID={Pid}", starting.Id);
                     }
                 }, cancellationToken).ConfigureAwait(false);
@@ -810,6 +831,7 @@ namespace SalmonEgg.Infrastructure.Transport
                 //
                 // _readCts is NOT cleared — IsTearingDown reads IsCancellationRequested off it.
                 _process = null;
+                _runningInvocation = null;
                 _stdin = null;
                 _stdout = null;
                 _stderr = null;

@@ -2345,7 +2345,32 @@ public partial class ChatViewModel
                     "ChatAuth_UnsupportedMethodType",
                     "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect."),
                 ResourceKey: "ChatAuth_UnsupportedMethodType",
-                Fallback: "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect."));
+                Fallback: "The agent only offers sign-in methods this app cannot run. Sign in with the agent's own command-line tool, then reconnect."),
+            terminalAuthenticateAsync: _terminalAuthenticationCoordinator?.CanAuthenticate(_chatService) == true
+                ? (method, token) => _terminalAuthenticationCoordinator.TryAuthenticateAsync(
+                    method, this, ReconnectAfterTerminalAuthenticationAsync, token)
+                : null);
+
+    private async Task<bool> ReconnectAfterTerminalAuthenticationAsync(
+        AcpConnectionContext connectionContext, CancellationToken cancellationToken)
+    {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+        if (!connectionContext.MatchesExpectedConnection(this)) return false;
+        var profile = ResolveNewSessionDraftProfile(connectionContext.ExpectedProfileId);
+        if (profile?.Id != connectionContext.ExpectedProfileId) return false;
+        var connected = await ConnectToAcpProfileCoreAsync(
+            profile, connectionContext, lifetime.Token, updateSelectedProfileIntent: false).ConfigureAwait(false);
+        if (!connected) return false;
+        if (connectionContext.ConversationId is not { } conversationId) return true;
+        if (!string.Equals(conversationId, CurrentSessionId, StringComparison.Ordinal)) return false;
+
+        // A restarted agent process cannot inherit a warm remote session. Existing hydration owns
+        // capability gating, transcript replay and the new authoritative connection identity.
+        return await EnsureActiveConversationRemoteHydratedAsync(
+            conversationId, new ConversationFailurePublicationContext(
+                conversationId, ActivationVersion: null, OperationOwner: conversationId, ExpectedShellSnapshotVersion: null), lifetime.Token,
+            allowWarmReuseShortCircuit: false).ConfigureAwait(false);
+    }
 
     private Task AddMessageToHistoryAsync(string? conversationId, ContentBlock content, bool isOutgoing)
     {

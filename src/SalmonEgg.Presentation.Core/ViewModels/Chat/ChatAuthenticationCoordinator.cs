@@ -105,7 +105,8 @@ public sealed class ChatAuthenticationCoordinator
         CancellationToken cancellationToken,
         AuthenticationHintPresentation? requiredFallback = null,
         Func<string, AuthenticationHintPresentation>? formatAuthenticationFailed = null,
-        AuthenticationHintPresentation? unsupportedMethodTypeFallback = null)
+        AuthenticationHintPresentation? unsupportedMethodTypeFallback = null,
+        Func<AuthMethodDefinition, CancellationToken, Task<bool>>? terminalAuthenticateAsync = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
@@ -117,6 +118,20 @@ public sealed class ChatAuthenticationCoordinator
         }
 
         var method = GetPrimaryAuthMethod();
+        if (method is null && terminalAuthenticateAsync is not null)
+        {
+            var terminalMethod = _advertisedAuthMethods?.FirstOrDefault(static candidate =>
+                candidate.ResolvedType == AuthMethodDefinition.TerminalType && !string.IsNullOrWhiteSpace(candidate.Id));
+            if (terminalMethod is not null)
+            {
+                MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast,
+                    terminalMethod, requiredFallback: requiredFallback);
+                if (!await terminalAuthenticateAsync(terminalMethod, cancellationToken).ConfigureAwait(false)) return false;
+                await coordinator.ClearAuthenticationRequiredAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+        }
+
         if (method == null)
         {
             // Fail closed: the agent may have advertised methods we are forbidden or unable to use.

@@ -16,6 +16,7 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
     private readonly IDiscoverSessionsConnectionFacade _discoverConnectionFacade;
     private readonly ITerminalSessionManager _terminalSessionManager;
     private readonly IAsyncDisposable? _localTerminalSessions;
+    private readonly IAsyncDisposable? _terminalAuthentication;
     private readonly IApplicationShutdownProgressSink _progressSink;
     private readonly ITelemetryRuntime _telemetryRuntime;
     private readonly ILogger<ApplicationShutdownWorkflow> _logger;
@@ -35,7 +36,8 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
         IApplicationShutdownProgressSink progressSink,
         ITelemetryRuntime telemetryRuntime,
         ILogger<ApplicationShutdownWorkflow> logger,
-        IAsyncDisposable? localTerminalSessions = null)
+        IAsyncDisposable? localTerminalSessions = null,
+        IAsyncDisposable? terminalAuthentication = null)
     {
         _chatRuntimePersistence = chatRuntimePersistence ?? throw new ArgumentNullException(nameof(chatRuntimePersistence));
         _connectionSessionCleaner = connectionSessionCleaner ?? throw new ArgumentNullException(nameof(connectionSessionCleaner));
@@ -45,6 +47,7 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
         _telemetryRuntime = telemetryRuntime ?? throw new ArgumentNullException(nameof(telemetryRuntime));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _localTerminalSessions = localTerminalSessions;
+        _terminalAuthentication = terminalAuthentication;
     }
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default)
@@ -118,6 +121,13 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
     /// </remarks>
     private async Task DrainChildProcessesAsync()
     {
+        if (_terminalAuthentication is not null)
+        {
+            await TryRunAsync(
+                _terminalAuthentication.DisposeAsync().AsTask,
+                "Failed to dispose agent sign-in sessions during shutdown").ConfigureAwait(false);
+        }
+
         var drainResult = await TryRunAsync(
             _connectionSessionCleaner.DrainAllAsync,
             "Failed to drain cached ACP connection sessions during shutdown").ConfigureAwait(false);

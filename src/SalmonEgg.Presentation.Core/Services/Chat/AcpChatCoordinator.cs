@@ -112,16 +112,17 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
 
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, cancellationToken);
         profile = profile.Clone();
         using var applyScope = EnterApplyScope(cancellationToken);
         var applyToken = applyScope.Token;
         applyToken.ThrowIfCancellationRequested();
         EnsureTransportSupported(profile.Transport);
         var mcpServers = await _mcpServerProvider.GetMcpServersAsync(applyToken).ConfigureAwait(false);
-        applyToken.ThrowIfCancellationRequested();
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, applyToken);
         sink.SetCurrentMcpServers(mcpServers);
         await sink.SelectProfileAsync(profile.Clone(), applyToken).ConfigureAwait(false);
-        applyToken.ThrowIfCancellationRequested();
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, applyToken);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
 
         return await ApplyTransportConfigurationCoreAsync(
@@ -152,6 +153,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         AcpConnectionContext connectionContext,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(sink);
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, cancellationToken);
         using var applyScope = EnterApplyScope(cancellationToken);
         return await ApplyTransportConfigurationCoreAsync(
             transportConfiguration,
@@ -177,6 +180,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(sink);
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, cancellationToken);
 
         var applyToken = applyScope.Token;
         applyToken.ThrowIfCancellationRequested();
@@ -212,6 +216,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 cleanupResult.DisposeFailureCount);
         }
 
+        ThrowIfExpectedConnectionChanged(connectionContext, sink, applyToken);
         var currentConnectionReuseKey = BuildConnectionReuseKey(transportConfiguration, profileForServiceCreation);
 
         var previousConnectionState = await CaptureConnectionStateAsync(sink, applyToken).ConfigureAwait(false);
@@ -220,7 +225,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             ? ServiceReplaceIntent.PoolOnly
             : ServiceReplaceIntent.ForegroundOwner;
 
-        if (_connectionPoolManager.TryGetReusableSession(
+        if (!connectionContext.ForceReconnect && _connectionPoolManager.TryGetReusableSession(
                 selectedProfileId,
                 currentConnectionReuseKey,
                 out var cachedSession)
@@ -292,7 +297,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 connectionContext.ConversationId);
             applyToken.ThrowIfCancellationRequested();
 
-            await sink.ReplaceChatServiceAsync(wrappedService, replaceIntent, applyToken).ConfigureAwait(false);
+            await sink.Dispatcher.EnqueueAsync(async () =>
+            {
+                ThrowIfExpectedConnectionChanged(connectionContext, sink, applyToken);
+                await sink.ReplaceChatServiceAsync(wrappedService, replaceIntent, applyToken).ConfigureAwait(true);
+            }).ConfigureAwait(false);
             _activeChatServiceAdapter = wrappedService;
             committed = true;
             if (!ShouldKeepServiceAlive(previousService, selectedProfileId))
@@ -340,7 +349,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
                 wrappedService?.SuppressAllBufferedUpdates("ApplySupersededBeforeCommit");
 
-                if (applyScope.IsSuperseded(cancellationToken))
+                if (applyScope.IsSuperseded(cancellationToken) || !connectionContext.MatchesExpectedConnection(sink))
                 {
                     _logger.LogInformation(
                         "ACP candidate superseded before commit. transport={TransportType} conversationId={ConversationId}",
@@ -367,7 +376,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             {
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
                 wrappedService?.SuppressAllBufferedUpdates("ApplySupersededBeforeCommitError");
-                if (applyScope.IsSuperseded(cancellationToken))
+                if (applyScope.IsSuperseded(cancellationToken) || !connectionContext.MatchesExpectedConnection(sink))
                 {
                     _logger.LogInformation(
                         ex,
@@ -404,6 +413,16 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             await _connectionCoordinator.SetDisconnectedAsync(ex.Message, cancellationToken).ConfigureAwait(false);
             _logger.LogError(ex, "Failed to apply ACP transport configuration");
             throw;
+        }
+    }
+
+    private static void ThrowIfExpectedConnectionChanged(
+        AcpConnectionContext context, IAcpChatCoordinatorSink sink, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!context.MatchesExpectedConnection(sink))
+        {
+            throw new OperationCanceledException("The connection changed during agent sign-in.", cancellationToken);
         }
     }
 

@@ -41,6 +41,23 @@ public sealed class ApplicationShutdownWorkflowTests
     }
 
     [Fact]
+    public async Task ShutdownAsync_AuthenticationActive_DrainsLoginBeforeAgentConnections()
+    {
+        // Arrange: sign-in could otherwise reconnect while the application drains its agent pool.
+        var authentication = new Mock<IAsyncDisposable>();
+        var harness = new Harness(terminalAuthentication: authentication.Object);
+        authentication.Setup(x => x.DisposeAsync()).Callback(() => harness.Order.Add("sign-in"))
+            .Returns(ValueTask.CompletedTask);
+
+        // Act
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        authentication.Verify(x => x.DisposeAsync(), Times.Once);
+        Assert.Equal(new[] { "chat", "sign-in", "acp-drain", "discover", "acp-terminal", "local-terminal", "telemetry" }, harness.Order);
+    }
+
+    [Fact]
     public async Task ShutdownAsync_WhenOneChildProcessOwnerFails_StillReleasesTheRest()
     {
         // 一个 owner 释放失败不得让其余子进程继续泄漏：这正是"关不掉的 agent"最常见的成因。
@@ -167,7 +184,7 @@ public sealed class ApplicationShutdownWorkflowTests
 
     private sealed class Harness
     {
-        public Harness(bool includeLocalTerminals = true)
+        public Harness(bool includeLocalTerminals = true, IAsyncDisposable? terminalAuthentication = null)
         {
             Persistence = new Mock<IChatRuntimePersistence>();
             Persistence
@@ -199,7 +216,8 @@ public sealed class ApplicationShutdownWorkflowTests
                 Progress,
                 Telemetry.Object,
                 NullLogger<ApplicationShutdownWorkflow>.Instance,
-                LocalTerminals);
+                LocalTerminals,
+                terminalAuthentication);
         }
 
         public List<string> Order { get; } = new();

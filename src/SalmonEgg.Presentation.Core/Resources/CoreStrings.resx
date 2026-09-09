@@ -1441,4 +1441,19 @@
   <data name="CredentialBinding_InvalidHeaderScheme" xml:space="preserve">
     <value>请求头方案只能填写一个 HTTP 标记；如需直接发送凭据原值，请留空。</value>
   </data>
+  <data name="ChatAuth_TerminalTitle" xml:space="preserve">
+    <value>登录智能体</value>
+  </data>
+  <data name="ChatAuth_TerminalConsent" xml:space="preserve">
+    <value>是否打开 {0} 的交互式登录（{1}）？这会启动独立的智能体进程，输出只在此登录窗口显示。</value>
+  </data>
+  <data name="ChatAuth_TerminalRunning" xml:space="preserve">
+    <value>请在下方完成登录。成功后将重新连接智能体。</value>
+  </data>
+  <data name="ChatAuth_TerminalContinue" xml:space="preserve">
+    <value>打开登录</value>
+  </data>
+  <data name="ChatAuth_TerminalCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
 </root>

@@ -27,7 +27,7 @@ public sealed partial class XtermTerminalView : UserControl
     public static readonly DependencyProperty SessionProperty =
         DependencyProperty.Register(
             nameof(Session),
-            typeof(ILocalTerminalSession),
+            typeof(IInteractiveTerminalSession),
             typeof(XtermTerminalView),
             new PropertyMetadata(null, OnSessionChanged));
 
@@ -48,7 +48,7 @@ public sealed partial class XtermTerminalView : UserControl
     private int _sessionGeneration;
     private string _currentHostId = CreateHostId();
     private string _pendingContent = string.Empty;
-    private ILocalTerminalSession? _attachedSession;
+    private IInteractiveTerminalSession? _attachedSession;
     private bool _guiLocalTerminalSmokeCommandSent;
     private string? _guiLocalTerminalSmokeCommand;
 
@@ -66,9 +66,9 @@ public sealed partial class XtermTerminalView : UserControl
         set => SetValue(ContentTextProperty, value);
     }
 
-    public ILocalTerminalSession? Session
+    public IInteractiveTerminalSession? Session
     {
-        get => (ILocalTerminalSession?)GetValue(SessionProperty);
+        get => (IInteractiveTerminalSession?)GetValue(SessionProperty);
         set => SetValue(SessionProperty, value);
     }
 
@@ -136,8 +136,8 @@ public sealed partial class XtermTerminalView : UserControl
         }
 
         view._sessionGeneration++;
-        view.DetachSession(e.OldValue as ILocalTerminalSession);
-        view.AttachSession(e.NewValue as ILocalTerminalSession);
+        view.DetachSession(e.OldValue as IInteractiveTerminalSession);
+        view.AttachSession(e.NewValue as IInteractiveTerminalSession);
         view._sessionHasLiveOutput = false;
         view.ClearPendingCommands(static _ => true);
         view._guiLocalTerminalSmokeCommandSent = false;
@@ -193,7 +193,7 @@ public sealed partial class XtermTerminalView : UserControl
         TerminalWebView.NavigationCompleted -= OnNavigationCompleted;
     }
 
-    private void AttachSession(ILocalTerminalSession? session)
+    private void AttachSession(IInteractiveTerminalSession? session)
     {
         if (session is null)
         {
@@ -206,7 +206,7 @@ public sealed partial class XtermTerminalView : UserControl
         session.StateChanged += OnSessionStateChanged;
     }
 
-    private void DetachSession(ILocalTerminalSession? session)
+    private void DetachSession(IInteractiveTerminalSession? session)
     {
         if (session is null)
         {
@@ -336,7 +336,7 @@ public sealed partial class XtermTerminalView : UserControl
 
     private void OnSessionOutputReceived(object? sender, string output)
     {
-        if (sender is not ILocalTerminalSession session || string.IsNullOrEmpty(output))
+        if (sender is not IInteractiveTerminalSession session || string.IsNullOrEmpty(output))
         {
             return;
         }
@@ -346,7 +346,7 @@ public sealed partial class XtermTerminalView : UserControl
 
     private void OnSessionStateChanged(object? sender, EventArgs e)
     {
-        if (sender is not ILocalTerminalSession session)
+        if (sender is not IInteractiveTerminalSession session)
         {
             return;
         }
@@ -359,7 +359,7 @@ public sealed partial class XtermTerminalView : UserControl
         _ = QueueHostResizeAsync();
     }
 
-    private Task AppendSessionOutputAsync(ILocalTerminalSession session, string output)
+    private Task AppendSessionOutputAsync(IInteractiveTerminalSession session, string output)
     {
         if (!ReferenceEquals(session, Session))
         {
@@ -455,7 +455,7 @@ public sealed partial class XtermTerminalView : UserControl
         return SyncSessionStateAsync(Session);
     }
 
-    private async Task SyncSessionStateAsync(ILocalTerminalSession? session)
+    private async Task SyncSessionStateAsync(IInteractiveTerminalSession? session)
     {
         if (session is not null && !ReferenceEquals(session, Session))
         {
@@ -476,7 +476,8 @@ public sealed partial class XtermTerminalView : UserControl
                     Enabled = Session is not null && Session.CanAcceptInput
                 }));
         await QueueHostResizeAsync();
-        await TryInjectGuiSmokeCommandAsync(session);
+        // The existing shell smoke injection belongs only to conversation terminals.
+        if (session is ILocalTerminalSession localSession) await TryInjectGuiSmokeCommandAsync(localSession);
     }
 
     private async Task TryInjectGuiSmokeCommandAsync(ILocalTerminalSession? session)

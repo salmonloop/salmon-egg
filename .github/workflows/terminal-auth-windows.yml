@@ -1,0 +1,44 @@
+name: Terminal Authentication Windows
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terminal-auth-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terminal-authentication:
+    name: Windows Terminal Authentication
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      DOTNET_PROCESSOR_COUNT: 2
+      DOTNET_CLI_USE_MSBUILD_SERVER: 0
+      MSBUILDDISABLENODEREUSE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+      - name: Run actual ConPTY process and teardown gate
+        shell: pwsh
+        run: ./scripts/gates/run-terminal-auth-windows-gate.ps1
+      - name: Upload terminal authentication results
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: terminal-auth-windows-results
+          path: artifacts/terminal-auth-windows
+          if-no-files-found: error

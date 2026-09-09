@@ -1367,6 +1367,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IUiInteractionService? _uiInteractionService;
     private readonly IAiContentReportLauncher? _aiContentReportLauncher;
     private readonly IRemoteDirectoryRegistrar _remoteDirectoryRegistrar;
+    private readonly TerminalAuthenticationCoordinator? _terminalAuthenticationCoordinator;
 
     public ChatViewModel(
         IChatStore chatStore,
@@ -1409,7 +1410,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IUiInteractionService? uiInteractionService = null,
         IAiContentReportLauncher? aiContentReportLauncher = null,
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
-        IRemoteDirectoryRegistrar? remoteDirectoryRegistrar = null)
+        IRemoteDirectoryRegistrar? remoteDirectoryRegistrar = null,
+        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1417,6 +1419,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _localizer = localizer;
         _languageService = languageService;
         _uiInteractionService = uiInteractionService;
+        _terminalAuthenticationCoordinator = terminalAuthenticationCoordinator;
         _aiContentReportLauncher = aiContentReportLauncher;
         _shellLayoutMetricsSink = shellLayoutMetricsSink;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
@@ -3167,6 +3170,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!connectionContext.MatchesExpectedConnection(this)) return false;
             if (updateSelectedProfileIntent)
             {
                 await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
@@ -3174,10 +3178,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             else
             {
                 var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-                if (!string.Equals(
-                    connectionState.SelectedProfileIntentId,
-                    profile.Id,
-                    StringComparison.Ordinal))
+                var effectiveIntent = connectionContext.ForceReconnect
+                    && string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId)
+                        ? connectionState.ForegroundTransportProfileId
+                        : connectionState.SelectedProfileIntentId;
+                if (!string.Equals(effectiveIntent, profile.Id, StringComparison.Ordinal))
                 {
                     return false;
                 }
@@ -3187,7 +3192,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             var scopedSink = CreateScopedAcpCoordinatorSink(connectionContext);
             await PostToUiAsync(() =>
             {
-                if (cancellationToken.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested || !connectionContext.MatchesExpectedConnection(this))
                 {
                     return;
                 }
@@ -3235,6 +3240,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             return true;
+        }
+        catch (OperationCanceledException) when (connectionContext.ForceReconnect
+            && !connectionContext.MatchesExpectedConnection(this))
+        {
+            // A new user intent owns the connection projection; the abandoned login cannot
+            // publish a disconnected state over it.
+            return false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

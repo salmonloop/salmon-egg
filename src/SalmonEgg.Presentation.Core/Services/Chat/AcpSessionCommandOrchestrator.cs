@@ -127,6 +127,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
                     ex);
             }
 
+            ThrowIfConversationChanged(sink, conversationId, selectedProfileId, cancellationToken);
+            chatService = RequireReadyChatService(sink);
             sessionParams = new SessionNewParams(
                 activeSessionCwd,
                 McpServerSnapshots.CloneServers(
@@ -257,6 +259,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         ArgumentNullException.ThrowIfNull(ensureRemoteSessionAsync);
 
         var conversationId = sink.CurrentSessionId;
+        var profileId = sink.SelectedProfileId;
         var chatService = RequireReadyChatService(sink);
         var promptParams = new SessionPromptParams(
             remoteSessionId,
@@ -280,9 +283,29 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
+            var retryService = RequireReadyChatService(sink);
+            var reconnected = !ReferenceEquals(chatService, retryService);
+            if (reconnected)
+            {
+                // Authentication's reconnect path owns authoritative hydration. Read its binding
+                // after completion instead of sending a stale session id to the old process.
+                var binding = await sink.GetCurrentRemoteBindingAsync(cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
+                {
+                    var recovered = await ensureRemoteSessionAsync(
+                        sink, authenticateAsync, static () => { }, cancellationToken).ConfigureAwait(false);
+                    promptParams = new SessionPromptParams(recovered.RemoteSessionId, promptParams.Prompt);
+                }
+                else
+                {
+                    promptParams = new SessionPromptParams(binding.RemoteSessionId!, promptParams.Prompt);
+                }
+            }
+
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
-            var response = await chatService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
-            return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: false);
+            var response = await retryService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
+            return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: reconnected);
         }
         catch (Exception ex) when (AcpErrorClassifier.IsRemoteSessionNotFound(ex))
         {
@@ -307,8 +330,19 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             var recoveredParams = new SessionPromptParams(recovered.RemoteSessionId, promptParams.Prompt);
             cancellationToken.ThrowIfCancellationRequested();
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
-            var recoveredResponse = await chatService.SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
+            var recoveredResponse = await RequireReadyChatService(sink).SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(recovered.RemoteSessionId, recoveredResponse, RetriedAfterSessionRecovery: true);
+        }
+    }
+
+    private static void ThrowIfConversationChanged(
+        IAcpChatCoordinatorSink sink, string? conversationId, string? profileId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!string.Equals(conversationId, sink.CurrentSessionId, StringComparison.Ordinal)
+            || !string.Equals(profileId, sink.SelectedProfileId, StringComparison.Ordinal))
+        {
+            throw new OperationCanceledException("The active conversation changed during authentication.", cancellationToken);
         }
     }
 

@@ -18,7 +18,7 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// Wraps IChatService so ACP session updates are serialized through AcpEventAdapter
 /// before being published to UI subscribers.
 /// </summary>
-public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBufferController, IDisposable
+public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource, IAcpSessionUpdateBufferController, IDisposable
 {
     private readonly IChatService _inner;
     private readonly AcpEventAdapter _eventAdapter;
@@ -77,6 +77,9 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
     public bool IsInitialized => _inner.IsInitialized;
 
     public bool IsConnected => _inner.IsConnected;
+
+    public SalmonEgg.Domain.Models.StdioInvocationSnapshot? StdioInvocation
+        => (_inner as IStdioInvocationSource)?.StdioInvocation;
 
     public AgentInfo? AgentInfo => _inner.AgentInfo;
 

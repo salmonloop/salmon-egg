@@ -378,6 +378,13 @@ public static class DependencyInjection
         services.AddSingleton<IPlatformRuntimeCapabilityProbe, PlatformRuntimeCapabilityProbe>();
 #endif
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+        services.AddSingleton<ITerminalAuthenticationSessionFactory, TerminalAuthenticationSessionFactory>();
+#else
+        services.AddSingleton<ITerminalAuthenticationSessionFactory, UnsupportedTerminalAuthenticationSessionFactory>();
+#endif
+        services.AddSingleton<ITerminalAuthenticationInteraction, TerminalAuthenticationInteraction>();
+        services.AddSingleton<TerminalAuthenticationCoordinator>();
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
 #if __WASM__
         if (OperatingSystem.IsBrowser())
@@ -575,7 +582,8 @@ public static class DependencyInjection
                 sessionManager,
                 acpClientFactory,
                 logger,
-                chatServiceDecorator);
+                chatServiceDecorator,
+                sp.GetRequiredService<ITerminalAuthenticationSessionFactory>());
         });
         services.AddTransient<ConfigurationEditorViewModel>();
         services.AddSingleton<IConversationWorkspacePreferences>(sp =>
@@ -797,10 +805,11 @@ public static class DependencyInjection
                 // 本地 PTY 协调器只在 desktop 注册；其余平台传 null，由 workflow 跳过该段。
                 // 用 GetService 而非 GetRequiredService 表达"可选"，避免为此在各平台注册空实现。
 #if !__WASM__ && !__ANDROID__ && !__IOS__
-                sp.GetService<LocalTerminalPanelCoordinator>()
+                sp.GetService<LocalTerminalPanelCoordinator>(),
 #else
-                null
+                null,
 #endif
+                sp.GetRequiredService<TerminalAuthenticationCoordinator>()
                 ));
 
         // Global search
