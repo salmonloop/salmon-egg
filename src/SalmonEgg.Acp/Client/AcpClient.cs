@@ -858,14 +858,9 @@ namespace SalmonEgg.Acp.Client
                     "session/cancel requires 'sessionId'.");
             }
 
-            CancellationToken connectionToken;
-            Task<SessionPromptCompletion>? cancellationCompletion;
-            lock (_lock)
-            {
-                EnsureInitialized();
-                connectionToken = _messageLoopCts!.Token;
-            }
+            var connectionToken = GetConnectionToken();
             using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
+            Task<SessionPromptCompletion>? cancellationCompletion;
             Task<bool> sendTask;
             lock (_lock)
             {
@@ -883,8 +878,8 @@ namespace SalmonEgg.Acp.Client
                 cancellationCompletion = ProtocolVersion == AcpProtocolVersion.V2
                     ? _sessionWork.RequestCancellation(@params.SessionId, connectionToken)
                     : null;
-                // The send claim and its token belong to the same connection. A queued write must
-                // be cancelled before the transport can carry it into a replacement connection.
+                // Claim the send before a disconnect can replace the connection. The linked token
+                // also prevents a queued physical write from reaching that replacement connection.
                 sendTask = _transport.SendMessageAsync(_parser.SerializeMessage(notification), sendCancellation.Token);
             }
             var sent = await sendTask.ConfigureAwait(false);
