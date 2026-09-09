@@ -244,6 +244,7 @@
 
                                                     <Button Grid.Column="1"
                                                             VerticalAlignment="Center"
+                                                            AutomationProperties.AutomationId="Acp.Profile.More"
                                                             x:Uid="Acp_ProfileMore">
                                                         <Button.Content>
                                                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>

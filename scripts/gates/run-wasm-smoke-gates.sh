@@ -240,6 +240,7 @@ cp "${REPO_ROOT}/scripts/gates/wasm-settings-persistence-smoke.mjs" "${PLAYWRIGH
 cp "${REPO_ROOT}/scripts/gates/wasm-capability-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-gamepad-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-acp-full-chain-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-credential-editor-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp -R "${REPO_ROOT}/scripts/gates/wasm-smoke-lib" "${PLAYWRIGHT_WORKDIR}/"
 
 echo "[gate] Install Playwright package"
@@ -281,6 +282,11 @@ run_playwright_smoke \
 echo "[gate] Run WASM ACP full-chain smoke"
 run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-acp-full-chain-smoke.mjs" \
+  "${BASE_URL}"
+
+echo "[gate] Run WASM credential editor smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-credential-editor-smoke.mjs" \
   "${BASE_URL}"
 
 echo "[gate] WASM smoke gates passed"

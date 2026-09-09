@@ -786,6 +786,9 @@
   <data name="Acp_ProfileMore.ToolTipService.ToolTip" xml:space="preserve">
     <value>More</value>
   </data>
+  <data name="Acp_ProfileMore.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>More</value>
+  </data>
   <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>Reconnect</value>
   </data>
