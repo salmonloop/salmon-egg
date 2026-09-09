@@ -15893,11 +15893,8 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         var firstRemoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
-        await WaitForConditionAsync(() =>
-        {
-            syncContext.RunAll();
-            return Task.FromResult(loadStarted.Task.IsCompleted);
-        }, timeoutMilliseconds: 2000);
+        // Reuse is a lifecycle contract, not a two-second runner performance requirement.
+        await syncContext.RunUntilCompletedAsync(loadStarted.Task.WaitAsync(TestContext.Current.CancellationToken));
 
         var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
         await syncContext.RunUntilCompletedAsync(localSwitchTask);
@@ -15910,7 +15907,7 @@ public partial class ChatViewModelTests
             return Task.FromResult(
                 string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
                 && fixture.ViewModel.IsRemoteHydrationPending);
-        }, timeoutMilliseconds: 2000);
+        });
 
         Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
         allowReplay.TrySetResult(null);
