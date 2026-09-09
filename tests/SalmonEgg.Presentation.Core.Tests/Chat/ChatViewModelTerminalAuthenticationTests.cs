@@ -20,6 +20,30 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 public partial class ChatViewModelTests
 {
+    [Fact]
+    public async Task EnsureNewSessionDraftAsync_NullResponseWithoutReconnect_FaultsInsteadOfRetrying()
+    {
+        // A null service response is invalid; only an actual authentication reconnect permits retry.
+        await using var fixture = CreateViewModel();
+        var service = CreateConnectedChatService();
+        service.Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .ReturnsAsync((SessionNewResponse)null!);
+        await fixture.ViewModel.ReplaceChatServiceAsync(service.Object, TestContext.Current.CancellationToken);
+        await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        await fixture.ViewModel.EnsureNewSessionDraftAsync("/work", TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var state = await fixture.GetConnectionStateAsync();
+        Assert.Equal(NewSessionDraftPhase.Faulted, state.NewSessionDraft?.Phase);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
+        service.Verify(x => x.AuthenticateAsync(It.IsAny<AuthenticateParams>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
