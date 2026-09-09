@@ -71,19 +71,6 @@ try {
     await waitForControlEnabledState(page, bindButton, false, "unsupported WebSocket binding blocked");
 
     await selectComboBoxItem(page, "Transport", "Streamable HTTP");
-    // Closing the native popup restores focus asynchronously. Wait for that lifecycle before
-    // directing the next keystrokes to another field.
-    const closedTransport = await page.waitForFunction(async () => {
-      const describe = () => window.__salmoneggSmoke.semantic.describe({ automationIds: ["Transport"], role: "combobox" });
-      const ready = () => {
-        const state = describe();
-        return state?.expanded === false && document.activeElement?.id === state.id;
-      };
-      if (!ready()) return false;
-      await new Promise(requestAnimationFrame);
-      return ready();
-    }, undefined, { timeout: 10_000 });
-    await closedTransport.dispose();
     await typeIntoVisibleTextField(page, { automationIds: ["Acp.ProfileEditor.ServerUrl"] },
       "https://credential.example/acp", "HTTP URL");
     await waitForControlEnabledState(page, bindButton, true, "HTTP binding available");
@@ -246,21 +233,40 @@ async function openAdvancedSettings(page) {
 async function expectPersistedCredential(page, path, canary, present) {
   // Read the existing IDBFS database. Do not flush it or create a second database connection:
   // persistence belongs to the app, and the deleted file may already be absent from its live FS.
-  const handle = await page.waitForFunction(async ({ path, canary, present }) => {
-    const mount = globalThis.FS?.lookupPath("/local/SalmonEgg")?.node?.mount;
-    const database = mount?.type?.dbs?.[mount.mountpoint];
-    const storeName = mount?.type?.DB_STORE_NAME;
-    if (!database || !storeName) return false;
-    return await new Promise((resolve, reject) => {
-      const transaction = database.transaction(storeName, "readonly");
-      const request = transaction.objectStore(storeName).get(path);
-      transaction.oncomplete = () => resolve(present
-        ? new TextDecoder().decode(request.result?.contents ?? new Uint8Array()) === canary
-        : request.result === undefined);
-      transaction.onabort = () => reject(new Error("The credential persistence read was aborted."));
-    });
-  }, { path, canary, present }, { timeout: 20_000 }).catch(() => {
-    throw new Error(`The local credential was not ${present ? "saved to" : "removed from"} IndexedDB; its value is omitted.`);
-  });
-  await handle.dispose();
+  // waitForFunction treats a returned Promise as truthy in our pinned Playwright version.
+  // Await each read here and inspect its boolean result so false cannot satisfy the gate.
+  const deadline = Date.now() + 20_000;
+  try {
+    while (Date.now() < deadline) {
+      const matched = await page.evaluate(async ({ path, canary, present, timeoutMs }) => {
+        const mount = globalThis.FS?.lookupPath("/local/SalmonEgg")?.node?.mount;
+        const database = mount?.type?.dbs?.[mount.mountpoint];
+        const storeName = mount?.type?.DB_STORE_NAME;
+        if (!database || !storeName) return false;
+        return await new Promise((resolve, reject) => {
+          const transaction = database.transaction(storeName, "readonly");
+          const request = transaction.objectStore(storeName).get(path);
+          const timer = setTimeout(() => {
+            try { transaction.abort(); } catch { /* A completed read needs no cancellation. */ }
+            reject(new Error("The credential persistence read timed out."));
+          }, timeoutMs);
+          transaction.oncomplete = () => {
+            clearTimeout(timer);
+            resolve(present
+              ? new TextDecoder().decode(request.result?.contents ?? new Uint8Array()) === canary
+              : request.result === undefined);
+          };
+          transaction.onabort = () => {
+            clearTimeout(timer);
+            reject(new Error("The credential persistence read was aborted."));
+          };
+        });
+      }, { path, canary, present, timeoutMs: Math.max(1, deadline - Date.now()) });
+      if (matched === true) return;
+      await page.waitForTimeout(100);
+    }
+  } catch {
+    // IndexedDB diagnostics must not expose credential contents or paths.
+  }
+  throw new Error(`The local credential was not ${present ? "saved to" : "removed from"} IndexedDB; its value is omitted.`);
 }
