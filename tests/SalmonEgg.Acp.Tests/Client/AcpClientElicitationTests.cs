@@ -340,6 +340,129 @@ public sealed class AcpClientElicitationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ElicitationCreate_SubscriberThrowsAfterAnswer_SendsOnlyTheClaimedResponse(bool delayedSend)
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(ClientCapabilityDefaults.Create());
+        var sent = new ConcurrentQueue<string>();
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((message, token) =>
+            {
+                sent.Enqueue(message);
+                return delayedSend ? release.Task.WaitAsync(token) : Task.FromResult(true);
+            });
+        Task<bool>? answer = null;
+        client.ElicitationRequestReceived += (_, request) =>
+        {
+            answer = request.Accept(null);
+            throw new JsonException("Private host exception.");
+        };
+
+        // Act
+        RaiseRequest(parser, 341, ElicitationMethods.Create, FormParamsJson);
+        release.TrySetResult(true);
+
+        // Assert
+        Assert.NotNull(answer);
+        Assert.True(await answer.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(Assert.Single(sent)));
+        Assert.False(response.IsError);
+        Assert.Equal(ElicitationActions.Accept, response.Result!.Value.GetProperty("action").GetString());
+    }
+
+    [Fact]
+    public async Task ElicitationCreate_SubscriberThrowsAfterReplacement_PreservesNewRequest()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(ClientCapabilityDefaults.Create());
+        var sent = CaptureSentMessages();
+        ElicitationRequestEventArgs? current = null;
+        var replacing = false;
+        client.ElicitationRequestReceived += (_, request) =>
+        {
+            if (replacing)
+            {
+                current = request;
+                return;
+            }
+            replacing = true;
+            RaiseRequest(parser, 342, ElicitationMethods.Create, FormParamsJson);
+            throw new InvalidOperationException("Previous host failed.");
+        };
+
+        // Act
+        RaiseRequest(parser, 342, ElicitationMethods.Create, FormParamsJson);
+
+        // Assert
+        Assert.Empty(sent);
+        Assert.NotNull(current);
+        Assert.True(await current.Cancel());
+        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(Assert.Single(sent)));
+        Assert.Equal(ElicitationActions.Cancel, response.Result!.Value.GetProperty("action").GetString());
+    }
+
+    [Fact]
+    public async Task ElicitationCreate_SubscriberThrowsBeforeAnswer_UsesOnePrivateDataFreeError()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(ClientCapabilityDefaults.Create());
+        var sent = CaptureSentMessages();
+        var errors = new List<string>();
+        client.ErrorOccurred += (_, error) => errors.Add(error);
+        ElicitationRequestEventArgs? published = null;
+        client.ElicitationRequestReceived += (_, request) =>
+        {
+            published = request;
+            throw new JsonException("Private host exception.");
+        };
+
+        // Act
+        RaiseRequest(parser, 343, ElicitationMethods.Create, FormParamsJson);
+
+        // Assert
+        var wire = Assert.Single(sent);
+        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(wire));
+        Assert.Equal(JsonRpcErrorCode.InternalError, response.Error!.Code);
+        Assert.DoesNotContain("Private host exception", wire, StringComparison.Ordinal);
+        Assert.DoesNotContain("Private host exception", Assert.Single(errors), StringComparison.Ordinal);
+        Assert.NotNull(published);
+        Assert.False(await published.Accept(null));
+    }
+
+    [Fact]
+    public async Task ElicitationCreate_SubscriberErrorSendFails_RetainsOriginalResponderForRetry()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(ClientCapabilityDefaults.Create());
+        _transportMock.Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        ElicitationRequestEventArgs? published = null;
+        client.ElicitationRequestReceived += (_, request) =>
+        {
+            published = request;
+            throw new InvalidOperationException("Host failed.");
+        };
+
+        // Act
+        RaiseRequest(parser, 344, ElicitationMethods.Create, FormParamsJson);
+        var sent = CaptureSentMessages();
+
+        // Assert
+        Assert.NotNull(published);
+        Assert.True(await published.Cancel());
+        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(Assert.Single(sent)));
+        Assert.Equal(ElicitationActions.Cancel, response.Result!.Value.GetProperty("action").GetString());
+        Assert.False(await published.Cancel());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task ElicitationComplete_RejectedUrl_DoesNotRaiseCompletion(bool advertiseUrl)
     {
         var parser = new MessageParser();

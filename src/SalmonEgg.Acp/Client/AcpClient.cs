@@ -1037,7 +1037,7 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private bool CompleteElicitationResponse(PendingInboundRequest pending, CreateElicitationResponse response, bool sent)
+        private bool CompleteElicitationResponse(PendingInboundRequest pending, CreateElicitationResponse? response, bool sent)
         {
             var idStr = pending.MessageId?.ToString() ?? string.Empty;
             lock (_lock)
@@ -1081,6 +1081,40 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
+        private async Task TrySendElicitationFailureResponseAsync(PendingInboundRequest pending)
+        {
+            Task<bool> responseTask;
+            lock (_lock)
+            {
+                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                    || !ReferenceEquals(current, pending) || !IsInboundRequestCurrent(pending)
+                    || pending.IsElicitationResponseInFlight || pending.IsElicitationCancellationRequested)
+                {
+                    return;
+                }
+
+                // Host failures share the original response claim. They cannot overwrite a reply
+                // already sent, consume a replacement id, or escape onto a later connection.
+                pending.IsElicitationResponseInFlight = true;
+                responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
+                    JsonRpcError.CreateInternalError("Failed to process elicitation/create request.")),
+                    pending.ConnectionToken);
+            }
+
+            var sent = false;
+            try
+            {
+                sent = await responseTask.ConfigureAwait(false);
+            }
+            finally
+            {
+                if (CompleteElicitationResponse(pending, response: null, sent))
+                {
+                    await SendPendingElicitationCancellationAsync(pending, pending.ConnectionToken).ConfigureAwait(false);
+                }
+            }
+        }
+
         private void RemovePendingUrlElicitation(PendingInboundRequest pending)
         {
             if (pending.ElicitationRequest is UrlElicitationRequest url
@@ -1117,7 +1151,7 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!TryGetPendingInboundRequest(idStr, out pending)
                     || (expectedRequest is not null && !ReferenceEquals(pending, expectedRequest))
-                    || pending.Method != "session/request_permission" || !IsPermissionRequestCurrent(pending))
+                    || pending.Method != "session/request_permission" || !IsInboundRequestCurrent(pending))
                 {
                     return false;
                 }
@@ -1145,7 +1179,7 @@ namespace SalmonEgg.Acp.Client
             lock (_lock)
             {
                 if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
-                    || !ReferenceEquals(current, pending) || !IsPermissionRequestCurrent(pending)
+                    || !ReferenceEquals(current, pending) || !IsInboundRequestCurrent(pending)
                     || pending.IsPermissionResponseInFlight || pending.IsPermissionCancellationRequested)
                 {
                     return false;
@@ -1219,11 +1253,11 @@ namespace SalmonEgg.Acp.Client
                 // A cancellation that arrived while the user's answer was in flight still owns the
                 // next attempt. A failed cancellation stays retryable without a background retry loop.
                 return !isCancellation && pending.IsPermissionCancellationRequested
-                    && IsPermissionRequestCurrent(pending);
+                    && IsInboundRequestCurrent(pending);
             }
         }
 
-        private bool IsPermissionRequestCurrent(PendingInboundRequest pending)
+        private bool IsInboundRequestCurrent(PendingInboundRequest pending)
             => !_disposed && _transport.IsConnected && !pending.ConnectionToken.IsCancellationRequested
                 && (pending.ConnectionToken.CanBeCanceled
                     ? _messageLoopCts?.Token == pending.ConnectionToken
@@ -2179,6 +2213,9 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandleElicitationRequest(JsonRpcRequest request)
         {
+            PendingInboundRequest? pending;
+            ElicitationRequestEventArgs eventArgs;
+            EventHandler<ElicitationRequestEventArgs> handler;
             try
             {
                 if (!request.Params.HasValue)
@@ -2209,37 +2246,51 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
 
-                var handler = ElicitationRequestReceived;
-                if (handler == null)
+                var currentHandler = ElicitationRequestReceived;
+                if (currentHandler == null)
                 {
                     FailPendingInboundRequest(request,
                         new JsonRpcError(JsonRpcErrorCode.CapabilityNotSupported, "Elicitation requests are not supported."));
                     return;
                 }
 
-                var pending = TrackInboundElicitationRequest(request.Id, elicitationRequest);
+                handler = currentHandler;
+                pending = TrackInboundElicitationRequest(request.Id, elicitationRequest);
                 if (pending is null)
                 {
                     return;
                 }
 
-                var eventArgs = new ElicitationRequestEventArgs(
+                eventArgs = new ElicitationRequestEventArgs(
                     request.Id,
                     elicitationRequest,
                     content => TrySendElicitationResponseAsync(pending, new ElicitationAcceptResponse { Content = content?.ToWireContent() }),
                     () => TrySendElicitationResponseAsync(pending, new ElicitationDeclineResponse()),
                     () => TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse()));
+            }
+            catch (JsonException)
+            {
+                FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams("Invalid elicitation/create parameters."));
+                return;
+            }
+            catch (Exception)
+            {
+                const string message = "Failed to process elicitation/create request.";
+                FailPendingInboundRequest(request, JsonRpcError.CreateInternalError(message));
+                OnErrorOccurred(message);
+                return;
+            }
 
+            try
+            {
                 handler.Invoke(this, eventArgs);
             }
-            catch (JsonException ex)
+            catch (Exception)
             {
-                FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams(ex.Message));
-            }
-            catch (Exception ex)
-            {
-                OnErrorOccurred($"Failed to process elicitation/create request: {ex.Message}");
-                FailPendingInboundRequest(request, JsonRpcError.CreateInternalError(ex.Message));
+                // A subscriber's JsonException is a host error, not malformed peer input. Never
+                // include its payload: it may contain private answers or an authorization URL.
+                _ = TrySendElicitationFailureResponseAsync(pending);
+                OnErrorOccurred("Failed to process elicitation/create request.");
             }
         }
 
