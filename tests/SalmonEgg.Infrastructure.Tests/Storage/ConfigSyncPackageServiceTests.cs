@@ -4,6 +4,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Infrastructure.Tests.Storage;
@@ -108,6 +110,41 @@ public sealed class ConfigSyncPackageServiceTests : IDisposable
             entryNames,
             name => name.Contains(ConfigurationFileTransactionArtifacts.PendingSuffix, StringComparison.Ordinal)
                 || name.Contains(ConfigurationFileTransactionArtifacts.RollbackSuffix, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CreatePackageAsync_CredentialBinding_DefaultPackageContainsMetadataOnlyAndExplicitSecretSnapshotStillWorks()
+    {
+        var fileStore = new FileSystemAppFileStore();
+        var storage = new PlainTextFileSecureStorage(fileStore, _appData);
+        var configurations = new ConfigurationManager(storage, fileStore, _appData, NullLogger<ConfigurationManager>.Instance);
+        var profile = new ServerConfiguration
+        {
+            Id = "bound-agent",
+            Transport = TransportType.StreamableHttp,
+            ServerUrl = "https://agent.example/acp",
+            Authentication = new AuthenticationConfig { Token = "package-secret-canary" },
+        };
+        profile.CredentialBinding = CredentialBindingPolicy.Create(profile, CredentialSource.Token, CredentialTarget.Header, "X-Agent-Key");
+        await configurations.SaveConfigurationAsync(profile);
+
+        var package = await _packageService.CreatePackageAsync(includeSecrets: false, TestContext.Current.CancellationToken);
+        using var archive = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+        foreach (var entry in archive.Entries)
+        {
+            using var reader = new StreamReader(entry.Open());
+            var content = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+            Assert.DoesNotContain("package-secret-canary", content);
+            if (entry.FullName == "files/config/servers/bound-agent.yaml")
+            {
+                Assert.Contains("credential_binding:", content);
+                Assert.Contains("X-Agent-Key", content);
+            }
+        }
+
+        var snapshots = new ConfigurationSecretSnapshotService(storage, fileStore, _appData);
+        var explicitSecrets = await snapshots.ExportAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(explicitSecrets.Entries, entry => entry.ProfileId == profile.Id && entry.Value == "package-secret-canary");
     }
 
     [Fact]

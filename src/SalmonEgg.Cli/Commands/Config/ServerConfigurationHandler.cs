@@ -19,7 +19,12 @@ public sealed record ServerConfigurationPatch(
     bool ProxySpecified,
     ProxyMode? ProxyMode,
     bool ProxyUrlSpecified,
-    string? ProxyUrl);
+    string? ProxyUrl,
+    string? CredentialSource = null,
+    string? CredentialEnvironment = null,
+    string? CredentialHeader = null,
+    string? CredentialScheme = null,
+    bool ClearCredentialBinding = false);
 
 /// <remarks>
 /// Handler methods are pure business logic: they call domain interfaces and write to
@@ -294,7 +299,7 @@ public sealed class ServerConfigurationHandler
                 return CliExitCodes.Failure;
             }
 
-            config = loaded;
+            config = loaded.Clone();
         }
         catch (ConfigurationPersistenceException ex)
         {
@@ -500,7 +505,45 @@ public sealed class ServerConfigurationHandler
             };
         }
 
-        return true;
+        return TryApplyCredentialBinding(config, patch, out error);
+    }
+
+    private static bool TryApplyCredentialBinding(ServerConfiguration config, ServerConfigurationPatch patch, out string? error)
+    {
+        error = null;
+        var hasEnvironment = patch.CredentialEnvironment is not null;
+        var hasHeader = patch.CredentialHeader is not null;
+        var hasBindingOptions = hasEnvironment || hasHeader || patch.CredentialSource is not null || patch.CredentialScheme is not null;
+        if ((hasEnvironment && hasHeader) || (patch.ClearCredentialBinding && hasBindingOptions))
+        {
+            error = "Choose one of --credential-env, --credential-header, or --clear-credential-binding.";
+            return false;
+        }
+
+        if (patch.ClearCredentialBinding)
+        {
+            config.CredentialBinding = null;
+            return true;
+        }
+
+        if (hasBindingOptions)
+        {
+            if ((!hasEnvironment && !hasHeader) || patch.CredentialSource is not ("token" or "api_key"))
+            {
+                error = "A binding requires --credential-source token|api_key and --credential-env NAME or --credential-header NAME.";
+                return false;
+            }
+
+            config.CredentialBinding = CredentialBindingPolicy.Create(
+                config,
+                patch.CredentialSource == "token" ? Domain.Models.CredentialSource.Token : Domain.Models.CredentialSource.ApiKey,
+                hasEnvironment ? CredentialTarget.Environment : CredentialTarget.Header,
+                patch.CredentialEnvironment ?? patch.CredentialHeader!,
+                patch.CredentialScheme);
+        }
+
+        error = CredentialBindingPolicy.GetValidationError(config);
+        return error is null;
     }
 
     private async Task<ServerConfigurationPatch?> ResolveCredentialInputAsync(
@@ -581,6 +624,19 @@ public sealed class ServerConfigurationHandler
         else if (config.Authentication is not null)
         {
             yield return "auth:       configured (credential unavailable)";
+        }
+
+        if (config.CredentialBinding is { } binding)
+        {
+            var source = binding.Source == Domain.Models.CredentialSource.Token ? "token" : "api_key";
+            var target = binding.Target == CredentialTarget.Environment ? "environment" : "header";
+            yield return $"binding:    {source} -> {target} {binding.Name}";
+            if (binding.Target == CredentialTarget.Header)
+            {
+                yield return $"scheme:     {(string.IsNullOrEmpty(binding.Scheme) ? "raw" : binding.Scheme)}";
+            }
+
+            yield return $"credential: {(CredentialBindingResolver.Resolve(config).IsSuccess ? "set" : "unavailable or destination changed")}";
         }
     }
 

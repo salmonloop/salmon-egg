@@ -36,6 +36,7 @@ namespace SalmonEgg.Infrastructure.Network
         private readonly ILogger _logger;
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
+        private readonly ResolvedCredentialBinding? _credential;
         private readonly Subject<string> _messagesSubject = new();
         private readonly BehaviorSubject<TransportState> _stateSubject = new(TransportState.Disconnected);
         // 连接级流、各会话级流与 POST 内联正文是并发生产者;下游(ChatService 顺序管道)
@@ -65,22 +66,31 @@ namespace SalmonEgg.Infrastructure.Network
             ILogger logger,
             HttpClient? httpClient = null,
             ProxyConfig? proxyConfiguration = null,
-            TimeSpan? connectTimeout = null)
+            TimeSpan? connectTimeout = null,
+            ResolvedCredentialBinding? credential = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            if (credential is { HasHeader: true } && httpClient is not null)
+            {
+                throw new ArgumentException("A credential-bound transport must own its redirect policy; an arbitrary HttpClient is unsupported.", nameof(httpClient));
+            }
+
+            _credential = credential;
             _ownsHttpClient = httpClient is null;
             // SSE 流是长连接,HttpClient 级超时须为无限,单次请求超时交由 CancellationToken 控制。
             // 注入的 HttpClient(测试用)原样沿用;自建时按代理配置装配 handler。
-            _httpClient = httpClient ?? CreateHttpClient(proxyConfiguration);
+            _httpClient = httpClient ?? CreateHttpClient(proxyConfiguration, credential is { HasHeader: true });
             _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
         }
 
         // 与 WebSocketTransport 对齐:自建 HttpClient 时按 ProxyConfig 装配 handler,
         // 使 Streamable HTTP 与 WebSocket 走同一套代理事实源;注入 HttpClient 时不覆盖调用方选择。
-        private static HttpClient CreateHttpClient(ProxyConfig? proxyConfiguration)
+        private static HttpClient CreateHttpClient(ProxyConfig? proxyConfiguration, bool hasCredential)
         {
             var mode = proxyConfiguration?.Mode ?? ProxyConfig.DefaultMode;
-            var handler = new HttpClientHandler();
+            // Even same-origin redirects may name another agent or tenant. Only the bound endpoint
+            // receives this credential; the browser handler maps false to Fetch's manual redirect mode.
+            var handler = new HttpClientHandler { AllowAutoRedirect = !hasCredential };
 
             switch (mode)
             {
@@ -121,6 +131,8 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 throw new ArgumentException($"Invalid Streamable HTTP endpoint URL: {url}", nameof(url));
             }
+
+            BoundCredentialHeader.EnsureEndpoint(_credential, endpoint);
 
             if (_connectionCts is { IsCancellationRequested: false })
             {
@@ -333,6 +345,7 @@ namespace SalmonEgg.Infrastructure.Network
                 Version = System.Net.HttpVersion.Version20,
                 VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
             };
+            BoundCredentialHeader.Apply(_credential, request);
 
             if (includeConnectionId && _connectionId is not null)
             {
@@ -445,6 +458,7 @@ namespace SalmonEgg.Infrastructure.Network
                 Version = System.Net.HttpVersion.Version20,
                 VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
             };
+            BoundCredentialHeader.Apply(_credential, request);
             request.Headers.Add("Accept", "text/event-stream");
             if (_connectionId is not null)
             {
@@ -562,6 +576,7 @@ namespace SalmonEgg.Infrastructure.Network
                     Version = System.Net.HttpVersion.Version20,
                     VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
                 };
+                BoundCredentialHeader.Apply(_credential, request);
                 request.Headers.Add(ConnectionIdHeader, _connectionId);
                 using var response = await _httpClient.SendAsync(request, terminateCts.Token).ConfigureAwait(false);
                 _logger.Information(

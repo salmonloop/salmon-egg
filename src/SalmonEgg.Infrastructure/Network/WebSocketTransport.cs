@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using System.Net.Http;
 using System.Net.WebSockets;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -22,6 +23,8 @@ namespace SalmonEgg.Infrastructure.Network
         private readonly ILogger _logger;
         private readonly ProxyConfig _proxyConfiguration;
         private readonly Func<Uri, ProxyConfig, IWebsocketClient> _clientFactory;
+        private readonly ResolvedCredentialBinding? _credential;
+        private readonly HttpMessageInvoker? _credentialInvoker;
         // Replaced on connect and cleared on teardown, both of which can run while a send is in
         // flight. Volatile so a send sees the current handle, and every path that uses it more than
         // once captures it into a local first so it cannot be swapped mid-decision.
@@ -36,13 +39,23 @@ namespace SalmonEgg.Infrastructure.Network
         /// Initializes a new instance of the WebSocketTransport class.
         /// </summary>
         /// <param name="logger">Logger instance for logging transport events.</param>
-        public WebSocketTransport(ILogger logger, ProxyConfig? proxyConfiguration = null, TimeSpan? connectTimeout = null)
+        public WebSocketTransport(
+            ILogger logger,
+            ProxyConfig? proxyConfiguration = null,
+            TimeSpan? connectTimeout = null,
+            ResolvedCredentialBinding? credential = null)
             : this(
                 logger,
                 proxyConfiguration,
                 connectTimeout,
                 (uri, proxy) => CreateClient(uri, proxy, connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds)))
         {
+            _credential = credential;
+            if (credential is { HasHeader: true })
+            {
+                _credentialInvoker = CreateCredentialInvoker(_proxyConfiguration);
+                _clientFactory = CreateCredentialClient;
+            }
         }
 
         internal WebSocketTransport(
@@ -78,6 +91,8 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 throw new ArgumentException("URL cannot be null or empty", nameof(url));
             }
+
+            BoundCredentialHeader.EnsureEndpoint(_credential, new Uri(url, UriKind.Absolute));
 
             var existingClient = _client;
             if (existingClient != null && existingClient.IsRunning)
@@ -348,6 +363,7 @@ namespace SalmonEgg.Infrastructure.Network
                     // 不再 fire-and-forget 优雅断开与资源释放竞态;需要 NormalClosure 优雅关闭的
                     // 调用方应先 await DisconnectAsync()。
                     DisposeClient();
+                    _credentialInvoker?.Dispose();
 
                     // Complete the subjects
                     _messagesSubject?.OnCompleted();
@@ -478,6 +494,55 @@ namespace SalmonEgg.Infrastructure.Network
             };
 
             return client;
+        }
+
+        private IWebsocketClient CreateCredentialClient(Uri uri, ProxyConfig proxyConfiguration)
+        {
+            BoundCredentialHeader.EnsureEndpoint(_credential, uri);
+            return new WebsocketClient(uri, logger: null, connectionFactory: ConnectCredentialSocketAsync)
+            {
+                ConnectTimeout = _connectTimeout,
+            };
+        }
+
+        private async Task<WebSocket> ConnectCredentialSocketAsync(Uri uri, CancellationToken cancellationToken)
+        {
+            // Websocket.Client calls this for every reconnect. Recheck its destination before the
+            // HTTP upgrade and supply our own invoker: ClientWebSocket otherwise follows redirects.
+            BoundCredentialHeader.EnsureEndpoint(_credential, uri);
+            var client = new ClientWebSocket();
+            try
+            {
+                client.Options.SetRequestHeader(_credential!.HeaderName!, _credential.HeaderValue!);
+                await client.ConnectAsync(uri, _credentialInvoker!, cancellationToken).ConfigureAwait(false);
+                return client;
+            }
+            catch
+            {
+                client.Dispose();
+                throw;
+            }
+        }
+
+        private static HttpMessageInvoker CreateCredentialInvoker(ProxyConfig proxy)
+        {
+            var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+            switch (proxy.Mode)
+            {
+                case ProxyMode.None:
+                    handler.UseProxy = false;
+                    break;
+                case ProxyMode.System:
+                    break;
+                case ProxyMode.Custom when !string.IsNullOrWhiteSpace(proxy.ProxyUrl):
+                    handler.Proxy = new WebProxy(new Uri(proxy.ProxyUrl, UriKind.Absolute));
+                    break;
+                default:
+                    handler.Dispose();
+                    throw new InvalidOperationException("Custom proxy mode requires a proxy URL.");
+            }
+
+            return new HttpMessageInvoker(handler, disposeHandler: true);
         }
 
         private static ProxyConfig CloneProxyConfiguration(ProxyConfig? proxyConfiguration)

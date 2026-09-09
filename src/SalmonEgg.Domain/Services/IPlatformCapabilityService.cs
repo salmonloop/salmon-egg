@@ -9,6 +9,7 @@ public interface IPlatformCapabilityService
     bool SupportsExternalFileOpen { get; }
     bool SupportsLocalFileExport { get; }
     bool SupportsStdioTransport { get; }
+    bool SupportsWebSocketRequestHeaders => false;
     bool SupportsInteractiveTerminalSurface { get; }
     bool SupportsLocalTerminal { get; }
     bool SupportsGamepadInput { get; }

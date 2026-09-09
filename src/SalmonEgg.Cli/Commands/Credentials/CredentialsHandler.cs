@@ -89,7 +89,7 @@ public sealed class CredentialsHandler
                 return CliExitCodes.Failure;
             }
 
-            config = loaded;
+            config = loaded.Clone();
             config.Authentication = token is not null
                 ? new AuthenticationConfig { Token = token }
                 : new AuthenticationConfig { ApiKey = apiKey };
@@ -119,8 +119,9 @@ public sealed class CredentialsHandler
                 return CliExitCodes.Failure;
             }
 
-            loaded.Authentication = null;
-            await _configurationService.SaveConfigurationAsync(loaded).ConfigureAwait(false);
+            var cleared = loaded.Clone();
+            cleared.Authentication = null;
+            await _configurationService.SaveConfigurationAsync(cleared).ConfigureAwait(false);
         }
         catch (ConfigurationPersistenceException ex)
         {

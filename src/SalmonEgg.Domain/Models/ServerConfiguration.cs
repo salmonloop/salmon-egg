@@ -61,6 +61,12 @@ namespace SalmonEgg.Domain.Models
         public AuthenticationConfig? Authentication { get; set; }
 
         /// <summary>
+        /// Explicit non-secret destination for a stored token or API key. Clearing the credential
+        /// keeps this binding so reconnect cannot silently inherit an unrelated environment value.
+        /// </summary>
+        public CredentialBinding? CredentialBinding { get; set; }
+
+        /// <summary>
         /// 代理配置
         /// </summary>
         public ProxyConfig? Proxy { get; set; }
@@ -102,5 +108,26 @@ namespace SalmonEgg.Domain.Models
                 return ServerUrl ?? string.Empty;
             }
         }
+
+        public ServerConfiguration Clone() => new()
+        {
+            Id = Id,
+            PersistenceRevision = PersistenceRevision,
+            Name = Name,
+            ServerUrl = ServerUrl,
+            StdioCommand = StdioCommand,
+            StdioArguments = new List<string>(StdioArguments),
+            StdioEnvironment = new Dictionary<string, string>(StdioEnvironment, StringComparer.Ordinal),
+            Transport = Transport,
+            Authentication = Authentication is null ? null : new AuthenticationConfig
+            {
+                Token = Authentication.Token,
+                ApiKey = Authentication.ApiKey,
+            },
+            CredentialBinding = CredentialBinding,
+            Proxy = Proxy is null ? null : new ProxyConfig { Mode = Proxy.Mode, ProxyUrl = Proxy.ProxyUrl },
+            ConnectionTimeout = ConnectionTimeout,
+            Verification = Verification,
+        };
     }
 }

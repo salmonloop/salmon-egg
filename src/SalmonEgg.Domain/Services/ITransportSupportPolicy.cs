@@ -6,6 +6,8 @@ public interface ITransportSupportPolicy
 {
     TransportType DefaultTransport { get; }
 
+    bool SupportsWebSocketRequestHeaders => false;
+
     bool IsSupported(TransportType transport);
 
     TransportType Coerce(TransportType requested);

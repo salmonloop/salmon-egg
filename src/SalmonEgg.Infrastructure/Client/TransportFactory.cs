@@ -68,6 +68,18 @@ public class TransportFactory : ITransportFactory
 
         _logger.Information("Creating transport instance from configuration. TransportType={TransportType}, ProfileId={ProfileId}", configuration.Transport, configuration.Id);
         var connectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
+        var resolution = CredentialBindingResolver.Resolve(configuration);
+        if (!resolution.IsSuccess)
+        {
+            throw new InvalidOperationException(resolution.Error);
+        }
+
+        if (resolution.Value!.HasHeader && configuration.Transport == TransportType.WebSocket
+            && !_transportSupportPolicy.SupportsWebSocketRequestHeaders)
+        {
+            throw new NotSupportedException(
+                "This platform cannot send custom WebSocket authentication headers. Use an HTTP endpoint or connect from the desktop app.");
+        }
 
         return CreateTransportCore(
             configuration.Transport,
@@ -76,7 +88,8 @@ public class TransportFactory : ITransportFactory
             configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
             connectTimeout,
             configuration.Proxy,
-            configuration.Transport == TransportType.Stdio ? configuration.StdioEnvironment : null);
+            configuration.Transport == TransportType.Stdio ? resolution.Value.Environment : null,
+            resolution.Value.HasHeader ? resolution.Value : null);
     }
 
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
@@ -86,15 +99,16 @@ public class TransportFactory : ITransportFactory
         string? url,
         TimeSpan connectTimeout,
         ProxyConfig? proxy = null,
-        IReadOnlyDictionary<string, string>? stdioEnvironment = null)
+        IReadOnlyDictionary<string, string>? stdioEnvironment = null,
+        ResolvedCredentialBinding? credential = null)
     {
         _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
 
         return transportType switch
         {
             TransportType.Stdio => CreateStdioTransport(command, arguments, stdioEnvironment),
-            TransportType.WebSocket => CreateWebSocketTransport(url, connectTimeout, proxy),
-            TransportType.StreamableHttp => CreateStreamableHttpTransport(url, connectTimeout, proxy),
+            TransportType.WebSocket => CreateWebSocketTransport(url, connectTimeout, proxy, credential),
+            TransportType.StreamableHttp => CreateStreamableHttpTransport(url, connectTimeout, proxy, credential),
             _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
         };
     }
@@ -136,7 +150,8 @@ public class TransportFactory : ITransportFactory
     /// <param name="url">WebSocket URL</param>
     /// <returns>WebSocket 传输实例</returns>
     /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(string? url, TimeSpan connectTimeout, ProxyConfig? proxy)
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateWebSocketTransport(
+        string? url, TimeSpan connectTimeout, ProxyConfig? proxy, ResolvedCredentialBinding? credential)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -154,7 +169,8 @@ public class TransportFactory : ITransportFactory
         var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(
             logger,
             proxyConfiguration: proxy,
-            connectTimeout: connectTimeout);
+            connectTimeout: connectTimeout,
+            credential: credential);
         return new NetworkTransportAdapter(inner, url.Trim());
     }
 
@@ -169,7 +185,8 @@ public class TransportFactory : ITransportFactory
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStreamableHttpTransport(
         string? url,
         TimeSpan connectTimeout,
-        ProxyConfig? proxy)
+        ProxyConfig? proxy,
+        ResolvedCredentialBinding? credential)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -190,7 +207,8 @@ public class TransportFactory : ITransportFactory
         var inner = new SalmonEgg.Infrastructure.Network.StreamableHttpTransport(
             _logger,
             proxyConfiguration: proxy,
-            connectTimeout: connectTimeout);
+            connectTimeout: connectTimeout,
+            credential: credential);
         return new NetworkTransportAdapter(inner, url.Trim());
     }
 }

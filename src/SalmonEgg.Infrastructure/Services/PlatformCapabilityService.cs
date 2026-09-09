@@ -41,6 +41,8 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsStdioTransport => _runtimeProbe.IsDesktopProcessHost;
 
+    public bool SupportsWebSocketRequestHeaders => !IsBrowserRuntime;
+
     public bool SupportsInteractiveTerminalSurface => _runtimeProbe.HasInteractiveTerminalSurface;
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;

@@ -1,6 +1,7 @@
 using System;
 using FluentValidation;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Application.Validators
 {
@@ -69,6 +70,14 @@ namespace SalmonEgg.Application.Validators
             RuleFor(x => x.Proxy)
                 .Must(proxy => proxy == null || Enum.IsDefined(typeof(ProxyMode), proxy.Mode))
                 .WithMessage("Invalid proxy mode");
+
+            RuleFor(x => x).Custom((configuration, context) =>
+            {
+                if (CredentialBindingPolicy.GetValidationError(configuration) is { } error)
+                {
+                    context.AddFailure(nameof(ServerConfiguration.CredentialBinding), error);
+                }
+            });
 
             // Validate proxy configuration (if custom)
             When(x => x.Proxy != null && x.Proxy.Mode == ProxyMode.Custom, () =>

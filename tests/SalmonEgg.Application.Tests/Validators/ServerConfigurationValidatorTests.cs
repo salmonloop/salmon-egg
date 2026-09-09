@@ -1,6 +1,7 @@
 using FluentValidation.TestHelper;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using Xunit;
 
 namespace SalmonEgg.Application.Tests.Validators;
@@ -23,6 +24,24 @@ public sealed class ServerConfigurationValidatorTests
 
         var result = _validator.TestValidate(configuration);
         result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Validate_CredentialDestinationChanged_RequiresRebindingButPermitsMissingSecret()
+    {
+        var profile = new ServerConfiguration
+        {
+            Id = "bound-agent",
+            Name = "Agent",
+            Transport = TransportType.StreamableHttp,
+            ServerUrl = "https://agent.example/acp",
+        };
+        profile.CredentialBinding = CredentialBindingPolicy.Create(profile, CredentialSource.Token, CredentialTarget.Header, "X-Agent-Key");
+
+        _validator.TestValidate(profile).ShouldNotHaveAnyValidationErrors();
+        profile.ServerUrl = "https://agent.example/another";
+
+        _validator.TestValidate(profile).ShouldHaveValidationErrorFor(value => value.CredentialBinding);
     }
 
     [Fact]
