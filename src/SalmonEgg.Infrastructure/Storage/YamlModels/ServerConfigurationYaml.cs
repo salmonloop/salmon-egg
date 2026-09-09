@@ -5,7 +5,7 @@ namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
 internal sealed class ServerConfigurationYaml
 {
-    public int SchemaVersion { get; set; } = 4;
+    public int SchemaVersion { get; set; } = 5;
 
     public string UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow.ToString("O");
 
@@ -66,12 +66,27 @@ internal sealed class ServerConfigurationYaml
 
     public AuthenticationYamlV1 Authentication { get; set; } = new();
 
+    public CredentialBindingYaml? CredentialBinding { get; set; }
+
     public ProxyYamlV1 Proxy { get; set; } = new();
 }
 
 internal sealed class AuthenticationYamlV1
 {
     public string Mode { get; set; } = "none";
+}
+
+internal sealed class CredentialBindingYaml
+{
+    public string Source { get; set; } = string.Empty;
+
+    public string Target { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? Scheme { get; set; }
+
+    public string TargetIdentity { get; set; } = string.Empty;
 }
 
 internal sealed class ProxyYamlV1

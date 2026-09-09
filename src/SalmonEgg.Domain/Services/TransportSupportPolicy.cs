@@ -15,6 +15,8 @@ public sealed class TransportSupportPolicy : ITransportSupportPolicy
     public TransportType DefaultTransport =>
         _capabilities.SupportsStdioTransport ? TransportType.Stdio : TransportType.WebSocket;
 
+    public bool SupportsWebSocketRequestHeaders => _capabilities.SupportsWebSocketRequestHeaders;
+
     public bool IsSupported(TransportType transport)
         => transport switch
         {

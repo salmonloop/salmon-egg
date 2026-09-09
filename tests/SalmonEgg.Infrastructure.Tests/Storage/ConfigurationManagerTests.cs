@@ -95,6 +95,60 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveConfigurationAsync_CredentialBinding_RoundTripsOnlyMetadataAndRetainsBindingOnClear()
+    {
+        var config = CreateTestConfiguration("credential-binding");
+        config.Transport = TransportType.StreamableHttp;
+        config.ServerUrl = "https://agent.example/acp";
+        config.Authentication = new AuthenticationConfig { Token = "binding-secret-canary" };
+        config.CredentialBinding = CredentialBindingPolicy.Create(config, CredentialSource.Token, CredentialTarget.Header, "Authorization", "Bearer");
+
+        await _configManager.SaveConfigurationAsync(config);
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.DoesNotContain("binding-secret-canary", yaml);
+        Assert.Contains("credential_binding:", yaml);
+        Assert.Contains("source: token", yaml);
+        Assert.Equal(config.CredentialBinding, loaded!.CredentialBinding);
+        Assert.Equal("Bearer binding-secret-canary", CredentialBindingResolver.Resolve(loaded).Value!.HeaderValue);
+
+        loaded.Authentication = null;
+        await _configManager.SaveConfigurationAsync(loaded);
+        var cleared = await _configManager.LoadConfigurationAsync(config.Id);
+
+        Assert.Equal(config.CredentialBinding, cleared!.CredentialBinding);
+        Assert.False(CredentialBindingResolver.Resolve(cleared).IsSuccess);
+        Assert.Null(cleared.Authentication);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_BoundCredentialWriteFailure_RestoresOldTargetAndSecretTogether()
+    {
+        var original = CreateTestConfiguration("bound-rollback");
+        original.Transport = TransportType.StreamableHttp;
+        original.ServerUrl = "https://first.example/acp";
+        original.Authentication = new AuthenticationConfig { Token = "old-bound-secret" };
+        original.CredentialBinding = CredentialBindingPolicy.Create(original, CredentialSource.Token, CredentialTarget.Header, "X-Agent-Key");
+        await _configManager.SaveConfigurationAsync(original);
+        var candidate = original.Clone();
+        candidate.ServerUrl = "https://second.example/acp";
+        candidate.Authentication!.Token = "new-bound-secret";
+        candidate.CredentialBinding = CredentialBindingPolicy.Create(candidate, CredentialSource.Token, CredentialTarget.Header, "Authorization", "Bearer");
+        var failing = new ConfigurationManager(_secureStorage, new WriteFailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
+
+        await Assert.ThrowsAsync<ConfigurationPersistenceException>(() => failing.SaveConfigurationAsync(candidate));
+        var reloaded = await _configManager.LoadConfigurationAsync(original.Id);
+
+        Assert.Equal(original.ServerUrl, reloaded!.ServerUrl);
+        Assert.Equal(original.CredentialBinding, reloaded.CredentialBinding);
+        Assert.Equal("old-bound-secret", CredentialBindingResolver.Resolve(reloaded).Value!.HeaderValue);
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(original.Id), TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("old-bound-secret", yaml);
+        Assert.DoesNotContain("new-bound-secret", yaml);
+    }
+
+    [Fact]
     public async Task SaveConfigurationAsync_AcrossManagerInstances_SerializesAndRejectsStaleWriter()
     {
         var config = CreateTestConfiguration("cross-manager-conflict");

@@ -98,6 +98,11 @@ public static class ConfigServerCommandFactory
         command.Options.Add(authenticationOptions.Token);
         command.Options.Add(authenticationOptions.ApiKey);
         command.Options.Add(authenticationOptions.Mode);
+        command.Options.Add(authenticationOptions.CredentialSource);
+        command.Options.Add(authenticationOptions.Environment);
+        command.Options.Add(authenticationOptions.Header);
+        command.Options.Add(authenticationOptions.Scheme);
+        command.Options.Add(authenticationOptions.ClearBinding);
         command.Options.Add(proxyOptions.Mode);
         command.Options.Add(proxyOptions.Url);
     }
@@ -121,13 +126,23 @@ public static class ConfigServerCommandFactory
             ProxySpecified: proxyModeResult is not null,
             ProxyMode: parseResult.GetValue(proxyOptions.Mode),
             ProxyUrlSpecified: proxyUrlResult is not null,
-            ProxyUrl: parseResult.GetValue(proxyOptions.Url));
+            ProxyUrl: parseResult.GetValue(proxyOptions.Url),
+            CredentialSource: parseResult.GetValue(authenticationOptions.CredentialSource),
+            CredentialEnvironment: parseResult.GetValue(authenticationOptions.Environment),
+            CredentialHeader: parseResult.GetValue(authenticationOptions.Header),
+            CredentialScheme: parseResult.GetValue(authenticationOptions.Scheme),
+            ClearCredentialBinding: parseResult.GetValue(authenticationOptions.ClearBinding));
     }
 
     private static AuthenticationOptions CreateAuthenticationOptions() => new(
         new Option<bool>("--token-stdin") { Description = "Read the bearer token from stdin (one line)." },
         new Option<bool>("--api-key-stdin") { Description = "Read the API key from stdin (one line)." },
-        new Option<string?>("--auth") { Description = "Authentication mode: none, bearer_token, api_key." });
+        new Option<string?>("--auth") { Description = "Authentication mode: none, bearer_token, api_key." },
+        new Option<string?>("--credential-source") { Description = "Stored credential to bind: token or api_key." },
+        new Option<string?>("--credential-env") { Description = "Bind the credential to this environment variable of the configured stdio command." },
+        new Option<string?>("--credential-header") { Description = "Bind the credential to this HTTP header of the exact configured endpoint." },
+        new Option<string?>("--credential-scheme") { Description = "Explicit header scheme, for example Bearer. Omit for a raw value." },
+        new Option<bool>("--clear-credential-binding") { Description = "Remove the injection binding; keep the separately stored credential." });
 
     private static ProxyOptions CreateProxyOptions() => new(
         new Option<ProxyMode?>("--proxy-mode") { Description = "Proxy mode: none, system, custom." },
@@ -136,7 +151,12 @@ public static class ConfigServerCommandFactory
     private sealed record AuthenticationOptions(
         Option<bool> Token,
         Option<bool> ApiKey,
-        Option<string?> Mode);
+        Option<string?> Mode,
+        Option<string?> CredentialSource,
+        Option<string?> Environment,
+        Option<string?> Header,
+        Option<string?> Scheme,
+        Option<bool> ClearBinding);
 
     private sealed record ProxyOptions(
         Option<ProxyMode?> Mode,

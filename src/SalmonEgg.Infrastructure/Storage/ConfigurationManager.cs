@@ -21,7 +21,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 public sealed class ConfigurationManager : IConfigurationService, IConfigurationRecoveryService
 {
     /// <summary>本程序写入 server 配置时使用的 schema 版本。</summary>
-    public const int CurrentServerConfigurationSchemaVersion = 4;
+    public const int CurrentServerConfigurationSchemaVersion = 5;
 
     private const int CurrentSchemaVersion = CurrentServerConfigurationSchemaVersion;
 
@@ -579,6 +579,7 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             Verification = VerificationToString(config.Verification.State),
             VerifiedAtUtc = config.Verification.VerifiedAtUtc?.ToString("O", CultureInfo.InvariantCulture),
             Authentication = new AuthenticationYamlV1 { Mode = mode },
+            CredentialBinding = ToYamlCredentialBinding(config.CredentialBinding),
             Proxy = new ProxyYamlV1
             {
                 Mode = ProxyModeToString(config.Proxy?.Mode ?? ProxyConfig.DefaultMode),
@@ -598,6 +599,7 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
             StdioArguments = yamlModel.StdioArguments ?? new List<string>(),
             StdioEnvironment = CloneStdioEnvironment(yamlModel.StdioEnvironment),
+            CredentialBinding = FromYamlCredentialBinding(yamlModel.CredentialBinding),
             Transport = TransportFromString(yamlModel.Transport),
             ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds),
             Verification = VerificationFromYaml(yamlModel.Verification, yamlModel.VerifiedAtUtc)
@@ -614,6 +616,44 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
 
         return config;
     }
+
+    private static CredentialBindingYaml? ToYamlCredentialBinding(CredentialBinding? binding)
+        => binding is null ? null : new CredentialBindingYaml
+        {
+            Source = binding.Source switch
+            {
+                CredentialSource.Token => "token",
+                CredentialSource.ApiKey => "api_key",
+                _ => throw new InvalidOperationException("Unsupported credential source."),
+            },
+            Target = binding.Target switch
+            {
+                CredentialTarget.Environment => "environment",
+                CredentialTarget.Header => "header",
+                _ => throw new InvalidOperationException("Unsupported credential target."),
+            },
+            Name = binding.Name,
+            Scheme = string.IsNullOrEmpty(binding.Scheme) ? null : binding.Scheme,
+            TargetIdentity = binding.TargetIdentity,
+        };
+
+    private static CredentialBinding? FromYamlCredentialBinding(CredentialBindingYaml? binding)
+        => binding is null ? null : new CredentialBinding(
+            binding.Source switch
+            {
+                "token" => CredentialSource.Token,
+                "api_key" => CredentialSource.ApiKey,
+                _ => (CredentialSource)(-1),
+            },
+            binding.Target switch
+            {
+                "environment" => CredentialTarget.Environment,
+                "header" => CredentialTarget.Header,
+                _ => (CredentialTarget)(-1),
+            },
+            binding.Name,
+            binding.Scheme,
+            binding.TargetIdentity);
 
     /// <summary>
     /// Projects the environment overlay for YAML, returning null when there is nothing to persist.
