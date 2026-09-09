@@ -45,7 +45,7 @@ internal sealed class ServerConfigurationYaml
     /// Nullable, and left null for <see cref="ProfileVerificationState.Unknown"/> so <c>OmitNull</c>
     /// drops the key entirely rather than writing <c>unknown</c>. That keeps the no-verdict wire shape
     /// minimal and prevents a redundant default key from participating in the cloud-sync fingerprint.
-    /// A schema_version 3 file saved by this build still changes to schema_version 4 by design.
+    /// Saving an older file writes the current server configuration schema version.
     ///
     /// Written as a token rather than the enum's name so the on-disk vocabulary is owned here, the way
     /// <c>transport</c> and <c>proxy.mode</c> already are. An unrecognized token reads back as

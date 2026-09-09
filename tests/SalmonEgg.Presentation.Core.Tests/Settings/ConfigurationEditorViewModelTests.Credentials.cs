@@ -281,8 +281,11 @@ public sealed partial class ConfigurationEditorViewModelTests
     {
         var profile = new ServerConfiguration
         {
-            Id = "credential-profile", Name = "Agent", Transport = TransportType.Stdio,
-            StdioCommand = "agent", PersistenceRevision = "loaded-revision",
+            Id = "credential-profile",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent",
+            PersistenceRevision = "loaded-revision",
             Authentication = new AuthenticationConfig { Token = "stored-canary" }
         };
         profile.CredentialBinding = CredentialBindingPolicy.Create(

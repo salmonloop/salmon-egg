@@ -324,6 +324,43 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WithSchemaVersion4File_DoesNotInferCredentialBinding()
+    {
+        const string configId = "schema-v4-no-binding";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """
+            schema_version: 4
+            id: schema-v4-no-binding
+            name: Existing Agent
+            transport: streamable_http
+            server_url: https://agent.example/acp
+            connection_timeout_seconds: 10
+            authentication:
+              mode: bearer_token
+            proxy:
+              mode: system
+            """, TestContext.Current.CancellationToken);
+
+        await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetTokenKey(configId), "legacy-stored-token");
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Null(loaded.CredentialBinding);
+        Assert.Equal("legacy-stored-token", loaded.Authentication?.Token);
+        Assert.False(CredentialBindingResolver.Resolve(loaded).Value!.HasHeader);
+        Assert.Contains("schema_version: 4", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+
+        await _configManager.SaveConfigurationAsync(loaded);
+
+        var saved = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("schema_version: 5", saved);
+        Assert.DoesNotContain("credential_binding:", saved);
+        Assert.Null((await _configManager.LoadConfigurationAsync(configId))!.CredentialBinding);
+    }
+
+    [Fact]
     public async Task LoadConfigurationAsync_WithSchemaVersion3File_DefaultsVerificationToUnknown()
     {
         const string configId = "schema-v3-no-verification-001";

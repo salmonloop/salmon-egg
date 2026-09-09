@@ -392,7 +392,9 @@ public sealed partial class AcpChatCoordinatorTests
     {
         var profile = new ServerConfiguration
         {
-            Id = "bound-profile", Name = "Bound agent", PersistenceRevision = "original-revision",
+            Id = "bound-profile",
+            Name = "Bound agent",
+            PersistenceRevision = "original-revision",
             Transport = network ? TransportType.StreamableHttp : TransportType.Stdio,
             StdioCommand = network ? string.Empty : "agent",
             ServerUrl = network ? "https://agent.example/acp" : string.Empty,
