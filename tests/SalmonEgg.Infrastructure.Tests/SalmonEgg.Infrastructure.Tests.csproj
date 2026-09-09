@@ -18,17 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Real HTTP/2 loopback peer for the Streamable HTTP transport contract. No UI workload. -->
+    <!-- Real HTTP/2 loopback peer for cancellation and credential transport contracts. No UI workload. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Real HTTP/2 loopback peer for transport credential isolation; no UI workload. -->
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

@@ -103,6 +103,21 @@ printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credentia
 
 凭据值只从 stdin 读取，不会进入进程参数、YAML 或 `has-credential` 输出。非凭据配置操作不受该策略影响。该策略针对 Linux Secret Service 与 macOS Keychain；Windows DPAPI 始终可用，该 flag 在 Windows 上无实际作用。完整命令示例见 [README.en.md](README.en.md#cli-configuration-management)，发布与安装细节见 [发布指南](docs/release-guide.md#cli-发布)。
 
+保存凭据后，还需按 Agent 文档指定发送位置。绑定只对当前启动命令或完整网络地址生效；更改目标后必须重新绑定。示例：
+
+```bash
+# 本地 Agent：仅注入其子进程环境
+salmon-egg config server update <server-id> --credential-source api_key --credential-env AGENT_API_KEY
+
+# HTTP / 桌面 WebSocket：向当前地址发送 Authorization: Bearer ...
+salmon-egg config server update <server-id> --credential-source token --credential-header Authorization --credential-scheme Bearer
+
+# 停止注入，保留已保存的凭据
+salmon-egg config server update <server-id> --clear-credential-binding
+```
+
+应用内的配置编辑页也可设置“凭据发送方式”。凭据输入留空会保留旧值，勾选清除才会删除；保存后的更改在重新连接时生效。绑定仍在但凭据已清除时，连接会提示补充凭据或移除绑定。浏览器 WebSocket 无法设置请求头，须使用 Agent 支持的 HTTP 接口。绑定的网络请求不跟随重定向，避免凭据转发到另一个目标。
+
 ## 文档
 
 - [文档导航](docs/README.md)
