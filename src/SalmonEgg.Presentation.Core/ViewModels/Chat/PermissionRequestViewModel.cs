@@ -8,19 +8,22 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class PermissionRequestViewModel : ObservableObject
 {
+    [ObservableProperty]
+    private ObservableCollection<PermissionOptionViewModel> _options = new();
+
     public object MessageId { get; set; } = string.Empty;
     public string SessionId { get; set; } = string.Empty;
     public string ToolCallJson { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    private ObservableCollection<PermissionOptionViewModel> _options = new();
+    internal string? ToolCallId { get; set; }
+    internal Func<bool>? IsRequestAvailable { get; set; }
+    internal bool IsAvailable => IsRequestAvailable?.Invoke() ?? true;
 
     public Func<string, string?, Task>? OnRespond { get; set; }
 
     [RelayCommand]
     private async Task RespondAsync(PermissionOptionViewModel? option)
     {
-        if (OnRespond == null)
+        if (OnRespond == null || !IsAvailable)
         {
             return;
         }

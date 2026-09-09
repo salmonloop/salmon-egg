@@ -1036,6 +1036,7 @@ public partial class ChatViewModel
         SelectedTerminalSession = selection.SelectedTerminal;
         PendingAskUserRequest = selection.PendingAskUserRequest;
         PendingElicitationRequest = selection.PendingElicitationRequest;
+        SyncPermissionRequestProjection();
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             ActiveLocalTerminalSession = null;
@@ -1129,6 +1130,7 @@ public partial class ChatViewModel
             ActiveLocalTerminalSession = null;
             PendingAskUserRequest = selection.PendingAskUserRequest;
             PendingElicitationRequest = selection.PendingElicitationRequest;
+            SyncPermissionRequestProjection();
         }
     }
 
@@ -1865,89 +1867,119 @@ public partial class ChatViewModel
         }
     }
 
-    private void OnPermissionRequestReceived(object? sender, PermissionRequestEventArgs e)
+    private void ProcessPermissionRequest(IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
     {
-        _uiDispatcher.Enqueue(() =>
+        _ = ProcessPermissionRequestAsync(service, foregroundGeneration, request);
+    }
+
+    private async Task ProcessPermissionRequestAsync(IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
+    {
+        try
         {
-            try
+            var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+            var conversationId = _authoritativeRemoteSessionRouter.ResolveConversationId(state, request.SessionId);
+            var binding = state.ResolveBinding(conversationId);
+            await PostToUiAsync(async () =>
             {
-                PermissionRequestViewModel? permissionRequest = null;
-                permissionRequest = _interactionEventBridge.CreatePermissionRequestViewModel(
-                    e,
-                    async (messageId, outcome, optionId) =>
+                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(conversationId) || binding is null
+                    || !await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(true))
+                {
+                    await CancelUndisplayedPermissionAsync(request).ConfigureAwait(true);
+                    return;
+                }
+
+                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                {
+                    return;
+                }
+
+                PermissionRequestViewModel? viewModel = null;
+                viewModel = _interactionEventBridge.CreatePermissionRequestViewModel(
+                    request,
+                    async (_, outcome, optionId) =>
                     {
-                        if (_chatService == null)
+                        if (!await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(false)
+                            || !IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
                         {
                             return false;
                         }
 
-                        return await _chatService.RespondToPermissionRequestAsync(messageId, outcome, optionId).ConfigureAwait(true);
+                        return await request.TryRespondAsync(outcome, optionId).ConfigureAwait(false);
                     },
-                    () =>
-                    {
-                        ShowPermissionDialog = false;
-                        ClearInlinePermissionRequest(permissionRequest);
-                        PendingPermissionRequest = null;
-                    });
-                PendingPermissionRequest = permissionRequest;
-                ApplyInlinePermissionRequest(e, permissionRequest);
-                ShowPermissionDialog = true;
-            }
-            catch (Exception ex)
+                    () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
+                viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
+                viewModel.IsRequestAvailable = () => IsPermissionSourceCurrent(service, foregroundGeneration) && request.CanRespond;
+                _panelStateCoordinator.StorePermissionRequest(conversationId, viewModel);
+                SyncPermissionRequestProjection();
+            }).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            Logger.LogError("Error processing permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
+            if (IsPermissionSourceCurrent(service, foregroundGeneration))
             {
-                Logger.LogError(ex, "Error processing permission request");
+                await CancelUndisplayedPermissionAsync(request).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private bool IsPermissionSourceCurrent(IChatService service, int foregroundGeneration)
+        // A PoolOnly replacement can leave the original service live for its background conversation.
+        // Its request callback remains authoritative even while another service is in the foreground.
+        => !_disposed && foregroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
+            && service.IsConnected;
+
+    private async Task<bool> IsPermissionBindingCurrentAsync(string conversationId, ConversationBindingSlice binding)
+        => (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false)).ResolveBinding(conversationId) == binding;
+
+    private async Task CancelUndisplayedPermissionAsync(PermissionRequestEventArgs request)
+    {
+        try
+        {
+            await request.TryRespondAsync("cancelled").ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning("Could not cancel an undisplayed permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
+        }
+    }
+
+    private void RemovePermissionRequestProjection(string conversationId, PermissionRequestViewModel request)
+    {
+        if (_panelStateCoordinator.RemovePermissionRequest(conversationId, request))
+        {
+            SyncPermissionRequestProjection();
+        }
+    }
+
+    private void SyncPermissionRequestProjection()
+    {
+        PendingPermissionRequest = _panelStateCoordinator.GetPendingPermissionRequest(CurrentSessionId);
+        ShowPermissionDialog = PendingPermissionRequest is not null;
+        MessageHistory.UpdateCachedItems(message =>
+        {
+            // CurrentSessionId changes before the transcript is replaced. Do not briefly attach
+            // another conversation's permission to an old card that happens to share its tool id.
+            if (string.Equals(_visibleTranscriptConversationId, CurrentSessionId, StringComparison.Ordinal))
+            {
+                ApplyPendingInlinePermissionProjection(message);
+            }
+            else
+            {
+                message.PendingPermissionRequest = null;
             }
         });
     }
 
-    private void ApplyInlinePermissionRequest(PermissionRequestEventArgs request, PermissionRequestViewModel permissionRequest)
+    private void ClearPermissionRequests()
     {
-        var toolCallId = TryResolvePermissionToolCallId(request.ToolCall);
-        if (string.IsNullOrWhiteSpace(toolCallId))
-        {
-            return;
-        }
-
-        lock (_pendingInlinePermissionRequestsSync)
-        {
-            _pendingInlinePermissionRequestsByToolCallId[toolCallId] = permissionRequest;
-        }
-
-        var target = MessageHistory.LastOrDefault(message =>
-            string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
-            && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
-        if (target != null)
-        {
-            target.PendingPermissionRequest = permissionRequest;
-        }
-    }
-
-    private void ClearInlinePermissionRequest(PermissionRequestViewModel? permissionRequest)
-    {
-        if (permissionRequest is null)
-        {
-            return;
-        }
-
-        lock (_pendingInlinePermissionRequestsSync)
-        {
-            var clearedToolCallIds = _pendingInlinePermissionRequestsByToolCallId
-                .Where(entry => ReferenceEquals(entry.Value, permissionRequest))
-                .Select(entry => entry.Key)
-                .ToArray();
-            foreach (var toolCallId in clearedToolCallIds)
-            {
-                _pendingInlinePermissionRequestsByToolCallId.Remove(toolCallId);
-            }
-        }
-
-        foreach (var message in MessageHistory)
-        {
-            if (ReferenceEquals(message.PendingPermissionRequest, permissionRequest))
-            {
-                message.PendingPermissionRequest = null;
-            }
-        }
+        _panelStateCoordinator.ClearPermissionRequests();
+        SyncPermissionRequestProjection();
     }
 
     private static string? TryResolvePermissionToolCallId(object? toolCall)

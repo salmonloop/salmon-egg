@@ -1626,10 +1626,14 @@ public partial class ChatViewModel
             QueueClearConversationOperationFailure(operationOwner);
             await _acpConnectionCommands.DisconnectAsync(this);
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
-            _panelStateCoordinator.ClearAskUserRequests();
-            _panelStateCoordinator.ClearElicitationRequests();
-            PendingAskUserRequest = null;
-            PendingElicitationRequest = null;
+            await PostToUiAsync(() =>
+            {
+                _panelStateCoordinator.ClearAskUserRequests();
+                _panelStateCoordinator.ClearElicitationRequests();
+                ClearPermissionRequests();
+                PendingAskUserRequest = null;
+                PendingElicitationRequest = null;
+            }).ConfigureAwait(false);
         }
         catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
         {

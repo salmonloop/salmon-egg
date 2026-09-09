@@ -12,6 +12,7 @@ public sealed class ChatConversationPanelStateCoordinator
     private readonly Dictionary<string, string> _selectedTerminalIdByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ElicitationRequestViewModel> _pendingElicitationRequestsByConversation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<PermissionRequestViewModel>> _pendingPermissionRequestsByConversation = new(StringComparer.Ordinal);
 
     public ChatConversationPanelSelection SyncConversation(string? conversationId)
     {
@@ -100,6 +101,41 @@ public sealed class ChatConversationPanelStateCoordinator
     public void ClearElicitationRequests()
         => _pendingElicitationRequestsByConversation.Clear();
 
+    public PermissionRequestViewModel? GetPendingPermissionRequest(string? conversationId, string? toolCallId = null)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests))
+        {
+            return null;
+        }
+
+        requests.RemoveAll(static request => !request.IsAvailable);
+        return requests.FirstOrDefault(request => toolCallId is null
+            || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal));
+    }
+
+    public void StorePermissionRequest(string conversationId, PermissionRequestViewModel request)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
+        ArgumentNullException.ThrowIfNull(request);
+        if (!_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests))
+        {
+            requests = [];
+            _pendingPermissionRequestsByConversation.Add(conversationId, requests);
+        }
+
+        // The first unanswered request retains its surface; later requests wait or attach to their
+        // own tool card. Invalidated SDK identities cannot keep an obsolete prompt in front.
+        requests.RemoveAll(static pending => !pending.IsAvailable);
+        requests.Add(request);
+    }
+
+    public bool RemovePermissionRequest(string conversationId, PermissionRequestViewModel request)
+        => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
+            && requests.Remove(request);
+
+    public void ClearPermissionRequests() => _pendingPermissionRequestsByConversation.Clear();
+
     public TerminalPanelSessionViewModel GetOrCreateTerminalSession(string conversationId, string terminalId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
@@ -153,6 +189,7 @@ public sealed class ChatConversationPanelStateCoordinator
         _selectedTerminalIdByConversation.Remove(conversationId);
         _pendingAskUserRequestsByConversation.Remove(conversationId);
         _pendingElicitationRequestsByConversation.Remove(conversationId);
+        _pendingPermissionRequestsByConversation.Remove(conversationId);
 
         return isCurrentConversation ? EmptySelection() : NoUiChange();
     }
