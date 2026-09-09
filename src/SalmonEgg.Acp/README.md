@@ -43,14 +43,14 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, and message/tool/terminal projections are covered by deterministic protocol peers. Draft SDK helpers support offline history replay. Live initialization rejects v2. | Permission handling, configuration workflows, batch processing, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, message/tool/terminal projections, and permission request handling are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Configuration workflows, batch processing, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
 inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;
 default-on-error and skip-invalid-item behavior applies only where the upstream schema permits it.
 Resource-link icons are available through the experimental `ResourceLinkDraftExtensions` helper,
-so constructing them requires an explicit draft opt-in. Permission subject types are still not
-connected to live request handling. Draft session snapshots now supply message upserts, streaming
+so constructing them requires an explicit draft opt-in. Permission subjects reach the staged v2
+handler through the same pending-request owner as v1. Draft session snapshots supply message upserts, streaming
 tool content, and Agent-owned terminal projections; the production application does not consume
 them until its complete v2 feature gate is ready.
 
@@ -101,6 +101,19 @@ tool-content, and location arrays. Those recoveries apply only to the v2 contrac
 them. Required identities and chunks remain strict, unknown string discriminators survive, and
 v1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
 history and asserts replacement, append, clear, terminal bytes, and snapshot isolation.
+
+`AcpPermissionDraftExtensions.ReadRequest(parameters)` parses recorded v2 permission params;
+`permissionEvent.GetDraftRequest()` returns the same immutable view on the existing
+`PermissionRequestReceived` event (null for v1). It supplies the required prompt title, optional
+description, optional tool-call/command/custom subject, and detached options. `RawParameters` keeps
+the entire input for recording or forwarding. Missing/null subjects stay absent; unknown subject
+types stay opaque. Prompt text and subjects never update transcript, tool, or terminal projections,
+and a command subject never executes a local command. V2 events leave the legacy `ToolCall` null.
+The host explicitly selects an offered option or cancels; failed sends and invalid choices retain
+the original request for retry, and stale callbacks cannot answer a new request with a reused id.
+Subscriber failures also claim that original request, so an exception after an answer cannot send
+a second response. The nupkg consumer gate verifies optional subjects, opaque custom payloads,
+detached prompt data, and rejection of live v2 before any connection or write.
 
 Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
 both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
@@ -172,12 +185,13 @@ result without casting a `Task` to `Task<bool>`.
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is
 a **compile error** by default rather than a warning. That is deliberate: v2 is still an upstream
 draft, no live client negotiates it (`AcpProtocolVersion.RuntimeServed` is v1), and code built on
-these types cannot reach a real Agent today. The 44 marked types are the `state_update` work-state
+these types cannot reach a real Agent today. The 46 marked types are the `state_update` work-state
 family, the whole-message upsert updates, the terminal updates, streaming tool-call content, the
 v2 `plan_update` envelope, permission subjects, the v2 capability markers, the structured diff,
 `ResourceLinkDraftExtensions` for resource-link icons, and six session-projection types (the draft
 entry point, message kind, and session/message/tool/terminal snapshots). The projection types are
-not source-generated wire DTOs and introduce no serialization-context bypass.
+not source-generated wire DTOs and introduce no serialization-context bypass. The permission draft
+entry point and request snapshot likewise add no serialization-context bypass.
 
 To evaluate them anyway, opt in explicitly:
 
