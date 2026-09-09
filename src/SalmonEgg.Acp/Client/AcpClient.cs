@@ -1136,6 +1136,31 @@ namespace SalmonEgg.Acp.Client
                     ToElement<PermissionOutcomeResult>(payload)), pending.ConnectionToken);
             }
 
+            return await AwaitPermissionResponseAsync(pending, responseTask, outcome == "cancelled").ConfigureAwait(false);
+        }
+
+        private async Task<bool> TrySendPermissionFailureResponseAsync(PendingInboundRequest pending)
+        {
+            Task<bool> responseTask;
+            lock (_lock)
+            {
+                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                    || !ReferenceEquals(current, pending) || !IsPermissionRequestCurrent(pending)
+                    || pending.IsPermissionResponseInFlight || pending.IsPermissionCancellationRequested)
+                {
+                    return false;
+                }
+                pending.IsPermissionResponseInFlight = true;
+                responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
+                    JsonRpcError.CreateInternalError("Client failed to process inbound permission request.")),
+                    pending.ConnectionToken);
+            }
+
+            return await AwaitPermissionResponseAsync(pending, responseTask, isCancellation: false).ConfigureAwait(false);
+        }
+
+        private async Task<bool> AwaitPermissionResponseAsync(PendingInboundRequest pending, Task<bool> responseTask, bool isCancellation)
+        {
             var sent = false;
             try
             {
@@ -1144,7 +1169,7 @@ namespace SalmonEgg.Acp.Client
             }
             finally
             {
-                if (CompletePermissionResponse(pending, outcome, sent))
+                if (CompletePermissionResponse(pending, isCancellation, sent))
                 {
                     await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null,
                         pending, cancelForSession: true).ConfigureAwait(false);
@@ -1175,7 +1200,7 @@ namespace SalmonEgg.Acp.Client
             };
         }
 
-        private bool CompletePermissionResponse(PendingInboundRequest pending, string outcome, bool sent)
+        private bool CompletePermissionResponse(PendingInboundRequest pending, bool isCancellation, bool sent)
         {
             lock (_lock)
             {
@@ -1193,7 +1218,7 @@ namespace SalmonEgg.Acp.Client
                 }
                 // A cancellation that arrived while the user's answer was in flight still owns the
                 // next attempt. A failed cancellation stays retryable without a background retry loop.
-                return outcome != "cancelled" && pending.IsPermissionCancellationRequested
+                return !isCancellation && pending.IsPermissionCancellationRequested
                     && IsPermissionRequestCurrent(pending);
             }
         }
@@ -1871,6 +1896,8 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandlePermissionRequest(JsonRpcRequest request)
         {
+            PendingInboundRequest pendingPermission;
+            PermissionRequestEventArgs eventArgs;
             try
             {
                 if (!request.Params.HasValue)
@@ -1953,26 +1980,18 @@ namespace SalmonEgg.Acp.Client
                     });
                 }
 
-                if (!TryGetPendingInboundRequest(requestId, out var pendingPermission)) return;
+                if (!TryGetPendingInboundRequest(requestId, out pendingPermission)) return;
                 pendingPermission.PermissionOptionIds = optionsList.Select(static option => option.OptionId).ToHashSet(StringComparer.Ordinal);
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>
                     TrySendPermissionOutcomeResponseAsync(messageId, outcome, optionId, pendingPermission));
 
-                var eventArgs = new PermissionRequestEventArgs(
+                eventArgs = new PermissionRequestEventArgs(
                     messageId,
                     sessionId,
                     toolCall,
                     optionsList,
                     permissionResponseFunc);
 
-                if (PermissionRequestReceived == null)
-                {
-                    // No UI hooked up; cancel to avoid deadlock.
-                    _ = TrySendPermissionOutcomeResponseAsync(messageId, "cancelled", null, pendingPermission);
-                    return;
-                }
-
-                PermissionRequestReceived.Invoke(this, eventArgs);
             }
             catch (Exception ex)
             {
@@ -1980,6 +1999,30 @@ namespace SalmonEgg.Acp.Client
                 FailPendingInboundRequest(
                     request,
                     JsonRpcError.CreateInternalError("Client failed to process inbound permission request."));
+                return;
+            }
+
+            PublishPermissionRequest(pendingPermission, eventArgs);
+        }
+
+        private void PublishPermissionRequest(PendingInboundRequest pending, PermissionRequestEventArgs eventArgs)
+        {
+            try
+            {
+                if (PermissionRequestReceived is null)
+                {
+                    // No host is available to answer, so cancellation still uses the same claim.
+                    _ = TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending);
+                    return;
+                }
+                PermissionRequestReceived.Invoke(this, eventArgs);
+            }
+            catch (Exception error)
+            {
+                // A subscriber can answer, reconnect, or replace this id before throwing. Errors
+                // must claim the original request too, never remove or answer a newer request.
+                _ = TrySendPermissionFailureResponseAsync(pending);
+                OnErrorOccurred($"Failed to process permission request: {error.Message}");
             }
         }
 
