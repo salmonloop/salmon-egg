@@ -24,7 +24,7 @@ public sealed class ConfigSchemaVersionContractTests
     [Fact]
     public void ServerConfigurationSchemaVersion_IsPinnedToTheCurrentContract()
     {
-        Assert.Equal(4, ConfigurationManager.CurrentServerConfigurationSchemaVersion);
+        Assert.Equal(5, ConfigurationManager.CurrentServerConfigurationSchemaVersion);
     }
 
     [Fact]
