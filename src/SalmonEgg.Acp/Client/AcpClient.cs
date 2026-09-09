@@ -797,6 +797,7 @@ namespace SalmonEgg.Acp.Client
         public async Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            cancellationToken.ThrowIfCancellationRequested();
             if (@params == null)
             {
                 throw new ArgumentNullException(nameof(@params));
@@ -809,16 +810,50 @@ namespace SalmonEgg.Acp.Client
                     "session/cancel requires 'sessionId'.");
             }
 
-            var notification = new JsonRpcNotification(
-                "session/cancel",
-                ToElement<SessionCancelParams>(@params));
+            CancellationToken connectionToken;
+            lock (_lock)
+            {
+                EnsureInitialized();
+                connectionToken = _messageLoopCts!.Token;
+            }
+            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
+            Task<bool> sendTask;
+            lock (_lock)
+            {
+                connectionToken.ThrowIfCancellationRequested();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_messageLoopCts?.Token != connectionToken)
+                {
+                    throw new OperationCanceledException("The ACP connection changed before cancelling the session.");
+                }
+                EnsureInitialized();
+                var notification = new JsonRpcNotification(
+                    "session/cancel",
+                    ToElement<SessionCancelParams>(@params));
 
-            await _transport.SendMessageAsync(
-                _parser.SerializeMessage(notification),
-                cancellationToken).ConfigureAwait(false);
+                // The send claim and its token belong to the same connection. A queued write must
+                // be cancelled before the transport can carry it into a replacement connection.
+                sendTask = _transport.SendMessageAsync(_parser.SerializeMessage(notification), sendCancellation.Token);
+            }
+            var sent = await sendTask.ConfigureAwait(false);
+            connectionToken.ThrowIfCancellationRequested();
+            if (!sent)
+            {
+                throw new InvalidOperationException(CreateTransportSendFailureMessage("session/cancel"));
+            }
 
-            await CancelPendingInboundRequestsForSessionAsync(@params.SessionId).ConfigureAwait(false);
-            await _sessionStore.CancelSessionAsync(@params.SessionId).ConfigureAwait(false);
+            await CancelPendingInboundRequestsForSessionAsync(@params.SessionId, connectionToken).ConfigureAwait(false);
+            Task<bool> cancelSessionTask;
+            lock (_lock)
+            {
+                connectionToken.ThrowIfCancellationRequested();
+                if (_messageLoopCts?.Token != connectionToken)
+                {
+                    throw new OperationCanceledException("The ACP connection changed while cancelling the session.");
+                }
+                cancelSessionTask = _sessionStore.CancelSessionAsync(@params.SessionId);
+            }
+            await cancelSessionTask.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -2543,7 +2578,7 @@ namespace SalmonEgg.Acp.Client
                     isReleased));
         }
 
-        private async Task CancelPendingInboundRequestsForSessionAsync(string sessionId)
+        private async Task CancelPendingInboundRequestsForSessionAsync(string sessionId, CancellationToken connectionToken)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
@@ -2552,12 +2587,19 @@ namespace SalmonEgg.Acp.Client
 
             // Each awaited send lets the peer finish and reuse other request ids. Cancellation
             // belongs to these request instances, never to a later request with the same id.
-            var pendingRequests = _pendingInboundRequests
-                .Where(pair => string.Equals(pair.Value.SessionId, sessionId, StringComparison.Ordinal))
-                .ToArray();
+            KeyValuePair<string, PendingInboundRequest>[] pendingRequests;
+            lock (_lock)
+            {
+                connectionToken.ThrowIfCancellationRequested();
+                pendingRequests = _pendingInboundRequests
+                    .Where(pair => pair.Value.ConnectionToken == connectionToken
+                        && string.Equals(pair.Value.SessionId, sessionId, StringComparison.Ordinal))
+                    .ToArray();
+            }
 
             foreach (var (pendingId, pending) in pendingRequests)
             {
+                connectionToken.ThrowIfCancellationRequested();
                 if (pending.ElicitationRequest is not null)
                 {
                     await TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse(), cancelForSession: true).ConfigureAwait(false);
@@ -2571,21 +2613,30 @@ namespace SalmonEgg.Acp.Client
                     continue;
                 }
 
-                if (!_pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(pendingId, pending)))
+                Task<bool> responseTask;
+                lock (_lock)
                 {
-                    continue;
-                }
+                    connectionToken.ThrowIfCancellationRequested();
+                    if (!IsInboundRequestCurrent(pending)
+                        || !_pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(pendingId, pending)))
+                    {
+                        continue;
+                    }
 
-                if (pending.MessageId == null)
-                {
-                    continue;
-                }
+                    if (pending.MessageId == null)
+                    {
+                        continue;
+                    }
 
-                await SendResponseAsync(new JsonRpcResponse(
-                    pending.MessageId,
-                    new JsonRpcError(
-                        JsonRpcErrorCode.MethodNotAllowed,
-                        "Session was cancelled before the client completed this request."))).ConfigureAwait(false);
+                    // Claim this response while the original callback still owns its connection;
+                    // its physical write must observe the same token as the session cancellation.
+                    responseTask = SendResponseAsync(new JsonRpcResponse(
+                        pending.MessageId,
+                        new JsonRpcError(
+                            JsonRpcErrorCode.MethodNotAllowed,
+                            "Session was cancelled before the client completed this request.")), connectionToken);
+                }
+                await responseTask.ConfigureAwait(false);
             }
         }
 
