@@ -1259,22 +1259,31 @@ namespace SalmonEgg.Acp.Client
             using var activity = AcpActivitySources.StartClientRequest(request.Method);
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _pendingRequests[requestIdStr] = tcs;
+            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
             var requestWriteStarted = false;
             var retainPendingRequest = false;
 
             try
             {
                 var json = _parser.SerializeMessage(request);
-                ClearLastTransportError();
-                connectionToken.ThrowIfCancellationRequested();
-                cancellationToken.ThrowIfCancellationRequested();
-                // Once the transport call begins, a pipe/socket implementation may have written
-                // some or all of the frame before observing its token. Treat it as potentially
-                // delivered for cancellation purposes: skipping $/cancel_request here would leave
-                // a peer running an operation the caller has already abandoned.
-                requestWriteStarted = true;
-                var sent = await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                Task<bool> sendTask;
+                lock (_lock)
+                {
+                    connectionToken.ThrowIfCancellationRequested();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (_disposed || _messageLoopCts?.Token != connectionToken)
+                    {
+                        throw new OperationCanceledException("The ACP connection changed before sending the request.");
+                    }
+                    ClearLastTransportError();
+                    // Pending registration must precede synchronous peer replies,
+                    // under the same connection lock as starting transport I/O. The linked token also
+                    // prevents a transport's delayed write from crossing a subsequent reconnect.
+                    _pendingRequests[requestIdStr] = tcs;
+                    requestWriteStarted = true;
+                    sendTask = _transport.SendMessageAsync(json, sendCancellation.Token);
+                }
+                var sent = await sendTask.ConfigureAwait(false);
                 if (!sent)
                 {
                     throw new InvalidOperationException(CreateTransportSendFailureMessage(request.Method));
@@ -1363,6 +1372,10 @@ namespace SalmonEgg.Acp.Client
                 if (!retainPendingRequest)
                 {
                     _pendingRequests.TryRemove(requestIdStr, out _);
+                    if (tcs.Task.IsFaulted)
+                    {
+                        _ = tcs.Task.Exception;
+                    }
                 }
             }
         }
