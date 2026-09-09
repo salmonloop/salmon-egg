@@ -24,6 +24,8 @@ namespace SalmonEgg.Acp.Client
     {
         private const string StableV1RuntimeOnlyMessage =
             "ACP live client support is limited to stable protocolVersion 1 while newer modeled versions remain draft or incomplete.";
+        private const string DisconnectIncompleteMessage =
+            "ACP client disconnect has not completed successfully. Wait for it or retry DisconnectAsync before initializing.";
 
         // A best-effort notification must never turn a user cancellation into an unbounded wait.
         // Shared with behavioral tests so they validate the lifecycle, not a second timeout value.
@@ -88,6 +90,7 @@ namespace SalmonEgg.Acp.Client
         private readonly object _lock = new();
         private bool _disposed;
         private CancellationTokenSource? _messageLoopCts;
+        private Task<bool>? _disconnectTask;
         private string? _lastTransportErrorMessage;
 
         private bool _isInitialized;
@@ -231,9 +234,31 @@ namespace SalmonEgg.Acp.Client
 
             InitializeClientProtocolPolicy.Validate(@params.ProtocolVersion, @params.ClientCapabilities);
 
+            Task<bool>? previousDisconnect;
+            lock (_lock)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                previousDisconnect = _disconnectTask;
+                if (previousDisconnect is { IsCompletedSuccessfully: false })
+                {
+                    throw new InvalidOperationException(DisconnectIncompleteMessage);
+                }
+            }
+
+            if (previousDisconnect is not null && !await previousDisconnect.ConfigureAwait(false))
+            {
+                throw new InvalidOperationException(DisconnectIncompleteMessage);
+            }
+
             CancellationToken connectionToken;
             lock (_lock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!ReferenceEquals(_disconnectTask, previousDisconnect))
+                {
+                    throw new InvalidOperationException(DisconnectIncompleteMessage);
+                }
+
                 if (_isInitialized)
                 {
                     throw new InvalidOperationException("ACP client is already initialized.");
@@ -1175,13 +1200,44 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Disconnects from the agent.
         /// </summary>
-        public async Task<bool> DisconnectAsync()
+        public Task<bool> DisconnectAsync()
         {
-            ResetConnectionState();
-            CancelPendingRequests();
+            TaskCompletionSource<bool> completion;
+            lock (_lock)
+            {
+                if (_disconnectTask is { IsCompleted: false } pending)
+                {
+                    return pending;
+                }
 
-            await _transport.DisconnectAsync();
-            return true;
+                if (_disposed)
+                {
+                    return Task.FromResult(true);
+                }
+
+                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                // Publish before cancelling the old connection. A reentrant initializer must not
+                // share a transport whose physical teardown is still in flight.
+                _disconnectTask = completion.Task;
+            }
+
+            _ = CompleteDisconnectAsync(completion);
+            return completion.Task;
+        }
+
+        private async Task CompleteDisconnectAsync(TaskCompletionSource<bool> completion)
+        {
+            try
+            {
+                ResetConnectionState();
+                CancelPendingRequests();
+                var disconnected = await _transport.DisconnectAsync().ConfigureAwait(false);
+                completion.TrySetResult(disconnected);
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
         }
 
         /// <summary>
@@ -2713,12 +2769,15 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
+            lock (_lock)
             {
-                return;
-            }
+                if (_disposed)
+                {
+                    return;
+                }
 
-            _disposed = true;
+                _disposed = true;
+            }
             ResetConnectionState();
 
             // Detach the transport events first so callbacks during teardown cannot re-enter disposed

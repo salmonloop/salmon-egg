@@ -40,6 +40,7 @@ public sealed class AcpClientRequestCancellationTests
     public AcpClientRequestCancellationTests()
     {
         _transportMock.SetupGet(t => t.IsConnected).Returns(true);
+        _transportMock.Setup(t => t.DisconnectAsync()).ReturnsAsync(true);
         _transportMock
             .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<AcpTransportSendOptions>(), It.IsAny<CancellationToken>()))
             .Returns<string, AcpTransportSendOptions, CancellationToken>((message, _, token) =>

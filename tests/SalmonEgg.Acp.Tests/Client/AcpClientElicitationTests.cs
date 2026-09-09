@@ -54,6 +54,7 @@ public sealed class AcpClientElicitationTests
     public AcpClientElicitationTests()
     {
         _transportMock.SetupGet(t => t.IsConnected).Returns(true);
+        _transportMock.Setup(t => t.DisconnectAsync()).ReturnsAsync(true);
     }
 
     [Fact]
