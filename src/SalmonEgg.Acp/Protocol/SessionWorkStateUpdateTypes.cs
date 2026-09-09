@@ -170,7 +170,9 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             var state = stateElement.GetString() ?? string.Empty;
-            var meta = AcpMetaJson.Read(root);
+            // All three known state payloads mark _meta x-deserialize-default-on-error. Custom
+            // states keep the complete raw payload; only their optional object projection defaults.
+            var meta = AcpMetaJson.ReadOrDefault(root);
 
             return state switch
             {

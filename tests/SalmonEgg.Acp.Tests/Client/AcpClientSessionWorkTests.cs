@@ -12,6 +12,22 @@ public sealed class AcpClientSessionWorkTests
 {
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
+    public static TheoryData<string, string?> StateMetadataCases
+    {
+        get
+        {
+            var cases = new TheoryData<string, string?>();
+            foreach (var state in new[] { "running", "requires_action", "idle" })
+            {
+                foreach (var metadata in new string?[] { null, "null", "42", "[]", "\"invalid\"", "{\"owned\":true}" })
+                {
+                    cases.Add(state, metadata);
+                }
+            }
+            return cases;
+        }
+    }
+
     [Fact]
     public async Task SendPromptAsync_V2Acknowledgement_DoesNotFinishForegroundWork()
     {
@@ -57,6 +73,101 @@ public sealed class AcpClientSessionWorkTests
         var response = await peer.PromptAsync("one").WaitAsync(TestToken);
 
         // Assert
+        Assert.Equal(StopReason.EndTurn, response.StopReason);
+        Assert.Equal(0, peer.Client.GetSessionWorkSnapshot("one")!.PendingPrompts);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{\"accepted\":true}")]
+    public async Task SendPromptAsync_V2AcknowledgementMetadata_WaitsForAuthoritativeIdle(string? metadata)
+    {
+        // Arrange
+        using var peer = await ProtocolPeer.CreateAsync();
+        var pending = peer.PromptAsync("one");
+
+        // Act
+        peer.ReplyPrompt("one", metadata is null ? "{}" : "{\"_meta\":" + metadata + "}");
+
+        // Assert
+        Assert.Equal(1, peer.Client.GetSessionWorkSnapshot("one")!.AcceptedPrompts);
+        Assert.False(pending.IsCompleted);
+        peer.State("one", "idle", "end_turn");
+        var response = await pending.WaitAsync(TestToken);
+        Assert.Equal(StopReason.EndTurn, response.StopReason);
+        Assert.Null(response.Meta);
+        Assert.Empty(peer.Errors);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{\"completed\":true}")]
+    public async Task SendPromptAsync_V1Metadata_KeepsTheTerminalResponseContract(string? metadata)
+    {
+        // Arrange
+        using var peer = await ProtocolPeer.CreateAsync(AcpProtocolVersion.V1);
+        var pending = peer.PromptAsync("one");
+
+        // Act
+        peer.ReplyPrompt("one", "{\"stopReason\":\"max_tokens\""
+            + (metadata is null ? "" : ",\"_meta\":" + metadata) + "}");
+        var response = await pending.WaitAsync(TestToken);
+
+        // Assert
+        Assert.Equal(StopReason.MaxTokens, response.StopReason);
+        Assert.True(response.HasStopReason);
+        if (metadata == "{\"completed\":true}")
+        {
+            Assert.True(Assert.IsType<JsonElement>(response.Meta!["completed"]).GetBoolean());
+        }
+        else
+        {
+            Assert.Null(response.Meta);
+        }
+        Assert.Empty(peer.Errors);
+    }
+
+    [Theory]
+    [MemberData(nameof(StateMetadataCases))]
+    public async Task SendPromptAsync_V2StateMetadata_PreservesLifecycleAndSchemaDefaults(string state, string? metadata)
+    {
+        // Arrange
+        using var peer = await ProtocolPeer.CreateAsync();
+        var pending = peer.PromptAsync("one");
+        peer.ReplyPrompt("one", "{}");
+        peer.State("one", "running");
+
+        // Act
+        peer.Update("one", "{\"sessionUpdate\":\"state_update\",\"state\":\"" + state + "\""
+            + (state == "idle" ? ",\"stopReason\":\"end_turn\"" : "")
+            + (metadata is null ? "" : ",\"_meta\":" + metadata) + "}");
+
+        // Assert
+        Assert.Empty(peer.Errors);
+        var snapshot = Assert.IsType<SessionWorkSnapshot>(peer.Client.GetSessionWorkSnapshot("one"));
+        Assert.Equal(state, snapshot.State!.State);
+        if (metadata == "{\"owned\":true}")
+        {
+            Assert.True(Assert.IsType<JsonElement>(snapshot.State.Meta!["owned"]).GetBoolean());
+        }
+        else
+        {
+            Assert.Null(snapshot.State.Meta);
+        }
+        if (state != "idle")
+        {
+            Assert.False(pending.IsCompleted);
+            peer.State("one", "idle", "end_turn");
+        }
+        var response = await pending.WaitAsync(TestToken);
         Assert.Equal(StopReason.EndTurn, response.StopReason);
         Assert.Equal(0, peer.Client.GetSessionWorkSnapshot("one")!.PendingPrompts);
     }

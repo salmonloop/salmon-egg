@@ -114,7 +114,8 @@ namespace SalmonEgg.Acp.Protocol
             {
                 StopReason = has ? new StopReason(reason.GetString() ?? string.Empty) : StopReason.EndTurn,
                 HasStopReason = has,
-                Meta = AcpMetaJson.Read(root)
+                // PromptResponse._meta defaults on error in both stable and draft schemas.
+                Meta = AcpMetaJson.ReadOrDefault(root)
             };
         }
 

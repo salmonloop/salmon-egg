@@ -374,7 +374,7 @@ namespace SalmonEgg.Acp.Protocol
                     {
                         SessionId = sessionId,
                         Update = StateSessionUpdateWireFormat.Read(updateElement, options),
-                        Meta = AcpMetaJson.Read(root)
+                        Meta = AcpMetaJson.ReadOrDefault(root)
                     };
                 }
 
@@ -506,7 +506,7 @@ namespace SalmonEgg.Acp.Protocol
             return new StateSessionUpdate
             {
                 State = state!,
-                Meta = AcpMetaJson.Read(root)
+                Meta = AcpMetaJson.Clone(state!.Meta)
             };
         }
 
@@ -530,6 +530,11 @@ namespace SalmonEgg.Acp.Protocol
             writer.WriteString("sessionUpdate", Discriminator);
             foreach (var property in element.EnumerateObject())
             {
+                if (property.NameEquals("sessionUpdate")
+                    || (property.NameEquals("_meta") && value.Meta is not null))
+                {
+                    continue;
+                }
                 property.WriteTo(writer);
             }
 
