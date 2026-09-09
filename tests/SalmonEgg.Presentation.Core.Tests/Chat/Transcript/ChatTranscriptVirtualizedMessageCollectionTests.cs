@@ -58,6 +58,30 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
     }
 
     [Fact]
+    public void ContainsToolCall_UnmaterializedTranscript_DoesNotCreateMessageViewModels()
+    {
+        // Arrange
+        var projectedIndexes = new List<int>();
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var transcript = BuildTranscript(5000).SetItem(4321, new ConversationMessageSnapshot
+        {
+            Id = "permission-tool",
+            ContentType = "tool_call",
+            ToolCallId = "call-id"
+        });
+        sut.Reset("conversation", transcript, (snapshot, index) =>
+        {
+            projectedIndexes.Add(index);
+            return Project(snapshot, index);
+        }, MatchesSnapshot, PatchProjectedMessage);
+
+        // Act / Assert
+        Assert.True(sut.ContainsToolCall("call-id"));
+        Assert.False(sut.ContainsToolCall("unknown"));
+        Assert.Empty(projectedIndexes);
+    }
+
+    [Fact]
     public void Reset_WhenSameConversationAppendsStablePrefix_PublishesAddWithoutFullReset()
     {
         var projectedIndexes = new List<int>();

@@ -1322,6 +1322,15 @@
   <data name="Elicitation_UnsupportedRequiredFields" xml:space="preserve">
     <value>This form contains required fields that cannot be displayed. Decline or cancel the request.</value>
   </data>
+  <data name="Permission_DefaultTitle" xml:space="preserve">
+    <value>Permission required</value>
+  </data>
+  <data name="Permission_RetryCancellation" xml:space="preserve">
+    <value>Retry cancellation</value>
+  </data>
+  <data name="Permission_BindingChanged" xml:space="preserve">
+    <value>This request is no longer valid because the conversation changed. Retry cancellation to dismiss it.</value>
+  </data>
   <data name="SettingsSection_CommandLine" xml:space="preserve">
     <value>Command line</value>
   </data>

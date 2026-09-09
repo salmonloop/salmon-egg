@@ -134,7 +134,8 @@ public sealed class ChatStateProjector : IChatStateProjector
                 : string.Empty,
             TurnFailureDismissActionText: isTurnFailureVisible
                 ? Localize("ChatTurnFailure_DismissAction", "Dismiss failure detail")
-                : string.Empty);
+                : string.Empty,
+            Bindings: storeState.Bindings);
     }
 
     private static ActiveTurnState? GetVisibleActiveTurn(ActiveTurnState? activeTurn, string? hydratedConversationId)
@@ -250,4 +251,5 @@ public sealed record ChatUiProjection(
     string TurnFailureTitle,
     string TurnFailureMessage,
     string TurnFailureCopyActionText,
-    string TurnFailureDismissActionText);
+    string TurnFailureDismissActionText,
+    IImmutableDictionary<string, ConversationBindingSlice>? Bindings = null);

@@ -1322,6 +1322,15 @@
   <data name="Elicitation_UnsupportedRequiredFields" xml:space="preserve">
     <value>此表单包含暂不支持的必填项。请选择拒绝或取消。</value>
   </data>
+  <data name="Permission_DefaultTitle" xml:space="preserve">
+    <value>需要授权</value>
+  </data>
+  <data name="Permission_RetryCancellation" xml:space="preserve">
+    <value>重试取消</value>
+  </data>
+  <data name="Permission_BindingChanged" xml:space="preserve">
+    <value>会话已更改，此请求已失效。请重试取消以关闭此提示。</value>
+  </data>
   <data name="SettingsSection_CommandLine" xml:space="preserve">
     <value>命令行工具</value>
   </data>

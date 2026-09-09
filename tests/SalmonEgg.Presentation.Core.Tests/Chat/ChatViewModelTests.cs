@@ -8842,6 +8842,9 @@ public partial class ChatViewModelTests
             return Task.FromResult(fixture.ViewModel.PendingPermissionRequest?.Options.Count == 3);
         }, timeoutMilliseconds: 5000);
 
+        Assert.Same(fixture.ViewModel.PendingPermissionRequest, fixture.ViewModel.StandalonePermissionRequest);
+        Assert.Equal("Run tests", fixture.ViewModel.StandalonePermissionRequest!.Title);
+
         chatService.Raise(
             service => service.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new ToolCallUpdate
@@ -8868,6 +8871,7 @@ public partial class ChatViewModelTests
                 && string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
         Assert.Same(fixture.ViewModel.PendingPermissionRequest, toolMessage.PendingPermissionRequest);
         Assert.Equal(3, toolMessage.PendingPermissionRequest?.Options.Count);
+        Assert.Null(fixture.ViewModel.StandalonePermissionRequest);
     }
 
     [Fact]

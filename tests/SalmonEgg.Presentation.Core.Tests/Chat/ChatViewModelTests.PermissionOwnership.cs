@@ -8,6 +8,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -219,6 +220,257 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task PermissionRequest_ReboundConversation_CancelsObsoletePromptAndDisplaysCurrent()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("obsolete", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var old = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+
+        // Act
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "replacement-remote", "profile"))
+        });
+        peer.Request("current", "replacement-remote", "current-tool");
+        await dispatcher.RunUntilIdleAsync();
+
+        // Assert: cancellation and advancement happen without clicking an obsolete prompt.
+        var current = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+        Assert.NotSame(old, current);
+        Assert.Equal("current", current.MessageId.ToString());
+        var cancelled = Assert.Single(peer.Responses);
+        Assert.Equal("obsolete", cancelled.GetProperty("id").GetString());
+        Assert.Equal("cancelled", cancelled.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+        await AwaitWithSynchronizationContextAsync(dispatcher, old.RespondCommand.ExecuteAsync(null));
+        Assert.Single(peer.Responses);
+        await AwaitWithSynchronizationContextAsync(dispatcher,
+            current.RespondCommand.ExecuteAsync(current.Options[0]).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.Equal(["obsolete", "current"], peer.Responses.Select(response => response.GetProperty("id").GetString()));
+        Assert.Null(fixture.ViewModel.PendingPermissionRequest);
+        Assert.False(fixture.ViewModel.ShowPermissionDialog);
+    }
+
+    [Fact]
+    public async Task PermissionRequest_ReboundCancellationFails_RetriesOnlyOnExplicitCommand()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("obsolete", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var old = fixture.ViewModel.PendingPermissionRequest!;
+        var attempts = 0;
+        peer.ResponseSend = (_, _) =>
+        {
+            attempts++;
+            return Task.FromResult(false);
+        };
+
+        // Act
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "replacement-remote", "profile"))
+        });
+        peer.Request("current", "replacement-remote", "current-tool");
+        await dispatcher.RunUntilIdleAsync();
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        // Assert: store ticks cannot turn a failed best-effort send into an automatic retry loop.
+        Assert.Equal(1, attempts);
+        var current = fixture.ViewModel.PendingPermissionRequest!;
+        Assert.Equal("current", current.MessageId.ToString());
+        Assert.Empty(peer.Responses);
+        var retry = Assert.Single(old.Options);
+        Assert.False(retry.IsAllow);
+        Assert.Equal("Retry cancellation", retry.Name);
+        Assert.Contains("no longer valid", old.Description);
+        peer.ResponseSend = null;
+        await AwaitWithSynchronizationContextAsync(dispatcher, current.RespondCommand.ExecuteAsync(current.Options[0]));
+        Assert.Same(old, fixture.ViewModel.StandalonePermissionRequest);
+        await AwaitWithSynchronizationContextAsync(dispatcher, retry.SelectCommand.ExecuteAsync(null));
+        Assert.Equal(["current", "obsolete"], peer.Responses.Select(response => response.GetProperty("id").GetString()));
+        Assert.Equal("cancelled", peer.Responses.Last().GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+        Assert.Null(fixture.ViewModel.PendingPermissionRequest);
+        Assert.Null(fixture.ViewModel.StandalonePermissionRequest);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PermissionRequest_ReboundDuringSelectionWrite_SettlesOriginalBeforeAdvancing(bool firstWriteSucceeds)
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("obsolete", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var old = fixture.ViewModel.PendingPermissionRequest!;
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var settled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        peer.ResponseSend = (response, token) =>
+        {
+            attempts++;
+            if (response.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString() == "selected")
+            {
+                started.TrySetResult(true);
+                return release.Task.WaitAsync(token);
+            }
+            return Task.FromResult(true);
+        };
+        void OnPromptChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(ChatViewModel.PendingPermissionRequest)
+                && fixture.ViewModel.PendingPermissionRequest?.MessageId.ToString() == "current")
+            {
+                settled.TrySetResult(true);
+            }
+        }
+        fixture.ViewModel.PropertyChanged += OnPromptChanged;
+        var answer = old.RespondCommand.ExecuteAsync(old.Options[0]);
+        try
+        {
+            await AwaitWithSynchronizationContextAsync(dispatcher, started.Task);
+
+            // Act
+            await fixture.UpdateStateAsync(state => state with
+            {
+                Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "replacement-remote", "profile"))
+            });
+            peer.Request("current", "replacement-remote", "current-tool");
+            await dispatcher.RunUntilIdleAsync();
+            Assert.Equal(1, attempts);
+            Assert.Empty(peer.Responses);
+            release.TrySetResult(firstWriteSucceeds);
+            await AwaitWithSynchronizationContextAsync(dispatcher, answer);
+            if (old.BindingCancellationTask is not null)
+            {
+                await AwaitWithSynchronizationContextAsync(dispatcher, old.BindingCancellationTask);
+            }
+            await AwaitWithSynchronizationContextAsync(dispatcher,
+                settled.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+            // Assert
+            var response = Assert.Single(peer.Responses);
+            Assert.Equal("obsolete", response.GetProperty("id").GetString());
+            Assert.Equal(firstWriteSucceeds ? "selected" : "cancelled",
+                response.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+            Assert.Equal(firstWriteSucceeds ? 1 : 2, attempts);
+            Assert.Equal("current", fixture.ViewModel.PendingPermissionRequest!.MessageId.ToString());
+        }
+        finally
+        {
+            fixture.ViewModel.PropertyChanged -= OnPromptChanged;
+            release.TrySetResult(firstWriteSucceeds);
+            await AwaitWithSynchronizationContextAsync(dispatcher, answer);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PermissionRequest_BindingRestoredAfterInvalidation_NeverResurrectsSelection(bool selectionInFlight)
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("obsolete", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var old = fixture.ViewModel.PendingPermissionRequest!;
+        var oldOption = old.Options[0];
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.ResponseSend = (_, token) =>
+        {
+            started.TrySetResult(true);
+            return selectionInFlight ? release.Task.WaitAsync(token) : Task.FromResult(false);
+        };
+        Task? answer = selectionInFlight ? old.RespondCommand.ExecuteAsync(oldOption) : null;
+        try
+        {
+            if (answer is not null) await AwaitWithSynchronizationContextAsync(dispatcher, started.Task);
+
+            // Act
+            await fixture.UpdateStateAsync(state => state with
+            {
+                Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "replacement-remote", "profile"))
+            });
+            await dispatcher.RunUntilIdleAsync();
+            await fixture.UpdateStateAsync(state => state with
+            {
+                Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "remote-1", "profile"))
+            });
+            release.TrySetResult(false);
+            if (answer is not null) await AwaitWithSynchronizationContextAsync(dispatcher, answer);
+            await AwaitWithSynchronizationContextAsync(dispatcher, old.BindingCancellationTask!);
+            peer.ResponseSend = null;
+            await AwaitWithSynchronizationContextAsync(dispatcher, oldOption.SelectCommand.ExecuteAsync(null));
+
+            // Assert
+            Assert.Equal("cancelled", Assert.Single(peer.Responses).GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+            Assert.Null(fixture.ViewModel.PendingPermissionRequest);
+        }
+        finally
+        {
+            release.TrySetResult(false);
+            if (answer is not null) await AwaitWithSynchronizationContextAsync(dispatcher, answer);
+        }
+    }
+
+    [Fact]
+    public async Task PermissionRequest_LanguageChanges_ReprojectsBackgroundCancellationWithoutRetrying()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "Permission_RetryCancellation", "重试取消");
+        localizer.Set("zh-Hans", "Permission_BindingChanged", "会话已变化，此请求已失效。请重试取消。");
+        localizer.Set("en-US", "Permission_RetryCancellation", "Retry cancellation");
+        localizer.Set("en-US", "Permission_BindingChanged", "This request is no longer valid.");
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+        await using var fixture = CreateViewModel(dispatcher, localizer: localizer, languageService: languageService.Object);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("obsolete", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var old = fixture.ViewModel.PendingPermissionRequest!;
+        var attempts = 0;
+        peer.ResponseSend = (_, _) => { attempts++; return Task.FromResult(false); };
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Bindings = state.Bindings!.SetItem("conv-1", new("conv-1", "replacement-remote", "profile"))
+        });
+        await dispatcher.RunUntilIdleAsync();
+        Assert.Equal("重试取消", old.Title);
+        await SelectPermissionConversationAsync(fixture, "conv-2");
+
+        // Act
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+        await dispatcher.RunUntilIdleAsync();
+
+        // Assert
+        Assert.Equal("Retry cancellation", old.Title);
+        Assert.Equal("This request is no longer valid.", old.Description);
+        Assert.Equal("Retry cancellation", Assert.Single(old.Options).Name);
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
     public async Task PermissionRequest_DecoratorForwardsInnerSender_UsesSubscribedService()
     {
         // Arrange
@@ -337,7 +589,8 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(dispatcher, prompt.RespondCommand.ExecuteAsync(prompt.Options[0]));
 
         // Assert
-        Assert.Empty(peer.Responses);
+        Assert.Equal("cancelled", Assert.Single(peer.Responses).GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+        Assert.Null(fixture.ViewModel.PendingPermissionRequest);
     }
 
     [Fact]
