@@ -2253,6 +2253,12 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandlePermissionRequest(JsonRpcRequest request)
         {
+            if (ProtocolVersion == AcpProtocolVersion.V2)
+            {
+                HandleDraftPermissionRequest(request);
+                return;
+            }
+
             PendingInboundRequest pendingPermission;
             PermissionRequestEventArgs eventArgs;
             try
@@ -2365,6 +2371,49 @@ namespace SalmonEgg.Acp.Client
             }
 
             PublishPermissionRequest(pendingPermission, eventArgs);
+        }
+
+        private void HandleDraftPermissionRequest(JsonRpcRequest request)
+        {
+            var requestId = request.Id?.ToString() ?? string.Empty;
+            AcpPermissionRequestSnapshot snapshot;
+            try
+            {
+                snapshot = AcpPermissionDraftExtensions.ReadRequest(request.Params
+                    ?? throw new JsonException("Missing permission params."));
+            }
+            catch (JsonException error)
+            {
+                FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams(error.Message));
+                return;
+            }
+
+            PendingInboundRequest pending;
+            PermissionRequestEventArgs eventArgs;
+            try
+            {
+                SetPendingInboundSessionId(requestId, snapshot.SessionId);
+                if (!TryGetPendingInboundRequest(requestId, out pending) || !IsInboundRequestCurrent(pending)) return;
+                var options = snapshot.Options.ToList();
+                pending.PermissionOptionIds = options.Select(static option => option.OptionId).ToHashSet(StringComparer.Ordinal);
+                // The same request owner carries cancellation and responses. Draft display data is
+                // reachable only through its opt-in accessor; it never becomes a v1 tool-call event.
+                eventArgs = new PermissionRequestEventArgs(request.Id!, snapshot.SessionId, null, options,
+                    (outcome, optionId) => TrySendPermissionOutcomeResponseAsync(pending.MessageId, outcome, optionId, pending),
+                    () => CanRespondToPermissionRequest(pending))
+                {
+                    DraftRequest = snapshot
+                };
+            }
+            catch (Exception error)
+            {
+                OnErrorOccurred($"Failed to process permission request: {error.Message}");
+                FailPendingInboundRequest(request,
+                    JsonRpcError.CreateInternalError("Client failed to process inbound permission request."));
+                return;
+            }
+
+            PublishPermissionRequest(pending, eventArgs);
         }
 
         private void PublishPermissionRequest(PendingInboundRequest pending, PermissionRequestEventArgs eventArgs)

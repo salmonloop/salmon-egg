@@ -379,6 +379,8 @@ namespace SalmonEgg.Acp.Client
             _isResponseSending = isResponseSending;
         }
 
+        internal AcpPermissionRequestSnapshot? DraftRequest { get; init; }
+
         /// <summary>
         /// The message ID of the original request.
         /// </summary>

@@ -24,9 +24,10 @@ internal static class SessionProjectionWireContract
             Property(info, "content").IsRequired = true;
             DefaultMetadata(info);
         }
-        else if (info.Type == typeof(ToolCallStatusUpdate))
+        else if (info.Type == typeof(ToolCallStatusUpdate) || info.Type == typeof(ToolCallUpdate))
         {
-            RequireId(info, "toolCallId", static value => ((ToolCallStatusUpdate)value).ToolCallId);
+            RequireId(info, "toolCallId", static value => value is ToolCallStatusUpdate patch
+                ? patch.ToolCallId : ((ToolCallUpdate)value).ToolCallId);
             Property(info, "title").CustomConverter = new DefaultableStringJsonConverter();
             Property(info, "kind").CustomConverter = new DefaultableNullableJsonConverter<ToolCallKind>();
             Property(info, "status").CustomConverter = new DefaultableNullableJsonConverter<ToolCallStatus>();
@@ -65,6 +66,13 @@ internal static class SessionProjectionWireContract
         {
             RequireId(info, "path", static value => ((ToolCallLocation)value).Path);
             Property(info, "line").CustomConverter = new DefaultableNullableJsonConverter<uint>();
+            DefaultMetadata(info);
+        }
+        else if (info.Type == typeof(PermissionOption))
+        {
+            RequireId(info, "optionId", static value => ((PermissionOption)value).OptionId);
+            RequireId(info, "name", static value => ((PermissionOption)value).Name);
+            RequireId(info, "kind", static value => ((PermissionOption)value).Kind);
             DefaultMetadata(info);
         }
     }

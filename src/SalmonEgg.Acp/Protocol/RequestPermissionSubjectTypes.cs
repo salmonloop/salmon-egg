@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -16,6 +17,10 @@ public abstract record RequestPermissionSubject : AcpProtocolObject
 {
     /// <summary>The raw <c>type</c> discriminator.</summary>
     public abstract string Type { get; }
+
+    /// <summary>Unknown fields on a known subject, preserved without interpretation.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; init; }
 }
 
 /// <summary>A permission subject referring to a tool-call upsert.</summary>
@@ -95,17 +100,19 @@ internal sealed class RequestPermissionSubjectJsonConverter : JsonConverter<Requ
                 ToolCall = root.TryGetProperty("toolCall", out var toolCall) && toolCall.ValueKind == JsonValueKind.Object
                     ? toolCall.Deserialize((JsonTypeInfo<ToolCallUpdate>)options.GetTypeInfo(typeof(ToolCallUpdate))) ?? new ToolCallUpdate()
                     : throw new JsonException("ACP tool_call permission subject requires toolCall."),
-                Meta = AcpMetaJson.Read(root)
+                Meta = ReadDefaultMetadata(root),
+                ExtensionData = ReadExtensions(root, ["toolCall"])
             },
             "command" => new CommandPermissionSubject
             {
                 Command = ReadRequired(root, "command"),
-                Cwd = ReadRequired(root, "cwd"),
+                Cwd = ReadAbsoluteCwd(root),
                 ToolCallId = ReadOptional(root, "toolCallId"),
                 TerminalId = ReadOptional(root, "terminalId"),
-                Meta = AcpMetaJson.Read(root)
+                Meta = ReadDefaultMetadata(root),
+                ExtensionData = ReadExtensions(root, ["command", "cwd", "toolCallId", "terminalId"])
             },
-            var custom => new CustomRequestPermissionSubject(custom ?? string.Empty, root.Clone()) { Meta = AcpMetaJson.Read(root) }
+            var custom => new CustomRequestPermissionSubject(custom ?? string.Empty, root.Clone()) { Meta = ReadDefaultMetadata(root) }
         };
     }
 
@@ -122,9 +129,47 @@ internal sealed class RequestPermissionSubjectJsonConverter : JsonConverter<Requ
                 if (command.ToolCallId is not null) writer.WriteString("toolCallId", command.ToolCallId);
                 if (command.TerminalId is not null) writer.WriteString("terminalId", command.TerminalId); break;
         }
+        if (value.ExtensionData is not null)
+        {
+            foreach (var field in value.ExtensionData)
+            {
+                if (field.Key is "type" or "_meta"
+                    || (value is ToolCallPermissionSubject && field.Key == "toolCall")
+                    || (value is CommandPermissionSubject && field.Key is "command" or "cwd" or "toolCallId" or "terminalId"))
+                {
+                    throw new JsonException("Permission subject extension fields must not replace declared fields.");
+                }
+                writer.WritePropertyName(field.Key);
+                field.Value.WriteTo(writer);
+            }
+        }
         AcpMetaJson.Write(writer, value.Meta); writer.WriteEndObject();
     }
 
     private static string ReadRequired(JsonElement root, string name) => ReadOptional(root, name) ?? throw new JsonException($"ACP command permission subject requires {name}.");
     private static string? ReadOptional(JsonElement root, string name) => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static string ReadAbsoluteCwd(JsonElement root)
+    {
+        var cwd = ReadRequired(root, "cwd");
+        return ProtocolPathRules.IsAbsolutePath(cwd)
+            ? cwd
+            : throw new JsonException("ACP command permission subject cwd must be absolute.");
+    }
+
+    private static Dictionary<string, object?>? ReadDefaultMetadata(JsonElement root)
+        => root.TryGetProperty("_meta", out var meta) && meta.ValueKind == JsonValueKind.Object
+            ? AcpMetaJson.Read(root) : null;
+
+    private static Dictionary<string, JsonElement>? ReadExtensions(JsonElement root, string[] knownFields)
+    {
+        Dictionary<string, JsonElement>? extensions = null;
+        foreach (var field in root.EnumerateObject())
+        {
+            if (field.Name is "type" or "_meta" || Array.IndexOf(knownFields, field.Name) >= 0) continue;
+            extensions ??= new(StringComparer.Ordinal);
+            extensions[field.Name] = field.Value.Clone();
+        }
+        return extensions;
+    }
 }
