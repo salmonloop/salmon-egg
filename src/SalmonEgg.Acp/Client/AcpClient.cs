@@ -36,12 +36,14 @@ namespace SalmonEgg.Acp.Client
             public PendingInboundRequest(
                 string method,
                 object? messageId,
+                CancellationToken connectionToken,
                 string? sessionId = null,
                 AskUserRequest? askUserRequest = null,
                 CreateElicitationRequest? elicitationRequest = null)
             {
                 Method = method;
                 MessageId = messageId;
+                ConnectionToken = connectionToken;
                 SessionId = sessionId;
                 AskUserRequest = askUserRequest;
                 ElicitationRequest = elicitationRequest;
@@ -50,6 +52,8 @@ namespace SalmonEgg.Acp.Client
             public string Method { get; }
 
             public object? MessageId { get; }
+
+            public CancellationToken ConnectionToken { get; }
 
             public string? SessionId { get; }
 
@@ -61,13 +65,20 @@ namespace SalmonEgg.Acp.Client
 
             public bool IsElicitationCancellationRequested { get; set; }
 
+            public HashSet<string>? PermissionOptionIds { get; set; }
+
+            public bool IsPermissionResponseInFlight { get; set; }
+
+            public bool IsPermissionCancellationRequested { get; set; }
+
             public PendingInboundRequest WithSessionId(string sessionId)
-                => new(Method, MessageId, sessionId, AskUserRequest, ElicitationRequest);
+                => new(Method, MessageId, ConnectionToken, sessionId, AskUserRequest, ElicitationRequest);
 
             public PendingInboundRequest WithAskUserRequest(AskUserRequest request)
                 => new(
                     string.IsNullOrWhiteSpace(Method) ? ClientCapabilityMetadata.AskUserExtensionMethod : Method,
                     MessageId,
+                    ConnectionToken,
                     request.SessionId,
                     request,
                     ElicitationRequest);
@@ -1084,7 +1095,8 @@ namespace SalmonEgg.Acp.Client
             object? messageId,
             string outcome,
             string? optionId,
-            PendingInboundRequest? expectedRequest = null)
+            PendingInboundRequest? expectedRequest = null,
+            bool cancelForSession = false)
         {
             if (messageId == null)
             {
@@ -1099,45 +1111,98 @@ namespace SalmonEgg.Acp.Client
                 return false;
             }
 
-            var claimed = expectedRequest is null
-                ? TryTakePendingInboundRequest(idStr, out _)
-                : _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(idStr, expectedRequest));
-            if (!claimed)
+            PendingInboundRequest pending;
+            Task<bool> responseTask;
+            lock (_lock)
             {
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(outcome))
-            {
-                return false;
-            }
-
-            if (string.Equals(outcome, "selected", StringComparison.Ordinal))
-            {
-                if (string.IsNullOrWhiteSpace(optionId))
+                if (!TryGetPendingInboundRequest(idStr, out pending)
+                    || (expectedRequest is not null && !ReferenceEquals(pending, expectedRequest))
+                    || pending.Method != "session/request_permission" || !IsPermissionRequestCurrent(pending))
                 {
-                    throw new AcpException(JsonRpcErrorCode.InvalidParams, "Permission outcome 'selected' requires optionId.");
+                    return false;
+                }
+                if (cancelForSession) pending.IsPermissionCancellationRequested = true;
+                if (pending.IsPermissionResponseInFlight
+                    || (pending.IsPermissionCancellationRequested && outcome != "cancelled"))
+                {
+                    return false;
+                }
+
+                // Invalid UI choices must not consume the request or enable a second response. The
+                // offered ids are captured before invoking consumers, whose DTO lists are mutable.
+                var payload = CreatePermissionOutcome(pending, outcome, optionId);
+                pending.IsPermissionResponseInFlight = true;
+                responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
+                    ToElement<PermissionOutcomeResult>(payload)), pending.ConnectionToken);
+            }
+
+            var sent = false;
+            try
+            {
+                sent = await responseTask.ConfigureAwait(false);
+                return sent;
+            }
+            finally
+            {
+                if (CompletePermissionResponse(pending, outcome, sent))
+                {
+                    await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null,
+                        pending, cancelForSession: true).ConfigureAwait(false);
                 }
             }
-            else if (!string.Equals(outcome, "cancelled", StringComparison.Ordinal))
+        }
+
+        private static PermissionOutcomeResult CreatePermissionOutcome(PendingInboundRequest pending, string outcome, string? optionId)
+        {
+            if (outcome == "selected")
+            {
+                if (optionId is null || pending.PermissionOptionIds?.Contains(optionId) != true)
+                {
+                    throw new AcpException(JsonRpcErrorCode.InvalidParams, "Permission outcome 'selected' requires an offered optionId.");
+                }
+            }
+            else if (outcome != "cancelled")
             {
                 throw new AcpException(JsonRpcErrorCode.InvalidParams, $"Unsupported permission outcome '{outcome}'.");
             }
-
-            var outcomePayload = new PermissionOutcomeResult
+            return new PermissionOutcomeResult
             {
                 Outcome = new PermissionOutcome
                 {
                     Outcome = outcome,
-                    OptionId = string.IsNullOrWhiteSpace(optionId) ? null : optionId
+                    OptionId = outcome == "selected" ? optionId : null
                 }
             };
-
-            var response = new JsonRpcResponse(
-                messageId,
-                ToElement<PermissionOutcomeResult>(outcomePayload));
-            return await SendResponseAsync(response).ConfigureAwait(false);
         }
+
+        private bool CompletePermissionResponse(PendingInboundRequest pending, string outcome, bool sent)
+        {
+            lock (_lock)
+            {
+                pending.IsPermissionResponseInFlight = false;
+                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                    || !ReferenceEquals(current, pending))
+                {
+                    return false;
+                }
+                if (sent)
+                {
+                    _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(
+                        pending.MessageId!.ToString()!, pending));
+                    return false;
+                }
+                // A cancellation that arrived while the user's answer was in flight still owns the
+                // next attempt. A failed cancellation stays retryable without a background retry loop.
+                return outcome != "cancelled" && pending.IsPermissionCancellationRequested
+                    && IsPermissionRequestCurrent(pending);
+            }
+        }
+
+        private bool IsPermissionRequestCurrent(PendingInboundRequest pending)
+            => !_disposed && _transport.IsConnected && !pending.ConnectionToken.IsCancellationRequested
+                && (pending.ConnectionToken.CanBeCanceled
+                    ? _messageLoopCts?.Token == pending.ConnectionToken
+                    : _messageLoopCts is null);
 
         private async Task<bool> TrySendFileSystemResponseAsync(object messageId, bool success, string? content, string? message)
         {
@@ -1888,8 +1953,10 @@ namespace SalmonEgg.Acp.Client
                     });
                 }
 
+                if (!TryGetPendingInboundRequest(requestId, out var pendingPermission)) return;
+                pendingPermission.PermissionOptionIds = optionsList.Select(static option => option.OptionId).ToHashSet(StringComparer.Ordinal);
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>
-                    RespondToPermissionRequestAsync(messageId, outcome, optionId));
+                    TrySendPermissionOutcomeResponseAsync(messageId, outcome, optionId, pendingPermission));
 
                 var eventArgs = new PermissionRequestEventArgs(
                     messageId,
@@ -1901,7 +1968,7 @@ namespace SalmonEgg.Acp.Client
                 if (PermissionRequestReceived == null)
                 {
                     // No UI hooked up; cancel to avoid deadlock.
-                    _ = RespondToPermissionRequestAsync(messageId, "cancelled", null);
+                    _ = TrySendPermissionOutcomeResponseAsync(messageId, "cancelled", null, pendingPermission);
                     return;
                 }
 
@@ -2405,7 +2472,8 @@ namespace SalmonEgg.Acp.Client
 
                 if (string.Equals(pending.Method, "session/request_permission", StringComparison.Ordinal))
                 {
-                    await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending).ConfigureAwait(false);
+                    await TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending,
+                        cancelForSession: true).ConfigureAwait(false);
                     continue;
                 }
 
@@ -2461,7 +2529,11 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
-            _pendingInboundRequests[idStr] = new PendingInboundRequest(method, messageId);
+            lock (_lock)
+            {
+                _pendingInboundRequests[idStr] = new PendingInboundRequest(method, messageId,
+                    _messageLoopCts?.Token ?? CancellationToken.None);
+            }
         }
 
         private bool TryGetPendingInboundRequest(string idStr, out PendingInboundRequest pending)
@@ -2515,6 +2587,7 @@ namespace SalmonEgg.Acp.Client
                 var pending = new PendingInboundRequest(
                     ElicitationMethods.Create,
                     messageId,
+                    _messageLoopCts?.Token ?? CancellationToken.None,
                     request.Scope.SessionId,
                     null,
                     request);
@@ -2542,6 +2615,7 @@ namespace SalmonEgg.Acp.Client
                 _ => new PendingInboundRequest(
                     ClientCapabilityMetadata.AskUserExtensionMethod,
                     null,
+                    _messageLoopCts?.Token ?? CancellationToken.None,
                     request.SessionId,
                     request),
                 (_, existing) => existing.WithAskUserRequest(request));
