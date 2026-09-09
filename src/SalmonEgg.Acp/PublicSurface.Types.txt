@@ -15,6 +15,12 @@
 # Sorted by type name, ordinal. Asserted by PublicSurfaceBaselineTests and DraftProtocolSurfaceTests.
 SalmonEgg.Acp.Client.AcpClient stable
 SalmonEgg.Acp.Client.AcpClientLogLevel stable
+SalmonEgg.Acp.Client.AcpMessageKind draft
+SalmonEgg.Acp.Client.AcpMessageSnapshot draft
+SalmonEgg.Acp.Client.AcpSessionDraftExtensions draft
+SalmonEgg.Acp.Client.AcpSessionSnapshot draft
+SalmonEgg.Acp.Client.AcpTerminalSnapshot draft
+SalmonEgg.Acp.Client.AcpToolCallSnapshot draft
 SalmonEgg.Acp.Client.AcpTransportErrorEventArgs stable
 SalmonEgg.Acp.Client.AcpTransportErrorKind stable
 SalmonEgg.Acp.Client.AcpTransportMessageReceivedEventArgs stable

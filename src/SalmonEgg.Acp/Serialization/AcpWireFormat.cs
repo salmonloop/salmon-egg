@@ -128,6 +128,8 @@ namespace SalmonEgg.Acp.Serialization
                 return;
             }
 
+            SessionProjectionWireContract.Apply(info);
+
             if (info.Type == typeof(SessionNewResponse) || info.Type == typeof(SessionResumeResponse))
             {
                 IgnoreProperty(info, "modes", new IgnoredProtocolPropertyJsonConverter<SessionModesState>());

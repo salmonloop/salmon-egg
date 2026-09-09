@@ -43,15 +43,16 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit v2 wire contracts and the internal prompt/work-state lifecycle are covered by deterministic protocol peers. Live initialization rejects v2. | Update projections, permission handling, batch processing, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, and message/tool/terminal projections are covered by deterministic protocol peers. Draft SDK helpers support offline history replay. Live initialization rejects v2. | Permission handling, configuration workflows, batch processing, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
 inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;
 default-on-error and skip-invalid-item behavior applies only where the upstream schema permits it.
 Resource-link icons are available through the experimental `ResourceLinkDraftExtensions` helper,
 so constructing them requires an explicit draft opt-in. Permission subject types are still not
-connected to live request handling. These contracts do not supply message upserts, streaming tool
-and terminal projections.
+connected to live request handling. Draft session snapshots now supply message upserts, streaming
+tool content, and Agent-owned terminal projections; the production application does not consume
+them until its complete v2 feature gate is ready.
 
 `SendPromptAsync` always waits for completed foreground work. The internal v2 development path
 records the prompt acknowledgement separately and finishes on an idle `state_update`; cancellation
@@ -65,6 +66,41 @@ says an ending idle must carry a stop reason, while its
 [schema](https://github.com/agentclientprotocol/agent-client-protocol/blob/5ebaf0aceb04a4ba6574cd63fa6355352dc6d931/schema/v2/schema.json)
 allows an omitted/null/default-on-error reason. The client preserves that unknown reason and still
 finishes on idle (`HasStopReason == false`), without fabricating `end_turn` or waiting indefinitely.
+
+`AcpSessionDraftExtensions.ReplaySession(sessionId, updates)` is an **offline** SDK host API for
+recorded histories. Each input is a JSON update object with `sessionUpdate`, in receive order and
+scoped to the supplied session. It uses the same v2 reader and projection as the normal client
+handler without connecting, executing terminal commands, or changing a client's state.
+`client.GetSessionSnapshot(sessionId)` reads the same owner on an internally staged v2 connection;
+it returns null on the public v1 runtime and after session close or disconnect. Suppressing
+`SEACP002` does not enable live v2 initialization.
+
+Snapshots expose messages, tool calls, and terminal output in first-seen order. Patch omission
+keeps a value, null clears it, and arrays replace complete content; chunks append. Terminal chunks
+are independently decoded into immutable bytes. Message/tool/terminal metadata is separate from
+chunk metadata. Entity `ExtensionData` retains the last-seen value of each unknown top-level field,
+including explicit null, without interpreting its semantics. Protocol DTO getters return detached
+copies because wire DTO collections are mutable; editing a returned
+DTO cannot alter an existing snapshot or client state. A full `replayFrom: { type: "start" }` begins
+a fresh projection, while resume without replay retains prior history. Overlapping full replays
+are rejected because session updates carry no request id that could separate them; cancelling the
+local wait retains this claim until the peer responds or the connection ends.
+
+A snapshot is a current view, not a lossless event archive. `UnprojectedUpdates` retains recent
+unhandled updates verbatim within `MaxUnprojectedUpdates` (64 entries) and
+`MaxUnprojectedUtf8Bytes` (256 KiB of JSON). A fitting update evicts the oldest entries as needed;
+a single oversized update is omitted without evicting existing entries. Both cases increment
+`OmittedUnprojectedUpdateCount`. A fresh full replay resets this accounting. These limits do not
+truncate known message/tool/terminal content or suppress `SessionUpdateReceived`. Hosts record that
+event for complete update history, or raw transport messages for a wire-exact archive; snapshots
+do not retain replaced entity values or chunk-scoped metadata and extension history.
+
+The [pinned v2 schema](https://github.com/agentclientprotocol/agent-client-protocol/blob/5ebaf0aceb04a4ba6574cd63fa6355352dc6d931/schema/v2/schema.json)
+explicitly allows default-on-error for optional patch fields and skip-invalid-items for message,
+tool-content, and location arrays. Those recoveries apply only to the v2 contracts that declare
+them. Required identities and chunks remain strict, unknown string discriminators survive, and
+v1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
+history and asserts replacement, append, clear, terminal bytes, and snapshot isolation.
 
 Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
 both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
@@ -136,10 +172,12 @@ result without casting a `Task` to `Task<bool>`.
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is
 a **compile error** by default rather than a warning. That is deliberate: v2 is still an upstream
 draft, no live client negotiates it (`AcpProtocolVersion.RuntimeServed` is v1), and code built on
-these types cannot reach a real Agent today. The 38 marked types are the `state_update` work-state
+these types cannot reach a real Agent today. The 44 marked types are the `state_update` work-state
 family, the whole-message upsert updates, the terminal updates, streaming tool-call content, the
 v2 `plan_update` envelope, permission subjects, the v2 capability markers, the structured diff,
-and `ResourceLinkDraftExtensions` for resource-link icons.
+`ResourceLinkDraftExtensions` for resource-link icons, and six session-projection types (the draft
+entry point, message kind, and session/message/tool/terminal snapshots). The projection types are
+not source-generated wire DTOs and introduce no serialization-context bypass.
 
 To evaluate them anyway, opt in explicitly:
 

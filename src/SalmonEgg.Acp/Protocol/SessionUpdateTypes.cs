@@ -354,6 +354,13 @@ namespace SalmonEgg.Acp.Protocol
             SessionUpdate? update = null;
             if (root.TryGetProperty("update", out var updateElement) && updateElement.ValueKind == JsonValueKind.Object)
             {
+                if (AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
+                    && (!updateElement.TryGetProperty("sessionUpdate", out var updateKind)
+                        || updateKind.ValueKind != JsonValueKind.String))
+                {
+                    throw new JsonException("ACP v2 updates require string 'sessionUpdate'.");
+                }
+
                 // state_update carries a second discriminator ("state") flattened alongside
                 // "sessionUpdate". STJ polymorphism resolves exactly one discriminator per hierarchy, so
                 // this variant is handled here instead of through a JsonDerivedType registration.

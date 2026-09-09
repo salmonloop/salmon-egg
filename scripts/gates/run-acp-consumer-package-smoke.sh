@@ -435,4 +435,20 @@ fi
 
 echo "[smoke] Both documented suppressions compile and run"
 
+# A host evaluates draft replay through the shipped package, with real mixed history and immutable
+# snapshots. This is deliberately offline: suppression must not enable unsupported live negotiation.
+cp "$repo_root/scripts/gates/acp-v2-projection-consumer.cs" "$draft_dir/Program.cs"
+capture_build "$DOTNET_BIN" build "$draft_dir/ACPDraftConsumerSmoke.csproj" --configuration "$CONFIGURATION" --no-restore -v minimal
+require_no_infrastructure_failure "[smoke] Draft projection consumer"
+if [ "$build_rc" -ne 0 ]; then
+  cat "$build_log" >&2
+  exit 1
+fi
+projection_output="$("$DOTNET_BIN" run --project "$draft_dir/ACPDraftConsumerSmoke.csproj" --configuration "$CONFIGURATION" --no-build --no-restore -v minimal)"
+if [ "$projection_output" != "draft-projection-consumer-ok" ]; then
+  echo "[smoke] Unexpected draft projection consumer output: $projection_output" >&2
+  exit 1
+fi
+echo "[smoke] Offline draft projection consumer: mixed replay, clears, terminal bytes, immutable snapshots passed"
+
 echo "[smoke] ACP SDK package consumer smoke passed"
