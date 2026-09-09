@@ -617,14 +617,259 @@ public sealed class AcpClientRequestCancellationTests
         Assert.Empty(surfaced);
     }
 
-    private async Task<AcpClient> CreateInitializedClientAsync(AgentCapabilities? capabilities = null)
+    [Fact]
+    public async Task SessionCancel_QueuedWriteAcrossReconnect_NeverSendsToReplacementConnection()
     {
-        var client = new AcpClient(_transportMock.Object, _loggerMock.Object);
+        // Arrange
+        var sessionStore = new Mock<IAcpClientSessionStore>();
+        sessionStore.Setup(store => store.CancelSessionAsync(It.IsAny<string>())).ReturnsAsync(true);
+        using var client = await CreateInitializedClientAsync(sessionStore: sessionStore.Object);
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(transport => transport.SendMessageAsync(It.IsRegex("session/cancel"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>(async (message, token) =>
+            {
+                writeStarted.TrySetResult();
+                await releaseWrite.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                _sent.Enqueue(message);
+                return true;
+            });
+        var cancellation = client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
+
+        try
+        {
+            await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await ReconnectForSessionCancellationAsync(client);
+
+            // Act
+            releaseWrite.TrySetResult();
+            var failure = await Record.ExceptionAsync(() => cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Empty(SentNotifications("session/cancel"));
+            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            sessionStore.Verify(store => store.CancelSessionAsync(It.IsAny<string>()), Times.Never);
+
+            SetupSilentSend("session/cancel");
+            await client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
+            Assert.Single(SentNotifications("session/cancel"));
+            sessionStore.Verify(store => store.CancelSessionAsync("session-1"), Times.Once);
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SessionCancel_QueuedWriteCancelledOrDisposed_NeverSends(bool dispose)
+    {
+        // Arrange
+        var sessionStore = new Mock<IAcpClientSessionStore>();
+        using var client = await CreateInitializedClientAsync(sessionStore: sessionStore.Object);
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(transport => transport.SendMessageAsync(It.IsRegex("session/cancel"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>(async (message, token) =>
+            {
+                writeStarted.TrySetResult();
+                await releaseWrite.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                _sent.Enqueue(message);
+                return true;
+            });
+        var cancellation = client.CancelSessionAsync(new SessionCancelParams("session-1"), caller.Token);
+
+        try
+        {
+            await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            // Act
+            if (dispose) client.Dispose();
+            else caller.Cancel();
+            releaseWrite.TrySetResult();
+            var failure = await Record.ExceptionAsync(() => cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Empty(SentNotifications("session/cancel"));
+            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            sessionStore.Verify(store => store.CancelSessionAsync(It.IsAny<string>()), Times.Never);
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData("session/request_permission")]
+    [InlineData("fs/read_text_file")]
+    public async Task SessionCancel_WriteReturnsAfterReconnect_LeavesReplacementRequestsAndStoreUntouched(string method)
+    {
+        // Arrange: the frame reached the old connection, but its write has not returned yet.
+        var sessionStore = new Mock<IAcpClientSessionStore>();
+        using var client = await CreateInitializedClientAsync(sessionStore: sessionStore.Object,
+            clientCapabilities: new ClientCapabilities(fs: new FsCapability()));
+        SetupResponseRecording();
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(transport => transport.SendMessageAsync(It.IsRegex("session/cancel"), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((message, _) =>
+            {
+                _sent.Enqueue(message);
+                writeStarted.TrySetResult();
+                return releaseWrite.Task;
+            });
+        var cancellation = client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
+
+        try
+        {
+            await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await ReconnectForSessionCancellationAsync(client);
+            await RaisePendingSessionRequestAsync(client, method, 401);
+
+            // Act
+            releaseWrite.TrySetResult(true);
+            var failure = await Record.ExceptionAsync(() => cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Empty(_sent.Select(_parser.ParseMessage).OfType<JsonRpcResponse>());
+            sessionStore.Verify(store => store.CancelSessionAsync(It.IsAny<string>()), Times.Never);
+            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            Assert.True(await CompleteSessionRequestAsync(client, method, 401));
+            Assert.False(Assert.Single(_sent.Select(_parser.ParseMessage).OfType<JsonRpcResponse>()).IsError);
+        }
+        finally
+        {
+            releaseWrite.TrySetResult(true);
+        }
+    }
+
+    [Theory]
+    [InlineData("session/request_permission")]
+    [InlineData("fs/read_text_file")]
+    public async Task SessionCancel_DrainingResponseAcrossReconnect_NeverWritesOrCancelsReplacement(string method)
+    {
+        // Arrange: pause the response before its physical write while session cancellation drains callbacks.
+        var sessionStore = new Mock<IAcpClientSessionStore>();
+        using var client = await CreateInitializedClientAsync(sessionStore: sessionStore.Object,
+            clientCapabilities: new ClientCapabilities(fs: new FsCapability()));
+        SetupSilentSend("session/cancel");
+        await RaisePendingSessionRequestAsync(client, method, 402);
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(transport => transport.SendMessageAsync(
+                It.Is<string>(message => IsResponseFrame(message)), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>(async (message, token) =>
+            {
+                writeStarted.TrySetResult();
+                await releaseWrite.Task.ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                _sent.Enqueue(message);
+                return true;
+            });
+        var cancellation = client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
+
+        try
+        {
+            await writeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await ReconnectForSessionCancellationAsync(client);
+            await RaisePendingSessionRequestAsync(client, method, 402);
+
+            // Act
+            releaseWrite.TrySetResult();
+            var failure = await Record.ExceptionAsync(() => cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+            // Assert
+            Assert.Empty(_sent.Select(_parser.ParseMessage).OfType<JsonRpcResponse>());
+            sessionStore.Verify(store => store.CancelSessionAsync(It.IsAny<string>()), Times.Never);
+            Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            Assert.True(await CompleteSessionRequestAsync(client, method, 402));
+            Assert.False(Assert.Single(_sent.Select(_parser.ParseMessage).OfType<JsonRpcResponse>()).IsError);
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task SessionCancel_SendReturnsFalse_LeavesPendingRequestAndStoreUntouched()
+    {
+        // Arrange
+        var sessionStore = new Mock<IAcpClientSessionStore>();
+        using var client = await CreateInitializedClientAsync(sessionStore: sessionStore.Object);
+        SetupResponseRecording();
+        await RaisePendingSessionRequestAsync(client, "session/request_permission", 403);
+        _transportMock.Setup(transport => transport.SendMessageAsync(It.IsRegex("session/cancel"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => client.CancelSessionAsync(
+            new SessionCancelParams("session-1"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Empty(_sent.Select(_parser.ParseMessage).OfType<JsonRpcResponse>());
+        sessionStore.Verify(store => store.CancelSessionAsync(It.IsAny<string>()), Times.Never);
+        Assert.Contains("session/cancel", Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
+        Assert.True(await CompleteSessionRequestAsync(client, "session/request_permission", 403));
+    }
+
+    private bool IsResponseFrame(string message) => _parser.ParseMessage(message) is JsonRpcResponse;
+
+    private void SetupResponseRecording()
+        => _transportMock.Setup(transport => transport.SendMessageAsync(
+                It.Is<string>(message => IsResponseFrame(message)), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((message, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                _sent.Enqueue(message);
+                return Task.FromResult(true);
+            });
+
+    private static async Task ReconnectForSessionCancellationAsync(AcpClient client)
+    {
+        await client.DisconnectAsync();
+        await client.InitializeAsync(new InitializeParams(new ClientInfo("reconnected", "1.0"),
+            new ClientCapabilities(fs: new FsCapability()))
+        {
+            ProtocolVersion = AcpProtocolVersion.V1
+        }, TestContext.Current.CancellationToken);
+    }
+
+    private async Task RaisePendingSessionRequestAsync(AcpClient client, string method, long requestId)
+    {
+        var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.PermissionRequestReceived += (_, _) => published.TrySetResult();
+        client.FileSystemRequestReceived += (_, _) => published.TrySetResult();
+        var payload = method == "session/request_permission"
+            ? """{"sessionId":"session-1","toolCall":{"toolCallId":"call","title":"Read file"},"options":[{"optionId":"allow","name":"Allow","kind":"allow_once"}]}"""
+            : """{"sessionId":"session-1","path":"/workspace/file.txt"}""";
+        using var document = JsonDocument.Parse(payload);
+        RaiseTransportMessage(_parser.SerializeMessage(new JsonRpcRequest(requestId, method, document.RootElement)));
+        await published.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+    }
+
+    private static Task<bool> CompleteSessionRequestAsync(AcpClient client, string method, long requestId)
+        => method == "session/request_permission"
+            ? client.RespondToPermissionRequestAsync(requestId, "selected", "allow")
+            : client.RespondToFileSystemRequestAsync(requestId, success: true, content: "new request completed");
+
+    private async Task<AcpClient> CreateInitializedClientAsync(
+        AgentCapabilities? capabilities = null,
+        IAcpClientSessionStore? sessionStore = null,
+        ClientCapabilities? clientCapabilities = null)
+    {
+        var client = new AcpClient(_transportMock.Object, _loggerMock.Object, sessionStore);
         SetupInitializeResponse(capabilities);
 
         await client.InitializeAsync(new InitializeParams(
             new ClientInfo("Test", "1.0.0"),
-            new ClientCapabilities())
+            clientCapabilities ?? new ClientCapabilities())
         {
             ProtocolVersion = AcpProtocolVersion.V1
         });
