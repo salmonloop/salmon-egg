@@ -589,6 +589,83 @@ public sealed class AcpClientSessionWorkTests
         await replacement.WaitAsync(TestToken);
     }
 
+    [Theory]
+    [InlineData(AcpProtocolVersion.V1)]
+    [InlineData(AcpProtocolVersion.V2)]
+    public async Task CancelSessionAsync_PhysicalWriteDelayedAcrossReconnect_NeverSendsOldNotification(int version)
+    {
+        // Arrange
+        using var peer = await ProtocolPeer.CreateAsync(version);
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.BeforeCancelWrite = () =>
+        {
+            writeStarted.TrySetResult();
+            return releaseWrite.Task;
+        };
+        var cancellation = peer.Client.CancelSessionAsync(new SessionCancelParams("one"), TestToken);
+        await writeStarted.Task.WaitAsync(TestToken);
+
+        try
+        {
+            await peer.Client.DisconnectAsync();
+            await peer.InitializeAsync();
+
+            // Act
+            releaseWrite.TrySetResult();
+
+            // Assert
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellation.WaitAsync(TestToken));
+            Assert.DoesNotContain(peer.Sent, static message => message is JsonRpcNotification { Method: "session/cancel" });
+            Assert.Empty(peer.Errors);
+            peer.BeforeCancelWrite = null;
+            await peer.Client.CancelSessionAsync(new SessionCancelParams("one"), TestToken);
+            Assert.Single(peer.Sent, static message => message is JsonRpcNotification { Method: "session/cancel" });
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData(AcpProtocolVersion.V1, false)]
+    [InlineData(AcpProtocolVersion.V2, false)]
+    [InlineData(AcpProtocolVersion.V1, true)]
+    [InlineData(AcpProtocolVersion.V2, true)]
+    public async Task CancelSessionAsync_PhysicalWriteDelayedUntilCancelledOrDisposed_DoesNotSend(int version, bool dispose)
+    {
+        // Arrange
+        using var peer = await ProtocolPeer.CreateAsync(version);
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestToken);
+        var writeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.BeforeCancelWrite = () =>
+        {
+            writeStarted.TrySetResult();
+            return releaseWrite.Task;
+        };
+        var cancellation = peer.Client.CancelSessionAsync(new SessionCancelParams("one"), caller.Token);
+        await writeStarted.Task.WaitAsync(TestToken);
+
+        try
+        {
+            // Act
+            if (dispose) peer.Client.Dispose();
+            else caller.Cancel();
+            releaseWrite.TrySetResult();
+
+            // Assert
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellation.WaitAsync(TestToken));
+            Assert.DoesNotContain(peer.Sent, static message => message is JsonRpcNotification { Method: "session/cancel" });
+            Assert.Empty(peer.Errors);
+        }
+        finally
+        {
+            releaseWrite.TrySetResult();
+        }
+    }
+
     [Fact]
     public async Task InitializeDraftAsync_HandshakeQueuedCallback_CannotFinishReconnectedWork()
     {
@@ -637,6 +714,7 @@ public sealed class AcpClientSessionWorkTests
         internal Action<JsonRpcRequest>? BeforeSessionResponse { get; set; }
         internal Action<JsonRpcRequest>? BeforeInitializeResponse { get; set; }
         internal Func<Task<bool>>? OnCancel { get; set; }
+        internal Func<Task>? BeforeCancelWrite { get; set; }
 
         public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
         public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred;
@@ -680,6 +758,10 @@ public sealed class AcpClientSessionWorkTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             var parsed = _parser.ParseMessage(message);
+            if (parsed is JsonRpcNotification { Method: "session/cancel" } && BeforeCancelWrite is { } beforeWrite)
+            {
+                return SendCancellationAfterGateAsync(parsed, beforeWrite(), cancellationToken);
+            }
             Sent.Enqueue(parsed);
             if (parsed is JsonRpcNotification { Method: "session/cancel" } && OnCancel is not null) return OnCancel();
             if (parsed is not JsonRpcRequest request) return Task.FromResult(true);
@@ -714,6 +796,16 @@ public sealed class AcpClientSessionWorkTests
                     break;
             }
             return Task.FromResult(true);
+        }
+
+        private async Task<bool> SendCancellationAfterGateAsync(JsonRpcMessage message, Task gate, CancellationToken cancellationToken)
+        {
+            // Model a pipe/socket write queued behind another write. Recording before this await
+            // would exercise only a delayed return and would miss a stale physical notification.
+            await gate.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            Sent.Enqueue(message);
+            return OnCancel is null || await OnCancel().ConfigureAwait(false);
         }
 
         internal void ReplyPrompt(string sessionId, string result)
