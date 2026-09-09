@@ -31,6 +31,10 @@ namespace SalmonEgg.Acp.Client
         // Shared with behavioral tests so they validate the lifecycle, not a second timeout value.
         internal static readonly TimeSpan CancellationNotificationTimeout = TimeSpan.FromSeconds(2);
 
+        private sealed record PendingOutboundRequest(
+            TaskCompletionSource<JsonRpcResponse> Completion,
+            Action<JsonRpcResponse>? ResponseObserver);
+
         private sealed class PendingInboundRequest
         {
             public PendingInboundRequest(
@@ -93,9 +97,8 @@ namespace SalmonEgg.Acp.Client
         private readonly IAcpClientSessionStore _sessionStore;
         private readonly IAcpTerminalSessionManager _terminalSessionManager;
         private readonly IAcpClientLogger _logger;
-
-
-        private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
+        private readonly AcpSessionWorkController _sessionWork = new();
+        private readonly ConcurrentDictionary<string, PendingOutboundRequest> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
         private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
         // URL completion outlives the JSON-RPC response. Both indexes refer to the same request identity;
@@ -234,14 +237,29 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Initializes the connection to the agent.
         /// </summary>
-        public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+        public Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+            => InitializeCoreAsync(@params, allowDraftRuntime: false, cancellationToken);
+
+        // Assembly-internal staging seam: deterministic protocol peers exercise the actual parser,
+        // dispatch and lifecycle before the full draft can be enabled by a future feature gate.
+        internal Task<InitializeResponse> InitializeDraftAsync(InitializeParams @params, CancellationToken cancellationToken = default)
+            => InitializeCoreAsync(@params, allowDraftRuntime: true, cancellationToken);
+
+        internal SessionWorkSnapshot? GetSessionWorkSnapshot(string sessionId)
+            => _sessionWork.GetSnapshot(sessionId);
+
+        private async Task<InitializeResponse> InitializeCoreAsync(
+            InitializeParams @params,
+            bool allowDraftRuntime,
+            CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(@params);
             // A modeled version is not a served version: the SDK carries draft v2 wire contracts so they
             // can be developed and asserted, while this runtime runs exactly one version end to end.
             // Ask the single authority rather than spelling out which version that is here.
             if (AcpProtocolVersion.IsSupported(@params.ProtocolVersion)
-                && !AcpProtocolVersion.IsRuntimeServed(@params.ProtocolVersion))
+                && !AcpProtocolVersion.IsRuntimeServed(@params.ProtocolVersion)
+                && !allowDraftRuntime)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
@@ -287,13 +305,14 @@ namespace SalmonEgg.Acp.Client
                 // through the successful handshake instead of introducing it only afterwards.
                 _messageLoopCts = new CancellationTokenSource();
                 connectionToken = _messageLoopCts.Token;
+                _sessionWork.BeginConnection(connectionToken);
                 AttachConnectionMessageHandler(connectionToken);
             }
 
             InitializeResponse initializeResponse;
             try
             {
-                initializeResponse = await InitializeConnectionAsync(@params, connectionToken, cancellationToken)
+                initializeResponse = await InitializeConnectionAsync(@params, allowDraftRuntime, connectionToken, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch
@@ -315,6 +334,7 @@ namespace SalmonEgg.Acp.Client
 
         private async Task<InitializeResponse> InitializeConnectionAsync(
             InitializeParams @params,
+            bool allowDraftRuntime,
             CancellationToken connectionToken,
             CancellationToken cancellationToken)
         {
@@ -364,7 +384,9 @@ namespace SalmonEgg.Acp.Client
             // runtime actually serves; otherwise the connection would proceed under a version whose
             // lifecycle is unimplemented. serverVersion > clientVersion stays rejected separately: an
             // Agent must never answer above what the Client asked for.
-            if (!AcpProtocolVersion.IsRuntimeServed(serverVersion) || serverVersion > clientVersion)
+            if ((!AcpProtocolVersion.IsRuntimeServed(serverVersion)
+                    && !(allowDraftRuntime && serverVersion == AcpProtocolVersion.V2))
+                || serverVersion > clientVersion)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
@@ -398,6 +420,7 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            var connectionToken = GetConnectionToken();
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/new");
             ValidateAdditionalDirectories(@params.AdditionalDirectories, "session/new");
             EnsureMcpServersSupported(@params.McpServers, "session/new");
@@ -427,6 +450,7 @@ namespace SalmonEgg.Acp.Client
             {
                 await _sessionStore.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
             }
+            RegisterSessionWork(sessionNewResponse.SessionId, connectionToken);
 
             return sessionNewResponse;
         }
@@ -437,6 +461,7 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            var connectionToken = GetConnectionToken();
             if (!SupportsSessionLoad)
             {
                 _logger.Log(
@@ -467,7 +492,7 @@ namespace SalmonEgg.Acp.Client
             // A successful session/load means the agent has acknowledged the session, so register it in
             // the local store. Otherwise the existence fast-fail in session/prompt would locally reject
             // the official load -> prompt flow as SessionNotFound.
-            await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
+            await RegisterSessionAsync(@params.SessionId, @params.Cwd, connectionToken).ConfigureAwait(false);
 
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -487,6 +512,7 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            var connectionToken = GetConnectionToken();
             ArgumentNullException.ThrowIfNull(@params);
             if (ProtocolVersion == AcpProtocolVersion.V1 && @params.ReplayFrom is not null)
             {
@@ -525,7 +551,7 @@ namespace SalmonEgg.Acp.Client
             // The agent has acknowledged the resumed session, so register the local tracking entry. This
             // keeps the existence fast-fail gate in SendPromptAsync from misreporting the official
             // resume -> prompt flow as SessionNotFound.
-            await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
+            await RegisterSessionAsync(@params.SessionId, @params.Cwd, connectionToken).ConfigureAwait(false);
 
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -544,6 +570,7 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            var connectionToken = GetConnectionToken();
 
             if (!SupportsSessionClose)
             {
@@ -553,7 +580,7 @@ namespace SalmonEgg.Acp.Client
                     "Agent does not support session/close capability",
                     nameof(CloseSessionAsync));
 
-                _sessionStore.RemoveSession(@params.SessionId);
+                RemoveSession(@params.SessionId, connectionToken);
                 return SessionCloseResponse.Completed;
             }
 
@@ -572,13 +599,13 @@ namespace SalmonEgg.Acp.Client
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
-                _sessionStore.RemoveSession(@params.SessionId);
+                RemoveSession(@params.SessionId, connectionToken);
                 return SessionCloseResponse.Completed;
             }
 
             var sessionCloseResponse = FromElement<SessionCloseResponse>(response.Result.Value);
 
-            _sessionStore.RemoveSession(@params.SessionId);
+            RemoveSession(@params.SessionId, connectionToken);
             return sessionCloseResponse ?? SessionCloseResponse.Completed;
         }
 
@@ -588,6 +615,7 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            var connectionToken = GetConnectionToken();
 
             if (!SupportsSessionDelete)
             {
@@ -615,13 +643,13 @@ namespace SalmonEgg.Acp.Client
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
-                _sessionStore.RemoveSession(@params.SessionId);
+                RemoveSession(@params.SessionId, connectionToken);
                 return SessionDeleteResponse.Completed;
             }
 
             var sessionDeleteResponse = FromElement<SessionDeleteResponse>(response.Result.Value);
 
-            _sessionStore.RemoveSession(@params.SessionId);
+            RemoveSession(@params.SessionId, connectionToken);
             return sessionDeleteResponse ?? SessionDeleteResponse.Completed;
         }
 
@@ -667,11 +695,13 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// Sends a prompt to a session.
+        /// Sends a prompt and waits for the session's foreground work to finish.
         /// </summary>
         public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            ArgumentNullException.ThrowIfNull(@params);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Check whether the session exists.
             if (!_sessionStore.ContainsSession(@params.SessionId))
@@ -681,27 +711,39 @@ namespace SalmonEgg.Acp.Client
 
             EnsurePromptContentAllowed(@params);
 
-            var request = new JsonRpcRequest(
-                Interlocked.Increment(ref _nextMessageId),
-                "session/prompt",
-                ToElement<SessionPromptParams>(@params));
-
-            // ACP requires a real session/prompt response with a protocol stopReason.
-            // The client must wait for the protocol response instead of fabricating a terminal result.
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
-
-            if (response.IsError)
+            SessionPromptOperation prompt;
+            JsonRpcRequest request;
+            lock (_lock)
             {
-                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+                EnsureInitialized();
+                var connectionToken = _messageLoopCts!.Token;
+                request = new JsonRpcRequest(
+                    Interlocked.Increment(ref _nextMessageId),
+                    "session/prompt",
+                    ToElement<SessionPromptParams>(@params));
+                prompt = _sessionWork.BeginPrompt(@params.SessionId, _wire, connectionToken);
             }
 
-            var promptResponse = FromElement<SessionPromptResponse>(response.Result!.Value);
-            if (promptResponse == null)
+            try
             {
-                throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/prompt response");
+                // Record acceptance synchronously in response dispatch. An asynchronous continuation
+                // could otherwise run after the very next state_update and lose an immediate idle.
+                await SendRequestAsync(request, cancellationToken, prompt.ConnectionToken,
+                    response => _sessionWork.ReceivePromptResponse(prompt, response)).ConfigureAwait(false);
+                var completion = await prompt.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+                return completion.GetResponse();
             }
-
-            return promptResponse;
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Cancelling a local wait cannot invent an idle state. The peer response and any
+                // later state_update remain correlated until they settle or the connection ends.
+                throw;
+            }
+            catch (Exception error)
+            {
+                _sessionWork.FailPrompt(prompt, error);
+                throw;
+            }
         }
 
         // spec MUST: the client must restrict the content types it sends to the promptCapabilities
@@ -817,6 +859,7 @@ namespace SalmonEgg.Acp.Client
             }
 
             CancellationToken connectionToken;
+            Task<SessionPromptCompletion>? cancellationCompletion;
             lock (_lock)
             {
                 EnsureInitialized();
@@ -837,6 +880,9 @@ namespace SalmonEgg.Acp.Client
                     "session/cancel",
                     ToElement<SessionCancelParams>(@params));
 
+                cancellationCompletion = ProtocolVersion == AcpProtocolVersion.V2
+                    ? _sessionWork.RequestCancellation(@params.SessionId, connectionToken)
+                    : null;
                 // The send claim and its token belong to the same connection. A queued write must
                 // be cancelled before the transport can carry it into a replacement connection.
                 sendTask = _transport.SendMessageAsync(_parser.SerializeMessage(notification), sendCancellation.Token);
@@ -849,6 +895,11 @@ namespace SalmonEgg.Acp.Client
             }
 
             await CancelPendingInboundRequestsForSessionAsync(@params.SessionId, connectionToken).ConfigureAwait(false);
+            if (cancellationCompletion is not null)
+            {
+                var completion = await cancellationCompletion.WaitAsync(cancellationToken).ConfigureAwait(false);
+                completion.GetResponse();
+            }
             Task<bool> cancelSessionTask;
             lock (_lock)
             {
@@ -1450,7 +1501,8 @@ namespace SalmonEgg.Acp.Client
         private async Task<JsonRpcResponse> SendRequestAsync(
             JsonRpcRequest request,
             CancellationToken cancellationToken,
-            CancellationToken connectionToken = default)
+            CancellationToken connectionToken = default,
+            Action<JsonRpcResponse>? responseObserver = null)
         {
             if (!connectionToken.CanBeCanceled)
             {
@@ -1482,7 +1534,7 @@ namespace SalmonEgg.Acp.Client
                     // Pending registration must precede synchronous peer replies,
                     // under the same connection lock as starting transport I/O. The linked token also
                     // prevents a transport's delayed write from crossing a subsequent reconnect.
-                    _pendingRequests[requestIdStr] = tcs;
+                    _pendingRequests[requestIdStr] = new PendingOutboundRequest(tcs, responseObserver);
                     requestWriteStarted = true;
                     sendTask = _transport.SendMessageAsync(json, sendCancellation.Token);
                 }
@@ -1661,29 +1713,68 @@ namespace SalmonEgg.Acp.Client
         /// The local entry is only an optional fast-fail optimization; the agent remains the source of
         /// truth for session existence, and nothing is tightened when a capability is not advertised.
         /// </summary>
-        private async Task RegisterSessionAsync(string sessionId, string cwd)
+        private async Task RegisterSessionAsync(string sessionId, string cwd, CancellationToken connectionToken)
         {
-            if (string.IsNullOrWhiteSpace(sessionId) || _sessionStore.ContainsSession(sessionId))
+            if (string.IsNullOrWhiteSpace(sessionId))
             {
                 return;
             }
 
-            await _sessionStore.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
+            if (!_sessionStore.ContainsSession(sessionId))
+            {
+                await _sessionStore.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
+            }
+            RegisterSessionWork(sessionId, connectionToken);
+        }
+
+        private void RegisterSessionWork(string sessionId, CancellationToken connectionToken)
+        {
+            lock (_lock)
+            {
+                if (_messageLoopCts?.Token == connectionToken)
+                {
+                    _sessionWork.RegisterSession(sessionId, connectionToken);
+                }
+            }
+        }
+
+        private void RemoveSession(string sessionId, CancellationToken connectionToken)
+        {
+            lock (_lock)
+            {
+                if (_messageLoopCts?.Token == connectionToken)
+                {
+                    _sessionWork.RemoveSession(sessionId, connectionToken);
+                    _sessionStore.RemoveSession(sessionId);
+                }
+            }
+        }
+
+        private CancellationToken GetConnectionToken()
+        {
+            lock (_lock)
+            {
+                EnsureInitialized();
+                return _messageLoopCts!.Token;
+            }
         }
 
         private void CancelPendingRequests(string? transportErrorMessage = null)
         {
+            _sessionWork.EndConnection(string.IsNullOrWhiteSpace(transportErrorMessage)
+                ? new OperationCanceledException("The ACP client disconnected.")
+                : new InvalidOperationException(CreateTransportDisconnectedMessage(transportErrorMessage)));
             foreach (var pendingRequest in _pendingRequests)
             {
                 if (_pendingRequests.TryRemove(pendingRequest.Key, out var pending))
                 {
                     if (string.IsNullOrWhiteSpace(transportErrorMessage))
                     {
-                        pending.TrySetCanceled();
+                        pending.Completion.TrySetCanceled();
                     }
                     else
                     {
-                        pending.TrySetException(new InvalidOperationException(
+                        pending.Completion.TrySetException(new InvalidOperationException(
                             CreateTransportDisconnectedMessage(transportErrorMessage)));
                     }
                 }
@@ -1770,9 +1861,13 @@ namespace SalmonEgg.Acp.Client
                 {
                     var responseIdStr = response.Id?.ToString() ?? string.Empty;
                     // Match the pending request.
-                    if (_pendingRequests.TryRemove(responseIdStr, out var tcs)
-                        && !tcs.TrySetResult(response))
+                    if (_pendingRequests.TryRemove(responseIdStr, out var pending))
                     {
+                        pending.ResponseObserver?.Invoke(response);
+                        if (pending.Completion.TrySetResult(response))
+                        {
+                            return;
+                        }
                         // The entry was still correlated, so the only thing that can already have
                         // completed it is the caller's own cancellation: this is the terminal
                         // response ACP requires the peer to send for a cancelled request (a partial
@@ -1855,7 +1950,7 @@ namespace SalmonEgg.Acp.Client
                     HandleInboundCancellation(notification, connectionToken);
                     break;
                 case "session/update":
-                    HandleSessionUpdate(notification);
+                    HandleSessionUpdate(notification, connectionToken);
                     break;
                 case ElicitationMethods.Complete:
                     HandleElicitationCompleted(notification);
@@ -2044,7 +2139,7 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Handles the session/update notification.
         /// </summary>
-        private void HandleSessionUpdate(JsonRpcNotification notification)
+        private void HandleSessionUpdate(JsonRpcNotification notification, CancellationToken connectionToken)
         {
             try
             {
@@ -2053,8 +2148,23 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
 
-                var updateParams = FromElement<SessionUpdateParams>(notification.Params.Value);
+                AcpWireFormat wire;
+                lock (_lock)
+                {
+                    if (connectionToken.CanBeCanceled
+                        && (connectionToken.IsCancellationRequested || _messageLoopCts?.Token != connectionToken))
+                    {
+                        return;
+                    }
+                    wire = _wire;
+                }
+                var updateParams = notification.Params.Value.Deserialize(wire.TypeInfo<SessionUpdateParams>());
                 if (updateParams == null || updateParams.Update == null)
+                {
+                    return;
+                }
+                if (connectionToken.CanBeCanceled
+                    && !_sessionWork.ReceiveUpdate(updateParams.SessionId, updateParams.Update, connectionToken))
                 {
                     return;
                 }
