@@ -134,7 +134,8 @@ internal sealed class AcpSessionWorkController
                 }
 
                 // The acknowledgement's metadata belongs to acceptance, not to the later idle.
-                prompt.Accept(AcpMetaJson.Read(response.Result.Value));
+                // PromptResponse._meta explicitly defaults on error in the schema.
+                prompt.Accept(AcpMetaJson.ReadOrDefault(response.Result.Value));
                 if (prompt.CompletionBeforeAcceptance is { } completion)
                 {
                     prompt.Complete(completion);

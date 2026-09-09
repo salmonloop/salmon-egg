@@ -151,6 +151,144 @@ public sealed class SessionWorkStateUpdateTypesTests
         Assert.Contains("\"state\":\"_vendor_paused\"", json, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("running")]
+    [InlineData("requires_action")]
+    [InlineData("idle")]
+    [InlineData("_vendor_paused")]
+    public void StateSessionUpdate_MetadataRoundTrip_EmitsEachFlattenedFieldOnce(string state)
+    {
+        // Arrange
+        var json = "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
+            + "\"state\":\"" + state + "\",\"_meta\":{\"nested\":{\"owned\":[true,42,null]}}}}";
+        using var original = JsonDocument.Parse(json);
+
+        // Act
+        var restored = Assert.IsType<SessionUpdateParams>(JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>()));
+        using var replay = JsonDocument.Parse(SerializeV2(restored));
+
+        // Assert
+        var update = replay.RootElement.GetProperty("update");
+        Assert.Single(update.EnumerateObject(), property => property.NameEquals("sessionUpdate"));
+        Assert.Single(update.EnumerateObject(), property => property.NameEquals("_meta"));
+        Assert.True(JsonElement.DeepEquals(original.RootElement, replay.RootElement));
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"unknown\"")]
+    [InlineData("{\"nested\":[true,42,null]}")]
+    public void StateSessionUpdate_CustomMetadata_RoundTripsTheUnknownPayload(string metadata)
+    {
+        // Arrange
+        var json = "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
+            + "\"state\":\"_vendor_paused\",\"_meta\":" + metadata + "}}";
+        using var original = JsonDocument.Parse(json);
+
+        // Act
+        var restored = Assert.IsType<SessionUpdateParams>(JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>()));
+        using var replay = JsonDocument.Parse(SerializeV2(restored));
+
+        // Assert
+        Assert.IsType<CustomSessionWorkState>(Assert.IsType<StateSessionUpdate>(restored.Update).State);
+        Assert.True(JsonElement.DeepEquals(original.RootElement, replay.RootElement));
+    }
+
+    [Fact]
+    public void StateSessionUpdate_ArbitraryMetadataValue_SurvivesTheParentRoundTrip()
+        => FsCheckPropertyRunner.Run(this, nameof(StateMetadataRoundTripProperty));
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{\"outer\":true}")]
+    public void StateSessionUpdate_ParentMetadata_DefaultsWithoutDiscardingTheState(string metadata)
+    {
+        // Arrange
+        var json = "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
+            + "\"state\":\"idle\",\"stopReason\":\"cancelled\"},\"_meta\":" + metadata + "}";
+
+        // Act
+        var restored = Assert.IsType<SessionUpdateParams>(JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>()));
+
+        // Assert
+        var update = Assert.IsType<StateSessionUpdate>(restored.Update);
+        Assert.Equal(StopReason.Cancelled, Assert.IsType<IdleSessionWorkState>(update.State).StopReason);
+        Assert.Null(update.Meta);
+        if (metadata == "{\"outer\":true}")
+        {
+            Assert.True(Assert.IsType<JsonElement>(restored.Meta!["outer"]).GetBoolean());
+        }
+        else
+        {
+            Assert.Null(restored.Meta);
+        }
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public void StateSessionUpdate_InvalidStateDiscriminator_RemainsRejected(string state)
+    {
+        // Arrange
+        var json = "{\"sessionId\":\"session-1\",\"update\":{\"sessionUpdate\":\"state_update\","
+            + "\"state\":" + state + ",\"_meta\":42}}";
+
+        // Act / Assert
+        var error = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(json, Wire.V2<SessionUpdateParams>()));
+        Assert.Equal(SessionWorkStateJsonConverter.MissingStateMessage, error.Message);
+    }
+
+    [Theory]
+    [InlineData("42")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    public void MetadataWithoutSchemaDefaultOptIn_RemainsStrict(string metadata)
+    {
+        // Arrange
+        using var document = JsonDocument.Parse("{\"_meta\":" + metadata + "}");
+
+        // Act / Assert
+        Assert.Throws<JsonException>(() => AcpMetaJson.Read(document.RootElement));
+        Assert.Throws<JsonException>(() => ReadMetadataValue(metadata));
+    }
+
+    private static void ReadMetadataValue(string metadata)
+    {
+        var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(metadata));
+        Assert.True(reader.Read());
+        AcpMetaJson.ReadValue(ref reader);
+    }
+
+    private void StateMetadataRoundTripProperty(string? content, long number, bool flag)
+    {
+        // Arrange
+        var original = new SessionUpdateParams("session-1", new StateSessionUpdate(new IdleSessionWorkState
+        {
+            StopReason = StopReason.EndTurn,
+            Meta = new Dictionary<string, object?>
+            {
+                ["_vendor"] = new object?[] { content, number, flag, null }
+            }
+        }));
+        using var first = JsonDocument.Parse(SerializeV2(original));
+
+        // Act
+        var restored = Assert.IsType<SessionUpdateParams>(
+            JsonSerializer.Deserialize(first.RootElement, Wire.V2<SessionUpdateParams>()));
+        using var replay = JsonDocument.Parse(SerializeV2(restored));
+
+        // Assert
+        Assert.True(JsonElement.DeepEquals(first.RootElement, replay.RootElement));
+        Assert.Single(replay.RootElement.GetProperty("update").EnumerateObject(), property => property.NameEquals("_meta"));
+    }
+
     [Fact]
     public void StateSessionUpdate_MissingState_IsRejected()
     {

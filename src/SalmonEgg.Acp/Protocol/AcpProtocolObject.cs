@@ -17,6 +17,15 @@ public abstract record AcpProtocolObject
 
 public static class AcpMetaJson
 {
+    // Opt in only at fields whose schema declares x-deserialize-default-on-error, or when projecting
+    // an unconstrained custom payload that remains authoritative. The general readers stay strict.
+    internal static Dictionary<string, object?>? ReadOrDefault(JsonElement root)
+    {
+        return root.TryGetProperty("_meta", out var metadata) && metadata.ValueKind == JsonValueKind.Object
+            ? Read(root)
+            : null;
+    }
+
     public static Dictionary<string, object?>? Read(JsonElement root)
     {
         if (!root.TryGetProperty("_meta", out var metaElement)
