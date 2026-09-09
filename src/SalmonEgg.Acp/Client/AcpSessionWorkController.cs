@@ -162,7 +162,11 @@ internal sealed class AcpSessionWorkController
         }
     }
 
-    internal bool ReceiveUpdate(string sessionId, SessionUpdate update, CancellationToken connectionToken)
+    internal bool ReceiveUpdate(
+        string sessionId,
+        SessionUpdate update,
+        CancellationToken connectionToken,
+        JsonElement? draftPayload = null)
     {
         lock (_gate)
         {
@@ -171,12 +175,18 @@ internal sealed class AcpSessionWorkController
                 return false;
             }
 
+            var session = GetOrCreateSession(sessionId);
+            if (draftPayload is { } payload)
+            {
+                session.Projection ??= new AcpSessionProjection();
+                session.Projection.Apply(update, payload);
+            }
+
             if (update is not StateSessionUpdate workUpdate)
             {
                 return true;
             }
 
-            var session = GetOrCreateSession(sessionId);
             session.State = CloneState(workUpdate.State);
             if (workUpdate.State is IdleSessionWorkState idle)
             {
@@ -222,6 +232,49 @@ internal sealed class AcpSessionWorkController
                     session.Prompts.Count,
                     session.Prompts.Count(static prompt => prompt.Accepted is not null))
                 : null;
+        }
+    }
+
+    internal AcpSessionSnapshot? GetProjectionSnapshot(string sessionId)
+    {
+        lock (_gate)
+        {
+            return _sessions.TryGetValue(sessionId, out var session)
+                ? (session.Projection ?? new AcpSessionProjection()).Snapshot(sessionId, session.State)
+                : null;
+        }
+    }
+
+    internal AcpSessionProjection BeginReplay(string sessionId, CancellationToken connectionToken)
+    {
+        lock (_gate)
+        {
+            if (!IsCurrent(connectionToken))
+            {
+                throw new OperationCanceledException("The ACP connection changed before session replay.");
+            }
+            var session = GetOrCreateSession(sessionId);
+            if (session.ReplayInProgress)
+            {
+                // session/update has no request id: overlapping full replays cannot be separated.
+                throw new InvalidOperationException("A full history replay is already in progress for this session.");
+            }
+            _closedSessions.Remove(sessionId);
+            session.ReplayInProgress = true;
+            session.Projection = new AcpSessionProjection();
+            return session.Projection;
+        }
+    }
+
+    internal void EndReplay(string sessionId, AcpSessionProjection? projection, CancellationToken connectionToken)
+    {
+        lock (_gate)
+        {
+            if (IsCurrent(connectionToken) && _sessions.TryGetValue(sessionId, out var session)
+                && ReferenceEquals(session.Projection, projection))
+            {
+                session.ReplayInProgress = false;
+            }
         }
     }
 
@@ -292,6 +345,8 @@ internal sealed class AcpSessionWorkController
         internal SessionWorkState? State { get; set; }
         internal bool CancellationRequested { get; set; }
         internal TaskCompletionSource<SessionPromptCompletion>? CancellationCompletion { get; set; }
+        internal AcpSessionProjection? Projection { get; set; }
+        internal bool ReplayInProgress { get; set; }
     }
 }
 

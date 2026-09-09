@@ -249,6 +249,16 @@ namespace SalmonEgg.Acp.Client
         internal SessionWorkSnapshot? GetSessionWorkSnapshot(string sessionId)
             => _sessionWork.GetSnapshot(sessionId);
 
+        internal AcpSessionSnapshot? GetDraftSessionSnapshot(string sessionId)
+        {
+            lock (_lock)
+            {
+                return _isInitialized && _wire.Version == AcpProtocolVersion.V2
+                    ? _sessionWork.GetProjectionSnapshot(sessionId)
+                    : null;
+            }
+        }
+
         private async Task<InitializeResponse> InitializeCoreAsync(
             InitializeParams @params,
             bool allowDraftRuntime,
@@ -542,7 +552,8 @@ namespace SalmonEgg.Acp.Client
                 "session/resume",
                 ToElement<SessionResumeParams>(@params));
 
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await SendSessionResumeRequestAsync(
+                request, @params, connectionToken, cancellationToken).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -564,6 +575,48 @@ namespace SalmonEgg.Acp.Client
 
             return sessionResumeResponse ?? SessionResumeResponse.Completed;
         }
+
+        private async Task<JsonRpcResponse> SendSessionResumeRequestAsync(
+            JsonRpcRequest request,
+            SessionResumeParams @params,
+            CancellationToken connectionToken,
+            CancellationToken cancellationToken)
+        {
+            if (ProtocolVersion != AcpProtocolVersion.V2 || !RequestsFullReplay(request))
+            {
+                return await SendRequestAsync(request, cancellationToken, connectionToken).ConfigureAwait(false);
+            }
+
+            AcpSessionProjection? replay = null;
+            try
+            {
+                return await SendRequestAsync(
+                    request,
+                    cancellationToken,
+                    connectionToken,
+                    responseObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
+                    beforeSend: () => replay = _sessionWork.BeginReplay(@params.SessionId, connectionToken)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && replay is not null)
+            {
+                // Cancelling the wait cannot retract streamed replay. Its response or disconnect
+                // releases the claim; another full replay must not interleave uncorrelated updates.
+                throw;
+            }
+            catch
+            {
+                _sessionWork.EndReplay(@params.SessionId, replay, connectionToken);
+                throw;
+            }
+        }
+
+        private static bool RequestsFullReplay(JsonRpcRequest request)
+            => request.Params is { } parameters
+                && parameters.TryGetProperty("replayFrom", out var cursor)
+                && cursor.ValueKind == JsonValueKind.Object
+                && cursor.TryGetProperty("type", out var type)
+                && type.ValueKind == JsonValueKind.String
+                && type.ValueEquals("start");
 
         /// <summary>
         /// Closes an existing session and releases the resources held on the agent side.
@@ -1486,7 +1539,8 @@ namespace SalmonEgg.Acp.Client
             CancellationToken cancellationToken,
             CancellationToken connectionToken = default,
             Action<JsonRpcResponse>? responseObserver = null,
-            Action<Exception>? requestNotSentObserver = null)
+            Action<Exception>? requestNotSentObserver = null,
+            Action? beforeSend = null)
         {
             Activity? activity = null;
             CancellationTokenSource? sendCancellation = null;
@@ -1520,9 +1574,10 @@ namespace SalmonEgg.Acp.Client
                         throw new OperationCanceledException("The ACP connection changed before sending the request.");
                     }
                     ClearLastTransportError();
-                    // Pending registration must precede synchronous peer replies,
+                    // Lifecycle claims and pending registration must precede synchronous peer replies,
                     // under the same connection lock as starting transport I/O. The linked token also
                     // prevents a transport's delayed write from crossing a subsequent reconnect.
+                    beforeSend?.Invoke();
                     _pendingRequests[requestIdStr] = new PendingOutboundRequest(tcs, responseObserver);
                     requestWriteStarted = true;
                     sendTask = _transport.SendMessageAsync(json, sendCancellation.Token);
@@ -2177,7 +2232,11 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
                 if (connectionToken.CanBeCanceled
-                    && !_sessionWork.ReceiveUpdate(updateParams.SessionId, updateParams.Update, connectionToken))
+                    && !_sessionWork.ReceiveUpdate(
+                        updateParams.SessionId,
+                        updateParams.Update,
+                        connectionToken,
+                        wire.Version == AcpProtocolVersion.V2 ? notification.Params.Value.GetProperty("update") : null))
                 {
                     return;
                 }

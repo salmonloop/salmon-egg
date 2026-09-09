@@ -62,6 +62,82 @@ internal sealed class DefaultableObjectJsonConverter<T> : JsonConverter<T> where
         => JsonSerializer.Serialize(writer, value, (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
 }
 
+internal sealed class DefaultableNullableJsonConverter<T> : JsonConverter<T?> where T : struct
+{
+    public override T? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        if (document.RootElement.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return document.RootElement.Deserialize((JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        }
+        catch (JsonException)
+        {
+            // Only properties explicitly annotated x-deserialize-default-on-error use this converter.
+            return null;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, T? value, JsonSerializerOptions options)
+    {
+        if (value is { } item)
+        {
+            JsonSerializer.Serialize(writer, item, (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
+}
+
+internal sealed class DefaultableListJsonConverter<T> : JsonConverter<List<T>> where T : class
+{
+    public override List<T>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var result = new List<T>();
+        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            try
+            {
+                if (item.Deserialize(typeInfo) is { } value)
+                {
+                    result.Add(value);
+                }
+            }
+            catch (JsonException)
+            {
+                // Collection recovery is valid only when the schema also permits skip-invalid-items.
+            }
+        }
+
+        return result;
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<T> value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        foreach (var item in value)
+        {
+            JsonSerializer.Serialize(writer, item, typeInfo);
+        }
+        writer.WriteEndArray();
+    }
+}
+
 internal sealed class DefaultableProtocolListJsonConverter<T> : JsonConverter<List<T>> where T : class
 {
     public override bool HandleNull => true;
