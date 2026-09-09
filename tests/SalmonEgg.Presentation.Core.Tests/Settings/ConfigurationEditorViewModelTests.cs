@@ -13,7 +13,7 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
-public sealed class ConfigurationEditorViewModelTests
+public sealed partial class ConfigurationEditorViewModelTests
 {
     [Fact]
     public void TransportOptions_Should_UseLocalizedTransportLabels()

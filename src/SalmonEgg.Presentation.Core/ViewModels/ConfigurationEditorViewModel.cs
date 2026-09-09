@@ -128,8 +128,7 @@ public partial class ConfigurationEditorViewModel(
         StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
-        Token = string.Empty;
-        ApiKey = string.Empty;
+        ResetCredentialEdits();
         ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
         SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
@@ -140,6 +139,7 @@ public partial class ConfigurationEditorViewModel(
     partial void OnTransportChanged(TransportType value)
     {
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == value) ?? TransportOptions.FirstOrDefault();
+        RefreshCredentialBindingState();
     }
 
     partial void OnSelectedTransportOptionChanged(TransportOption? value)
@@ -175,6 +175,8 @@ public partial class ConfigurationEditorViewModel(
     {
         OnPropertyChanged(nameof(CanSaveConfiguration));
         OnPropertyChanged(nameof(CanRetryProfileLoad));
+        RefreshCredentialBindingState();
+        OnPropertyChanged(nameof(IsCredentialInputEnabled));
     }
 
     public async Task LoadConfigurationAsync(string profileId)
@@ -237,15 +239,14 @@ public partial class ConfigurationEditorViewModel(
         HasProfileLoadError = false;
         ClearError();
         IsEditing = true;
-        Configuration = config;
+        Configuration = config.Clone();
         var transport = ResolveSupportedTransportType(Configuration.Transport);
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
         StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = transport;
-        Token = Configuration.Authentication?.Token ?? string.Empty;
-        ApiKey = Configuration.Authentication?.ApiKey ?? string.Empty;
+        ResetCredentialEdits();
         ConnectionTimeout = Configuration.ConnectionTimeout;
 
         if (Configuration.Proxy != null)
@@ -285,8 +286,7 @@ public partial class ConfigurationEditorViewModel(
         StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
-        Token = string.Empty;
-        ApiKey = string.Empty;
+        ResetCredentialEdits();
         ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
         SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
@@ -322,8 +322,7 @@ public partial class ConfigurationEditorViewModel(
         StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
-        Token = string.Empty;
-        ApiKey = string.Empty;
+        ResetCredentialEdits();
         ProxyMode = ProxyConfig.DefaultMode;
         ProxyUrl = string.Empty;
         SelectedProxyModeOption = ProxyModeOptions.FirstOrDefault(o => o.Mode == ProxyConfig.DefaultMode) ?? ProxyModeOptions.FirstOrDefault();
@@ -339,42 +338,10 @@ public partial class ConfigurationEditorViewModel(
 
         try
         {
+            IsBusy = true;
             ClearError();
-
-            Configuration.Name = Name;
-            Configuration.Transport = Transport;
-
-            if (Transport == TransportType.Stdio)
-            {
-                Configuration.ServerUrl = string.Empty;
-                Configuration.StdioCommand = StdioCommand;
-                Configuration.StdioArguments = StdioCommandLine.ParseArgumentsText(StdioArgumentsText).ToList();
-            }
-            else
-            {
-                Configuration.ServerUrl = ServerUrl;
-                Configuration.StdioCommand = string.Empty;
-                Configuration.StdioArguments = new();
-            }
-
-            Configuration.ConnectionTimeout = ConnectionTimeout;
-
-            if (!string.IsNullOrEmpty(Token) || !string.IsNullOrEmpty(ApiKey))
-            {
-                Configuration.Authentication = new AuthenticationConfig
-                {
-                    Token = Token,
-                    ApiKey = ApiKey
-                };
-            }
-
-            Configuration.Proxy = new ProxyConfig
-            {
-                Mode = ProxyMode,
-                ProxyUrl = ProxyMode == ProxyMode.Custom ? ProxyUrl : string.Empty
-            };
-
-            var validationResult = await _validator.ValidateAsync(Configuration);
+            var candidate = CreateConfigurationCandidate();
+            var validationResult = await _validator.ValidateAsync(candidate);
             if (!validationResult.IsValid)
             {
                 var errors = string.Join("; ", validationResult.Errors);
@@ -382,18 +349,57 @@ public partial class ConfigurationEditorViewModel(
                 return;
             }
 
-            await _configurationService.SaveConfigurationAsync(Configuration);
+            await _configurationService.SaveConfigurationAsync(candidate);
+            Configuration = candidate;
+            _profileId = candidate.Id;
+            IsEditing = true;
+            ResetCredentialEdits();
         }
         catch (ConfigurationPersistenceException ex)
         {
-            Logger.LogError(ex, "Failed to save configuration: {Reason}", ex.Reason);
+            Logger.LogError("Failed to save configuration: {Reason}", ex.Reason);
             SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.UserMessage]);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to save configuration");
-            SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.Message]);
+            Logger.LogError("Failed to save configuration. ExceptionType={ExceptionType}", ex.GetType().Name);
+            SetError(_localizer["AgentProfileEditor_CredentialSaveFailed"]);
         }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private ServerConfiguration CreateConfigurationCandidate()
+    {
+        var candidate = Configuration.Clone();
+        candidate.Name = Name;
+        candidate.Transport = Transport;
+        candidate.ServerUrl = IsStdio ? string.Empty : ServerUrl;
+        candidate.StdioCommand = IsStdio ? StdioCommand : string.Empty;
+        candidate.StdioArguments = IsStdio
+            ? StdioCommandLine.ParseArgumentsText(StdioArgumentsText).ToList()
+            : new();
+        candidate.ConnectionTimeout = ConnectionTimeout;
+        candidate.CredentialBinding = _credentialBindingDraft;
+        if (ClearCredentialsOnSave)
+        {
+            candidate.Authentication = null;
+        }
+        else if (!string.IsNullOrEmpty(Token) || !string.IsNullOrEmpty(ApiKey))
+        {
+            // Storage supports one credential kind. An entered value explicitly replaces it;
+            // leaving both fields empty keeps the hydrated snapshot unchanged.
+            candidate.Authentication = new AuthenticationConfig { Token = Token, ApiKey = ApiKey };
+        }
+
+        candidate.Proxy = new ProxyConfig
+        {
+            Mode = ProxyMode,
+            ProxyUrl = IsCustomProxy ? ProxyUrl : string.Empty
+        };
+        return candidate;
     }
 
     private string ResolveNewConfigurationName()

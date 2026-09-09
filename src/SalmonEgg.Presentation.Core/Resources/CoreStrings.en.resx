@@ -1391,4 +1391,21 @@ Create the corresponding Markdown file in:
   <data name="CommandLine_Action_InspectFailed" xml:space="preserve">
     <value>Checking the command's status failed.</value>
   </data>
+  <data name="AgentProfileEditor_CredentialKeepHint" xml:space="preserve"><value>Leave both fields empty to keep the stored credential. Enter either a token or an API key to replace it. Stored values are never shown.</value></data>
+  <data name="AgentProfileEditor_CredentialClear" xml:space="preserve"><value>Clear the stored credential when saving</value></data>
+  <data name="AgentProfileEditor_CredentialBindingTitle" xml:space="preserve"><value>Send credentials</value></data>
+  <data name="AgentProfileEditor_CredentialSource" xml:space="preserve"><value>Credential to use</value></data>
+  <data name="AgentProfileEditor_CredentialToken" xml:space="preserve"><value>Token</value></data>
+  <data name="AgentProfileEditor_CredentialApiKey" xml:space="preserve"><value>API key</value></data>
+  <data name="AgentProfileEditor_CredentialEnvironmentName" xml:space="preserve"><value>Environment variable required by the agent</value></data>
+  <data name="AgentProfileEditor_CredentialHeaderName" xml:space="preserve"><value>HTTP header required by the agent</value></data>
+  <data name="AgentProfileEditor_CredentialScheme" xml:space="preserve"><value>Header prefix (for example, Bearer; empty sends the credential directly)</value></data>
+  <data name="AgentProfileEditor_CredentialBind" xml:space="preserve"><value>Bind to current destination</value></data>
+  <data name="AgentProfileEditor_CredentialUnbind" xml:space="preserve"><value>Remove binding</value></data>
+  <data name="AgentProfileEditor_CredentialBindingHint" xml:space="preserve"><value>Use the name in the agent's documentation, then bind it to the current destination. Bind again after changing the address or launch command. Save to apply.</value></data>
+  <data name="AgentProfileEditor_CredentialWebSocketUnsupported" xml:space="preserve"><value>This platform cannot send credential headers over WebSocket. Use an HTTP address provided by the agent. Credentials will not be added to the URL.</value></data>
+  <data name="AgentProfileEditor_CredentialBoundFormat" xml:space="preserve"><value>Bound: {0} → {1}. Save to apply.</value></data>
+  <data name="AgentProfileEditor_CredentialUnbound" xml:space="preserve"><value>No binding. Stored credentials will not be sent automatically.</value></data>
+  <data name="AgentProfileEditor_CredentialUnsupported" xml:space="preserve"><value>Unsupported credential type</value></data>
+  <data name="AgentProfileEditor_CredentialSaveFailed" xml:space="preserve"><value>The configuration could not be saved. Check that secure storage is available, then try again.</value></data>
 </root>

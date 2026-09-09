@@ -9,7 +9,13 @@ public readonly record struct AcpConnectionReuseKey(
     string StdioArgumentsCanonical,
     string RemoteUrl)
 {
-    public static AcpConnectionReuseKey FromTransportConfiguration(IAcpTransportConfiguration transportConfiguration)
+    public string? ProfileRevision { get; init; }
+
+    public CredentialBinding? CredentialBinding { get; init; }
+
+    public static AcpConnectionReuseKey FromTransportConfiguration(
+        IAcpTransportConfiguration transportConfiguration,
+        ServerConfiguration? profile = null)
     {
         ArgumentNullException.ThrowIfNull(transportConfiguration);
 
@@ -21,6 +27,10 @@ public readonly record struct AcpConnectionReuseKey(
             transportConfiguration.SelectedTransportType,
             normalizedCommand,
             canonicalArgs,
-            normalizedUrl);
+            normalizedUrl)
+        {
+            ProfileRevision = profile?.PersistenceRevision,
+            CredentialBinding = profile?.CredentialBinding
+        };
     }
 }
