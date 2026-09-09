@@ -348,31 +348,40 @@ export async function typeIntoVisibleTextField(page, options, value, label, time
   return await setSemanticInputValue(page, options, value, label, timeoutMs);
 }
 
-async function setSemanticInputValue(page, options, value, label, timeoutMs) {
+async function waitForStableSemanticState(page, readState, options, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
-  let resolved = null;
   while (Date.now() < deadline) {
-    resolved = await page.evaluate(
-      input => window.__salmoneggSmoke.semantic.resolveEditableField(input),
-      options);
-    if (resolved?.id && !resolved.disabled) {
-      break;
+    // waitForFunction tests the predicate's immediate truthiness. An async predicate returns a
+    // truthy Promise even when it later resolves false, so keep polling and frame checks separate.
+    const ready = await page.waitForFunction(readState, options, { timeout: Math.max(1, deadline - Date.now()) });
+    let before;
+    try {
+      before = await ready.jsonValue();
+    } finally {
+      await ready.dispose();
     }
-
-    await page.waitForTimeout(200);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    if (await page.evaluate(readState, options) === before) {
+      return;
+    }
   }
+  throw new Error("The semantic control did not retain its ready state across a frame.");
+}
 
-  if (resolved?.disabled) {
-    throw new Error(
-      `${label} is disabled. State=${JSON.stringify(resolved.state)} `
-      + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
-  }
-
-  if (!resolved?.id) {
-    throw new Error(
-      `No editable field found for ${label}. Options=${JSON.stringify(options)} `
-      + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
-  }
+async function setSemanticInputValue(page, options, value, label, timeoutMs) {
+  // Navigation publishes editable peers before their first layout. Keyboard input can precede
+  // that layout, so wait for this field's real bounds before transferring focus.
+  await waitForStableSemanticState(page, ({ options, minimumSize }) => {
+    const field = window.__salmoneggSmoke.semantic.resolveEditableField(options);
+    const rect = field?.state?.rect;
+    return field?.id && !field.disabled && !field.state.hidden
+      && rect?.width >= minimumSize && rect.height >= minimumSize ? field.id : false;
+  }, { options, minimumSize: laidOutMinimumSize }, timeoutMs).catch(async error => {
+    const current = await page.evaluate(
+      input => window.__salmoneggSmoke.semantic.resolveEditableField(input), options);
+    throw new Error(`${label} did not become laid out and enabled before typing. `
+      + `State=${JSON.stringify(current)}.`, { cause: error });
+  });
 
   const field = page.locator(`#${resolved.id}`);
   await field.focus();
@@ -699,9 +708,30 @@ async function openComboBoxAligned(page, selectorAutomationId, label) {
     + `Semantic DOM=${JSON.stringify(await collectSemanticDebug(page))}`);
 }
 
-async function closeComboBox(page) {
+async function closeComboBox(page, selectorAutomationId) {
+  const popupId = await page.evaluate(automationId => {
+    const state = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
+    return state?.id ? document.getElementById(state.id)?.getAttribute("aria-controls") : null;
+  }, selectorAutomationId);
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(200);
+  await waitForComboBoxClosed(page, selectorAutomationId, popupId);
+}
+
+async function waitForComboBoxClosed(page, selectorAutomationId, popupId) {
+  // Uno finishes the closing storyboard before returning focus and disposing this ComboBox's
+  // listbox. The expanded flag alone can arrive earlier; a fixed delay cannot prove completion.
+  await waitForStableSemanticState(page, ({ automationId, popupId }) => {
+    const state = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
+    const element = state?.id ? document.getElementById(state.id) : null;
+    return element && !state.disabled && state.expanded === false
+      && !element.getAttribute("aria-controls") && (!popupId || !document.getElementById(popupId))
+      && document.activeElement === element ? state.id : false;
+  }, { automationId: selectorAutomationId, popupId }, COMBO_OPEN_TIMEOUT_MS).catch(async error => {
+    const state = await findComboBox(page, selectorAutomationId);
+    const focused = await page.evaluate(() => window.__salmoneggSmoke.semantic.focusedSnapshot());
+    throw new Error(`Combo box '${selectorAutomationId}' did not finish closing and return focus. `
+      + `State=${JSON.stringify(state)} Focus=${JSON.stringify(focused)}.`, { cause: error });
+  });
 }
 
 // Opens the dropdown (retrying through the F4 race), reads the highlighted option's label, then
@@ -719,14 +749,14 @@ async function readComboBoxSelectionLabel(page, selectorAutomationId) {
   const state = await openComboBoxAligned(page, selectorAutomationId, `combo box '${selectorAutomationId}'`);
   const activeIndex = state.activeIndex;
   if (activeIndex < 0 || activeIndex >= state.itemLabels.length) {
-    await closeComboBox(page);
+    await closeComboBox(page, selectorAutomationId);
     throw new Error(
       `combo box '${selectorAutomationId}' open state has no highlighted option. `
       + `State=${JSON.stringify(state)}`);
   }
 
   const selected = state.itemLabels[activeIndex];
-  await closeComboBox(page);
+  await closeComboBox(page, selectorAutomationId);
   return selected;
 }
 
@@ -744,7 +774,7 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
   const targetIndex = state.itemLabels.findIndex(
     item => expectedNames.some(name => name.toLowerCase() === item.toLowerCase()));
   if (targetIndex < 0) {
-    await closeComboBox(page);
+    await closeComboBox(page, selectorAutomationId);
     throw new Error(
       `${label} open state exposed ${JSON.stringify(state.itemLabels)}; `
       + `none matched ${JSON.stringify(expectedNames)}.`);
@@ -756,8 +786,12 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(100);
   }
+  const popupId = await page.evaluate(automationId => {
+    const combo = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
+    return combo?.id ? document.getElementById(combo.id)?.getAttribute("aria-controls") : null;
+  }, selectorAutomationId);
   await page.keyboard.press("Enter");
-  await closeComboBox(page);
+  await waitForComboBoxClosed(page, selectorAutomationId, popupId);
 
   if (options.verifySelectionText !== false) {
     const observed = await readComboBoxSelectionLabel(page, selectorAutomationId);
