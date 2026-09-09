@@ -43,7 +43,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit v2 contexts model grouped configuration IDs, message IDs, resource-link icons, command inputs, and version-specific initialization/session/MCP shapes. Live initialization rejects v2. | Runtime state, projections, permission handling, and batch processing remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit v2 wire contracts and the internal prompt/work-state lifecycle are covered by deterministic protocol peers. Live initialization rejects v2. | Update projections, permission handling, batch processing, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
 inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;
@@ -51,7 +51,20 @@ default-on-error and skip-invalid-item behavior applies only where the upstream 
 Resource-link icons are available through the experimental `ResourceLinkDraftExtensions` helper,
 so constructing them requires an explicit draft opt-in. Permission subject types are still not
 connected to live request handling. These contracts do not supply message upserts, streaming tool
-and terminal projections, or the acknowledgement-to-`state_update` completion lifecycle.
+and terminal projections.
+
+`SendPromptAsync` always waits for completed foreground work. The internal v2 development path
+records the prompt acknowledgement separately and finishes on an idle `state_update`; cancellation
+keeps accepting trailing updates until that idle arrives. One controller owns session work, including
+unsolicited running/requires-action/idle updates, and uses the connection's existing lifetime token
+to reject stale callbacks. This path is exercised through the actual JSON parser and client handlers,
+not exposed as a public v2 opt-in. V1 still completes from its terminal prompt response.
+
+The pinned [v2 lifecycle](https://github.com/agentclientprotocol/agent-client-protocol/blob/5ebaf0aceb04a4ba6574cd63fa6355352dc6d931/docs/protocol/v2/prompt-lifecycle.mdx)
+says an ending idle must carry a stop reason, while its
+[schema](https://github.com/agentclientprotocol/agent-client-protocol/blob/5ebaf0aceb04a4ba6574cd63fa6355352dc6d931/schema/v2/schema.json)
+allows an omitted/null/default-on-error reason. The client preserves that unknown reason and still
+finishes on idle (`HasStopReason == false`), without fabricating `end_turn` or waiting indefinitely.
 
 Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
 both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete

@@ -168,8 +168,9 @@ namespace SalmonEgg.Acp.Client
         Task<SessionListResponse> ListSessionsAsync(SessionListParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Sends a prompt to the session.
-        /// Sends a session/prompt request and waits for the Agent's response.
+        /// Sends a prompt to the session and waits for foreground work to finish.
+        /// On stable v1 the terminal session/prompt response supplies the completion.
+        /// A prompt acceptance acknowledgement is never returned as completed work.
         /// </summary>
         /// <param name="params">The send-prompt parameters</param>
         /// <param name="cancellationToken">The cancellation token</param>
