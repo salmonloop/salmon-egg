@@ -130,12 +130,10 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
         catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
-            // Preserve the caller's cancellation identity so the SDK can notify the peer. An actual
-            // break is still a connection failure even when cancellation races that failed write.
-            if (!_reportedSendFailures.Remove(ex) && wasConnected && !_isConnected)
-            {
-                RaiseError("Transport disconnected during send", null, TransportErrorKind.General);
-            }
+            // StateTransitions already reports actual connection failures. A cancelled write may
+            // resume after an intentional Disconnecting/Disconnected transition; IsConnected alone
+            // cannot turn that expected shutdown into a failure or duplicate a reported Error.
+            _reportedSendFailures.Remove(ex);
             throw;
         }
         catch (Exception ex)
