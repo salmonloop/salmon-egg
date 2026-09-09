@@ -383,16 +383,26 @@ async function setSemanticInputValue(page, options, value, label, timeoutMs) {
       + `State=${JSON.stringify(current)}.`, { cause: error });
   });
 
-  const field = page.locator(`#${resolved.id}`);
-  await field.focus();
-  const focusedId = await page.evaluate(() => document.activeElement?.id ?? null);
-  if (focusedId !== resolved.id) {
+  const focused = await page.evaluate(async input => {
+    const current = window.__salmoneggSmoke.semantic.resolveEditableField(input);
+    const element = current?.id ? document.getElementById(current.id) : null;
+    if (element && !current.disabled) element.focus();
+    // Uno flushes semantic nodes and pending managed focus at the animation-frame boundary.
+    // Check the current focus owner after that boundary before issuing any keys.
+    await new Promise(requestAnimationFrame);
+    return {
+      current: window.__salmoneggSmoke.semantic.resolveEditableField(input),
+      focusedId: document.activeElement?.id ?? null
+    };
+  }, options);
+  if (!focused.current?.id || focused.focusedId !== focused.current.id) {
     throw new Error(
-      `${label} did not take focus before typing (focus went to ${JSON.stringify(focusedId)}).`);
+      `${label} did not take focus before typing. State=${JSON.stringify(focused)}.`);
   }
 
   await page.keyboard.press("Control+a");
   await page.keyboard.type(String(value), { delay: 25 });
+  await waitForSemanticInputValue(page, options, String(value), label, true, timeoutMs);
   // Commit with Tab. Some fields update their binding per keystroke, but not all: the ACP profile
   // editor's Server URL only pushes its value to the ViewModel when the field is left, so without
   // this the app saves an empty URL while the DOM shows the typed one. It has to be the key, not a
@@ -400,12 +410,32 @@ async function setSemanticInputValue(page, options, value, label, timeoutMs) {
   // keyboard pipeline rather than by DOM focus events.
   await page.keyboard.press("Tab");
 
-  const observed = await field.inputValue().catch(() => null);
-  if (observed !== String(value)) {
-    throw new Error(`Typing into ${label} did not land. Expected ${JSON.stringify(String(value))}, observed ${JSON.stringify(observed)}.`);
-  }
+  return (await waitForSemanticInputValue(page, options, String(value), label, false, timeoutMs)).state;
+}
 
-  return resolved.state;
+async function waitForSemanticInputValue(page, options, expected, label, requireFocus, timeoutMs) {
+  // Text edits and focus changes can recreate Uno's semantic node. Read through the control's
+  // identity each time, not the old element id, and require this round's complete value before Tab.
+  const handle = await page.waitForFunction(({ options, expected, requireFocus }) => {
+    const current = window.__salmoneggSmoke.semantic.resolveEditableField(options);
+    const element = current?.id ? document.getElementById(current.id) : null;
+    if (!element || current.disabled || element.value !== expected
+      || (requireFocus && document.activeElement !== element)) return false;
+    return current;
+  }, { options, expected, requireFocus }, { timeout: timeoutMs }).catch(async error => {
+    const current = await page.evaluate(input => ({
+      resolved: window.__salmoneggSmoke.semantic.resolveEditableField(input),
+      focusedId: document.activeElement?.id ?? null
+    }), options);
+    throw new Error(`Typing into ${label} did not settle on the current input. `
+      + `Expected ${JSON.stringify(expected)}; requireFocus=${requireFocus}; `
+      + `current=${JSON.stringify(current)}.`, { cause: error });
+  });
+  try {
+    return await handle.jsonValue();
+  } finally {
+    await handle.dispose();
+  }
 }
 
 // ---- numeric fields --------------------------------------------------------------------------
