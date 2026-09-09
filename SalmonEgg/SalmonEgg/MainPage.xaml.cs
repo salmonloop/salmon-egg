@@ -77,9 +77,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly IGamepadShortcutDispatcher _gamepadShortcutDispatcher;
     private readonly IGamepadContextIntentDispatcher _gamepadContextIntentDispatcher;
     private readonly IApplicationStartupWorkflow _startupWorkflow;
+    private readonly IShellNavigationRuntimeState _shellNavigationRuntimeState;
     private readonly ContentFrameNavigationAdapter _contentNavigation;
     private bool _isGamepadInputAttached;
     private long _contentFrameNavigationVersion;
+    private Guid _nativeFocusCorrelationId;
 
     public MainPage()
     {
@@ -102,6 +104,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _gamepadShortcutDispatcher = App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
         _gamepadContextIntentDispatcher = App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
         _startupWorkflow = App.ServiceProvider.GetRequiredService<IApplicationStartupWorkflow>();
+        _shellNavigationRuntimeState = App.ServiceProvider.GetRequiredService<IShellNavigationRuntimeState>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
             "1",
@@ -192,6 +195,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
         DetachGamepadInput();
         DetachDebugKeyLogging();
+        Microsoft.UI.Xaml.Input.FocusManager.GettingFocus -= OnMainPageGettingFocus;
         _metricsProvider.Detach();
         _titleBarAdapter.Detach();
         DetachAppWindowClosing();
@@ -716,6 +720,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
     private async void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
+        // Observe native movements before startup can yield. The correlation id also changes
+        // when focus leaves and returns to the same element; element equality alone misses it.
+        Microsoft.UI.Xaml.Input.FocusManager.GettingFocus -= OnMainPageGettingFocus;
+        Microsoft.UI.Xaml.Input.FocusManager.GettingFocus += OnMainPageGettingFocus;
         AttachGamepadInput();
         AttachDebugKeyLogging();
         AttachAppWindowClosing();
@@ -726,12 +734,39 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         UpdateMainNavAutomationSelectionState();
         await _startupWorkflow.ActivateShellAsync().ConfigureAwait(true);
         BootLogDebug("MainPage: initial shell content activated");
-        _ = DispatcherQueue.TryEnqueue(
-            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () =>
-            {
-                _ = TryMoveFocusFromCurrentContentIntoMainNavigation();
-            });
+        var initialFocusRoot = XamlRoot;
+        var initialFocusedElement = initialFocusRoot is null
+            ? null
+            : Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(initialFocusRoot) as DependencyObject;
+        if (initialFocusRoot is not null && !IsDescendantOf(initialFocusedElement, ContentFrame))
+        {
+            var initialFocusState = (initialFocusedElement as Control)?.FocusState;
+            var initialFocusCorrelationId = _nativeFocusCorrelationId;
+            var initialActivationToken = _shellNavigationRuntimeState.LatestActivationToken;
+            var initialContentNavigationVersion = Interlocked.Read(ref _contentFrameNavigationVersion);
+            // Low-priority work can run after the user has already navigated or begun typing.
+            // Seed only the original focus intent; native focus and navigation remain the owners.
+            _ = DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () =>
+                {
+                    var currentFocusedElement = XamlRoot is null
+                        ? null
+                        : Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+                    if (!IsLoaded
+                        || !ReferenceEquals(XamlRoot, initialFocusRoot)
+                        || _shellNavigationRuntimeState.LatestActivationToken != initialActivationToken
+                        || Interlocked.Read(ref _contentFrameNavigationVersion) != initialContentNavigationVersion
+                        || _nativeFocusCorrelationId != initialFocusCorrelationId
+                        || !ReferenceEquals(currentFocusedElement, initialFocusedElement)
+                        || (currentFocusedElement as Control)?.FocusState != initialFocusState)
+                    {
+                        return;
+                    }
+
+                    _ = TryMoveFocusFromCurrentContentIntoMainNavigation();
+                });
+        }
         InitializeTray();
         await _startupWorkflow.InitializeRuntimeAsync().ConfigureAwait(true);
 
@@ -744,6 +779,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // sampling remain owned by the independent probe; the page only exposes the live shell root.
         NumberBoxThemeProbeDriver.TryStart(App.ServiceProvider, this);
     }
+
+    private void OnMainPageGettingFocus(object? sender, GettingFocusEventArgs e)
+        => _nativeFocusCorrelationId = e.CorrelationId;
 
     private void AttachGamepadInput()
     {
