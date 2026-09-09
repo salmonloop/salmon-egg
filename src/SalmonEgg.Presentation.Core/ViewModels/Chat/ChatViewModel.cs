@@ -19,6 +19,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
@@ -229,8 +230,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly object _remoteSessionRecoveryRequestsSync = new();
     private readonly Dictionary<RemoteSessionRecoveryLeaseKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
     private int _foregroundChatServiceGeneration;
-    private readonly object _pendingInlinePermissionRequestsSync = new();
-    private readonly Dictionary<string, PermissionRequestViewModel> _pendingInlinePermissionRequestsByToolCallId = new(StringComparer.Ordinal);
+    private EventHandler<PermissionRequestEventArgs>? _permissionRequestHandler;
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
     private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
@@ -2572,18 +2572,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void ApplyPendingInlinePermissionProjection(ChatMessageViewModel message)
     {
         ArgumentNullException.ThrowIfNull(message);
-
-        PermissionRequestViewModel? permissionRequest = null;
-        var toolCallId = message.ToolCallId;
-        if (!string.IsNullOrWhiteSpace(toolCallId))
-        {
-            lock (_pendingInlinePermissionRequestsSync)
-            {
-                _pendingInlinePermissionRequestsByToolCallId.TryGetValue(toolCallId, out permissionRequest);
-            }
-        }
-
-        message.PendingPermissionRequest = permissionRequest;
+        message.PendingPermissionRequest = string.IsNullOrWhiteSpace(message.ToolCallId)
+            ? null
+            : _panelStateCoordinator.GetPendingPermissionRequest(CurrentSessionId, message.ToolCallId);
     }
 
     private static ChatMessageViewModel FromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
@@ -3340,7 +3331,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void SubscribeToChatService(IChatService chatService)
     {
         chatService.SessionUpdateReceived += OnSessionUpdateReceived;
-        chatService.PermissionRequestReceived += OnPermissionRequestReceived;
+        var foregroundGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
+        // Decorators forward events with the inner service as sender. Capture the actual subscribed
+        // service and generation here instead of guessing ownership from that forwarded sender.
+        _permissionRequestHandler = (_, request) => ProcessPermissionRequest(chatService, foregroundGeneration, request);
+        chatService.PermissionRequestReceived += _permissionRequestHandler;
         chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
         chatService.TerminalRequestReceived += OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
@@ -3354,7 +3349,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void UnsubscribeFromChatService(IChatService chatService)
     {
         chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
-        chatService.PermissionRequestReceived -= OnPermissionRequestReceived;
+        if (_permissionRequestHandler is not null)
+        {
+            chatService.PermissionRequestReceived -= _permissionRequestHandler;
+            _permissionRequestHandler = null;
+        }
         chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
         chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
@@ -3663,6 +3662,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             return;
         }
+
+        _panelStateCoordinator.ClearPermissionRequests();
 
         if (_chatService != null)
         {

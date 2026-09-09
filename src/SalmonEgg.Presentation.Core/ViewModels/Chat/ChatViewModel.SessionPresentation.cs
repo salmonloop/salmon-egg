@@ -709,6 +709,10 @@ public partial class ChatViewModel
         AuthenticationHintMessage = projection.AuthenticationHintMessage;
         AgentName = projection.AgentName;
         AgentVersion = projection.AgentVersion;
+        if (PendingPermissionRequest is { IsAvailable: false })
+        {
+            SyncPermissionRequestProjection();
+        }
         RaiseOverlayStateChanged();
     }
 

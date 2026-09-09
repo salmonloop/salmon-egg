@@ -30,7 +30,7 @@ public sealed class ChatInteractionDialogFactoryTests
                 Assert.Equal("opt-1", optionId);
                 return Task.FromResult(true);
             },
-            () => dismissed = true);
+            () => { dismissed = true; return Task.CompletedTask; });
 
         Assert.Equal(string.Empty, sut.Options[0].Description);
 

@@ -32,8 +32,8 @@ public sealed class ChatInteractionEventBridge
     public PermissionRequestViewModel CreatePermissionRequestViewModel(
         PermissionRequestEventArgs args,
         Func<object, string, string?, Task<bool>> respondAsync,
-        Action dismiss)
-        => ChatInteractionDialogFactory.CreatePermissionRequestViewModel(args, respondAsync, dismiss);
+        Func<Task> dismissAsync)
+        => ChatInteractionDialogFactory.CreatePermissionRequestViewModel(args, respondAsync, dismissAsync);
 
     public FileSystemRequestViewModel CreateFileSystemRequestViewModel(
         FileSystemRequestEventArgs args,

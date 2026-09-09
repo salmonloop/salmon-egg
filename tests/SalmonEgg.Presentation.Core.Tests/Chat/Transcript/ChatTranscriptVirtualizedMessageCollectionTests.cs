@@ -34,6 +34,30 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
     }
 
     [Fact]
+    public void UpdateCachedItems_RuntimeProjection_LeavesUnrealizedRowsUnmaterialized()
+    {
+        // Arrange
+        var projectedIndexes = new List<int>();
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        sut.Reset("conv-large", BuildTranscript(5000), (snapshot, index) =>
+        {
+            projectedIndexes.Add(index);
+            return Project(snapshot, index);
+        }, MatchesSnapshot, PatchProjectedMessage);
+        var visible = sut[1234];
+        var prompt = new PermissionRequestViewModel();
+
+        // Act
+        sut.UpdateCachedItems(message => message.PendingPermissionRequest = prompt);
+
+        // Assert
+        Assert.Same(prompt, visible.PendingPermissionRequest);
+        Assert.Equal([1234], projectedIndexes);
+        Assert.Null(sut[1235].PendingPermissionRequest);
+        Assert.Equal([1234, 1235], projectedIndexes);
+    }
+
+    [Fact]
     public void Reset_WhenSameConversationAppendsStablePrefix_PublishesAddWithoutFullReset()
     {
         var projectedIndexes = new List<int>();

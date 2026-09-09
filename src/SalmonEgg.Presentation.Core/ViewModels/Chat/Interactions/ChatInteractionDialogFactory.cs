@@ -13,11 +13,11 @@ public static class ChatInteractionDialogFactory
     public static PermissionRequestViewModel CreatePermissionRequestViewModel(
         PermissionRequestEventArgs request,
         Func<object, string, string?, Task<bool>> respondAsync,
-        Action dismiss)
+        Func<Task> dismissAsync)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(respondAsync);
-        ArgumentNullException.ThrowIfNull(dismiss);
+        ArgumentNullException.ThrowIfNull(dismissAsync);
 
         var optionViewModels = request.Options
             .Select(opt => new PermissionOptionViewModel
@@ -42,7 +42,7 @@ public static class ChatInteractionDialogFactory
             var succeeded = await respondAsync(request.MessageId, outcome, optionId).ConfigureAwait(true);
             if (succeeded)
             {
-                dismiss();
+                await dismissAsync().ConfigureAwait(true);
             }
         };
         foreach (var option in optionViewModels)

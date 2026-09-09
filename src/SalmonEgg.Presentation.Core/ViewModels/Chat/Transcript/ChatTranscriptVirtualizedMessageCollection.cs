@@ -300,6 +300,17 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         return _matchesSnapshot(item, _transcript[index]);
     }
 
+    internal void UpdateCachedItems(Action<ChatMessageViewModel> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        // Runtime-only projections must update the instances already bound by the view without
+        // defeating transcript virtualization. Property observers may materialize another row.
+        foreach (var item in _cache.Values.ToArray())
+        {
+            update(item);
+        }
+    }
+
     private void PublishChangedCachedItems(
         IImmutableList<ConversationMessageSnapshot> oldTranscript,
         IImmutableList<ConversationMessageSnapshot> newTranscript,

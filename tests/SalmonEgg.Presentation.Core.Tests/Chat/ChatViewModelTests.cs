@@ -8705,8 +8705,7 @@ public partial class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        chatService.Setup(service => service.RespondToPermissionRequestAsync("permission-1", "cancelled", null))
-            .ReturnsAsync(true);
+        var permissionResponses = new List<string>();
         await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
 
         await fixture.UpdateStateAsync(state => state with
@@ -8718,16 +8717,25 @@ public partial class ChatViewModelTests
         });
         syncContext.RunAll();
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-1", "remote-1", null, new List<PermissionOption>(), null!));
+        chatService.Raise(service => service.PermissionRequestReceived += null,
+            new PermissionRequestEventArgs("permission-1", "remote-1", null, [], (outcome, optionId) =>
+            {
+                Assert.Null(optionId);
+                permissionResponses.Add(outcome);
+                return Task.CompletedTask;
+            }));
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
             return Task.FromResult(viewModel.ShowPermissionDialog && viewModel.PendingPermissionRequest is not null);
         });
 
-        await viewModel.CancelPromptCommand.ExecuteAsync(null);
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.CancelPromptCommand.ExecuteAsync(null));
         syncContext.RunAll();
 
+        Assert.Equal(["cancelled"], permissionResponses);
+        chatService.Verify(service => service.RespondToPermissionRequestAsync(
+            It.IsAny<object>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
         Assert.False(viewModel.ShowPermissionDialog);
         Assert.Null(viewModel.PendingPermissionRequest);
     }
@@ -8740,8 +8748,7 @@ public partial class ChatViewModelTests
         var chatService = CreateConnectedChatService();
         chatService.Setup(service => service.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .Returns(Task.CompletedTask);
-        chatService.Setup(service => service.RespondToPermissionRequestAsync("permission-2", "cancelled", null))
-            .ReturnsAsync(true);
+        var permissionResponses = new List<string>();
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
 
         await fixture.UpdateStateAsync(state => state with
@@ -8759,7 +8766,13 @@ public partial class ChatViewModelTests
                 && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-fresh", StringComparison.Ordinal);
         }, timeoutMilliseconds: 5000);
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-2", "remote-fresh", null, new List<PermissionOption>(), null!));
+        chatService.Raise(service => service.PermissionRequestReceived += null,
+            new PermissionRequestEventArgs("permission-2", "remote-fresh", null, [], (outcome, optionId) =>
+            {
+                Assert.Null(optionId);
+                permissionResponses.Add(outcome);
+                return Task.CompletedTask;
+            }));
 
         await WaitForConditionAsync(() =>
         {
@@ -8768,7 +8781,7 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 5000);
         Assert.Equal("permission-2", fixture.ViewModel.PendingPermissionRequest?.MessageId);
 
-        await fixture.ViewModel.CancelSessionCommand.ExecuteAsync(null);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.CancelSessionCommand.ExecuteAsync(null));
 
         await WaitForConditionAsync(() =>
         {
@@ -8778,7 +8791,9 @@ public partial class ChatViewModelTests
                 && fixture.ViewModel.PendingPermissionRequest is null);
         }, timeoutMilliseconds: 5000);
 
-        chatService.Verify(service => service.RespondToPermissionRequestAsync("permission-2", "cancelled", null), Times.Once);
+        Assert.Equal(["cancelled"], permissionResponses);
+        chatService.Verify(service => service.RespondToPermissionRequestAsync(
+            It.IsAny<object>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
         chatService.Verify(service => service.CancelSessionAsync(It.Is<SessionCancelParams>(p => p.SessionId == "remote-fresh")), Times.Once);
         Assert.False(fixture.ViewModel.ShowPermissionDialog);
         Assert.Null(fixture.ViewModel.PendingPermissionRequest);
@@ -8819,7 +8834,7 @@ public partial class ChatViewModelTests
                 new PermissionOption("allow-always", "Always allow", "allow_always"),
                 new PermissionOption("reject-once", "Reject", "reject_once")
             ],
-            null!));
+            static (_, _) => Task.CompletedTask));
 
         await WaitForConditionAsync(() =>
         {

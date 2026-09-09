@@ -883,39 +883,25 @@ public partial class ChatViewModel
     private async Task CancelPendingPermissionRequestAsync(string? expectedRemoteSessionId = null)
     {
         var pending = PendingPermissionRequest;
-        if (pending is null)
-        {
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(expectedRemoteSessionId)
-            && !string.Equals(pending.SessionId, expectedRemoteSessionId, StringComparison.Ordinal))
+        if (pending is null || (!string.IsNullOrWhiteSpace(expectedRemoteSessionId)
+            && !string.Equals(pending.SessionId, expectedRemoteSessionId, StringComparison.Ordinal)))
         {
             return;
         }
 
         try
         {
-            if (_chatService != null)
+            await PostToUiAsync(async () =>
             {
-                await _chatService.RespondToPermissionRequestAsync(pending.MessageId, "cancelled", null).ConfigureAwait(true);
-            }
+                // The same command owns both explicit cancellation and user choices. Failed writes
+                // keep the original prompt visible. Capture it before dispatch so a queued command
+                // cannot cancel a replacement prompt, and its late completion removes only itself.
+                await pending.RespondCommand.ExecuteAsync(null).ConfigureAwait(true);
+            }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(
-                ex,
-                "Failed to send permission cancellation response. SessionId={SessionId}",
-                pending.SessionId);
-        }
-        finally
-        {
-            ShowPermissionDialog = false;
-            ClearInlinePermissionRequest(pending);
-            if (ReferenceEquals(PendingPermissionRequest, pending))
-            {
-                PendingPermissionRequest = null;
-            }
+            Logger.LogWarning("Failed to send permission cancellation response. ExceptionType={ExceptionType}", ex.GetType().FullName);
         }
     }
 
@@ -1086,6 +1072,7 @@ public partial class ChatViewModel
             _hydrationOverlayPhaseConversationId = null;
             _panelStateCoordinator.ClearAskUserRequests();
             _panelStateCoordinator.ClearElicitationRequests();
+            ClearPermissionRequests();
             PendingAskUserRequest = null;
             PendingElicitationRequest = null;
         }
@@ -1142,6 +1129,7 @@ public partial class ChatViewModel
             _hydrationOverlayPhaseConversationId = null;
             _panelStateCoordinator.ClearAskUserRequests();
             _panelStateCoordinator.ClearElicitationRequests();
+            ClearPermissionRequests();
             PendingAskUserRequest = null;
             PendingElicitationRequest = null;
         }
