@@ -201,7 +201,10 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             var itemsType = ElicitationSchemaJson.ReadOptionalString(root, "type");
-            if (string.Equals(itemsType, "string", StringComparison.Ordinal))
+            // StringMultiSelectItems is identified by enum in both protocol versions. Retain the
+            // previously accepted type:string spelling, without reclassifying unknown item types.
+            if (string.Equals(itemsType, "string", StringComparison.Ordinal)
+                || (itemsType is null && root.TryGetProperty("enum", out _)))
             {
                 return new StringMultiSelectItems
                 {
@@ -224,7 +227,6 @@ namespace SalmonEgg.Acp.Protocol
             {
                 case StringMultiSelectItems stringItems:
                     writer.WriteStartObject();
-                    writer.WriteString("type", "string");
                     ElicitationSchemaJson.WriteStringArray(writer, "enum", stringItems.Enum);
                     AcpMetaJson.Write(writer, stringItems.Meta);
                     writer.WriteEndObject();
