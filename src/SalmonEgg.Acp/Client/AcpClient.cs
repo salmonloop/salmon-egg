@@ -724,26 +724,13 @@ namespace SalmonEgg.Acp.Client
                 prompt = _sessionWork.BeginPrompt(@params.SessionId, _wire, connectionToken);
             }
 
-            try
-            {
-                // Record acceptance synchronously in response dispatch. An asynchronous continuation
-                // could otherwise run after the very next state_update and lose an immediate idle.
-                await SendRequestAsync(request, cancellationToken, prompt.ConnectionToken,
-                    response => _sessionWork.ReceivePromptResponse(prompt, response)).ConfigureAwait(false);
-                var completion = await prompt.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
-                return completion.GetResponse();
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // Cancelling a local wait cannot invent an idle state. The peer response and any
-                // later state_update remain correlated until they settle or the connection ends.
-                throw;
-            }
-            catch (Exception error)
-            {
-                _sessionWork.FailPrompt(prompt, error);
-                throw;
-            }
+            // Record acceptance synchronously in response dispatch. An asynchronous continuation
+            // could otherwise run after the very next state_update and lose an immediate idle.
+            await SendRequestAsync(request, cancellationToken, prompt.ConnectionToken,
+                response => _sessionWork.ReceivePromptResponse(prompt, response),
+                error => _sessionWork.FailPrompt(prompt, error)).ConfigureAwait(false);
+            var completion = await prompt.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return completion.GetResponse();
         }
 
         // spec MUST: the client must restrict the content types it sends to the promptCapabilities
@@ -1497,7 +1484,8 @@ namespace SalmonEgg.Acp.Client
             JsonRpcRequest request,
             CancellationToken cancellationToken,
             CancellationToken connectionToken = default,
-            Action<JsonRpcResponse>? responseObserver = null)
+            Action<JsonRpcResponse>? responseObserver = null,
+            Action<Exception>? requestNotSentObserver = null)
         {
             if (!connectionToken.CanBeCanceled)
             {
@@ -1512,6 +1500,7 @@ namespace SalmonEgg.Acp.Client
             using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
             var requestWriteStarted = false;
             var retainPendingRequest = false;
+            Exception? failure = null;
 
             try
             {
@@ -1596,18 +1585,21 @@ namespace SalmonEgg.Acp.Client
                     await SendCancelRequestNotificationAsync(requestId, connectionToken).ConfigureAwait(false);
                 }
 
-                throw new OperationCanceledException(cancellationToken);
+                failure = new OperationCanceledException(cancellationToken);
+                throw failure;
             }
             catch (TaskCanceledException ex)
             {
                 var exception = new OperationCanceledException(
                     "ACP request was canceled because the transport disconnected.",
                     ex);
+                failure = exception;
                 AcpActivitySources.RecordException(activity, exception);
                 throw exception;
             }
             catch (Exception ex)
             {
+                failure = ex;
                 AcpActivitySources.RecordException(activity, ex);
                 _logger.Log(
                     AcpClientLogLevel.Error,
@@ -1619,6 +1611,25 @@ namespace SalmonEgg.Acp.Client
             }
             finally
             {
+                if (failure is not null)
+                {
+                    if (!requestWriteStarted)
+                    {
+                        requestNotSentObserver?.Invoke(failure);
+                    }
+                    else if (responseObserver is not null)
+                    {
+                        // Once transport I/O starts, false or an exception cannot prove that no
+                        // bytes reached the peer. Keep prompt acceptance correlated until its
+                        // response or disconnect; only the send owner can declare it unsent.
+                        retainPendingRequest = true;
+                        _ = tcs.Task.ContinueWith(
+                            static completed => _ = completed.Exception,
+                            CancellationToken.None,
+                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
+                    }
+                }
                 if (!retainPendingRequest)
                 {
                     _pendingRequests.TryRemove(requestIdStr, out _);
