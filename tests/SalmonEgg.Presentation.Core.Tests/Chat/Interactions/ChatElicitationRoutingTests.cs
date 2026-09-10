@@ -88,10 +88,11 @@ public sealed class ChatElicitationRoutingTests
     }
 
     [Theory]
-    [InlineData(false, "")]
-    [InlineData(true, "")]
-    [InlineData(true, "  ")]
-    public async Task BuildElicitationRequestAsync_MultiSelectLabels_PreservesWireValues(bool titled, string blankTitle)
+    [InlineData(false, "", false)]
+    [InlineData(false, "", true)]
+    [InlineData(true, "", false)]
+    [InlineData(true, "  ", false)]
+    public async Task BuildElicitationRequestAsync_MultiSelectLabels_PreservesWireValues(bool titled, string blankTitle, bool omitItemType)
     {
         // Arrange
         var transport = new Mock<IAcpTransport>();
@@ -108,7 +109,9 @@ public sealed class ChatElicitationRoutingTests
         service.ElicitationRequestReceived += OnRequest;
         var items = titled
             ? $$$"""{"anyOf":[{"const":"api-internal","title":"Public API","description":"Read interface contracts"},{"const":"ui-internal","title":"Desktop UI","description":null},{"const":"fallback-internal","title":"{{{blankTitle}}}","description":"  "}]}"""
-            : """{"type":"string","enum":["api-internal","ui-internal","fallback-internal"]}""";
+            : omitItemType
+                ? """{"enum":["api-internal","ui-internal","fallback-internal"]}"""
+                : """{"type":"string","enum":["api-internal","ui-internal","fallback-internal"]}""";
         ElicitationRequestViewModel? clearedRequest = null;
         try
         {

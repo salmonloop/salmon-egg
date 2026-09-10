@@ -24,8 +24,9 @@ export async function verifyRemainingFormInputs(page, server) {
     firstValue: "0.25", invalidValue: "3", finalValue: "0.375", expected: 0.375
   }));
   requests.push(await verifyMultiSelectForm(page, server, suffix));
+  requests.push(await verifyTitledMultiSelectForm(page, server, suffix));
   requests.push(await verifyDeclinedForm(page, server, suffix));
-  console.log("WASM form inputs: integer/number edits and validation, bounded multi-select, native Decline, typed replies and dismissal");
+  console.log("WASM form inputs: integer/number validation, bounded and titled multi-select, native Decline, typed replies and dismissal");
   return requests;
 }
 
@@ -88,6 +89,47 @@ async function verifyMultiSelectForm(page, server, suffix) {
   await activateFormAction(page, form, "Submit");
   await verifyResponseAndDismissal(page, form, {
     action: "accept", content: { targets: [options[0], options[2]] }
+  });
+  return form.request;
+}
+
+async function verifyTitledMultiSelectForm(page, server, suffix) {
+  const options = [
+    { const: `api-internal-${suffix}`, title: `Public API ${suffix}`, description: `Read interface contracts ${suffix}` },
+    { const: `ui-internal-${suffix}`, title: `Desktop UI ${suffix}`, description: null },
+    { const: `fallback-internal-${suffix}`, title: "  ", description: "  " }
+  ];
+  const form = await openForm(page, server, `WASM titled multi-select input ${suffix}`, {
+    targets: {
+      type: "array", title: `Smoke titled targets ${suffix}`,
+      items: { anyOf: options }, default: [options[0].const], minItems: 1, maxItems: 2
+    }
+  });
+  const labels = [options[0].title, options[1].title, options[2].const];
+  const checkboxes = [];
+  for (const [index, label] of labels.entries()) {
+    checkboxes.push(await findNamedCheckbox(page, label, index === 0));
+  }
+  assert.equal(new Set(checkboxes).size, options.length);
+  await waitForValue(page, description => Array.from(document.querySelectorAll(
+    "#uno-semantics-root [id^='uno-semantics-']")).some(element => {
+    const rect = element.getBoundingClientRect();
+    const matches = element.getAttribute("aria-label") === description || element.textContent?.trim() === description;
+    return matches && !element.closest("[hidden]") && rect.width > 0 && rect.height > 0;
+  }), options[0].description, "this request's visible option description");
+  await waitForControlEnabledState(page, submitButton, true, "The default uses the wire const value");
+  assert.equal(form.request.responses().length, 0);
+
+  for (const [index, checked, enabled] of [[0, false, false], [1, true, true], [2, true, true]]) {
+    await activateNativeControl(page, checkboxes[index], "Space", labels[index]);
+    await waitForCheckboxState(page, checkboxes[index], checked);
+    await waitForControlEnabledState(page, submitButton, enabled, "Titled choices update Submit", formTimeoutMs);
+    assert.equal(form.request.responses().length, 0, "Choosing a display label must not submit the form.");
+  }
+
+  await activateFormAction(page, form, "Submit");
+  await verifyResponseAndDismissal(page, form, {
+    action: "accept", content: { targets: [options[1].const, options[2].const] }
   });
   return form.request;
 }
