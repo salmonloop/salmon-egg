@@ -15,6 +15,75 @@ public sealed class AcpClientPermissionCancellationOwnershipTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ExplicitCancellation_DuringSelectionWrite_LatchesWithoutRacingTerminalResponses(bool selectionWriteSucceeds)
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.Request();
+        var request = Assert.Single(peer.Requests);
+        var started = NewSignal<bool>();
+        var release = NewSignal<bool>();
+        peer.ResponseSend = (response, token) =>
+        {
+            if (response.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString() != "selected")
+                return Task.FromResult(true);
+            started.TrySetResult(true);
+            return release.Task.WaitAsync(token);
+        };
+        var answer = request.TryRespondAsync("selected", "allow");
+        try
+        {
+            await started.Task.WaitAsync(WaitTimeout, TestToken);
+
+            // Act: withdrawing the choice must not wait for a response that may need another input.
+            Assert.False(await request.TryRespondAsync("cancelled").WaitAsync(WaitTimeout, TestToken));
+            Assert.True(request.IsCancellationRequested);
+            Assert.Single(peer.Attempts);
+            release.TrySetResult(selectionWriteSucceeds);
+            Assert.Equal(selectionWriteSucceeds, await answer.WaitAsync(WaitTimeout, TestToken));
+            await peer.FirstResponseWritten.WaitAsync(WaitTimeout, TestToken);
+
+            // Assert
+            var response = Assert.Single(peer.Responses);
+            Assert.Equal(selectionWriteSucceeds ? "selected" : "cancelled",
+                response.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+            Assert.Equal(selectionWriteSucceeds ? 1 : 2, peer.Attempts.Count);
+            Assert.False(request.CanRespond);
+            Assert.False(await request.TryRespondAsync("selected", "allow").WaitAsync(WaitTimeout, TestToken));
+        }
+        finally
+        {
+            release.TrySetResult(selectionWriteSucceeds);
+            await answer.WaitAsync(WaitTimeout, TestToken);
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitCancellation_FailedWrite_CannotBeReplacedBySelection()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.Request();
+        var request = Assert.Single(peer.Requests);
+        peer.ResponseSend = (_, _) => Task.FromResult(false);
+
+        // Act
+        Assert.False(await request.TryRespondAsync("cancelled").WaitAsync(WaitTimeout, TestToken));
+
+        // Assert
+        Assert.True(request.IsCancellationRequested);
+        Assert.True(request.CanRespond);
+        Assert.False(await request.TryRespondAsync("selected", "allow").WaitAsync(WaitTimeout, TestToken));
+        Assert.Single(peer.Attempts);
+        peer.ResponseSend = null;
+        Assert.True(await request.TryRespondAsync("cancelled").WaitAsync(WaitTimeout, TestToken));
+        Assert.Equal("cancelled", Assert.Single(peer.Responses).GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
+        Assert.False(request.CanRespond);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task PeerCancellation_FailedWrite_PreservesOwnerUntilExplicitRetry(bool retryFromOriginalRequest)
     {
         // Arrange

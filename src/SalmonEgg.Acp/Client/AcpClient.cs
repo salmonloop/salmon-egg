@@ -1196,7 +1196,7 @@ namespace SalmonEgg.Acp.Client
                 {
                     return false;
                 }
-                if (cancelForSession)
+                if (cancelForSession || outcome == "cancelled")
                 {
                     pending.IsPermissionCancellationRequested = true;
                     pending.PermissionEvent?.NotifyChanged();
