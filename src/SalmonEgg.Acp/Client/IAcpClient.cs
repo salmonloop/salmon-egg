@@ -314,6 +314,7 @@ namespace SalmonEgg.Acp.Client
         private readonly Func<string, string?, Task<bool>>? _tryRespond;
         private readonly Func<bool>? _canRespond;
         private readonly Func<bool>? _isResponsePrepared;
+        private readonly Func<bool>? _isResponseSending;
         private readonly Func<bool>? _isCancellationRequested;
         private readonly IAcpClientLogger? _logger;
         private int _changeVersion;
@@ -366,6 +367,17 @@ namespace SalmonEgg.Acp.Client
             _logger = logger;
         }
 
+        internal PermissionRequestEventArgs(
+            object messageId, string sessionId, object? toolCall, List<PermissionOption> options,
+            Func<string, string?, Task<bool>> tryRespond, Func<bool> canRespond,
+            Func<bool> isResponsePrepared, Func<bool> isResponseSending,
+            Func<bool> isCancellationRequested, IAcpClientLogger? logger = null)
+            : this(messageId, sessionId, toolCall, options, tryRespond, canRespond,
+                isResponsePrepared, isCancellationRequested, logger)
+        {
+            _isResponseSending = isResponseSending;
+        }
+
         /// <summary>
         /// The message ID of the original request.
         /// </summary>
@@ -404,6 +416,14 @@ namespace SalmonEgg.Acp.Client
         /// <summary>Whether an answer is prepared or being sent, without confirmation of delivery.</summary>
         /// <remarks>A failed write resets this value so the original request may be retried.</remarks>
         public bool IsResponsePrepared => _isResponsePrepared?.Invoke() ?? false;
+
+        /// <summary>Whether the original response is awaiting completion of its physical send.</summary>
+        /// <remarks>
+        /// A prepared batch answer may wait for sibling answers before sending. Independent replies
+        /// keep their presentation until this send finishes. Legacy events conservatively treat a
+        /// prepared response as sending when they do not provide a separate delivery query.
+        /// </remarks>
+        public bool IsResponseSending => _isResponseSending?.Invoke() ?? IsResponsePrepared;
 
         /// <summary>Whether the original owner has withdrawn selection and only cancellation may be retried.</summary>
         public bool IsCancellationRequested => _isCancellationRequested?.Invoke() ?? false;

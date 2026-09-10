@@ -30,10 +30,12 @@ public partial class PermissionRequestViewModel : ObservableObject
     internal bool BindingCancellationAttempted { get; set; }
     internal Func<bool>? IsRequestAvailable { get; set; }
     internal Func<bool>? IsResponsePrepared { get; set; }
+    internal Func<bool>? IsResponseSending { get; set; }
     internal Func<bool>? IsRequestCancellationRequested { get; set; }
     internal Action? UnsubscribeRequestChanges { get; set; }
     internal bool IsAvailable => IsRequestAvailable?.Invoke() ?? true;
     internal bool IsAwaitingInput => IsAvailable && IsResponsePrepared?.Invoke() != true;
+    internal bool IsSendingResponse => IsAvailable && IsResponseSending?.Invoke() == true;
     internal bool IsCancellationOnly => BindingCancellationAttempted || IsRequestCancellationRequested?.Invoke() == true;
 
     public Func<string, string?, Task>? OnRespond { get; set; }

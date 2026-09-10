@@ -1325,6 +1325,9 @@ Create the corresponding Markdown file in:
   <data name="Permission_Cancelled" xml:space="preserve">
     <value>This request was cancelled. Retry cancellation to dismiss it.</value>
   </data>
+  <data name="Permission_CancellationFailedDisconnected" xml:space="preserve">
+    <value>Could not cancel an undisplayed permission request. The connection was closed. Reconnect to the agent.</value>
+  </data>
   <data name="Permission_BindingChanged" xml:space="preserve">
     <value>This request is no longer valid because the conversation changed. Retry cancellation to dismiss it.</value>
   </data>

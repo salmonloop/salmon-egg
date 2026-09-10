@@ -83,10 +83,21 @@ Disconnecting, completing a request, or reusing its ID invalidates the old event
 remain retryable while the original request is still current. A host must dismiss only the prompt
 associated with the successful response, even if the active conversation or connection has changed.
 
-`IsResponsePrepared` means an answer is in flight without confirming delivery. A failed write
+`IsResponsePrepared` means an answer is prepared or in flight without confirming delivery.
+`IsResponseSending` distinguishes a physical send from a prepared batch answer waiting for siblings.
+Keep an independent prompt in place during that send, with the native asynchronous command disabled;
+only a batch answer waiting for other answers may yield its input surface before delivery. A failed write
 makes the original request retryable. When `IsCancellationRequested` is true, offer cancellation
 retry instead of authorization. `Title` and `Description` expose the peer's prompt text without a
 draft-type dependency; missing titles should use the host's localized fallback.
+
+If a request cannot be associated with a conversation, attempt cancellation once. A failed cancellation
+retains a standalone cancellation-only retry in the same interaction owner, bound to the original request
+and connection. Successful delivery, disconnection or service replacement removes that retry; it never
+creates a conversation binding or an automatic retry loop.
+When no chat surface can offer that retry, the connection coordinator closes only the original
+service and retains a localized connection failure asking the user to reconnect. Its bounded cleanup
+never clears a newer service or publishes the old failure over a replacement connection.
 
 Subscribe to the request's `Changed` event and immediately read its properties to cover the
 subscription window. Notifications are asynchronous and may coalesce; marshal UI projection to its
