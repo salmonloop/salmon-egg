@@ -61,6 +61,75 @@ public sealed class AcpClientPromptSubmissionTests
         await peer.Client.CancelSessionAsync(new SessionCancelParams("session"), TestToken).WaitAsync(TestToken);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendPromptAsync_TracePreparationThrows_DoesNotRetainUnsentWork(bool throwWhenStarted)
+    {
+        // Arrange
+        using var peer = await PromptPeer.CreateAsync(AcpProtocolVersion.V2);
+        using var trace = new Activity("prompt-submission-throws").Start();
+        var failure = new InvalidOperationException("Host tracing failed.");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == AcpActivitySources.ClientName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+            {
+                if (options.Parent.TraceId != trace.TraceId || options.Name != "acp.request session/prompt")
+                    return ActivitySamplingResult.None;
+                if (!throwWhenStarted) throw failure;
+                return ActivitySamplingResult.AllData;
+            },
+            ActivityStarted = activity =>
+            {
+                if (activity.TraceId == trace.TraceId && activity.OperationName == "acp.request session/prompt") throw failure;
+            }
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => peer.PromptAsync(TestToken)));
+
+        // Assert
+        Assert.Empty(peer.PromptWrites);
+        Assert.Equal(0, peer.Client.GetSessionWorkSnapshot("session")!.PendingPrompts);
+        await peer.Client.CancelSessionAsync(new SessionCancelParams("session"), TestToken).WaitAsync(TestToken);
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_TraceDisposalThrows_PreservesAcceptedWorkUntilIdle()
+    {
+        // Arrange
+        using var peer = await PromptPeer.CreateAsync(AcpProtocolVersion.V2);
+        using var trace = new Activity("prompt-disposal-throws").Start();
+        var failure = new InvalidOperationException("Host trace completion failed.");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == AcpActivitySources.ClientName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) => options.Parent.TraceId == trace.TraceId
+                ? ActivitySamplingResult.AllData : ActivitySamplingResult.None,
+            ActivityStopped = activity =>
+            {
+                if (activity.TraceId == trace.TraceId && activity.OperationName == "acp.request session/prompt") throw failure;
+            }
+        };
+        ActivitySource.AddActivityListener(listener);
+        peer.CompletePromptWrite = (request, _) =>
+        {
+            peer.Accept(request);
+            return Task.FromResult(true);
+        };
+
+        // Act
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => peer.PromptAsync(TestToken)));
+
+        // Assert
+        Assert.Single(peer.PromptWrites);
+        Assert.Equal(1, peer.Client.GetSessionWorkSnapshot("session")!.AcceptedPrompts);
+        peer.State("idle");
+        Assert.Equal(0, peer.Client.GetSessionWorkSnapshot("session")!.PendingPrompts);
+    }
+
     [Fact]
     public async Task SendPromptAsync_UnsentContributionCancelled_PreservesOtherActiveWork()
     {
