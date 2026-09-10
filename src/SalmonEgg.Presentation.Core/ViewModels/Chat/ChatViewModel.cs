@@ -986,6 +986,28 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public IAsyncRelayCommand? ElicitationCancelCommand => PendingElicitationRequest?.CancelCommand;
 
+    public string ElicitationAgentName => PendingElicitationRequest?.AgentName ?? string.Empty;
+
+    public bool ElicitationIsUrl => PendingElicitationRequest?.IsUrl ?? false;
+
+    public string ElicitationFullUrl => PendingElicitationRequest?.FullUrl ?? string.Empty;
+
+    public string ElicitationUrlHost => PendingElicitationRequest?.UrlHost ?? string.Empty;
+
+    public bool ElicitationHasUrlWarning => PendingElicitationRequest?.HasUrlWarning ?? false;
+
+    public bool ElicitationIsAwaitingCompletion => PendingElicitationRequest?.IsAwaitingCompletion ?? false;
+
+    public string ElicitationUrlStatus => PendingElicitationRequest?.UrlStatus ?? string.Empty;
+
+    public string ElicitationSubmitText => PendingElicitationRequest?.SubmitText ?? string.Empty;
+
+    public IAsyncRelayCommand? ElicitationDismissCommand => PendingElicitationRequest?.DismissCommand;
+
+    public IAsyncRelayCommand? ElicitationReopenCommand => PendingElicitationRequest?.ReopenCommand;
+
+    public bool ElicitationShowReopen => PendingElicitationRequest?.ShowReopen ?? false;
+
     // UI-BOUND PROPERTIES: Handlers for WinUI/Uno property change notifications.
     // These ensure the View reflects internal state changes that might not trigger automatically.
     public bool CanSendPromptUi => ResolveInputState().CanSendPrompt;
@@ -1411,7 +1433,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IAiContentReportLauncher? aiContentReportLauncher = null,
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         IRemoteDirectoryRegistrar? remoteDirectoryRegistrar = null,
-        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null)
+        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null,
+        IExternalUriLauncher? externalUriLauncher = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1475,7 +1498,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         NewSessionDraftModeOptions = new ReadOnlyObservableCollection<SessionModeViewModel>(_newSessionDraftModeOptions);
         NewSessionDraftModelOptions = new ReadOnlyObservableCollection<OptionValueViewModel>(_newSessionDraftModelOptions);
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
-        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator, _localizer);
+        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator, _localizer, externalUriLauncher);
         _authenticationCoordinator = new ChatAuthenticationCoordinator();
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _localSlashCommandSource = localSlashCommandSource ?? StaticSlashCommandSource.Empty;

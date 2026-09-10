@@ -1766,10 +1766,11 @@ public partial class ChatViewModel
 
     private void OnElicitationRequestReceived(object? sender, ElicitationRequestEventArgs e)
     {
-        _ = ProcessElicitationRequestAsync(e);
+        var requestingAgent = (sender as IChatService)?.AgentInfo;
+        _ = ProcessElicitationRequestAsync(e, requestingAgent?.Title ?? requestingAgent?.Name ?? CurrentAgentDisplayText);
     }
 
-    private async Task ProcessElicitationRequestAsync(ElicitationRequestEventArgs e)
+    private async Task ProcessElicitationRequestAsync(ElicitationRequestEventArgs e, string agentName)
     {
         var foregroundServiceGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
         try
@@ -1777,7 +1778,7 @@ public partial class ChatViewModel
             var projection = await _interactionEventBridge.BuildElicitationRequestAsync(
                 e,
                 (conversationId, request) => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId, request)),
-                Logger).ConfigureAwait(false);
+                Logger, PostToUiAsync, agentName).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -1788,7 +1789,7 @@ public partial class ChatViewModel
             {
                 // Routing and dispatcher work may finish after the foreground owner was replaced.
                 // A stale form must not occupy the new connection's only interaction slot.
-                if (_disposed || foregroundServiceGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
+                if (_disposed || !e.State.CanRespond || foregroundServiceGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
                 {
                     return;
                 }
@@ -1798,14 +1799,15 @@ public partial class ChatViewModel
             }).ConfigureAwait(true);
             if (!displayed)
             {
+                projection.Value.ViewModel.Dispose();
                 // This surface holds one form per conversation. Keep the visible request and cancel
                 // the unshown one instead of replacing an interaction the user still needs to answer.
                 await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Logger.LogError(ex, "Error processing elicitation request");
+            Logger.LogError("Error processing elicitation request");
             await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
         }
     }

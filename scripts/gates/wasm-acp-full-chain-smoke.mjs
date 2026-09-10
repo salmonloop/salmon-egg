@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
+import http from "node:http";
 import { chromium } from "playwright";
 import {
   normalizeBaseUrl,
@@ -27,6 +28,7 @@ import {
 } from "./wasm-smoke-lib/acp-ui-fixture.mjs";
 import {
   clickVisibleControl,
+  clickVisibleControlWithTrustedPointer,
   collectVisibleInteractiveDebug,
   typeIntoVisibleTextField,
   waitForControlEnabledState,
@@ -43,6 +45,7 @@ const fullChainPromptText = `WASM full chain prompt ${Date.now()}`;
 const fullChainAgentReplyText = `WASM full chain agent reply ${Date.now()}`;
 const browser = await chromium.launch({
   headless: true,
+  ignoreDefaultArgs: ["--disable-popup-blocking"],
   executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
 });
 let acpServer;
@@ -110,13 +113,17 @@ try {
     elicitationRequests.push(await verifyKnownFormSubmission(page, acpServer));
     elicitationRequests.push(...await verifyRemainingFormInputs(page, acpServer));
     elicitationRequests.push(await verifyUnknownRequiredFieldCancellation(page, acpServer));
+    assert.ok(initialize.params.clientCapabilities?.elicitation?.url,
+      "The tested WASM launcher must advertise URL elicitation.");
+    elicitationRequests.push(...await verifyUrlConsent(page, context, acpServer));
     elicitationRequests.push(...await verifyStandalonePermissionQueue(page, acpServer));
   } catch (error) {
     const artifacts = process.env.WASM_SMOKE_ARTIFACTS_DIR;
     if (artifacts) {
       await mkdir(artifacts, { recursive: true });
-      await page.screenshot({ path: `${artifacts}/interaction-failure.png` });
-      await writeFile(`${artifacts}/interaction-failure.json`, JSON.stringify({
+      await page.screenshot({ path: `${artifacts}/elicitation-failure.png` });
+      await writeFile(`${artifacts}/elicitation-failure.html`, await page.content());
+      await writeFile(`${artifacts}/elicitation-failure.json`, JSON.stringify({
         error: String(error),
         semantic: await page.evaluate(collectVisibleInteractiveDebug),
         fatalConsoleMessages
@@ -140,6 +147,169 @@ try {
   } finally {
     await acpServer?.close();
   }
+}
+
+async function verifyUrlConsent(page, context, server) {
+  let visits = 0;
+  let referrer;
+  const privateConsole = [];
+  const collectConsole = message => privateConsole.push(message.text());
+  page.on("console", collectConsole);
+  const target = http.createServer((request, response) => {
+    if (request.url.startsWith("/authorize")) {
+      visits++;
+      referrer = request.headers.referer;
+    }
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end("<!doctype html><title>External authorization</title><input id='private' value='page-canary'>");
+  });
+  await new Promise(resolve => target.listen(0, "127.0.0.1", resolve));
+  const requestSuffix = Date.now();
+  const cancelledUrl = `http://127.0.0.1:${target.address().port}/authorize?canary=url-cancel-${requestSuffix}`;
+  const url = `http://127.0.0.1:${target.address().port}/authorize?canary=url-accept-${requestSuffix}`;
+  const cancelledPrompt = `WASM URL cancellation ${requestSuffix}`;
+  const acceptedPrompt = `WASM URL consent ${requestSuffix}`;
+  const openButton = { labels: ["Open in browser"], role: "button" };
+  const requests = [];
+  try {
+    const cancelled = server.requestClient("elicitation/create", {
+      sessionId: server.sessionId, mode: "url", elicitationId: "url-cancel", url: cancelledUrl,
+      message: cancelledPrompt
+    });
+    requests.push(cancelled);
+    await waitForSemanticText(page, new RegExp(cancelledPrompt), "current URL cancellation request");
+    await waitForSemanticText(page, /Review the complete address/, "URL consent explanation");
+    await waitForSemanticText(page, /127\.0\.0\.1/, "URL target host");
+    await waitForSemanticText(page, /Check the domain carefully/, "numeric host warning");
+    await assertCompleteUrlVisible(page, cancelledUrl);
+    assert.equal(visits, 0, "Receiving a URL must not prefetch it.");
+    await waitForControlEnabledState(page, cancelButton, true, "URL request remains cancellable");
+    await clickVisibleControl(page, cancelButton);
+    assert.deepEqual(await cancelled.waitForResponse(), {
+      jsonrpc: "2.0", id: cancelled.id, result: { action: "cancel" }
+    });
+    assert.equal(visits, 0, "Cancelled URL must never open.");
+
+    const accepted = server.requestClient("elicitation/create", {
+      sessionId: server.sessionId, mode: "url", elicitationId: "url-accept", url,
+      message: acceptedPrompt
+    });
+    requests.push(accepted);
+    server.notifyClient("elicitation/complete", { elicitationId: "unknown-id" });
+    await waitForSemanticText(page, new RegExp(acceptedPrompt), "current URL consent request");
+    await waitForControlEnabledState(page, openButton, true, "URL consent button enabled");
+    await assertCompleteUrlVisible(page, url);
+    assert.equal(visits, 0);
+    assert.equal(accepted.responses().length, 0);
+    const [popup] = await Promise.all([
+      context.waitForEvent("page"),
+      activateUrlButtonWithPointer(page, openButton, "URL browser consent")
+    ]);
+    await popup.waitForURL(url);
+    assert.deepEqual(await accepted.waitForResponse(), {
+      jsonrpc: "2.0", id: accepted.id, result: { action: "accept" }
+    }, "URL acceptance must omit content and only mean consent.");
+    assert.equal(await popup.evaluate(() => window.opener), null);
+    assert.equal(await popup.evaluate(() => document.referrer), "");
+    assert.equal(referrer, undefined);
+    assert.equal(visits, 1);
+    await popup.close();
+    await waitForSemanticText(page, /Waiting for the agent to confirm completion/, "accepted URL still awaits completion");
+    const reopenButton = { labels: ["Open again"], role: "button" };
+    await waitForControlEnabledState(page, reopenButton, true, "explicit reopen available while waiting");
+    const [reopened] = await Promise.all([
+      context.waitForEvent("page"),
+      activateUrlButtonWithKeyboard(page, reopenButton, "explicit URL reopen")
+    ]);
+    await reopened.waitForURL(url);
+    assert.equal(await reopened.evaluate(() => window.opener), null);
+    assert.equal(await reopened.evaluate(() => document.referrer), "");
+    assert.equal(visits, 2);
+    assert.equal(accepted.responses().length, 1, "Opening again must never send a second accept response.");
+    await reopened.close();
+    server.notifyClient("elicitation/complete", { elicitationId: "url-accept" });
+    server.notifyClient("elicitation/complete", { elicitationId: "url-accept" });
+    await waitForSemanticText(page, /The agent reports that the external step is complete/, "authoritative URL completion");
+    await clickVisibleControl(page, { labels: ["Close notice"], role: "button" });
+    await page.waitForFunction(() => {
+      const element = document.querySelector("#uno-semantics-root [xamlautomationid='Elicitation.FullUrl']");
+      return !element || element.hidden || element.getBoundingClientRect().height === 0;
+    });
+    assert.equal(visits, 2);
+    const canaries = [new URL(cancelledUrl).searchParams.get("canary"), new URL(url).searchParams.get("canary"), "page-canary"];
+    assert.ok(!privateConsole.some(text => canaries.some(value => text.includes(value))),
+      "Private external interaction data must not enter the application console.");
+    await assertPrivateDataNotStored(page, canaries);
+    console.log("WASM URL elicitation: two distinct requests and complete URLs, trusted pointer consent and keyboard reopen with native popup policy, cancel, one accept without content, explicit reopen, completion, no opener/referrer or private-data persistence");
+    return requests;
+  } finally {
+    page.off("console", collectConsole);
+    await new Promise(resolve => target.close(resolve));
+  }
+}
+
+async function activateUrlButtonWithPointer(page, options, label) {
+  await waitForControlEnabledState(page, options, true, label);
+  await waitForLaidOutControl(page, options, label);
+  // Initial consent must travel through native canvas hit testing and browser user activation.
+  // Reopening below exercises the native keyboard Button path after the action row reflows.
+  await clickVisibleControlWithTrustedPointer(page, options, label);
+}
+
+async function activateUrlButtonWithKeyboard(page, options, label) {
+  await waitForControlEnabledState(page, options, true, label);
+  const state = await waitForLaidOutControl(page, options, label);
+  assert.equal(state.enabled, true, `${label} must remain enabled before taking focus.`);
+  await page.locator(`#${state.id}`).focus();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), state.id,
+    `${label} must own native keyboard focus before Enter.`);
+  // A real key grants transient browser activation through Uno's native Button path.
+  // Calling the semantic peer's Invoke action would not test user consent.
+  await page.keyboard.press("Enter");
+}
+
+async function assertCompleteUrlVisible(page, url) {
+  await page.waitForFunction(expected => {
+    const element = document.querySelector("#uno-semantics-root [xamlautomationid='Elicitation.FullUrl']");
+    if (!element || element.hidden) return false;
+    const rect = element.getBoundingClientRect();
+    const text = element.getAttribute("aria-label") || element.textContent || "";
+    return rect.width > 0 && rect.height > 0 && text === expected;
+  }, url);
+}
+
+async function assertPrivateDataNotStored(page, canaries) {
+  const result = await page.evaluate(values => {
+    const fs = globalThis.FS;
+    if (!fs) return { error: "The running product filesystem is unavailable." };
+    let files = 0;
+    const inspect = path => {
+      for (const name of fs.readdir(path)) {
+        if (name === "." || name === "..") continue;
+        const child = `${path}/${name}`;
+        const mode = fs.stat(child).mode;
+        if (fs.isDir(mode)) {
+          const found = inspect(child);
+          if (found) return found;
+        } else if (fs.isFile(mode)) {
+          files++;
+          const text = new TextDecoder().decode(fs.readFile(child));
+          if (values.some(value => text.includes(value))) return child;
+        }
+      }
+      return null;
+    };
+    const leakedFile = inspect("/local/SalmonEgg");
+    const leakedStorage = [localStorage, sessionStorage].some(storage =>
+      Object.values(storage).some(text => values.some(value => text.includes(value))));
+    const transcript = document.querySelector("#uno-semantics-root")?.textContent || "";
+    return { files, leakedFile, leakedStorage, leakedTranscript: values.some(value => transcript.includes(value)) };
+  }, canaries);
+  assert.equal(result.error, undefined);
+  assert.ok(result.files > 0, "The gate must inspect the product's existing persistence files.");
+  assert.equal(result.leakedFile, null, "External URL/input leaked into a product file or diagnostic log.");
+  assert.equal(result.leakedStorage, false);
+  assert.equal(result.leakedTranscript, false);
 }
 
 async function verifyKnownFormSubmission(page, server) {
@@ -240,7 +410,7 @@ async function findSingleVisibleFormInput(page, existingControlIds) {
     return inputs.length === 1 ? `#${inputs[0].id}` : null;
   }, existingControlIds, { timeout: 15_000 }).catch(async error => {
     throw new Error(`Expected one editable elicitation input. Semantic DOM=${JSON.stringify(
-      await collectVisibleInteractiveDebug(page))}`, { cause: error });
+      await page.evaluate(collectVisibleInteractiveDebug))}`, { cause: error });
   });
   try {
     return await handle.jsonValue();
@@ -271,7 +441,14 @@ async function waitForVisibleForm(page) {
       ids.push(matches[0].id);
     }
     return ids;
-  }, null, { timeout: 15_000 });
+  }, null, { timeout: 15_000 }).catch(async error => {
+    throw new Error(`Expected one laid-out elicitation host and its actions. Semantic DOM=${JSON.stringify(
+      await page.evaluate(() => Array.from(document.querySelectorAll("#uno-semantics-root *"))
+        .filter(element => !element.closest("[hidden]"))
+        .map(element => ({ id: element.id, tag: element.tagName,
+          name: element.getAttribute("aria-label"), automationId: element.getAttribute("xamlautomationid"),
+          rect: element.getBoundingClientRect().toJSON() }))))}`, { cause: error });
+  });
   try {
     return await handle.jsonValue();
   } finally {
@@ -290,7 +467,7 @@ async function waitForFormDismissal(page, formNodeIds) {
         "#uno-semantics-root [xamlautomationid='ElicitationHost']")).every(isDismissed);
   }, formNodeIds, { timeout: 15_000 }).catch(async error => {
     throw new Error(`Elicitation host and actions did not dismiss. Semantic DOM=${JSON.stringify(
-      await collectVisibleInteractiveDebug(page))}`, { cause: error });
+      await page.evaluate(collectVisibleInteractiveDebug))}`, { cause: error });
   });
   await handle.dispose();
 }
@@ -317,7 +494,7 @@ async function toggleSingleVisibleFormCheckbox(page, existingControlIds) {
     return checked && enabled ? checkbox.id : null;
   }, existingControlIds, { timeout: 15_000 }).catch(async error => {
     throw new Error(`Expected one enabled elicitation checkbox with its true default. Semantic DOM=${JSON.stringify(
-      await collectVisibleInteractiveDebug(page))}`, { cause: error });
+      await page.evaluate(collectVisibleInteractiveDebug))}`, { cause: error });
   });
   let checkboxId;
   try {

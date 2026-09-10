@@ -1456,4 +1456,31 @@
   <data name="ChatAuth_TerminalCancel" xml:space="preserve">
     <value>取消</value>
   </data>
+  <data name="Elicitation_OpenBrowser" xml:space="preserve">
+    <value>在浏览器中打开</value>
+  </data>
+  <data name="Elicitation_RetryResponse" xml:space="preserve">
+    <value>重试发送回复</value>
+  </data>
+  <data name="Elicitation_Submit" xml:space="preserve">
+    <value>提交</value>
+  </data>
+  <data name="Elicitation_UrlCompleted" xml:space="preserve">
+    <value>智能体已确认外部操作完成。</value>
+  </data>
+  <data name="Elicitation_UrlWaiting" xml:space="preserve">
+    <value>已请求打开网页。如果没有出现，请允许弹出窗口后选择“再次打开”。正在等待智能体确认完成。</value>
+  </data>
+  <data name="Elicitation_UnsafeUrl" xml:space="preserve">
+    <value>无法安全打开这个地址。请拒绝或取消本次请求。</value>
+  </data>
+  <data name="Elicitation_UrlUnavailable" xml:space="preserve">
+    <value>此设备暂不支持安全打开本次请求。请拒绝或取消。</value>
+  </data>
+  <data name="Elicitation_OpenFailed" xml:space="preserve">
+    <value>浏览器未能打开。请允许弹出窗口后重试，或取消请求。</value>
+  </data>
+  <data name="Elicitation_RequestExpired" xml:space="preserve">
+    <value>这个请求已失效。请重新连接后继续。</value>
+  </data>
 </root>

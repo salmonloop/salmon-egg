@@ -85,6 +85,13 @@ public sealed class ChatConversationPanelStateCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
         ArgumentNullException.ThrowIfNull(request);
+        var existing = GetPendingElicitationRequest(conversationId);
+        if (existing is { IsAwaitingCompletion: true })
+        {
+            existing.Dispose();
+            _pendingElicitationRequestsByConversation.Remove(conversationId);
+        }
+
         return _pendingElicitationRequestsByConversation.TryAdd(conversationId, request);
     }
 
@@ -98,11 +105,19 @@ public sealed class ChatConversationPanelStateCoordinator
             return false;
         }
 
+        request.Dispose();
         return _pendingElicitationRequestsByConversation.Remove(conversationId);
     }
 
     public void ClearElicitationRequests()
-        => _pendingElicitationRequestsByConversation.Clear();
+    {
+        foreach (var request in _pendingElicitationRequestsByConversation.Values)
+        {
+            request.Dispose();
+        }
+
+        _pendingElicitationRequestsByConversation.Clear();
+    }
 
     public PermissionRequestViewModel? GetPendingPermissionRequest(string? conversationId, string? toolCallId = null)
         => GetPendingPermissionRequest(conversationId, toolCallId, currentRequest: null);
@@ -278,7 +293,10 @@ public sealed class ChatConversationPanelStateCoordinator
         _terminalSessionsByConversation.Remove(conversationId);
         _selectedTerminalIdByConversation.Remove(conversationId);
         _pendingAskUserRequestsByConversation.Remove(conversationId);
-        _pendingElicitationRequestsByConversation.Remove(conversationId);
+        if (_pendingElicitationRequestsByConversation.Remove(conversationId, out var request))
+        {
+            request.Dispose();
+        }
         if (_pendingPermissionRequestsByConversation.Remove(conversationId, out var permissions))
         {
             foreach (var permission in permissions) permission.DetachRequest();

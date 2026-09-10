@@ -33,6 +33,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
+    private readonly IPlatformCapabilityService? _platformCapabilities;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
     private readonly object _applyScopeLock = new();
     private readonly object _poolConnectionGateSync = new();
@@ -51,7 +52,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionSessionCleaner? sessionCleaner = null,
         IAcpConnectionPoolManager? connectionPoolManager = null,
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
-        int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit)
+        int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit,
+        IPlatformCapabilityService? platformCapabilities = null)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -80,6 +82,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             ?? throw new ArgumentNullException(nameof(sessionCommandOrchestrator));
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
+        _platformCapabilities = platformCapabilities;
     }
 
     public async Task<AcpTransportApplyResult> ConnectToProfileAsync(
@@ -1092,7 +1095,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         return new ApplyScope(this, scopeCts, callerToken);
     }
 
-    private static async Task<InitializeResponse> InitializeCandidateAsync(
+    private async Task<InitializeResponse> InitializeCandidateAsync(
         IChatService chatService,
         TransportType transportType,
         string? profileId,
@@ -1106,7 +1109,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             profileId,
             conversationId,
             initializeTimeout,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken, _platformCapabilities).ConfigureAwait(false);
     }
 
     private static TimeSpan ResolveInitializeTimeout(ServerConfiguration? profile)

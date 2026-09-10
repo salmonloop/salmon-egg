@@ -15,6 +15,8 @@ public interface IPlatformCapabilityService
     bool SupportsTerminalAuthentication => false;
     bool SupportsGamepadInput { get; }
 
+    bool SupportsUrlElicitation => false;
+
     /// <summary>
     /// True when the app can tell whether its <c>salmon-egg</c> command is reachable from a shell. Needs a
     /// PATH to resolve and a process host to ask the resolved executable what version it is.

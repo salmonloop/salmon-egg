@@ -50,7 +50,8 @@ namespace SalmonEgg.Acp.Client
                 CancellationToken connectionToken,
                 string? sessionId = null,
                 AskUserRequest? askUserRequest = null,
-                CreateElicitationRequest? elicitationRequest = null)
+                CreateElicitationRequest? elicitationRequest = null,
+                ElicitationRequestState? elicitationState = null)
             {
                 Method = method;
                 MessageId = messageId;
@@ -58,6 +59,7 @@ namespace SalmonEgg.Acp.Client
                 SessionId = sessionId;
                 AskUserRequest = askUserRequest;
                 ElicitationRequest = elicitationRequest;
+                ElicitationState = elicitationState;
             }
 
             public string Method { get; }
@@ -72,9 +74,7 @@ namespace SalmonEgg.Acp.Client
 
             public CreateElicitationRequest? ElicitationRequest { get; }
 
-            public bool IsElicitationResponseInFlight { get; set; }
-
-            public bool IsElicitationCancellationRequested { get; set; }
+            public ElicitationRequestState? ElicitationState { get; }
 
             public HashSet<string>? PermissionOptionIds { get; set; }
 
@@ -99,7 +99,7 @@ namespace SalmonEgg.Acp.Client
             public JsonRpcResponse? PreparedCancellationResponse { get; set; }
 
             public PendingInboundRequest WithSessionId(string sessionId)
-                => new(Method, MessageId, ConnectionToken, sessionId, AskUserRequest, ElicitationRequest);
+                => new(Method, MessageId, ConnectionToken, sessionId, AskUserRequest, ElicitationRequest, ElicitationState);
 
             public PendingInboundRequest WithAskUserRequest(AskUserRequest request)
                 => new(
@@ -108,7 +108,8 @@ namespace SalmonEgg.Acp.Client
                     ConnectionToken,
                     request.SessionId,
                     request,
-                    ElicitationRequest);
+                    ElicitationRequest,
+                    ElicitationState);
         }
         private readonly IAcpTransport _transport;
         private readonly MessageParser _parser;
@@ -132,6 +133,9 @@ namespace SalmonEgg.Acp.Client
         private readonly object _lock = new();
         private bool _disposed;
         private CancellationTokenSource? _messageLoopCts;
+        // A notification projection of the connection lifetime, never an I/O cancellation source.
+        // Host callbacks may block; transport cancellation must still finish before reconnect.
+        private CancellationTokenSource? _connectionClosedObservers;
         private EventHandler<AcpTransportMessageReceivedEventArgs>? _connectionMessageHandler;
         private Task<bool>? _disconnectTask;
         private string? _lastTransportErrorMessage;
@@ -287,6 +291,7 @@ namespace SalmonEgg.Acp.Client
             bool allowDraftRuntime,
             CancellationToken cancellationToken)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             ArgumentNullException.ThrowIfNull(@params);
             // A modeled version is not a served version: the SDK carries draft v2 wire contracts so they
             // can be developed and asserted, while this runtime runs exactly one version end to end.
@@ -338,6 +343,7 @@ namespace SalmonEgg.Acp.Client
                 // The initialize request belongs to this connection too. Keep this same owner
                 // through the successful handshake instead of introducing it only afterwards.
                 _messageLoopCts = new CancellationTokenSource();
+                _connectionClosedObservers = new CancellationTokenSource();
                 connectionToken = _messageLoopCts.Token;
                 _sessionWork.BeginConnection(connectionToken);
                 AttachConnectionMessageHandler(connectionToken);
@@ -351,14 +357,7 @@ namespace SalmonEgg.Acp.Client
             }
             catch
             {
-                lock (_lock)
-                {
-                    if (_messageLoopCts?.Token == connectionToken)
-                    {
-                        ResetConnectionState();
-                        CancelPendingRequests();
-                    }
-                }
+                ResetConnectionState(connectionToken);
                 throw;
             }
 
@@ -429,6 +428,7 @@ namespace SalmonEgg.Acp.Client
 
             lock (_lock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 connectionToken.ThrowIfCancellationRequested();
                 // An old handshake may finish after a disconnect and a newer initialize. Its
                 // result cannot replace the newer connection's capabilities or cancellation owner.
@@ -442,8 +442,9 @@ namespace SalmonEgg.Acp.Client
                 _authMethods = initializeResponse.AuthMethods;
                 _clientCapabilities = @params.ClientCapabilities;
                 _isInitialized = true;
-                _ = MonitorTransportConnectionAsync(connectionToken);
             }
+
+            _ = MonitorTransportConnectionAsync(connectionToken);
 
             return initializeResponse;
         }
@@ -1144,6 +1145,14 @@ namespace SalmonEgg.Acp.Client
         {
             var idStr = RequestKey(pending.MessageId);
             CancellationToken connectionCancellation;
+            JsonRpcResponse responseMessage;
+            var isPeerCancellation = false;
+            if (cancelForSession)
+            {
+                pending.ElicitationState!.RequestCancellation();
+                pending.ElicitationState.NotifyChanged();
+            }
+
             lock (_lock)
             {
                 if (_disposed || !_transport.IsConnected || pending.ElicitationRequest is null
@@ -1154,13 +1163,8 @@ namespace SalmonEgg.Acp.Client
                     return false;
                 }
 
-                if (cancelForSession)
-                {
-                    pending.IsElicitationCancellationRequested = true;
-                }
-
-                if (pending.IsElicitationResponseInFlight
-                    || (pending.IsElicitationCancellationRequested && response is not ElicitationCancelResponse))
+                if (pending.ElicitationState!.IsResponseInFlight
+                    || (pending.ElicitationState.IsCancellationRequested && response is not ElicitationCancelResponse))
                 {
                     return false;
                 }
@@ -1168,30 +1172,35 @@ namespace SalmonEgg.Acp.Client
                 // Claim without removing: a failed send must remain retryable, while a second action
                 // cannot race the first one onto the wire. The callback owns this exact request object,
                 // so reusing its JSON-RPC id never lets an old form answer a later request.
-                pending.IsElicitationResponseInFlight = true;
+                pending.ElicitationState!.IsResponseInFlight = true;
                 pending.PreparedElicitationResponse = response;
                 pending.HasPreparedElicitationFailure = false;
                 connectionCancellation = _messageLoopCts?.Token ?? CancellationToken.None;
+                isPeerCancellation = response is ElicitationCancelResponse && pending.PreparedCancellationResponse?.IsError == true;
+                responseMessage = isPeerCancellation ? pending.PreparedCancellationResponse!
+                    : new JsonRpcResponse(pending.MessageId, ToElement<CreateElicitationResponse>(response));
             }
 
             var sent = false;
             try
             {
-                sent = await SendResponseAsync(new JsonRpcResponse(
-                    pending.MessageId,
-                    ToElement<CreateElicitationResponse>(response)), connectionCancellation).ConfigureAwait(false);
+                sent = await SendResponseAsync(responseMessage, connectionCancellation).ConfigureAwait(false);
                 return sent;
             }
             finally
             {
-                if (CompleteElicitationResponse(pending, response, sent))
+                var sendCancellation = CompleteElicitationResponse(pending,
+                    isPeerCancellation ? null : response, sent, isCancellationResponse: response is ElicitationCancelResponse);
+                pending.ElicitationState!.NotifyChanged();
+                if (sendCancellation)
                 {
                     await SendPendingElicitationCancellationAsync(pending, connectionCancellation).ConfigureAwait(false);
                 }
             }
         }
 
-        private bool CompleteElicitationResponse(PendingInboundRequest pending, CreateElicitationResponse? response, bool sent)
+        private bool CompleteElicitationResponse(
+            PendingInboundRequest pending, CreateElicitationResponse? response, bool sent, bool isCancellationResponse = false)
         {
             var idStr = RequestKey(pending.MessageId);
             lock (_lock)
@@ -1199,12 +1208,21 @@ namespace SalmonEgg.Acp.Client
                 if (sent)
                 {
                     _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(idStr, pending));
+                    if (response is null)
+                    {
+                        pending.ElicitationState!.Invalidate();
+                    }
+                    else
+                    {
+                        pending.ElicitationState!.MarkResponseSent(response.Action);
+                    }
                     if (response is not ElicitationAcceptResponse)
                     {
                         RemovePendingUrlElicitation(pending);
                     }
                 }
-                else if (pending.IsElicitationCancellationRequested && response is not ElicitationCancelResponse
+                else if (!IsBatchedResponse(pending) && !isCancellationResponse
+                    && pending.ElicitationState!.IsCancellationRequested && response is not ElicitationCancelResponse
                     && !_disposed && _transport.IsConnected
                     && TryGetPendingInboundRequest(idStr, out var current) && ReferenceEquals(current, pending))
                 {
@@ -1213,7 +1231,7 @@ namespace SalmonEgg.Acp.Client
                     return true;
                 }
 
-                pending.IsElicitationResponseInFlight = false;
+                pending.ElicitationState!.IsResponseInFlight = false;
                 return false;
             }
         }
@@ -1221,17 +1239,24 @@ namespace SalmonEgg.Acp.Client
         private async Task SendPendingElicitationCancellationAsync(PendingInboundRequest pending, CancellationToken cancellationToken)
         {
             var response = new ElicitationCancelResponse();
+            JsonRpcResponse responseMessage;
+            bool isPeerCancellation;
+            lock (_lock)
+            {
+                isPeerCancellation = pending.PreparedCancellationResponse?.IsError == true;
+                responseMessage = isPeerCancellation ? pending.PreparedCancellationResponse!
+                    : new JsonRpcResponse(pending.MessageId, ToElement<CreateElicitationResponse>(response));
+            }
             var sent = false;
             try
             {
-                sent = await SendResponseAsync(new JsonRpcResponse(
-                    pending.MessageId,
-                    ToElement<CreateElicitationResponse>(response)), cancellationToken).ConfigureAwait(false);
+                sent = await SendResponseAsync(responseMessage, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
                 // A failed cancellation remains explicitly retryable; it never schedules another send.
-                CompleteElicitationResponse(pending, response, sent);
+                CompleteElicitationResponse(pending, isPeerCancellation ? null : response, sent, isCancellationResponse: true);
+                pending.ElicitationState!.NotifyChanged();
             }
         }
 
@@ -1242,7 +1267,7 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
                     || !ReferenceEquals(current, pending) || !IsInboundRequestCurrent(pending)
-                    || pending.IsElicitationResponseInFlight || pending.IsElicitationCancellationRequested
+                    || pending.ElicitationState!.IsResponseInFlight || pending.ElicitationState.IsCancellationRequested
                     || pending.PreparedCancellationResponse is not null)
                 {
                     return;
@@ -1250,7 +1275,7 @@ namespace SalmonEgg.Acp.Client
 
                 // Host failures share the original response claim. They cannot overwrite a reply
                 // already sent, consume a replacement id, or escape onto a later connection.
-                pending.IsElicitationResponseInFlight = true;
+                pending.ElicitationState!.IsResponseInFlight = true;
                 pending.HasPreparedElicitationFailure = true;
                 responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
                     JsonRpcError.CreateInternalError("Failed to process elicitation/create request.")),
@@ -1264,7 +1289,9 @@ namespace SalmonEgg.Acp.Client
             }
             finally
             {
-                if (CompleteElicitationResponse(pending, response: null, sent))
+                var sendCancellation = CompleteElicitationResponse(pending, response: null, sent);
+                pending.ElicitationState!.NotifyChanged();
+                if (sendCancellation)
                 {
                     await SendPendingElicitationCancellationAsync(pending, pending.ConnectionToken).ConfigureAwait(false);
                 }
@@ -1615,6 +1642,7 @@ namespace SalmonEgg.Acp.Client
         public Task<bool> DisconnectAsync()
         {
             TaskCompletionSource<bool> completion;
+            CancellationToken? connectionToken;
             lock (_lock)
             {
                 if (_disconnectTask is { IsCompleted: false } pending)
@@ -1628,21 +1656,23 @@ namespace SalmonEgg.Acp.Client
                 }
 
                 completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                // Publish before cancelling the old connection. A reentrant initializer must not
-                // share a transport whose physical teardown is still in flight.
+                // Publish the lifecycle owner before Reset invalidates the old token and schedules
+                // host callbacks. Reentrant initialize must wait until physical teardown is done.
                 _disconnectTask = completion.Task;
+                connectionToken = _messageLoopCts?.Token;
             }
 
-            _ = CompleteDisconnectAsync(completion);
+            _ = CompleteDisconnectAsync(completion, connectionToken);
             return completion.Task;
         }
 
-        private async Task CompleteDisconnectAsync(TaskCompletionSource<bool> completion)
+        private async Task CompleteDisconnectAsync(
+            TaskCompletionSource<bool> completion,
+            CancellationToken? connectionToken)
         {
             try
             {
-                ResetConnectionState();
-                CancelPendingRequests();
+                ResetConnectionState(connectionToken);
                 var disconnected = await _transport.DisconnectAsync().ConfigureAwait(false);
                 completion.TrySetResult(disconnected);
             }
@@ -2020,9 +2050,11 @@ namespace SalmonEgg.Acp.Client
             {
                 return false;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                OnErrorOccurred($"Failed to send response: {ex.Message}");
+                // Responses may contain private form answers or handler errors. A transport exception
+                // is not a safe source for the user-facing diagnostic or the host logger.
+                OnErrorOccurred("Failed to send the ACP response.");
                 return false;
             }
         }
@@ -2193,6 +2225,7 @@ namespace SalmonEgg.Acp.Client
 
         private void CompleteResponseBatch(InboundResponseBatch batch, IReadOnlyList<JsonRpcResponse> responses)
         {
+            var completedElicitations = new List<ElicitationRequestState>();
             lock (_lock)
             {
                 _responseBatches.Remove(batch);
@@ -2222,6 +2255,7 @@ namespace SalmonEgg.Acp.Client
                         var elicitation = response.Result is { } result
                             ? FromElement<CreateElicitationResponse>(result) : null;
                         CompleteElicitationResponse(pending, elicitation, sent: true);
+                        completedElicitations.Add(pending.ElicitationState!);
                     }
                     if (pending.PreparedAskUserResponse is not null && pending.MessageId is not null
                         && _responseRoutes.TryGetValue(pending.MessageId, out var askRoute) && askRoute.Batch == batch)
@@ -2235,6 +2269,9 @@ namespace SalmonEgg.Acp.Client
                     }
                 }
             }
+            // A different sibling may own the successful retry. Its completion must publish every
+            // committed URL state, including requests whose earlier responder already returned false.
+            foreach (var state in completedElicitations) state.NotifyChanged();
         }
 
         private void NotifyResponseBatchChanged(InboundResponseBatch batch)
@@ -2347,8 +2384,14 @@ namespace SalmonEgg.Acp.Client
                     return;
                 }
                 if (ProtocolVersion != AcpProtocolVersion.V2) return;
-                RemovePendingUrlElicitation(pending);
                 if (TrySubmitBatchCancellation(pending, response)) return;
+                if (pending.ElicitationRequest is not null)
+                {
+                    pending.PreparedCancellationResponse = response;
+                    _ = TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse(), cancelForSession: true);
+                    return;
+                }
+                RemovePendingUrlElicitation(pending);
                 _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(key, pending));
                 _ = SendResponseAsync(response, connectionToken);
             }
@@ -2895,7 +2938,7 @@ namespace SalmonEgg.Acp.Client
                 {
                     FailPendingInboundRequest(request,
                         JsonRpcError.CreateInvalidParams(
-                            $"Elicitation mode '{elicitationRequest.Mode}' was not advertised by the client."));
+                            "The requested elicitation mode was not advertised by the client."));
                     return;
                 }
 
@@ -2919,7 +2962,8 @@ namespace SalmonEgg.Acp.Client
                     elicitationRequest,
                     content => TrySendElicitationResponseAsync(pending, new ElicitationAcceptResponse { Content = content?.ToWireContent() }),
                     () => TrySendElicitationResponseAsync(pending, new ElicitationDeclineResponse()),
-                    () => TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse()));
+                    () => TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse()),
+                    pending.ElicitationState!);
             }
             catch (JsonException)
             {
@@ -2963,28 +3007,48 @@ namespace SalmonEgg.Acp.Client
                 completion = FromElement<CompleteElicitationNotification>(
                     notification.Params.Value);
             }
-            catch (JsonException ex)
+            catch (JsonException)
             {
                 // A notification has no reply, and the specification tells clients to ignore ids they do
                 // not recognize, so a malformed payload is a diagnostic rather than a user-visible fault.
                 _logger.Log(
                     AcpClientLogLevel.Warning,
                     "ELICITATION_COMPLETE_INVALID",
-                    ex.Message);
+                    "Invalid elicitation/complete parameters were ignored.");
                 return;
             }
 
+            PendingInboundRequest pending;
             lock (_lock)
             {
                 // IDs are opaque, and only outstanding URL interactions on this connection qualify.
                 // Removing before publication makes duplicate notifications harmless even on re-entry.
                 if (_disposed || !_transport.IsConnected || completion?.ElicitationId is not { } id
-                    || !_pendingUrlElicitations.Remove(id))
+                    || !_pendingUrlElicitations.Remove(id, out pending!))
                 {
                     return;
                 }
 
-                ElicitationCompleted?.Invoke(this, new ElicitationCompletedEventArgs(id));
+                pending.ElicitationState!.MarkCompleted();
+            }
+
+            pending.ElicitationState!.NotifyChanged();
+            var subscribers = ElicitationCompleted;
+            if (subscribers is not null)
+            {
+                var args = new ElicitationCompletedEventArgs(completion!.ElicitationId);
+                foreach (EventHandler<ElicitationCompletedEventArgs> subscriber in subscribers.GetInvocationList())
+                {
+                    try
+                    {
+                        subscriber(this, args);
+                    }
+                    catch (Exception)
+                    {
+                        _logger.Log(AcpClientLogLevel.Warning, "ELICITATION_OBSERVER_FAILED",
+                            "An elicitation completion observer failed after the request state was updated.");
+                    }
+                }
             }
         }
 
@@ -3320,8 +3384,10 @@ namespace SalmonEgg.Acp.Client
                 return false;
             }
             pending.PreparedCancellationResponse = response;
+            pending.ElicitationState?.RequestCancellation();
             route.Batch.SubmitCancellation(route.Index, response);
             pending.PermissionEvent?.NotifyChanged();
+            pending.ElicitationState?.NotifyChanged();
             return true;
         }
 
@@ -3332,14 +3398,19 @@ namespace SalmonEgg.Acp.Client
         private void RemovePendingInboundTracking(AcpRequestId idStr)
         {
 
+            PendingInboundRequest? removed = null;
             lock (_lock)
             {
                 if (_pendingInboundRequests.TryRemove(idStr, out var pending))
                 {
                     RemovePendingUrlElicitation(pending);
+                    pending.ElicitationState?.Invalidate();
+                    removed = pending;
                     pending.PermissionEvent?.NotifyChanged();
                 }
             }
+
+            removed?.ElicitationState?.NotifyChanged();
         }
 
         private void FailPendingInboundRequest(JsonRpcRequest request, JsonRpcError error)
@@ -3363,13 +3434,21 @@ namespace SalmonEgg.Acp.Client
         private void TrackPendingInboundRequest(AcpRequestId idStr, string method, object? messageId)
         {
 
+            PendingInboundRequest? replaced = null;
             lock (_lock)
             {
-                _pendingInboundRequests.TryGetValue(idStr, out var previous);
+                if (_pendingInboundRequests.TryGetValue(idStr, out replaced))
+                {
+                    RemovePendingUrlElicitation(replaced);
+                    replaced.ElicitationState?.Invalidate();
+                }
+
                 _pendingInboundRequests[idStr] = new PendingInboundRequest(method, messageId,
                     _messageLoopCts?.Token ?? CancellationToken.None);
-                previous?.PermissionEvent?.NotifyChanged();
+                replaced?.PermissionEvent?.NotifyChanged();
             }
+
+            replaced?.ElicitationState?.NotifyChanged();
         }
 
         private bool TryGetPendingInboundRequest(AcpRequestId idStr, out PendingInboundRequest pending)
@@ -3401,6 +3480,8 @@ namespace SalmonEgg.Acp.Client
 
         private PendingInboundRequest? TrackInboundElicitationRequest(object messageId, CreateElicitationRequest request)
         {
+            PendingInboundRequest? previous;
+            PendingInboundRequest pending;
             lock (_lock)
             {
                 if (_disposed || !_transport.IsConnected)
@@ -3408,13 +3489,14 @@ namespace SalmonEgg.Acp.Client
                     return null;
                 }
 
-                var pending = new PendingInboundRequest(
+                pending = new PendingInboundRequest(
                     ElicitationMethods.Create,
                     messageId,
                     _messageLoopCts?.Token ?? CancellationToken.None,
                     request.Scope.SessionId,
                     null,
-                    request);
+                    request,
+                    new ElicitationRequestState(_connectionClosedObservers?.Token ?? CancellationToken.None));
                 if (request is UrlElicitationRequest url && !_pendingUrlElicitations.TryAdd(url.ElicitationId, pending))
                 {
                     _ = SendResponseAsync(new JsonRpcResponse(messageId,
@@ -3422,9 +3504,19 @@ namespace SalmonEgg.Acp.Client
                     return null;
                 }
 
-                _pendingInboundRequests[RequestKey(messageId)] = pending;
-                return pending;
+                var key = RequestKey(messageId);
+                if (_pendingInboundRequests.TryGetValue(key, out previous))
+                {
+                    RemovePendingUrlElicitation(previous);
+                    previous.ElicitationState?.Invalidate();
+                }
+
+                _pendingInboundRequests[key] = pending;
+                previous?.PermissionEvent?.NotifyChanged();
             }
+
+            previous?.ElicitationState?.NotifyChanged();
+            return pending;
         }
 
         private void SetPendingInboundAskUserRequest(AcpRequestId idStr, AskUserRequest request)
@@ -3473,8 +3565,7 @@ namespace SalmonEgg.Acp.Client
             OnErrorOccurred(e.ErrorMessage);
             if (!_transport.IsConnected)
             {
-                ResetConnectionState();
-                CancelPendingRequests(e.ErrorMessage);
+                ResetConnectionState(transportErrorMessage: e.ErrorMessage);
             }
         }
 
@@ -3535,24 +3626,21 @@ namespace SalmonEgg.Acp.Client
                 return;
             }
 
+            ResetConnectionState(cancellationToken, _lastTransportErrorMessage ?? "The transport is no longer connected.");
+        }
+
+        private void ResetConnectionState(CancellationToken? expectedConnection = null, string? transportErrorMessage = null)
+        {
+            CancellationTokenSource? previousObservers;
+            Task? notifications;
             lock (_lock)
             {
-                // A previous watchdog can finish after explicit disconnect and reinitialization.
-                // Only the token still owned by this connection may clear its request state.
-                if (cancellationToken.IsCancellationRequested || _messageLoopCts?.Token != cancellationToken)
+                if (expectedConnection is { } expected
+                    && (expected.IsCancellationRequested || _messageLoopCts?.Token != expected))
                 {
                     return;
                 }
 
-                ResetConnectionState();
-                CancelPendingRequests(_lastTransportErrorMessage ?? "The transport is no longer connected.");
-            }
-        }
-
-        private void ResetConnectionState()
-        {
-            lock (_lock)
-            {
                 if (_connectionMessageHandler is not null)
                 {
                     _transport.MessageReceived -= _connectionMessageHandler;
@@ -3562,9 +3650,10 @@ namespace SalmonEgg.Acp.Client
                         _transport.MessageReceived += OnMessageReceived;
                     }
                 }
-                _messageLoopCts?.Cancel();
-                _messageLoopCts?.Dispose();
+                var previousConnection = _messageLoopCts;
+                previousObservers = _connectionClosedObservers;
                 _messageLoopCts = null;
+                _connectionClosedObservers = null;
                 foreach (var batch in _responseBatches)
                 {
                     batch.Abandon();
@@ -3580,6 +3669,61 @@ namespace SalmonEgg.Acp.Client
                 _authMethods = null;
                 _wire = AcpWireFormat.For(AcpProtocolVersion.Default);
                 _isInitialized = false;
+                CancelPendingRequests(transportErrorMessage);
+                // Linked write tokens are cancelled by callbacks on the I/O source. CancelAsync
+                // on that source leaves a window in which old writes can cross a reconnect. Finish
+                // this internal propagation now; arbitrary host observers use the projection below.
+                try
+                {
+                    previousConnection?.Cancel();
+                }
+                catch (AggregateException)
+                {
+                    try
+                    {
+                        _logger.Log(AcpClientLogLevel.Warning, "TRANSPORT_CANCELLATION_CALLBACK_FAILED",
+                            "A transport cancellation callback failed after connection state was cleared.");
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+                finally
+                {
+                    previousConnection?.Dispose();
+                    // Marks the public token now, then invokes host observers outside this lock.
+                    notifications = previousObservers?.CancelAsync();
+                }
+            }
+
+            if (previousObservers is not null)
+            {
+                _ = ObserveConnectionClosedAsync(previousObservers, notifications!);
+            }
+        }
+
+        private async Task ObserveConnectionClosedAsync(CancellationTokenSource previousConnection, Task notifications)
+        {
+            try
+            {
+                await notifications.ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                try
+                {
+                    // Callback exceptions can contain private interaction data. Neither their text
+                    // nor a failed logger may escape this owned background cleanup task.
+                    _logger.Log(AcpClientLogLevel.Warning, "CONNECTION_OBSERVER_FAILED",
+                        "A connection-closed observer failed after connection state was cleared.");
+                }
+                catch (Exception)
+                {
+                }
+            }
+            finally
+            {
+                previousConnection.Dispose();
             }
         }
 
@@ -3701,15 +3845,13 @@ namespace SalmonEgg.Acp.Client
 
                 _disposed = true;
             }
-            ResetConnectionState();
 
-            // Detach the transport events first so callbacks during teardown cannot re-enter disposed
-            // handlers, then fault every pending request. Otherwise callers awaiting tcs.Task would hang
-            // forever on the Dispose path, because the watchdog's cancellation only covers an explicit
-            // DisconnectAsync and nothing covers Dispose.
+            ResetConnectionState(transportErrorMessage: _lastTransportErrorMessage ?? "The ACP client was disposed.");
+
+            // Reset has synchronously faulted pending requests and invalidated their tokens. Detach
+            // events before disposing the transport so teardown cannot re-enter disposed handlers.
             _transport.MessageReceived -= OnMessageReceived;
             _transport.ErrorOccurred -= OnTransportError;
-            CancelPendingRequests(_lastTransportErrorMessage ?? "The ACP client was disposed.");
 
             // The transport is owned exclusively by this client (process / socket / HttpClient / Rx
             // subject), and Dispose is its authoritative release path; a graceful protocol-level
@@ -3734,8 +3876,6 @@ namespace SalmonEgg.Acp.Client
                     exception: ex);
             }
 
-            _messageLoopCts?.Dispose();
-            _messageLoopCts = null;
             GC.SuppressFinalize(this);
         }
     }

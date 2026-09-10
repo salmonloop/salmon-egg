@@ -8,6 +8,7 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 {
     private readonly IPlatformRuntimeCapabilityProbe _runtimeProbe;
     private readonly Func<OSPlatform, bool> _isOSPlatform;
+    private readonly IExternalUriLauncher _externalUriLauncher;
 
     public PlatformCapabilityService()
         : this(new PlatformRuntimeCapabilityProbe())
@@ -19,12 +20,19 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
     {
     }
 
+    public PlatformCapabilityService(IPlatformRuntimeCapabilityProbe runtimeProbe, IExternalUriLauncher externalUriLauncher)
+        : this(runtimeProbe, RuntimeInformation.IsOSPlatform)
+    {
+        _externalUriLauncher = externalUriLauncher ?? throw new ArgumentNullException(nameof(externalUriLauncher));
+    }
+
     internal PlatformCapabilityService(
         IPlatformRuntimeCapabilityProbe runtimeProbe,
         Func<OSPlatform, bool> isOSPlatform)
     {
         _runtimeProbe = runtimeProbe ?? throw new ArgumentNullException(nameof(runtimeProbe));
         _isOSPlatform = isOSPlatform ?? throw new ArgumentNullException(nameof(isOSPlatform));
+        _externalUriLauncher = UnsupportedExternalUriLauncher.Instance;
     }
 
     public bool SupportsLaunchOnStartup => IsWindowsDesktopProcessHost;
@@ -55,6 +63,8 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
     public bool SupportsTerminalAuthentication => false;
 
     public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;
+
+    public bool SupportsUrlElicitation => _externalUriLauncher.IsSupported;
 
     public bool SupportsCliCommandInspection => _runtimeProbe.IsDesktopProcessHost;
 

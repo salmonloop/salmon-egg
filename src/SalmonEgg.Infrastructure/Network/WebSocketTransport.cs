@@ -235,13 +235,14 @@ namespace SalmonEgg.Infrastructure.Network
 
             try
             {
-                _logger.Debug("Sending message: {Message}", message);
+                _logger.Debug("Sending WebSocket message. Length={Length}", message.Length);
                 client.Send(message);
                 await Task.CompletedTask; // Make method async-compatible
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to send message: {Message}", message);
+                _logger.Error("Failed to send WebSocket message. Length={Length} ExceptionType={ExceptionType}",
+                    message.Length, ex.GetType().FullName);
                 // A fatal send failure (the connection is actually gone) must be reflected in the
                 // transport state so downstream IsConnected projections flip and in-flight requests
                 // are faulted rather than hanging until timeout. A transient failure leaves the
@@ -301,7 +302,7 @@ namespace SalmonEgg.Infrastructure.Network
                             return;
                         }
 
-                        _logger.Debug("Received message: {Message}", text);
+                        _logger.Debug("Received WebSocket message. Length={Length}", text.Length);
                         PublishMessage(text);
                     }
                 }),

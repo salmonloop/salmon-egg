@@ -18,15 +18,18 @@ public sealed class ChatInteractionEventBridge
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly IExternalUriLauncher _uriLauncher;
 
     public ChatInteractionEventBridge(
         IAuthoritativeRemoteSessionRouter authoritativeRemoteSessionRouter,
         ChatTerminalProjectionCoordinator terminalProjectionCoordinator,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IExternalUriLauncher? uriLauncher = null)
     {
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? throw new ArgumentNullException(nameof(authoritativeRemoteSessionRouter));
         _terminalProjectionCoordinator = terminalProjectionCoordinator ?? throw new ArgumentNullException(nameof(terminalProjectionCoordinator));
         _localizer = localizer;
+        _uriLauncher = uriLauncher ?? UnsupportedExternalUriLauncher.Instance;
     }
 
     public PermissionRequestViewModel CreatePermissionRequestViewModel(
@@ -80,16 +83,18 @@ public sealed class ChatInteractionEventBridge
     public async Task<(string ConversationId, ElicitationRequestViewModel ViewModel)?> BuildElicitationRequestAsync(
         ElicitationRequestEventArgs args,
         Func<string, ElicitationRequestViewModel, Task> clearPendingRequestAsync,
-        ILogger logger)
+        ILogger logger,
+        Func<Action, Task>? dispatchAsync = null,
+        string agentName = "")
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(clearPendingRequestAsync);
         ArgumentNullException.ThrowIfNull(logger);
 
-        if (args.Request is not FormElicitationRequest || string.IsNullOrWhiteSpace(args.SessionId))
+        if (args.Request is not (FormElicitationRequest or UrlElicitationRequest) || string.IsNullOrWhiteSpace(args.SessionId))
         {
             logger.LogWarning(
-                "Elicitation request cannot be displayed because it is not a session-scoped form. Mode={ElicitationMode}",
+                "Elicitation request cannot be displayed because it is not a supported session-scoped request. Mode={ElicitationMode}",
                 args.Request.Mode);
             await CancelUndisplayedElicitationAsync(args, logger).ConfigureAwait(false);
             return null;
@@ -104,7 +109,8 @@ public sealed class ChatInteractionEventBridge
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Elicitation request could not be routed to its conversation");
+            logger.LogWarning("Elicitation request could not be routed to its conversation. ExceptionType={ExceptionType}",
+                ex.GetType().FullName);
             await CancelUndisplayedElicitationAsync(args, logger).ConfigureAwait(false);
             return null;
         }
@@ -123,7 +129,7 @@ public sealed class ChatInteractionEventBridge
             ElicitationInteractionViewModelFactory.Create(
                 args,
                 viewModel => clearPendingRequestAsync(conversationId, viewModel),
-                _localizer));
+                _localizer, _uriLauncher, dispatchAsync, agentName));
     }
 
     internal static async Task CancelUndisplayedElicitationAsync(ElicitationRequestEventArgs args, ILogger logger)
@@ -139,7 +145,8 @@ public sealed class ChatInteractionEventBridge
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not cancel undisplayed elicitation request {MessageId}", args.MessageId);
+            logger.LogWarning("Could not cancel undisplayed elicitation request {MessageId}. ExceptionType={ExceptionType}",
+                args.MessageId, ex.GetType().FullName);
         }
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Protocol;
 
@@ -14,6 +15,8 @@ namespace SalmonEgg.Acp.Client
     /// </remarks>
     public sealed class ElicitationRequestEventArgs : EventArgs
     {
+        private int _standaloneResponseInFlight;
+
         /// <summary>
         /// Creates the event payload for an inbound elicitation request.
         /// </summary>
@@ -28,13 +31,34 @@ namespace SalmonEgg.Acp.Client
             Func<ElicitationAcceptContent?, Task<bool>> accept,
             Func<Task<bool>> decline,
             Func<Task<bool>> cancel)
+            : this(messageId, request, accept, decline, cancel, new ElicitationRequestState())
+        {
+            Accept = content => RespondStandaloneAsync(() => accept(content), ElicitationActions.Accept);
+            Decline = () => RespondStandaloneAsync(decline, ElicitationActions.Decline);
+            Cancel = () => RespondStandaloneAsync(cancel, ElicitationActions.Cancel);
+        }
+
+        internal ElicitationRequestEventArgs(
+            object messageId,
+            CreateElicitationRequest request,
+            Func<ElicitationAcceptContent?, Task<bool>> accept,
+            Func<Task<bool>> decline,
+            Func<Task<bool>> cancel,
+            ElicitationRequestState state)
         {
             MessageId = messageId ?? throw new ArgumentNullException(nameof(messageId));
             Request = request ?? throw new ArgumentNullException(nameof(request));
-            Accept = accept ?? throw new ArgumentNullException(nameof(accept));
-            Decline = decline ?? throw new ArgumentNullException(nameof(decline));
-            Cancel = cancel ?? throw new ArgumentNullException(nameof(cancel));
+            ArgumentNullException.ThrowIfNull(accept);
+            ArgumentNullException.ThrowIfNull(decline);
+            ArgumentNullException.ThrowIfNull(cancel);
+            State = state ?? throw new ArgumentNullException(nameof(state));
+            Accept = accept;
+            Decline = decline;
+            Cancel = cancel;
         }
+
+        /// <summary>The authoritative lifetime of this request, including URL completion.</summary>
+        public ElicitationRequestState State { get; }
 
         /// <summary>
         /// The JSON-RPC id the response must echo.
@@ -66,6 +90,30 @@ namespace SalmonEgg.Acp.Client
         /// Cancels the request when the user dismisses it without choosing.
         /// </summary>
         public Func<Task<bool>> Cancel { get; }
+
+        private async Task<bool> RespondStandaloneAsync(Func<Task<bool>> respond, string action)
+        {
+            if (!State.CanRespond || Interlocked.CompareExchange(ref _standaloneResponseInFlight, 1, 0) != 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (!await respond().ConfigureAwait(false))
+                {
+                    return false;
+                }
+
+                State.MarkResponseSent(action);
+                State.NotifyChanged();
+                return true;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _standaloneResponseInFlight, 0);
+            }
+        }
     }
 
     /// <summary>

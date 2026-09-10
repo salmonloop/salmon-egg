@@ -88,6 +88,140 @@ public sealed class ChatElicitationRoutingTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildElicitationRequestAsync_UrlCompletionBeforeOrAfterConsent_UsesSameRequestState(bool earlyCompletion)
+    {
+        // Arrange
+        var transport = new Mock<IAcpTransport>();
+        var responses = new List<JsonElement>();
+        SetupTransport(transport, responses);
+        using var client = new AcpClient(transport.Object, Mock.Of<IAcpClientLogger>());
+        var capabilities = ClientCapabilityDefaults.Create() with
+        {
+            Elicitation = new ElicitationCapabilities { Form = new(), Url = new() }
+        };
+        await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"), capabilities), TestContext.Current.CancellationToken);
+        var router = new Mock<IAuthoritativeRemoteSessionRouter>();
+        router.Setup(x => x.ResolveConversationIdAsync("remote", It.IsAny<CancellationToken>())).ReturnsAsync("conversation");
+        var launcher = new Mock<IExternalUriLauncher>();
+        launcher.SetupGet(x => x.IsSupported).Returns(true);
+        launcher.Setup(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>())).ReturnsAsync(ExternalUriOpenResult.Opened);
+        var bridge = new ChatInteractionEventBridge(router.Object, new ChatTerminalProjectionCoordinator(), uriLauncher: launcher.Object);
+        ElicitationRequestEventArgs? args = null;
+        client.ElicitationRequestReceived += (_, value) => args = value;
+        transport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+            """{"jsonrpc":"2.0","id":201,"method":"elicitation/create","params":{"sessionId":"remote","mode":"url","elicitationId":"opaque","url":"https://example.com/authorize?canary=private","message":"Approve access"}}"""));
+        Assert.NotNull(args);
+        if (earlyCompletion)
+        {
+            Complete();
+        }
+
+        // Act
+        var projection = await bridge.BuildElicitationRequestAsync(args, (_, _) => Task.CompletedTask, NullLogger.Instance);
+        using var request = projection!.Value.ViewModel;
+
+        // Assert
+        launcher.Verify(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.True(request.CanSubmit);
+        Assert.Equal(earlyCompletion, request.IsCompleted);
+        await request.SubmitCommand.ExecuteAsync(null);
+        Assert.Equal("{\"action\":\"accept\"}", Assert.Single(responses).GetProperty("result").GetRawText());
+        Complete();
+        Complete();
+        Assert.True(request.IsCompleted);
+        Assert.True(request.IsAwaitingCompletion);
+        await request.ReopenCommand.ExecuteAsync(null);
+        launcher.Verify(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        void Complete() => transport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+            """{"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"opaque"}}"""));
+    }
+
+    [Fact]
+    public async Task BuildElicitationRequestAsync_DisconnectedUrl_NeverOpens()
+    {
+        // Arrange
+        var transport = new Mock<IAcpTransport>();
+        var responses = new List<JsonElement>();
+        SetupTransport(transport, responses);
+        using var client = new AcpClient(transport.Object, Mock.Of<IAcpClientLogger>());
+        await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"),
+            new ClientCapabilities { Elicitation = new() { Url = new() } }), TestContext.Current.CancellationToken);
+        ElicitationRequestEventArgs? args = null;
+        client.ElicitationRequestReceived += (_, value) => args = value;
+        transport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+            """{"jsonrpc":"2.0","id":202,"method":"elicitation/create","params":{"sessionId":"remote","mode":"url","elicitationId":"opaque","url":"https://example.com/authorize?canary=private","message":"Approve access"}}"""));
+        var launcher = new Mock<IExternalUriLauncher>();
+        launcher.SetupGet(x => x.IsSupported).Returns(true);
+        using var request = ElicitationInteractionViewModelFactory.Create(args!, _ => Task.CompletedTask, uriLauncher: launcher.Object);
+        var cleared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        request.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName == nameof(request.FullUrl) && request.FullUrl.Length == 0)
+            {
+                cleared.TrySetResult();
+            }
+        };
+
+        // Act
+        await client.DisconnectAsync();
+        await cleared.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await request.SubmitCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.False(request.CanSubmit);
+        Assert.Empty(request.FullUrl);
+        Assert.Empty(responses);
+        launcher.Verify(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task BuildElicitationRequestAsync_OldConnectionReusesIds_DoesNotOpenOrCompleteNewRequest()
+    {
+        // Arrange
+        var oldTransport = new Mock<IAcpTransport>();
+        var newTransport = new Mock<IAcpTransport>();
+        var oldResponses = new List<JsonElement>();
+        var newResponses = new List<JsonElement>();
+        SetupTransport(oldTransport, oldResponses);
+        SetupTransport(newTransport, newResponses);
+        using var oldClient = new AcpClient(oldTransport.Object);
+        using var newClient = new AcpClient(newTransport.Object);
+        var capabilities = new ClientCapabilities { Elicitation = new() { Url = new() } };
+        await oldClient.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"), capabilities), TestContext.Current.CancellationToken);
+        await newClient.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"), capabilities), TestContext.Current.CancellationToken);
+        ElicitationRequestEventArgs? oldArgs = null;
+        ElicitationRequestEventArgs? newArgs = null;
+        oldClient.ElicitationRequestReceived += (_, args) => oldArgs = args;
+        newClient.ElicitationRequestReceived += (_, args) => newArgs = args;
+        const string message = """{"jsonrpc":"2.0","id":203,"method":"elicitation/create","params":{"sessionId":"remote","mode":"url","elicitationId":"opaque","url":"https://example.com/authorize","message":"Approve access"}}""";
+        oldTransport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(message));
+        newTransport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(message));
+        var launcher = new Mock<IExternalUriLauncher>();
+        launcher.SetupGet(x => x.IsSupported).Returns(true);
+        launcher.Setup(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>())).ReturnsAsync(ExternalUriOpenResult.Dispatched);
+        using var previous = ElicitationInteractionViewModelFactory.Create(oldArgs!, _ => Task.CompletedTask, uriLauncher: launcher.Object);
+        using var current = ElicitationInteractionViewModelFactory.Create(newArgs!, _ => Task.CompletedTask, uriLauncher: launcher.Object);
+
+        // Act
+        await oldClient.DisconnectAsync();
+        oldTransport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+            """{"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"opaque"}}"""));
+        await previous.SubmitCommand.ExecuteAsync(null);
+        await current.SubmitCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.Empty(previous.FullUrl);
+        Assert.Empty(oldResponses);
+        Assert.Equal("{\"action\":\"accept\"}", Assert.Single(newResponses).GetProperty("result").GetRawText());
+        Assert.True(current.IsAwaitingCompletion);
+        Assert.False(current.IsCompleted);
+        launcher.Verify(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
     [InlineData(false, "", false)]
     [InlineData(false, "", true)]
     [InlineData(true, "", false)]

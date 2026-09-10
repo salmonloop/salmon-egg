@@ -29,6 +29,7 @@ SalmonEgg.Acp.Client.AcpTransportMessageReceivedEventArgs stable
 SalmonEgg.Acp.Client.AcpTransportSendOptions stable
 SalmonEgg.Acp.Client.ElicitationCompletedEventArgs stable
 SalmonEgg.Acp.Client.ElicitationRequestEventArgs stable
+SalmonEgg.Acp.Client.ElicitationRequestState stable
 SalmonEgg.Acp.Client.FileSystemRequestEventArgs stable
 SalmonEgg.Acp.Client.FileSystemRequestKind stable
 SalmonEgg.Acp.Client.IAcpClient stable

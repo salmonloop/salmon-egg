@@ -1450,4 +1450,31 @@ Create the corresponding Markdown file in:
   <data name="ChatAuth_TerminalCancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="Elicitation_OpenBrowser" xml:space="preserve">
+    <value>Open in browser</value>
+  </data>
+  <data name="Elicitation_RetryResponse" xml:space="preserve">
+    <value>Retry response</value>
+  </data>
+  <data name="Elicitation_Submit" xml:space="preserve">
+    <value>Submit</value>
+  </data>
+  <data name="Elicitation_UrlCompleted" xml:space="preserve">
+    <value>The agent reports that the external step is complete.</value>
+  </data>
+  <data name="Elicitation_UrlWaiting" xml:space="preserve">
+    <value>Opening was requested. If no page appeared, allow popups and choose Open again. Waiting for the agent to confirm completion.</value>
+  </data>
+  <data name="Elicitation_UnsafeUrl" xml:space="preserve">
+    <value>This address cannot be opened safely. Decline or cancel this request.</value>
+  </data>
+  <data name="Elicitation_UrlUnavailable" xml:space="preserve">
+    <value>This device cannot safely open this request. Decline or cancel it.</value>
+  </data>
+  <data name="Elicitation_OpenFailed" xml:space="preserve">
+    <value>The browser could not be opened. Allow popups and try again, or cancel.</value>
+  </data>
+  <data name="Elicitation_RequestExpired" xml:space="preserve">
+    <value>This request has expired. Reconnect to continue.</value>
+  </data>
 </root>

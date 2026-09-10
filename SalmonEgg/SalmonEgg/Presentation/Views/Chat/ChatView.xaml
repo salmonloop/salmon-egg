@@ -475,87 +475,122 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.HasPendingElicitationRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border x:Name="ElicitationHost"
-                                Margin="{StaticResource ChatElicitationMargin}"
-                                Padding="{StaticResource ChatElicitationPadding}"
-                                CornerRadius="{StaticResource ChatElicitationCornerRadius}"
-                                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                                BorderThickness="{StaticResource ChatElicitationBorderThickness}">
-                            <StackPanel Spacing="{StaticResource ChatElicitationSectionSpacing}">
-                                <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
-                                    <TextBlock x:Uid="ChatViewElicitationTitle"
-                                               FontSize="14"
-                                               FontWeight="SemiBold"
-                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                    <TextBlock Text="{x:Bind ViewModel.ElicitationPrompt, Mode=OneWay}"
-                                               TextWrapping="WrapWholeWords"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                </StackPanel>
-
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.ElicitationFields, Mode=OneWay}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="elicitationVm:ElicitationFieldViewModel">
-                                            <StackPanel Spacing="{StaticResource ChatElicitationFieldSpacing}"
-                                                        Margin="{StaticResource ChatElicitationFieldMargin}">
-                                                <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
-                                                <TextBlock Text="{x:Bind Description}"
+                        <ContentControl Content="{x:Bind ViewModel.PendingElicitationRequest, Mode=OneWay}"
+                                        HorizontalContentAlignment="Stretch"
+                                        IsTabStop="False">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="elicitationVm:ElicitationRequestViewModel">
+                                    <Border AutomationProperties.AutomationId="ElicitationHost"
+                                            Margin="{StaticResource ChatElicitationMargin}"
+                                            Padding="{StaticResource ChatElicitationPadding}"
+                                            CornerRadius="{StaticResource ChatElicitationCornerRadius}"
+                                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            BorderThickness="{StaticResource ChatElicitationBorderThickness}">
+                                        <StackPanel Spacing="{StaticResource ChatElicitationSectionSpacing}">
+                                            <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
+                                                <TextBlock x:Uid="ChatViewElicitationTitle"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                                                <TextBlock Text="{x:Bind Prompt, Mode=OneWay}"
                                                            TextWrapping="WrapWholeWords"
                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                                <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         Visibility="{x:Bind IsStringField, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         InputScope="Number"
-                                                         Visibility="{x:Bind IsIntegerField, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         InputScope="Number"
-                                                         Visibility="{x:Bind IsNumberField, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <CheckBox IsChecked="{x:Bind BooleanValue, Mode=TwoWay}"
-                                                          Visibility="{x:Bind IsBooleanField, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <ItemsControl ItemsSource="{x:Bind MultiSelectOptions, Mode=OneWay}"
-                                                              Visibility="{x:Bind IsMultiSelectField, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="elicitationVm:ElicitationMultiSelectOptionViewModel">
-                                                            <CheckBox AutomationProperties.Name="{x:Bind DisplayName}"
-                                                                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}">
-                                                                <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
-                                                                    <TextBlock Text="{x:Bind DisplayName}"
-                                                                               TextWrapping="WrapWholeWords" />
-                                                                    <TextBlock Text="{x:Bind Description}"
-                                                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                                                               TextWrapping="WrapWholeWords"
-                                                                               Visibility="{x:Bind HasDescription, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                                                </StackPanel>
-                                                            </CheckBox>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                                <TextBlock Text="{x:Bind ErrorMessage, Mode=OneWay}"
-                                                           Visibility="{x:Bind HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                           TextWrapping="WrapWholeWords"/>
                                             </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
 
-                                <TextBlock Text="{x:Bind ViewModel.ElicitationErrorMessage, Mode=OneWay}"
-                                           Visibility="{x:Bind ViewModel.ElicitationHasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                           TextWrapping="WrapWholeWords"/>
+                                            <TextBlock Text="{x:Bind AgentName, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       TextWrapping="Wrap"/>
+                                            <StackPanel Spacing="{StaticResource ChatElicitationFieldSpacing}"
+                                                        Visibility="{x:Bind IsUrl, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock x:Uid="ChatViewElicitationUrlConsent" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind UrlHost, Mode=OneWay}"
+                                                           AutomationProperties.AutomationId="Elicitation.UrlHost"
+                                                           FontWeight="SemiBold" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                                                <TextBlock Text="{x:Bind FullUrl, Mode=OneWay}"
+                                                           AutomationProperties.AutomationId="Elicitation.FullUrl"
+                                                           TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                                                <TextBlock x:Uid="ChatViewElicitationUrlWarning"
+                                                           Visibility="{x:Bind HasUrlWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind UrlStatus, Mode=OneWay}"
+                                                           Visibility="{x:Bind IsAwaitingCompletion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap"/>
+                                            </StackPanel>
 
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                                            Spacing="{StaticResource ChatElicitationActionSpacing}">
-                                    <Button x:Uid="ChatViewElicitationCancelButton"
-                                            Command="{x:Bind ViewModel.ElicitationCancelCommand, Mode=OneWay}"/>
-                                    <Button x:Uid="ChatViewElicitationDeclineButton"
-                                            Command="{x:Bind ViewModel.ElicitationDeclineCommand, Mode=OneWay}"/>
-                                    <Button x:Uid="ChatViewElicitationSubmitButton"
-                                            Command="{x:Bind ViewModel.ElicitationSubmitCommand, Mode=OneWay}"
-                                            Style="{StaticResource AccentButtonStyle}"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
+                                            <ItemsControl ItemsSource="{x:Bind Fields, Mode=OneWay}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="elicitationVm:ElicitationFieldViewModel">
+                                                        <StackPanel Spacing="{StaticResource ChatElicitationFieldSpacing}"
+                                                                    Margin="{StaticResource ChatElicitationFieldMargin}">
+                                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{x:Bind Description}"
+                                                                       TextWrapping="WrapWholeWords"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                            <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Visibility="{x:Bind IsStringField, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     InputScope="Number"
+                                                                     Visibility="{x:Bind IsIntegerField, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     InputScope="Number"
+                                                                     Visibility="{x:Bind IsNumberField, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            <CheckBox IsChecked="{x:Bind BooleanValue, Mode=TwoWay}"
+                                                                      Visibility="{x:Bind IsBooleanField, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            <ItemsControl ItemsSource="{x:Bind MultiSelectOptions, Mode=OneWay}"
+                                                                          Visibility="{x:Bind IsMultiSelectField, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="elicitationVm:ElicitationMultiSelectOptionViewModel">
+                                                                        <CheckBox AutomationProperties.Name="{x:Bind DisplayName}"
+                                                                                  IsChecked="{x:Bind IsSelected, Mode=TwoWay}">
+                                                                            <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
+                                                                                <TextBlock Text="{x:Bind DisplayName}"
+                                                                                           TextWrapping="WrapWholeWords" />
+                                                                                <TextBlock Text="{x:Bind Description}"
+                                                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                                                           TextWrapping="WrapWholeWords"
+                                                                                           Visibility="{x:Bind HasDescription, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                                            </StackPanel>
+                                                                        </CheckBox>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <TextBlock Text="{x:Bind ErrorMessage, Mode=OneWay}"
+                                                                       Visibility="{x:Bind HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                       TextWrapping="WrapWholeWords"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <TextBlock Text="{x:Bind ErrorMessage, Mode=OneWay}"
+                                                       Visibility="{x:Bind HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                       TextWrapping="WrapWholeWords"/>
+
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                                        Spacing="{StaticResource ChatElicitationActionSpacing}">
+                                                <Button x:Uid="ChatViewElicitationCancelButton"
+                                                        Command="{x:Bind CancelCommand, Mode=OneWay}"/>
+                                                <Button x:Uid="ChatViewElicitationDeclineButton"
+                                                        Command="{x:Bind DeclineCommand, Mode=OneWay}"/>
+                                                <Button Content="{x:Bind SubmitText, Mode=OneWay}"
+                                                        AutomationProperties.Name="{x:Bind SubmitText, Mode=OneWay}"
+                                                        Command="{x:Bind SubmitCommand, Mode=OneWay}"
+                                                        Style="{StaticResource AccentButtonStyle}"/>
+                                                <Button x:Uid="ChatViewElicitationReopenButton"
+                                                        Visibility="{x:Bind ShowReopen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{x:Bind ReopenCommand, Mode=OneWay}"/>
+                                                <Button x:Uid="ChatViewElicitationDismissButton"
+                                                        Visibility="{x:Bind IsAwaitingCompletion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{x:Bind DismissCommand, Mode=OneWay}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
                     </controls:ResponsiveContentHost.Child>
                 </controls:ResponsiveContentHost>
 
