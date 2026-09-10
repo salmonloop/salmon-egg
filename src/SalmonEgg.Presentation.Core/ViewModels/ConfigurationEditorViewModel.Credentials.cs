@@ -3,8 +3,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FluentValidation.Results;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Localization;
 
 namespace SalmonEgg.Presentation.ViewModels;
 
@@ -85,7 +87,7 @@ public partial class ConfigurationEditorViewModel
             IsStdio || string.IsNullOrEmpty(CredentialScheme) ? null : CredentialScheme);
         if (CredentialBindingPolicy.GetValidationError(candidate) is { } error)
         {
-            SetError(_localizer["AgentProfileEditor_ValidationFailedFormat", error]);
+            SetError(_localizer["AgentProfileEditor_ValidationFailedFormat", CredentialBindingErrorMessageFormatter.Format(error, _localizer)]);
             return;
         }
 
@@ -131,6 +133,11 @@ public partial class ConfigurationEditorViewModel
         BindCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialBindingCommand.NotifyCanExecuteChanged();
     }
+
+    private string FormatValidationFailure(ValidationFailure failure)
+        => failure.CustomState is CredentialBindingValidationError bindingError
+            ? CredentialBindingErrorMessageFormatter.Format(bindingError, _localizer)
+            : failure.ErrorMessage;
 }
 
 public sealed class CredentialSourceOption(CredentialSource source, string name)

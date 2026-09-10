@@ -41,7 +41,11 @@ public sealed class ServerConfigurationValidatorTests
         _validator.TestValidate(profile).ShouldNotHaveAnyValidationErrors();
         profile.ServerUrl = "https://agent.example/another";
 
-        _validator.TestValidate(profile).ShouldHaveValidationErrorFor(value => value.CredentialBinding);
+        var result = _validator.TestValidate(profile);
+        result.ShouldHaveValidationErrorFor(value => value.CredentialBinding)
+            .WithErrorCode("CredentialBindingValidationError.DestinationChanged")
+            .WithCustomState(CredentialBindingValidationError.DestinationChanged);
+        Assert.Contains("Bind the credential again", Assert.Single(result.Errors).ErrorMessage);
     }
 
     [Fact]

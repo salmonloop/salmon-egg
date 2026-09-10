@@ -17,7 +17,7 @@ public static class CredentialBindingResolver
         ArgumentNullException.ThrowIfNull(configuration);
         if (CredentialBindingPolicy.GetValidationError(configuration) is { } error)
         {
-            return CredentialBindingResolution.Failure(error);
+            return CredentialBindingResolution.Failure(CredentialBindingPolicy.GetDiagnosticMessage(error));
         }
 
         var environment = new Dictionary<string, string>(configuration.StdioEnvironment, StringComparer.Ordinal);

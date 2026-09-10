@@ -48,6 +48,7 @@ public sealed class CredentialBindingCommandTests
             .InvokeAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CliExitCodes.Usage, rejected);
+        Assert.Contains("Bind the credential again", string.Join('\n', fixture.Output.Errors), StringComparison.Ordinal);
         Assert.Equal("wss://agent.example/acp", (await fixture.Configurations.LoadConfigurationAsync("bound"))!.ServerUrl);
 
         var approved = await command.Parse([
@@ -57,6 +58,25 @@ public sealed class CredentialBindingCommandTests
 
         Assert.Equal(CliExitCodes.Success, approved);
         Assert.True(CredentialBindingResolver.Resolve((await fixture.Configurations.LoadConfigurationAsync("bound"))!).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ParseAndRun_InvalidHeader_ShowsActionableDiagnosticWithoutWriting()
+    {
+        // Arrange
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("bound", "Agent", "wss://agent.example/acp", token: Secret);
+        var command = ConfigServerCommandFactory.CreateServerCommand(fixture.Handler);
+
+        // Act
+        var result = await command.Parse(["update", "bound", "--credential-source", "token", "--credential-header", "Host"])
+            .InvokeAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CliExitCodes.Usage, result);
+        Assert.Contains("Choose an authentication header name", string.Join('\n', fixture.Output.Errors), StringComparison.Ordinal);
+        Assert.DoesNotContain(Secret, string.Join('\n', fixture.Output.Errors), StringComparison.Ordinal);
+        Assert.Null((await fixture.Configurations.LoadConfigurationAsync("bound"))!.CredentialBinding);
     }
 
     [Fact]
