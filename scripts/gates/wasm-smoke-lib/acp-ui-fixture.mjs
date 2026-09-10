@@ -15,6 +15,7 @@ import {
   waitForBodyText,
   waitForControlEnabledState,
   waitForControlState,
+  waitForNativeControlFocus,
   waitForSemanticText
 } from "./ui-affordances.mjs";
 
@@ -418,6 +419,10 @@ async function fillProfileEditorTextBoxes(page, profileName, serverUrl) {
     { labels: ["名称", "Name"], automationIds: ["Acp.ProfileEditor.Name"] },
     profileName,
     "ACP profile name");
+  // Name commits with Tab to the native Transport ComboBox. Its delayed focus must finish
+  // before the next field is focused, or that old Tab can steal the Server URL keystrokes.
+  await waitForNativeControlFocus(page, { automationIds: ["Transport"], labels: [], role: "combobox" },
+    "transport selector after committing the profile name");
   await typeIntoVisibleTextField(
     page,
     { labels: ["服务器地址", "Server URL"], automationIds: ["Acp.ProfileEditor.ServerUrl"] },
