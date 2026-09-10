@@ -775,7 +775,8 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.Equal("profile-a", workspaceBinding!.BoundProfileId);
         Assert.Equal("remote-1", workspaceBinding.RemoteSessionId);
 
-        var currentConnectionState = await connectionStore.State;
+        // State is an asynchronous UI projection; this assertion checks the committed intent.
+        var currentConnectionState = await connectionStore.GetCurrentStateAsync();
         Assert.NotNull(currentConnectionState);
         Assert.Equal("profile-a", currentConnectionState.SelectedProfileIntentId);
     }
