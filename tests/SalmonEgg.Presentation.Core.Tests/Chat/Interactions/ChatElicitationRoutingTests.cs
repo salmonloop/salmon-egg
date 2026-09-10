@@ -87,6 +87,67 @@ public sealed class ChatElicitationRoutingTests
         Assert.Same(result.Value.ViewModel, clearedRequest);
     }
 
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, "")]
+    [InlineData(true, "  ")]
+    public async Task BuildElicitationRequestAsync_MultiSelectLabels_PreservesWireValues(bool titled, string blankTitle)
+    {
+        // Arrange
+        var transport = new Mock<IAcpTransport>();
+        var responses = new List<JsonElement>();
+        SetupTransport(transport, responses);
+        using var client = new AcpClient(transport.Object, Mock.Of<IAcpClientLogger>());
+        using var service = new ChatService(client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>());
+        await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"), ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
+        var router = new Mock<IAuthoritativeRemoteSessionRouter>();
+        router.Setup(x => x.ResolveConversationIdAsync("remote", It.IsAny<CancellationToken>())).ReturnsAsync("conversation");
+        var bridge = new ChatInteractionEventBridge(router.Object, new ChatTerminalProjectionCoordinator());
+        var received = new TaskCompletionSource<ElicitationRequestEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnRequest(object? sender, ElicitationRequestEventArgs args) => received.TrySetResult(args);
+        service.ElicitationRequestReceived += OnRequest;
+        var items = titled
+            ? $$$"""{"anyOf":[{"const":"api-internal","title":"Public API","description":"Read interface contracts"},{"const":"ui-internal","title":"Desktop UI","description":null},{"const":"fallback-internal","title":"{{{blankTitle}}}","description":"  "}]}"""
+            : """{"type":"string","enum":["api-internal","ui-internal","fallback-internal"]}""";
+        ElicitationRequestViewModel? clearedRequest = null;
+        try
+        {
+            // Act: the displayed values originate in a real parsed ACP request.
+            transport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+                $$$$"""{"jsonrpc":"2.0","id":"titled-form","method":"elicitation/create","params":{"sessionId":"remote","mode":"form","message":"Choose targets","requestedSchema":{"type":"object","properties":{"targets":{"type":"array","items":{{{{items}}}},"default":["api-internal"],"minItems":1}},"required":["targets"]}}} """));
+            var request = await received.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var projection = await bridge.BuildElicitationRequestAsync(request,
+                (_, current) => { clearedRequest = current; return Task.CompletedTask; }, NullLogger.Instance);
+
+            // Assert: labels and descriptions are display data; defaults still match const values.
+            Assert.NotNull(projection);
+            var viewModel = projection.Value.ViewModel;
+            var field = Assert.IsType<ElicitationMultiSelectFieldViewModel>(Assert.Single(viewModel.Fields));
+            Assert.Equal(titled ? ["Public API", "Desktop UI", "fallback-internal"]
+                : new[] { "api-internal", "ui-internal", "fallback-internal" }, field.Options.Select(option => option.DisplayName));
+            Assert.Equal(titled ? "Read interface contracts" : string.Empty, field.Options[0].Description);
+            Assert.Equal(titled, field.Options[0].HasDescription);
+            Assert.False(field.Options[1].HasDescription);
+            Assert.False(field.Options[2].HasDescription);
+            Assert.Equal([true, false, false], field.Options.Select(option => option.IsSelected));
+            Assert.Empty(responses);
+            field.Options[0].IsSelected = false;
+            field.Options[1].IsSelected = true;
+            field.Options[2].IsSelected = true;
+            await viewModel.SubmitCommand.ExecuteAsync(null);
+            var response = Assert.Single(responses);
+            Assert.Equal("titled-form", response.GetProperty("id").GetString());
+            Assert.Equal("accept", response.GetProperty("result").GetProperty("action").GetString());
+            Assert.Equal(["ui-internal", "fallback-internal"], response.GetProperty("result")
+                .GetProperty("content").GetProperty("targets").EnumerateArray().Select(value => value.GetString()));
+            Assert.Same(viewModel, clearedRequest);
+        }
+        finally
+        {
+            service.ElicitationRequestReceived -= OnRequest;
+        }
+    }
+
     private static void SetupTransport(Mock<IAcpTransport> transport, List<JsonElement> responses)
     {
         transport.SetupGet(t => t.IsConnected).Returns(true);

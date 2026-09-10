@@ -619,16 +619,17 @@ public sealed partial class ElicitationMultiSelectFieldViewModel : ElicitationFi
         _minItems = schema.MinItems;
         _maxItems = schema.MaxItems;
         var defaults = new HashSet<string>(schema.Default ?? new List<string>(), StringComparer.Ordinal);
-        var values = schema.Items switch
+        var options = schema.Items switch
         {
-            StringMultiSelectItems strings => strings.Enum,
-            TitledMultiSelectItems titled => titled.AnyOf.Select(static item => item.Const).ToList(),
-            _ => new List<string>()
+            StringMultiSelectItems strings => strings.Enum.Select(value =>
+                new ElicitationMultiSelectOptionViewModel(value, defaults.Contains(value))),
+            TitledMultiSelectItems titled => titled.AnyOf.Select(item =>
+                new ElicitationMultiSelectOptionViewModel(item.Const, defaults.Contains(item.Const), item.Title, item.Description)),
+            _ => Enumerable.Empty<ElicitationMultiSelectOptionViewModel>()
         };
 
-        foreach (var value in values)
+        foreach (var option in options)
         {
-            var option = new ElicitationMultiSelectOptionViewModel(value, defaults.Contains(value));
             option.Changed += (_, _) => RaiseChanged();
             Options.Add(option);
         }
@@ -678,16 +679,24 @@ public sealed partial class ElicitationMultiSelectFieldViewModel : ElicitationFi
 
 public sealed partial class ElicitationMultiSelectOptionViewModel : ObservableObject
 {
-    public ElicitationMultiSelectOptionViewModel(string value, bool isSelected)
+    [ObservableProperty]
+    private bool _isSelected;
+
+    public ElicitationMultiSelectOptionViewModel(string value, bool isSelected, string? title = null, string? description = null)
     {
         Value = value;
+        DisplayName = string.IsNullOrWhiteSpace(title) ? value : title;
+        Description = description ?? string.Empty;
         IsSelected = isSelected;
     }
 
     public string Value { get; }
 
-    [ObservableProperty]
-    private bool _isSelected;
+    public string DisplayName { get; }
+
+    public string Description { get; }
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 
     public event EventHandler? Changed;
 
