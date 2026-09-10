@@ -45,6 +45,7 @@ public sealed class AcpPermissionResponseOwnershipTests
         Assert.Equal("Review file change", request.Title);
         Assert.Null(request.Description);
         Assert.False(request.IsResponsePrepared);
+        Assert.False(request.IsResponseSending);
         Assert.False(request.IsCancellationRequested);
     }
 
@@ -78,6 +79,54 @@ public sealed class AcpPermissionResponseOwnershipTests
         Assert.False(request.CanRespond);
         Assert.False(await request.TryRespondAsync("selected", "allow"));
         Assert.Equal("allow", Selected(Assert.Single(peer.Responses)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IsResponseSending_LegacyDeliveryQuery_PreservesConservativePreparedMeaning(bool prepared)
+    {
+        // Arrange
+        var request = new PermissionRequestEventArgs("permission", "session", null, [],
+            static (_, _) => Task.FromResult(true), static () => true,
+            () => prepared, static () => false);
+
+        // Act / Assert
+        Assert.Equal(prepared, request.IsResponsePrepared);
+        Assert.Equal(prepared, request.IsResponseSending);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IsResponseSending_IndependentResponse_TracksPhysicalSendCompletion(bool succeeds)
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+        peer.Request();
+        var request = Assert.Single(peer.Permissions);
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.ResponseSend = (_, token) => release.Task.WaitAsync(token);
+
+        // Act
+        var sending = request.TryRespondAsync("selected", "allow");
+        try
+        {
+            // Assert
+            Assert.False(sending.IsCompleted);
+            Assert.True(request.IsResponsePrepared);
+            Assert.True(request.IsResponseSending);
+            Assert.True(request.CanRespond);
+            Assert.Empty(peer.Responses);
+        }
+        finally
+        {
+            release.TrySetResult(succeeds);
+            Assert.Equal(succeeds, await sending.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        }
+        Assert.False(request.IsResponseSending);
+        Assert.False(request.IsResponsePrepared);
+        Assert.Equal(!succeeds, request.CanRespond);
     }
 
     [Theory]

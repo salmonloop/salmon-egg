@@ -1331,6 +1331,9 @@
   <data name="Permission_Cancelled" xml:space="preserve">
     <value>此请求已取消。请重试取消以关闭提示。</value>
   </data>
+  <data name="Permission_CancellationFailedDisconnected" xml:space="preserve">
+    <value>无法取消未显示的权限请求，已断开此连接。请重新连接 Agent。</value>
+  </data>
   <data name="Permission_BindingChanged" xml:space="preserve">
     <value>会话已更改，此请求已失效。请重试取消以关闭此提示。</value>
   </data>

@@ -515,6 +515,15 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         await _connectionCoordinator.ResetAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public Task DisconnectAfterInteractionFailureAsync(
+        IChatService expectedService, IAcpChatCoordinatorSink sink, string errorMessage)
+        => AcpInteractionFailureCleanup.DisconnectAsync(expectedService, sink, errorMessage,
+            service =>
+            {
+                _connectionPoolManager.RemoveByService(service, out _);
+                if (ReferenceEquals(_activeChatServiceAdapter, service)) _activeChatServiceAdapter = null;
+            }, _logger);
+
     public async Task<AcpTransportApplyResult> ConnectProfileInPoolAsync(
         ServerConfiguration profile,
         IAcpTransportConfiguration transportConfiguration,

@@ -686,6 +686,8 @@ public partial class ChatViewModelTests
         public ConcurrentQueue<PermissionRequestEventArgs> Requests { get; } = new();
         public ConcurrentQueue<JsonElement> Responses { get; } = new();
         public Func<JsonElement, CancellationToken, Task<bool>>? ResponseSend { get; set; }
+        public Func<Task<bool>>? DisconnectSend { get; set; }
+        public TaskCompletionSource<bool> ServiceDisposed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool IsConnected { get; private set; }
         public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
         public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred { add { } remove { } }
@@ -717,10 +719,11 @@ public partial class ChatViewModelTests
             return Task.FromResult(true);
         }
 
-        public Task<bool> DisconnectAsync()
+        public async Task<bool> DisconnectAsync()
         {
+            var disconnected = DisconnectSend is null || await DisconnectSend();
             IsConnected = false;
-            return Task.FromResult(true);
+            return disconnected;
         }
 
         public async Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
@@ -753,6 +756,7 @@ public partial class ChatViewModelTests
             _disposed = true;
             IsConnected = false;
             Service.Dispose();
+            ServiceDisposed.TrySetResult(true);
         }
 
         private void Receive(string message) => MessageReceived?.Invoke(this, new(message));

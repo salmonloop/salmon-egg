@@ -68,7 +68,7 @@ public partial class ChatViewModelTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PermissionNotification_SelectionInFlightThenPeerCancellation_AdvancesQueueWithoutDoubleResponse(bool writeSucceeds)
+    public async Task PermissionNotification_SelectionInFlightThenPeerCancellation_AdvancesAfterDeliveryWithoutDoubleResponse(bool writeSucceeds)
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
@@ -81,14 +81,6 @@ public partial class ChatViewModelTests
         var first = fixture.ViewModel.PendingPermissionRequest!;
         var started = NewPermissionSignal();
         var release = NewPermissionSignal();
-        var nextVisible = NewPermissionSignal();
-        PropertyChangedEventHandler projectionObserver = (_, args) =>
-        {
-            if (args.PropertyName == nameof(ChatViewModel.PendingPermissionRequest)
-                && fixture.ViewModel.PendingPermissionRequest?.MessageId.ToString() == "second")
-                nextVisible.TrySetResult(true);
-        };
-        fixture.ViewModel.PropertyChanged += projectionObserver;
         peer.ResponseSend = (response, token) =>
         {
             if (response.GetProperty("id").GetString() != "first" || !response.TryGetProperty("result", out _))
@@ -100,10 +92,14 @@ public partial class ChatViewModelTests
         try
         {
             await AwaitPermissionUiSignalAsync(dispatcher, started.Task);
-            await AwaitPermissionUiSignalAsync(dispatcher, nextVisible.Task);
+            await dispatcher.RunUntilIdleAsync();
+            Assert.Same(first, fixture.ViewModel.PendingPermissionRequest);
+            Assert.True(first.RespondCommand.IsRunning);
 
             // Act
             peer.CancelPermission("first");
+            await dispatcher.RunUntilIdleAsync();
+            Assert.Same(first, fixture.ViewModel.PendingPermissionRequest);
             release.TrySetResult(writeSucceeds);
             await AwaitPermissionUiSignalAsync(dispatcher, answer);
             await dispatcher.RunUntilIdleAsync();
@@ -121,7 +117,6 @@ public partial class ChatViewModelTests
         finally
         {
             release.TrySetResult(writeSucceeds);
-            fixture.ViewModel.PropertyChanged -= projectionObserver;
             await AwaitPermissionUiSignalAsync(dispatcher, answer);
         }
     }

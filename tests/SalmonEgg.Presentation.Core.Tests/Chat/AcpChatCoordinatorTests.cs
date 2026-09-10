@@ -2412,6 +2412,159 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal(1, resetCalls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisconnectAfterInteractionFailureAsync_DisconnectFails_ReleasesOriginalServiceAndPublishesRetryableError(bool throws)
+    {
+        // Arrange
+        var service = CreateChatService();
+        if (throws) service.Setup(x => x.DisconnectAsync()).ThrowsAsync(new InvalidOperationException("disconnect failure"));
+        else service.Setup(x => x.DisconnectAsync()).ReturnsAsync(false);
+        var sink = new FakeSink { CurrentChatService = service.Object, IsConnected = true, ConnectionInstanceId = "original" };
+        var pool = new Mock<IAcpConnectionPoolManager>();
+        var sut = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider, connectionPoolManager: pool.Object);
+
+        // Act
+        await sut.DisconnectAfterInteractionFailureAsync(service.Object, sink, "Reconnect to the agent.");
+
+        // Assert
+        service.Verify(x => x.DisconnectAsync(), Times.Once);
+        service.Verify(x => x.Dispose(), Times.Once);
+        Assert.Null(sink.CurrentChatService);
+        Assert.False(sink.IsConnected);
+        Assert.Equal("Reconnect to the agent.", sink.ConnectionErrorMessage);
+        pool.Verify(x => x.RemoveByService(service.Object, out It.Ref<string>.IsAny), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisconnectAfterInteractionFailureAsync_LegacyCoordinator_UsesOriginalServiceDefaultImplementation()
+    {
+        // Arrange
+        var commands = new Mock<IAcpConnectionCommands> { CallBase = true };
+        var service = CreateChatService();
+        var sink = new FakeSink { CurrentChatService = service.Object, IsConnected = true };
+
+        // Act
+        await commands.Object.DisconnectAfterInteractionFailureAsync(service.Object, sink, "Reconnect to the agent.");
+
+        // Assert
+        Assert.Null(sink.CurrentChatService);
+        Assert.Equal("Reconnect to the agent.", sink.ConnectionErrorMessage);
+        service.Verify(x => x.DisconnectAsync(), Times.Once);
+        service.Verify(x => x.Dispose(), Times.Once);
+        commands.Verify(x => x.DisconnectAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DisconnectAfterInteractionFailureAsync_CleanupObserverThrows_StillPublishesOriginalFailure()
+    {
+        // Arrange
+        var service = CreateChatService();
+        service.Setup(x => x.DisconnectAsync()).ThrowsAsync(new InvalidOperationException("disconnect failure"));
+        service.Setup(x => x.Dispose()).Throws(new InvalidOperationException("dispose failure"));
+        var sink = new FakeSink { CurrentChatService = service.Object, IsConnected = true };
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        logger.Setup(x => x.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+            It.IsAny<Exception?>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
+            .Throws(new InvalidOperationException("logger failure"));
+        var pool = new Mock<IAcpConnectionPoolManager>();
+        pool.Setup(x => x.RemoveByService(service.Object, out It.Ref<string>.IsAny))
+            .Throws(new InvalidOperationException("pool observer failure"));
+        var sut = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), logger.Object,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider, connectionPoolManager: pool.Object);
+
+        // Act
+        await sut.DisconnectAfterInteractionFailureAsync(service.Object, sink, "Reconnect to the agent.");
+
+        // Assert
+        Assert.Null(sink.CurrentChatService);
+        Assert.False(sink.IsConnected);
+        Assert.Equal("Reconnect to the agent.", sink.ConnectionErrorMessage);
+        service.Verify(x => x.Dispose(), Times.Once);
+        pool.Verify(x => x.RemoveByService(service.Object, out It.Ref<string>.IsAny), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisconnectAfterInteractionFailureAsync_DisconnectStalls_DisposesOriginalServiceWithinCleanupBudget()
+    {
+        // Arrange
+        var service = CreateChatService();
+        var disconnect = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Setup(x => x.DisconnectAsync()).Returns(disconnect.Task);
+        service.Setup(x => x.Dispose()).Callback(() => disconnect.TrySetResult(true));
+        var sink = new FakeSink { CurrentChatService = service.Object, IsConnected = true };
+        var sut = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+
+        // Act
+        try
+        {
+            await sut.DisconnectAfterInteractionFailureAsync(service.Object, sink, "Reconnect to the agent.")
+                .WaitAsync(AcpInteractionFailureCleanup.DisconnectTimeout + AcpInteractionFailureCleanup.DisconnectTimeout,
+                    TestContext.Current.CancellationToken);
+
+            // Assert: completion requires the application's disposal path, not just WaitAsync timing.
+            Assert.True(disconnect.Task.IsCompletedSuccessfully);
+            service.Verify(x => x.Dispose(), Times.Once);
+            Assert.Null(sink.CurrentChatService);
+            Assert.Equal("Reconnect to the agent.", sink.ConnectionErrorMessage);
+        }
+        finally
+        {
+            disconnect.TrySetResult(true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task DisconnectAfterInteractionFailureAsync_ConnectionReplacedDuringTeardown_LeavesNewStateUntouched(
+        bool generationChanges, bool instanceChanges)
+    {
+        // Arrange
+        var service = CreateChatService();
+        var replacement = CreateChatService();
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Setup(x => x.DisconnectAsync()).Returns(release.Task);
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            ConnectionInstanceId = "original",
+            ConnectionGeneration = 1
+        };
+        var sut = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+
+        // Act
+        var closing = sut.DisconnectAfterInteractionFailureAsync(service.Object, sink, "Old interaction failed.");
+        try
+        {
+            if (generationChanges) sink.ConnectionGeneration++;
+            else if (instanceChanges) sink.ConnectionInstanceId = "replacement";
+            else sink.ReplaceChatService(replacement.Object);
+            sink.UpdateConnectionState(false, true, true, null);
+            release.TrySetResult(true);
+            await closing.WaitAsync(AcpInteractionFailureCleanup.DisconnectTimeout, TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(sink.IsConnected);
+            Assert.Null(sink.ConnectionErrorMessage);
+            Assert.Same(generationChanges || instanceChanges ? service.Object : replacement.Object, sink.CurrentChatService);
+            replacement.Verify(x => x.DisconnectAsync(), Times.Never);
+            replacement.Verify(x => x.Dispose(), Times.Never);
+            service.Verify(x => x.Dispose(), Times.Once);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+            await closing.WaitAsync(AcpInteractionFailureCleanup.DisconnectTimeout, TestContext.Current.CancellationToken);
+        }
+    }
+
     [Fact]
     public async Task ApplyTransportConfigurationAsync_BufferOverflow_DelegatesResyncToConnectionCoordinator()
     {

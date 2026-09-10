@@ -90,6 +90,14 @@ public interface IAcpConnectionCommands
         IAcpChatCoordinatorSink sink,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Ends only the service whose undisplayed interaction could not be cancelled.</summary>
+    /// <remarks>The default keeps existing coordinators source compatible without redirecting failure to a newer service.</remarks>
+    Task DisconnectAfterInteractionFailureAsync(
+        IChatService expectedService,
+        IAcpChatCoordinatorSink sink,
+        string errorMessage)
+        => AcpInteractionFailureCleanup.DisconnectAsync(expectedService, sink, errorMessage);
+
     Task<AcpTransportApplyResult> ConnectProfileInPoolAsync(
         ServerConfiguration profile,
         IAcpTransportConfiguration transportConfiguration,

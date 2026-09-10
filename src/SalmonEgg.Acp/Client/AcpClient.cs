@@ -1807,7 +1807,7 @@ namespace SalmonEgg.Acp.Client
                 // recovered. Lines that never looked like frames are filtered upstream as
                 // StdoutProtocolViolation and deliberately get no reply.
                 OnErrorOccurred($"Failed to process message: {ex.Message}");
-                _ = SendParseErrorResponseAsync(ex.Message);
+                _ = SendParseErrorResponseAsync(ex.Message, connectionToken);
             }
             catch (Exception ex)
             {
@@ -1818,14 +1818,21 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Replies to an unparseable ACP frame per JSON-RPC 2.0: code -32700, id explicitly null.
         /// </summary>
-        private async Task SendParseErrorResponseAsync(string detail)
+        private async Task SendParseErrorResponseAsync(string detail, CancellationToken connectionToken)
         {
             try
             {
-                await SendResponseAsync(new JsonRpcResponse(
+                Task<bool> responseTask;
+                lock (_lock)
+                {
+                    // An error observer may reconnect synchronously before this courtesy reply.
+                    // Claim the send on the receiving connection, including pre-initialize frames.
+                    if (!IsCurrentConnection(connectionToken)) return;
+                    responseTask = SendResponseAsync(new JsonRpcResponse(
                         id: null,
-                        error: JsonRpcError.CreateParseError(detail)))
-                    .ConfigureAwait(false);
+                        error: JsonRpcError.CreateParseError(detail)), connectionToken);
+                }
+                await responseTask.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -2160,6 +2167,7 @@ namespace SalmonEgg.Acp.Client
                     optionsList,
                     permissionResponseFunc,
                     () => CanRespondToPermissionRequest(pendingPermission),
+                    () => IsPermissionResponsePrepared(pendingPermission),
                     () => IsPermissionResponsePrepared(pendingPermission),
                     () => IsPermissionCancellationRequested(pendingPermission), _logger);
                 pendingPermission.PermissionEvent = eventArgs;

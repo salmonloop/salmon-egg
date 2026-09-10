@@ -189,7 +189,7 @@ EventHandler observer = (_, _) => { };
 permission.Changed += observer;
 Require(permission.Title == "Review change" && permission.Description == "Review requested access.",
     "Stable permission text is unavailable.");
-Require(permission.CanRespond && !permission.IsResponsePrepared && !permission.IsCancellationRequested,
+Require(permission.CanRespond && !permission.IsResponsePrepared && !permission.IsResponseSending && !permission.IsCancellationRequested,
     "Legacy permission availability changed.");
 Require(await permission.TryRespondAsync("cancelled"), "Legacy permission callback did not complete.");
 permission.Changed -= observer;

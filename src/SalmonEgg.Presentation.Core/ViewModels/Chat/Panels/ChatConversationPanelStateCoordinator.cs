@@ -15,6 +15,7 @@ public sealed class ChatConversationPanelStateCoordinator
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ElicitationRequestViewModel> _pendingElicitationRequestsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<PermissionRequestViewModel>> _pendingPermissionRequestsByConversation = new(StringComparer.Ordinal);
+    private readonly List<PermissionRequestViewModel> _unboundPermissionCancellations = [];
 
     public ChatConversationPanelSelection SyncConversation(string? conversationId)
     {
@@ -112,9 +113,10 @@ public sealed class ChatConversationPanelStateCoordinator
         }
 
         RemoveUnavailablePermissionRequests(requests);
-        var candidates = requests.Where(request => request.IsAwaitingInput && (toolCallId is null
+        var candidates = requests.Where(request => (request.IsAwaitingInput || request.IsSendingResponse) && (toolCallId is null
             || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal)));
-        return candidates.FirstOrDefault(static request => !request.IsCancellationOnly)
+        return candidates.FirstOrDefault(static request => request.IsSendingResponse)
+            ?? candidates.FirstOrDefault(static request => !request.IsCancellationOnly)
             ?? candidates.FirstOrDefault();
     }
 
@@ -142,8 +144,30 @@ public sealed class ChatConversationPanelStateCoordinator
         return true;
     }
 
-    internal bool ContainsPermissionRequest(string conversationId, PermissionRequestViewModel request)
-        => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests) && requests.Contains(request);
+    internal PermissionRequestViewModel? GetUnboundPermissionCancellation()
+    {
+        RemoveUnavailablePermissionRequests(_unboundPermissionCancellations);
+        return _unboundPermissionCancellations.FirstOrDefault(static request => request.IsSendingResponse)
+            ?? _unboundPermissionCancellations.FirstOrDefault(static request => request.IsAwaitingInput);
+    }
+
+    internal void StoreUnboundPermissionCancellation(PermissionRequestViewModel request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        RemoveUnavailablePermissionRequests(_unboundPermissionCancellations);
+        _unboundPermissionCancellations.Add(request);
+    }
+
+    internal bool RemoveUnboundPermissionCancellation(PermissionRequestViewModel request)
+    {
+        if (!_unboundPermissionCancellations.Remove(request)) return false;
+        request.DetachRequest();
+        return true;
+    }
+
+    internal bool ContainsPermissionRequest(string? conversationId, PermissionRequestViewModel request)
+        => conversationId is null ? _unboundPermissionCancellations.Contains(request)
+            : _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests) && requests.Contains(request);
 
     internal IReadOnlyList<(string ConversationId, PermissionRequestViewModel Request)> GetObsoletePermissionRequests(
         IImmutableDictionary<string, ConversationBindingSlice>? bindings)
@@ -170,12 +194,18 @@ public sealed class ChatConversationPanelStateCoordinator
             foreach (var request in requests) request.DetachRequest();
         }
         _pendingPermissionRequestsByConversation.Clear();
+        foreach (var request in _unboundPermissionCancellations) request.DetachRequest();
+        _unboundPermissionCancellations.Clear();
     }
 
     internal void ReprojectPermissionLocalizedText(
         string defaultTitle, string cancellationTitle, string bindingCancellationDescription, string peerCancellationDescription)
     {
         foreach (var request in _pendingPermissionRequestsByConversation.Values.SelectMany(static requests => requests))
+        {
+            request.ReprojectLocalizedText(defaultTitle, cancellationTitle, bindingCancellationDescription, peerCancellationDescription);
+        }
+        foreach (var request in _unboundPermissionCancellations)
         {
             request.ReprojectLocalizedText(defaultTitle, cancellationTitle, bindingCancellationDescription, peerCancellationDescription);
         }
