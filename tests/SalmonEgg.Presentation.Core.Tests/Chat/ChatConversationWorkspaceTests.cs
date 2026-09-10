@@ -444,64 +444,59 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
-        var started = new ManualResetEventSlim(false);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-        Exception? failure = null;
+        const int iterations = 32;
+        using var start = new Barrier(2);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var snapshotsRead = 0;
+        var transcriptsWritten = 0;
 
-        var snapshotReader = Task.Run(() =>
+        // Dedicated workers rendezvous before every operation. A short timer can expire before
+        // a queued worker starts under CI load and would test scheduling instead of concurrent access.
+        var snapshotReader = Task.Factory.StartNew(() =>
         {
-            started.Wait(cts.Token);
             try
             {
-                while (!cts.IsCancellationRequested)
+                for (var i = 0; i < iterations; i++)
                 {
-                    _ = workspace.GetConversationSnapshot("session-1");
+                    start.SignalAndWait(lifetime.Token);
+                    Assert.NotNull(workspace.GetConversationSnapshot("session-1"));
+                    snapshotsRead++;
                 }
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            catch
             {
+                lifetime.Cancel();
+                throw;
             }
-            catch (Exception ex)
-            {
-                failure = ex;
-                cts.Cancel();
-            }
-        }, cancellationToken: TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
-        var transcriptMutator = Task.Run(() =>
+        var transcriptMutator = Task.Factory.StartNew(() =>
         {
-            started.Wait(cts.Token);
             try
             {
-                var counter = 0;
-                while (!cts.IsCancellationRequested)
+                for (var i = 0; i < iterations; i++)
                 {
+                    start.SignalAndWait(lifetime.Token);
                     workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                         ConversationId: "session-1",
-                        Transcript: CreateTranscript($"mutated-{counter}", 1024),
+                        Transcript: CreateTranscript($"mutated-{i}", 1024),
                         Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
                         ShowPlanPanel: false,
                         CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                        LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc).AddSeconds(counter)));
-                    counter++;
+                        LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc).AddSeconds(i)));
+                    transcriptsWritten++;
                 }
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            catch
             {
+                lifetime.Cancel();
+                throw;
             }
-            catch (Exception ex)
-            {
-                failure = ex;
-                cts.Cancel();
-            }
-        }, cancellationToken: TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
-        started.Set();
-        await Task.Delay(200, CancellationToken.None);
-        cts.Cancel();
         await Task.WhenAll(snapshotReader, transcriptMutator);
-
-        Assert.Null(failure);
+        Assert.Equal(iterations, snapshotsRead);
+        Assert.Equal(iterations, transcriptsWritten);
     }
 
     [Fact]

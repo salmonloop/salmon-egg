@@ -1196,7 +1196,7 @@ public sealed class StartViewModelTests
                 StdioCommand = "acp-two",
                 ConnectionTimeout = 10
             });
-            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+            await chat.ViewModel.SelectProfileAsync(chat.ViewModel.AcpProfileList[0], TestContext.Current.CancellationToken);
 
             var chatService = CreateConnectedChatService();
             chatService.SetupGet(service => service.AgentCapabilities)
@@ -1246,7 +1246,7 @@ public sealed class StartViewModelTests
                     && startViewModel.StartModeOptions.Count == 2,
                 timeoutMilliseconds: 10000);
 
-            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
+            await chat.ViewModel.SelectProfileAsync(chat.ViewModel.AcpProfileList[1], TestContext.Current.CancellationToken);
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-2"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
@@ -3661,7 +3661,9 @@ public sealed class StartViewModelTests
             Transport = TransportType.Stdio,
             StdioCommand = "agent"
         });
-        chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[^1];
+        // These launch tests publish connection/draft facts explicitly. Profile selection must
+        // not race them with the unrelated automatic connection command's unconfigured mock.
+        chat.ViewModel.SelectProfileForDefaultProjection(chat.ViewModel.AcpProfileList[^1]);
     }
 
     private static async Task MakeStartDraftReadyAsync(
