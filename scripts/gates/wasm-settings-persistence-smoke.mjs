@@ -92,7 +92,10 @@ const dataStorageCacheRetentionControl = {
   labels: ["缓存保留天数", "Cache retention (days)"],
   automationIds: ["DataStorage.CacheRetention"]
 };
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined
+});
 
 try {
   await clearBrowserOriginStorage(browser, baseUrl);
@@ -186,7 +189,7 @@ async function changeLanguage(page) {
     page,
     "GeneralSettings.Language",
     ["English"],
-    { keyboardSelectVisibleItem: true, verifySelectionText: false });
+    { keyboardSelectVisibleItem: true, verifySelectionText: false, expectControlReplacement: true });
   // The authoritative shell selection is preserved across a language reload. The
   // current Settings page is therefore the observable proof that x:Uid content was
   // recreated in English; navigation is not expected to jump to Start.

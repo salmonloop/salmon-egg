@@ -764,6 +764,33 @@ async function waitForComboBoxClosed(page, selectorAutomationId, popupId) {
   });
 }
 
+async function waitForComboBoxReplacement(page, selectorAutomationId, original) {
+  // A committed language change recreates the settings page. Its new ComboBox never owned the
+  // old popup's focus; wait for replacement and the native shell focus to settle instead.
+  await waitForStableSemanticState(page, ({ automationId, original, minimumSize }) => {
+    const state = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
+    const element = state?.id ? document.getElementById(state.id) : null;
+    const focused = document.activeElement;
+    const focusRect = focused?.getBoundingClientRect();
+    return element && state.id !== original.id && !document.getElementById(original.id)
+      && !element.closest("[hidden]") && !state.disabled && state.expanded === false
+      && state.rect.width >= minimumSize && state.rect.height >= minimumSize
+      && !element.getAttribute("aria-controls")
+      && (!original.popupId || !document.getElementById(original.popupId))
+      && focused?.id && focused.closest("#uno-semantics-root") && !focused.closest("[hidden]")
+      && !focused.disabled && focused.getAttribute("aria-disabled") !== "true"
+      && focusRect.width >= minimumSize && focusRect.height >= minimumSize
+      ? `${state.id}:${focused.id}` : false;
+  }, { automationId: selectorAutomationId, original, minimumSize: laidOutMinimumSize },
+  COMBO_OPEN_TIMEOUT_MS).catch(async error => {
+    const state = await findComboBox(page, selectorAutomationId);
+    const focused = await page.evaluate(() => window.__salmoneggSmoke.semantic.focusedSnapshot());
+    throw new Error(`Combo box '${selectorAutomationId}' was not replaced by a ready page. `
+      + `Original=${JSON.stringify(original)} State=${JSON.stringify(state)} Focus=${JSON.stringify(focused)}.`,
+    { cause: error });
+  });
+}
+
 // Opens the dropdown (retrying through the F4 race), reads the highlighted option's label, then
 // closes it. The dropdown must end closed: a lingering popup would swallow the next gate's keys.
 async function readComboBoxSelectionLabel(page, selectorAutomationId) {
@@ -810,18 +837,24 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
       + `none matched ${JSON.stringify(expectedNames)}.`);
   }
 
+  const original = await page.evaluate(automationId => {
+    const combo = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
+    const element = combo?.id ? document.getElementById(combo.id) : null;
+    if (!element) throw new Error(`Open combo box '${automationId}' disappeared before selection.`);
+    return { id: combo.id, popupId: element.getAttribute("aria-controls") };
+  }, selectorAutomationId);
   await page.keyboard.press("Home");
   await page.waitForTimeout(COMBO_SETTLE_MS);
   for (let i = 0; i < targetIndex; i += 1) {
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(100);
   }
-  const popupId = await page.evaluate(automationId => {
-    const combo = window.__salmoneggSmoke.semantic.describe({ automationIds: [automationId], labels: [] });
-    return combo?.id ? document.getElementById(combo.id)?.getAttribute("aria-controls") : null;
-  }, selectorAutomationId);
   await page.keyboard.press("Enter");
-  await waitForComboBoxClosed(page, selectorAutomationId, popupId);
+  if (options.expectControlReplacement === true) {
+    await waitForComboBoxReplacement(page, selectorAutomationId, original);
+  } else {
+    await waitForComboBoxClosed(page, selectorAutomationId, original.popupId);
+  }
 
   if (options.verifySelectionText !== false) {
     const observed = await readComboBoxSelectionLabel(page, selectorAutomationId);
