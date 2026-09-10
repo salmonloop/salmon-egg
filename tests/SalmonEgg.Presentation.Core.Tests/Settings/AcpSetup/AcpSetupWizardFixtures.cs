@@ -83,6 +83,10 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
     /// <summary>How many times a caller asked for the search to be redone.</summary>
     public int InvalidateCount { get; private set; }
 
+    public Func<string, CancellationToken, Task<IReadOnlyList<string>>>? ResolveCandidatesAsync { get; set; }
+
+    public List<string> ProbedCommands { get; } = new();
+
     public void InvalidateSearchPaths() => InvalidateCount++;
 
     public void SetExecutable(string command, string? path, string? version = null)
@@ -109,6 +113,12 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
         string command,
         CancellationToken cancellationToken = default)
     {
+        ProbedCommands.Add(command);
+        if (ResolveCandidatesAsync is not null)
+        {
+            return ResolveCandidatesAsync(command, cancellationToken);
+        }
+
         if (_candidates.TryGetValue(command, out var candidates))
         {
             return Task.FromResult<IReadOnlyList<string>>(candidates);
@@ -410,14 +420,16 @@ internal static class AcpSetupWizardFixtures
         IConfigurationService configurationService,
         IStringLocalizer<CoreStrings>? localizer = null,
         IUiDispatcher? uiDispatcher = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IAcpToolchainInstaller? toolchainInstaller = null)
         => new(
             new AcpSetupWizardOrchestrator(
                 catalog,
                 probe,
                 installer,
                 connectivityTester,
-                configurationService),
+                configurationService,
+                toolchainInstaller),
             // Immediate by default so most tests read as straight-line code. A test about what the wizard
             // does while a UI update is still in flight supplies a queueing dispatcher instead, which is
             // what the real WinUI one does: every marshalled write lands later, on another thread.

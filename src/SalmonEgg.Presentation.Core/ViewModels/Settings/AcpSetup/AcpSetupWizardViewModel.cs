@@ -503,6 +503,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanDetectAdapter))]
     private async Task DetectAdapterAsync(CancellationToken cancellationToken)
     {
+        var agent = SelectedAgent;
         var adapter = SelectedAdapter;
         if (adapter is null)
         {
@@ -516,33 +517,36 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 // toolchain-missing surface offers, so it must look at the machine rather than at the
                 // search that was current when the wizard first said the toolchain was absent.
                 _orchestrator.InvalidateSearchPaths();
-                var overrides = CollectCommandOverrides();
-                var probe = await _orchestrator
-                    .DetectComponentAsync(adapter.Component, overrides, token)
-                    .ConfigureAwait(false);
-
-                // Probed in the same operation as the component: the install button this gates appears on
-                // the same render as the "missing" verdict that reveals it, so it is never briefly offered
-                // on a machine that cannot honour it.
-                var toolchain = await _orchestrator
-                    .DetectToolchainAsync(adapter.Component, overrides, token)
-                    .ConfigureAwait(false);
-
-                await _uiDispatcher
-                    .EnqueueAsync(() =>
-                    {
-                        // A user can change the native ComboBox while the process probe is running.
-                        // The late result belongs to the captured adapter, never automatically to the
-                        // newer selection.
-                        if (ReferenceEquals(SelectedAdapter, adapter))
-                        {
-                            AdapterProbe = probe;
-                            AdapterToolchain = toolchain;
-                        }
-                    })
-                    .ConfigureAwait(false);
+                await ProbeAdapterAsync(agent, adapter, CollectCommandOverrides(), token).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ProbeAdapterAsync(
+        AcpSetupAgentRowViewModel? agent,
+        AcpAdapterDescriptor adapter,
+        AcpCommandOverrides overrides,
+        CancellationToken cancellationToken)
+    {
+        var probe = await _orchestrator
+            .DetectComponentAsync(adapter.Component, overrides, cancellationToken)
+            .ConfigureAwait(false);
+        var toolchain = await _orchestrator
+            .DetectToolchainAsync(adapter.Component, overrides, cancellationToken)
+            .ConfigureAwait(false);
+
+        await _uiDispatcher.EnqueueAsync(() =>
+        {
+            // Native selection can change during a process probe. A late result belongs to the
+            // captured agent and adapter, and must never approve their replacements.
+            if (!cancellationToken.IsCancellationRequested
+                && ReferenceEquals(SelectedAgent, agent)
+                && ReferenceEquals(SelectedAdapter, adapter))
+            {
+                AdapterProbe = probe;
+                AdapterToolchain = toolchain;
+            }
+        }).ConfigureAwait(false);
     }
 
     private bool CanDetectAdapter() => !IsBusy && SelectedAdapter is not null;
@@ -834,20 +838,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         switch (Step)
         {
             case AcpSetupWizardStep.AgentSelection:
-                PrepareComponentSetup();
-                await DetectAdapterAsync(cancellationToken).ConfigureAwait(false);
-
-                // Detection is preparation, not presentation. Only a conclusively no-op component step is
-                // folded; a missing, undetermined, failed, or cancelled probe remains visible and keeps the
-                // same blocking rule as an ordinary visit to that step.
-                if (IsStepApplicable(AcpSetupWizardStep.ComponentSetup)
-                    || !CanAdvanceFromComponentSetup())
-                {
-                    Step = AcpSetupWizardStep.ComponentSetup;
-                    break;
-                }
-
-                AdvancePastComponentSetup();
+                await AdvanceFromAgentSelectionAsync(cancellationToken).ConfigureAwait(false);
                 break;
             case AcpSetupWizardStep.ComponentSetup:
                 AdvancePastComponentSetup();
@@ -872,12 +863,82 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     private bool CanGoNext() => !IsBusy && Step switch
     {
-        AcpSetupWizardStep.AgentSelection => SelectedAgent is not null,
+        AcpSetupWizardStep.AgentSelection => SelectedAgent is { IsMissing: false, IsChecking: false },
         AcpSetupWizardStep.ComponentSetup => CanAdvanceFromComponentSetup(),
         AcpSetupWizardStep.Parameters => true,
         AcpSetupWizardStep.Test => IsTestSuccessful,
         _ => false
     };
+
+    private async Task AdvanceFromAgentSelectionAsync(CancellationToken cancellationToken)
+    {
+        var row = SelectedAgent;
+        if (row is null)
+        {
+            return;
+        }
+
+        var overrides = CollectCommandOverrides();
+        var command = overrides.Resolve(row.ProbeCommand);
+        await RunOperationAsync(async token =>
+        {
+            // Entering the wizard does not run the optional catalog sweep. Check the selected
+            // runtime here before a built-in adapter can fold the walk straight to the test step.
+            _orchestrator.InvalidateSearchPaths();
+            var runtime = await _orchestrator
+                .DetectComponentAsync(row.Agent.Runtime, overrides, token).ConfigureAwait(false);
+            var toolchain = await _orchestrator
+                .DetectToolchainAsync(row.Agent.Runtime, overrides, token).ConfigureAwait(false);
+
+            AcpAdapterDescriptor? adapter = null;
+            await _uiDispatcher.EnqueueAsync(() =>
+            {
+                if (!IsCurrentSelection())
+                {
+                    return;
+                }
+
+                row.RuntimeToolchain = toolchain;
+                row.Runtime = runtime;
+                OnPropertyChanged(nameof(StepPositionText));
+                if (row.IsMissing)
+                {
+                    return;
+                }
+
+                PrepareComponentSetup();
+                adapter = SelectedAdapter;
+            }).ConfigureAwait(false);
+
+            if (adapter is null)
+            {
+                return;
+            }
+
+            await ProbeAdapterAsync(row, adapter, overrides, token).ConfigureAwait(false);
+            await _uiDispatcher.EnqueueAsync(() =>
+            {
+                if (!IsCurrentSelection() || !ReferenceEquals(SelectedAdapter, adapter))
+                {
+                    return;
+                }
+
+                if (IsStepApplicable(AcpSetupWizardStep.ComponentSetup) || !CanAdvanceFromComponentSetup())
+                {
+                    Step = AcpSetupWizardStep.ComponentSetup;
+                }
+                else
+                {
+                    AdvancePastComponentSetup();
+                }
+            }).ConfigureAwait(false);
+
+            bool IsCurrentSelection()
+                => !token.IsCancellationRequested
+                    && ReferenceEquals(SelectedAgent, row)
+                    && string.Equals(command, CollectCommandOverrides().Resolve(row.ProbeCommand), StringComparison.Ordinal);
+        }, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// The component gate shared by a rendered visit and an automatically folded visit. Keeping one gate is
@@ -1115,7 +1176,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// find an install outside the GUI process PATH; saving the bare command after that would discard the
     /// fact detection just established and produce a profile that cannot start.
     /// </remarks>
-    private AcpCommandOverrides CollectCommandOverrides()
+    private AcpCommandOverrides CollectCommandOverrides(bool includeResolvedRuntime = false)
     {
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var row in Agents)
@@ -1124,6 +1185,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             {
                 overrides[row.ProbeCommand] = row.CustomCommand;
             }
+        }
+
+        // Discovery can find a newly installed CLI outside the app's inherited PATH. Use that
+        // absolute path for launch, but keep detection free to search again after an installation.
+        if (includeResolvedRuntime
+            && SelectedAgent is { IsInstalled: true, HasCustomCommand: false, HasResolvedPath: true } selected
+            && string.Equals(SelectedAdapter?.LaunchTemplate.Command, selected.ProbeCommand, StringComparison.Ordinal))
+        {
+            overrides.TryAdd(selected.ProbeCommand, selected.ResolvedPath);
         }
 
         if (!string.IsNullOrWhiteSpace(AdapterProbeCommand)
@@ -1158,7 +1228,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             Agent = agent,
             Adapter = adapter,
             ParameterValues = CollectParameterValues(),
-            CommandOverrides = CollectCommandOverrides(),
+            CommandOverrides = CollectCommandOverrides(includeResolvedRuntime: true),
             ProfileName = string.IsNullOrWhiteSpace(ProfileName) ? agent.DisplayName : ProfileName.Trim(),
             Verification = Verification
         };
@@ -1187,7 +1257,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         try
         {
             LaunchCommandPreview = AcpLaunchPlanBuilder
-                .Build(template, CollectParameterValues(), CollectCommandOverrides())
+                .Build(template, CollectParameterValues(), CollectCommandOverrides(includeResolvedRuntime: true))
                 .CommandLineDisplay;
         }
         catch (InvalidOperationException ex)

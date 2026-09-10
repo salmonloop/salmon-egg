@@ -541,6 +541,32 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.False(wizard.GoNextCommand.CanExecute(null));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AgentSelection_MissingRuntime_DoesNotAdvanceToAdapterDetection(bool hasToolchain)
+    {
+        // Arrange
+        var probe = new StubExecutableProbe();
+        if (!hasToolchain)
+        {
+            probe.WithoutPackageManagers();
+        }
+
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+        Assert.True(wizard.SelectedAgent.IsMissing);
+
+        // Act
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.Null(wizard.AdapterProbe);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
     [Fact]
     public async Task DetectAgents_UndeterminedProbe_DoesNotBlockAdvancement()
     {
@@ -553,6 +579,59 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Equal(AcpComponentAvailability.Undetermined, wizard.Agents[0].Availability);
         wizard.SelectedAgent = wizard.Agents[0];
         Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AgentSelection_WithoutInitialDetection_ChecksRuntimeAndToolchainBeforeAdvancing(bool hasToolchain)
+    {
+        // Arrange
+        var probe = new StubExecutableProbe();
+        if (!hasToolchain)
+        {
+            probe.WithoutPackageManagers();
+        }
+
+        var wizard = CreateWizard(probe);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        // Act
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.True(wizard.SelectedAgent.IsMissing);
+        Assert.Equal(!hasToolchain, wizard.SelectedAgent.IsToolchainMissing);
+        Assert.Equal(hasToolchain, wizard.SelectedAgent.CanInstallHere);
+        Assert.Null(wizard.AdapterProbe);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+        Assert.False(wizard.TestCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AgentSelection_InstalledRuntimeOutsidePath_UsesDetectedCommandForTestAndSave()
+    {
+        // Arrange
+        const string installedPath = @"C:\Users\test\AppData\Roaming\npm\test-agent.cmd";
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, installedPath, "1.0.0");
+        var tester = new StubConnectivityTester(StubConnectivityTester.SuccessfulHandshake());
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(
+            AcpSetupWizardFixtures.Agent(), probe, new StubComponentInstaller(), null, tester, configuration);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        // Act
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        await wizard.TestCommand.ExecuteAsync(null);
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.Equal(installedPath, tester.LastPlan?.Command);
+        Assert.Equal(new[] { "--acp" }, tester.LastPlan?.Arguments);
+        Assert.Equal(installedPath, Assert.Single(configuration.Saved).StdioCommand);
     }
 
     [Fact]
