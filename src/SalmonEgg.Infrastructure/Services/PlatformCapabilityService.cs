@@ -50,7 +50,9 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
     // Porta.Pty 1.0.7 reports Unix signal termination as ExitCode=0 and does not expose the signal.
     // Keep auth disabled there until upstream exposes a trustworthy normal exit result.
     // https://github.com/tomlm/Porta.Pty/blob/54684ba55148ed6bcd0c827ad7e8841a3289a466/src/Porta.Pty/Unix/PtyConnection.cs
-    public bool SupportsTerminalAuthentication => IsWindowsDesktopProcessHost && SupportsInteractiveTerminalSurface;
+    // #147 also requires the packaged application's consent, terminal, reconnect and retry flow
+    // to pass on Windows. ConPTY-only tests do not establish that product capability.
+    public bool SupportsTerminalAuthentication => false;
 
     public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;
 

@@ -20,7 +20,7 @@ public sealed class TerminalAuthenticationWindowsTests
     {
         // Arrange: obtain the invocation and terminal method from a live ACP process.
         await using var agent = await AgentFixture.CreateAsync(mode);
-        await using var factory = new TerminalAuthenticationSessionFactory(new PlatformCapabilityService());
+        await using var factory = new TerminalAuthenticationSessionFactory(new ConPtyGateCapabilities());
         Assert.True(factory.IsSupported);
         await using var session = await factory.StartAsync(agent.LoginInvocation, TestContext.Current.CancellationToken);
         using var output = new TerminalOutput(session);
@@ -51,7 +51,7 @@ public sealed class TerminalAuthenticationWindowsTests
     {
         // Arrange: the login process starts a descendant inside the Windows job.
         await using var agent = await AgentFixture.CreateAsync("cancel");
-        await using var factory = new TerminalAuthenticationSessionFactory(new PlatformCapabilityService());
+        await using var factory = new TerminalAuthenticationSessionFactory(new ConPtyGateCapabilities());
         await using var session = await factory.StartAsync(agent.LoginInvocation, TestContext.Current.CancellationToken);
         using var output = new TerminalOutput(session);
         await output.WaitForAsync("TERMINAL_AUTH_READY");
@@ -70,6 +70,25 @@ public sealed class TerminalAuthenticationWindowsTests
         await descendant.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.True(process.HasExited);
         Assert.True(descendant.HasExited);
+    }
+
+    // This gate exercises the actual PTY host before the application opts into the capability.
+    // Product advertisement remains governed by PlatformCapabilityService and the application GUI gate.
+    private sealed class ConPtyGateCapabilities : IPlatformCapabilityService
+    {
+        public bool SupportsTerminalAuthentication => OperatingSystem.IsWindows();
+        public bool SupportsStdioTransport => OperatingSystem.IsWindows();
+        public bool SupportsInteractiveTerminalSurface => OperatingSystem.IsWindows();
+        public bool SupportsLocalTerminal => OperatingSystem.IsWindows();
+        public bool SupportsLaunchOnStartup => false;
+        public bool SupportsTray => false;
+        public bool SupportsLanguageOverride => false;
+        public bool SupportsMiniWindow => false;
+        public bool SupportsExternalFileOpen => false;
+        public bool SupportsLocalFileExport => false;
+        public bool SupportsGamepadInput => false;
+        public bool SupportsCliCommandInspection => false;
+        public bool SupportsCliCommandLinking => false;
     }
 
     private sealed class AgentFixture : IAsyncDisposable
