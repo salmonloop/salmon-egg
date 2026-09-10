@@ -69,7 +69,7 @@ Windows 原生路径必须用 MSIX 脚本；Linux/macOS 桌面版走 Skia；WASM
 
 ### Windows 终端登录门禁
 
-ACP `auth.terminal` 当前仅在 Windows 桌面进程宿主且具备交互终端界面时启用。用户同意后，应用根据当前 Agent 进程的启动快照创建独立 ConPTY；只有正常退出码 `0` 才重新连接并初始化，再重试原操作。关闭窗口、取消或退出应用会回收登录进程及其子孙进程。
+ACP `auth.terminal` 的 Windows PTY host 已实现，但产品能力暂不广告。须用本次安装包通过同意、终端交互、退出、重连、原操作重试和取消回收的 GUI 门禁后，才能启用。独立 ConPTY 门禁通过显式测试 host 验证进程能力：根据当前 Agent 启动快照创建独立 ConPTY，正常退出码 `0` 才允许重连，关闭或取消会回收登录进程及其子孙进程。
 
 Windows 主机运行：
 
