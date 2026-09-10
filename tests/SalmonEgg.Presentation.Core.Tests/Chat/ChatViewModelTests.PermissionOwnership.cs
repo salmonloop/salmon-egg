@@ -678,10 +678,12 @@ public partial class ChatViewModelTests
         private PermissionUiPeer()
         {
             _client = new AcpClient(this, Mock.Of<IAcpClientLogger>());
+            _client.PermissionRequestReceived += (_, request) => Requests.Enqueue(request);
             Service = new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>());
         }
 
         public ChatService Service { get; }
+        public ConcurrentQueue<PermissionRequestEventArgs> Requests { get; } = new();
         public ConcurrentQueue<JsonElement> Responses { get; } = new();
         public Func<JsonElement, CancellationToken, Task<bool>>? ResponseSend { get; set; }
         public bool IsConnected { get; private set; }
@@ -705,6 +707,9 @@ public partial class ChatViewModelTests
 
         public void Request(string id, string sessionId, string toolCallId)
             => Receive($$$"""{"jsonrpc":"2.0","id":"{{{id}}}","method":"session/request_permission","params":{"sessionId":"{{{sessionId}}}","toolCall":{"toolCallId":"{{{toolCallId}}}","title":"Run tests"},"options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"}]}}""");
+
+        public void CancelPermission(string id)
+            => Receive($$$"""{"jsonrpc":"2.0","method":"$/cancel_request","params":{"requestId":"{{{id}}}"}}""");
 
         public Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
         {

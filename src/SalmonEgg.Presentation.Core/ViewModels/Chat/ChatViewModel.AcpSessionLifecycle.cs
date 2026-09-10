@@ -1900,6 +1900,8 @@ public partial class ChatViewModel
 
                 var viewModel = CreateOwnedPermissionRequest(service, foregroundGeneration, request, conversationId, binding);
                 _panelStateCoordinator.StorePermissionRequest(conversationId, viewModel);
+                SubscribePermissionRequestChanges(service, foregroundGeneration, request, conversationId, viewModel);
+                RefreshPermissionRequestProjection(service, foregroundGeneration, request, conversationId, viewModel);
                 ReconcilePermissionBindings(currentState.Bindings);
                 SyncPermissionRequestProjection();
             }).ConfigureAwait(false);
@@ -1931,20 +1933,72 @@ public partial class ChatViewModel
 
                 // A binding change withdraws the old choice, but the original request still
                 // requires an answer. Its callback keeps that cancellation on its own client.
-                var canSelect = bindingCurrent && viewModel?.BindingCancellationAttempted != true;
+                var canSelect = bindingCurrent && viewModel?.IsCancellationOnly != true;
                 return await request.TryRespondAsync(canSelect ? outcome : "cancelled",
                     canSelect ? optionId : null).ConfigureAwait(false);
             },
             () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
         viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
-        viewModel.RequestTitle = request.ToolCall is JsonElement toolCall && toolCall.ValueKind == JsonValueKind.Object
-            && toolCall.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String
-            ? title.GetString() : null;
+        viewModel.RequestTitle = request.Title;
         viewModel.Title = string.IsNullOrWhiteSpace(viewModel.RequestTitle)
             ? ResolveLocalizerText("Permission_DefaultTitle", "Permission required") : viewModel.RequestTitle;
         viewModel.Binding = binding;
+        viewModel.Description = request.Description ?? string.Empty;
         viewModel.IsRequestAvailable = () => IsPermissionSourceCurrent(service, foregroundGeneration) && request.CanRespond;
+        viewModel.IsResponsePrepared = () => request.IsResponsePrepared;
+        viewModel.IsRequestCancellationRequested = () => request.IsCancellationRequested;
         return viewModel;
+    }
+
+    private void SubscribePermissionRequestChanges(
+        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        string conversationId, PermissionRequestViewModel viewModel)
+    {
+        EventHandler changed = (_, _) => _ = ProcessPermissionRequestChangedAsync(
+            service, foregroundGeneration, request, conversationId, viewModel);
+        request.Changed += changed;
+        viewModel.UnsubscribeRequestChanges = () => request.Changed -= changed;
+    }
+
+    private async Task ProcessPermissionRequestChangedAsync(
+        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        string conversationId, PermissionRequestViewModel viewModel)
+    {
+        try
+        {
+            await PostToUiAsync(async () =>
+            {
+                if (_disposed || !_panelStateCoordinator.ContainsPermissionRequest(conversationId, viewModel)) return;
+                var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
+                // A captured SDK callback can outlive unsubscription, a binding change or replacement.
+                // Only the exact projection still held by this conversation may change its surface.
+                if (_disposed || !_panelStateCoordinator.ContainsPermissionRequest(conversationId, viewModel)) return;
+                RefreshPermissionRequestProjection(service, foregroundGeneration, request, conversationId, viewModel);
+                ReconcilePermissionBindings(state.Bindings);
+                SyncPermissionRequestProjection();
+            }).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning("Could not refresh a permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
+        }
+    }
+
+    private void RefreshPermissionRequestProjection(
+        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        string conversationId, PermissionRequestViewModel viewModel)
+    {
+        if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+        {
+            RemovePermissionRequestProjection(conversationId, viewModel);
+        }
+        else if (request.IsCancellationRequested && !viewModel.BindingCancellationAttempted)
+        {
+            viewModel.ShowCancellationRetry(
+                ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
+                ResolveLocalizerText("Permission_AgentCancelled",
+                    "The agent cancelled this request. Retry cancellation to dismiss it."), bindingChanged: false);
+        }
     }
 
     private bool IsPermissionSourceCurrent(IChatService service, int foregroundGeneration)
@@ -1981,18 +2035,12 @@ public partial class ChatViewModel
             request.ShowCancellationRetry(
                 ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
                 ResolveLocalizerText("Permission_BindingChanged",
-                    "This request is no longer valid because the conversation changed. Retry cancellation to dismiss it."));
+                    "This request is no longer valid because the conversation changed. Retry cancellation to dismiss it."), bindingChanged: true);
             SyncPermissionRequestProjection();
-            // If a physical answer is already being written it must settle first. A successful
-            // answer consumes the original owner; a failed answer can still be cancelled below.
-            if (request.RespondCommand.ExecutionTask is { IsCompleted: false } responseTask)
-            {
-                await responseTask.ConfigureAwait(true);
-            }
             if (request.IsAvailable)
             {
-                // One best-effort cancellation on invalidation; failure remains available to the
-                // user's command instead of making every store update an unbounded retry loop.
+                // Latch cancellation on the original SDK owner immediately. An in-flight write
+                // still owns its terminal response; waiting here first can strand a prepared batch.
                 await request.OnRespond("cancelled", null).ConfigureAwait(true);
             }
         }
