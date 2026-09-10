@@ -2400,10 +2400,15 @@ namespace SalmonEgg.Acp.Client
                 // reachable only through its opt-in accessor; it never becomes a v1 tool-call event.
                 eventArgs = new PermissionRequestEventArgs(request.Id!, snapshot.SessionId, null, options,
                     (outcome, optionId) => TrySendPermissionOutcomeResponseAsync(pending.MessageId, outcome, optionId, pending),
-                    () => CanRespondToPermissionRequest(pending))
+                    () => CanRespondToPermissionRequest(pending),
+                    () => IsPermissionResponsePrepared(pending),
+                    () => IsPermissionCancellationRequested(pending), _logger)
                 {
-                    DraftRequest = snapshot
+                    DraftRequest = snapshot,
+                    Title = snapshot.Title,
+                    Description = snapshot.Description
                 };
+                pending.PermissionEvent = eventArgs;
             }
             catch (Exception error)
             {

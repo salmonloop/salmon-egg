@@ -31,6 +31,8 @@ public sealed class AcpDraftPermissionTests
         Assert.Equal("one", draft.SessionId);
         Assert.Equal("Approve operation?", draft.Title);
         Assert.Equal("Please review", draft.Description);
+        Assert.Equal(draft.Title, request.Title);
+        Assert.Equal(draft.Description, request.Description);
         Assert.Null(draft.Subject);
         Assert.Null(request.ToolCall);
         Assert.Equal("selected", Outcome(Assert.Single(peer.Responses)));
@@ -96,11 +98,14 @@ public sealed class AcpDraftPermissionTests
         peer.Request("{\"sessionId\":\"one\",\"title\":\"Permission title\",\"description\":\"Permission explanation\","
             + "\"subject\":{\"type\":\"tool_call\",\"toolCall\":{\"toolCallId\":\"tool\",\"title\":\"subject title\",\"content\":[]},\"future\":1e2},"
             + Options + "}");
-        var draft = Assert.Single(peer.Requests).GetDraftRequest()!;
+        var request = Assert.Single(peer.Requests);
+        var draft = request.GetDraftRequest()!;
 
         // Assert
         Assert.Equal("Permission title", draft.Title);
         Assert.Equal("Permission explanation", draft.Description);
+        Assert.Equal(draft.Title, request.Title);
+        Assert.Equal(draft.Description, request.Description);
         var subject = Assert.IsType<ToolCallPermissionSubject>(draft.Subject);
         Assert.Equal("subject title", subject.ToolCall.Title);
         Assert.Equal("1e2", subject.ExtensionData!["future"].GetRawText());
