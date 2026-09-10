@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -1487,23 +1488,27 @@ namespace SalmonEgg.Acp.Client
             Action<JsonRpcResponse>? responseObserver = null,
             Action<Exception>? requestNotSentObserver = null)
         {
-            if (!connectionToken.CanBeCanceled)
-            {
-                lock (_lock)
-                {
-                    connectionToken = _messageLoopCts?.Token ?? CancellationToken.None;
-                }
-            }
-            using var activity = AcpActivitySources.StartClientRequest(request.Method);
+            Activity? activity = null;
+            CancellationTokenSource? sendCancellation = null;
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
             var requestWriteStarted = false;
             var retainPendingRequest = false;
             Exception? failure = null;
 
             try
             {
+                if (!connectionToken.CanBeCanceled)
+                {
+                    lock (_lock)
+                    {
+                        connectionToken = _messageLoopCts?.Token ?? CancellationToken.None;
+                    }
+                }
+                // Host tracing callbacks can throw before the physical send is claimed. They
+                // belong to the same failure scope as serialization and transport preparation.
+                activity = AcpActivitySources.StartClientRequest(request.Method);
+                sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, connectionToken);
                 var json = _parser.SerializeMessage(request);
                 Task<bool> sendTask;
                 lock (_lock)
@@ -1638,6 +1643,8 @@ namespace SalmonEgg.Acp.Client
                         _ = tcs.Task.Exception;
                     }
                 }
+                sendCancellation?.Dispose();
+                activity?.Dispose();
             }
         }
 
