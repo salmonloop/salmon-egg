@@ -82,8 +82,10 @@ namespace SalmonEgg.Acp.Protocol
     /// Request parameters for the Session/Load method.
     /// Loads the history of an existing session.
     /// </summary>
-    public sealed record SessionLoadParams : AcpProtocolObject
+    public sealed record SessionLoadParams : AcpProtocolObject, IJsonOnDeserialized
     {
+        private List<McpServer> _mcpServers = new();
+
         /// <summary>
         /// Session ID (required).
         /// </summary>
@@ -101,7 +103,12 @@ namespace SalmonEgg.Acp.Protocol
         /// ACP session/load requires this field to always be an array; send [] even when there is no MCP server.
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
+        [JsonConverter(typeof(DefaultableProtocolListJsonConverter<McpServer>))]
+        public List<McpServer> McpServers
+        {
+            get => _mcpServers;
+            init => _mcpServers = value;
+        }
 
         /// <summary>
         /// Additional working directories. When non-empty, requires the Agent to declare
@@ -135,6 +142,9 @@ namespace SalmonEgg.Acp.Protocol
             McpServers = mcpServers ?? new List<McpServer>();
             AdditionalDirectories = additionalDirectories;
         }
+
+        // Normalize the inbound schema default without changing validation of hand-built requests.
+        void IJsonOnDeserialized.OnDeserialized() => _mcpServers ??= new List<McpServer>();
     }
 
     /// <summary>
@@ -304,8 +314,10 @@ namespace SalmonEgg.Acp.Protocol
     /// to replay history, while <c>replayFrom: { type: "start" }</c> requests a full history replay (the V2
     /// alternative to session/load).
     /// </summary>
-    public sealed record SessionResumeParams : AcpProtocolObject
+    public sealed record SessionResumeParams : AcpProtocolObject, IJsonOnDeserialized
     {
+        private List<McpServer> _mcpServers = new();
+
         /// <summary>
         /// Session ID (required).
         /// </summary>
@@ -323,7 +335,12 @@ namespace SalmonEgg.Acp.Protocol
         /// ACP session/resume requires this field to always be an array; send [] even when there is no MCP server.
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
+        [JsonConverter(typeof(DefaultableProtocolListJsonConverter<McpServer>))]
+        public List<McpServer> McpServers
+        {
+            get => _mcpServers;
+            init => _mcpServers = value;
+        }
 
         /// <summary>
         /// Additional working directories. When non-empty, requires the Agent to declare
@@ -367,6 +384,9 @@ namespace SalmonEgg.Acp.Protocol
             AdditionalDirectories = additionalDirectories;
             ReplayFrom = replayFrom;
         }
+
+        // Normalize the inbound schema default without changing validation of hand-built requests.
+        void IJsonOnDeserialized.OnDeserialized() => _mcpServers ??= new List<McpServer>();
     }
 
     /// <summary>

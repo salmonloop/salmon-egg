@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -10,8 +11,10 @@ namespace SalmonEgg.Acp.Protocol
     /// Request parameters for the Session/New method.
     /// Used to create a new session.
     /// </summary>
-    public sealed record SessionNewParams : AcpProtocolObject
+    public sealed record SessionNewParams : AcpProtocolObject, IJsonOnDeserialized
     {
+        private List<McpServer> _mcpServers = new();
+
         /// <summary>
         /// The working directory for the session (required).
         /// </summary>
@@ -19,10 +22,15 @@ namespace SalmonEgg.Acp.Protocol
         public string Cwd { get; init; } = string.Empty;
 
         /// <summary>
-        /// List of MCP server configurations (required; the protocol requires this value to be an array).
+        /// List of MCP server configurations. Schema-permitted missing or invalid input defaults to an empty array.
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
+        [JsonConverter(typeof(DefaultableProtocolListJsonConverter<McpServer>))]
+        public List<McpServer> McpServers
+        {
+            get => _mcpServers;
+            init => _mcpServers = value;
+        }
 
         /// <summary>
         /// Additional working directories. When non-empty, the Agent is required to declare
@@ -53,6 +61,10 @@ namespace SalmonEgg.Acp.Protocol
             McpServers = mcpServers ?? new List<McpServer>();
             AdditionalDirectories = additionalDirectories;
         }
+
+        // Generated init-only setters can replace a missing field's initializer with null.
+        // Normalize the inbound default here; explicitly invalid API arguments still fail validation.
+        void IJsonOnDeserialized.OnDeserialized() => _mcpServers ??= new List<McpServer>();
     }
 
     /// <summary>

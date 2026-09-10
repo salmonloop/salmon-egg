@@ -186,7 +186,8 @@ public sealed class AuthMethodTypesTests
 
         // Assert
         Assert.NotNull(response);
-        Assert.Equal(["good", "future"], response.AuthMethods!.Select(method => method.Id));
+        Assert.NotNull(response.AuthMethods);
+        Assert.Equal(["good", "future"], response.AuthMethods.Select(method => method.Id));
         Assert.False(response.AuthMethods[1].SupportsAuthenticateRequest);
         using var document = JsonDocument.Parse(replay);
         Assert.True(document.RootElement.GetProperty("authMethods")[1].GetProperty("vendor").GetProperty("preserve").GetBoolean());

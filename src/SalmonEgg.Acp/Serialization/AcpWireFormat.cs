@@ -131,14 +131,14 @@ namespace SalmonEgg.Acp.Serialization
             if (info.Type == typeof(SessionNewResponse) || info.Type == typeof(SessionResumeResponse))
             {
                 IgnoreProperty(info, "modes", new IgnoredProtocolPropertyJsonConverter<SessionModesState>());
-                FindProperty(info, "configOptions").CustomConverter = new DefaultableConfigOptionsJsonConverter();
+                FindProperty(info, "configOptions").CustomConverter = new DefaultableProtocolListJsonConverter<ConfigOption>();
                 info.OnDeserialized = static value => NormalizeConfigOptions(value);
             }
             else if (info.Type == typeof(ConfigOptionUpdate) || info.Type == typeof(SessionSetConfigOptionResponse))
             {
                 var configOptions = FindProperty(info, "configOptions");
                 configOptions.IsRequired = true;
-                configOptions.CustomConverter = new DefaultableConfigOptionsJsonConverter();
+                configOptions.CustomConverter = new DefaultableProtocolListJsonConverter<ConfigOption>();
                 info.OnSerializing = static value => RequireConfigOptions(value);
             }
             else if (info.Type == typeof(AgentAuthCapabilities))
