@@ -368,6 +368,22 @@ async function waitForStableSemanticState(page, readState, options, timeoutMs) {
   throw new Error("The semantic control did not retain its ready state across a frame.");
 }
 
+export async function waitForNativeControlFocus(page, options, label, timeoutMs = defaultTimeoutMs) {
+  // Only observe the framework's focus handoff. Refocusing or sending another Tab would hide
+  // an unfinished earlier input and could move the next edit to an unrelated control.
+  await waitForStableSemanticState(page, ({ options, minimumSize }) => {
+    const state = window.__salmoneggSmoke.semantic.describe(options);
+    const element = state?.id ? document.getElementById(state.id) : null;
+    return element && !state.disabled && !element.closest("[hidden]")
+      && state.rect.width >= minimumSize && state.rect.height >= minimumSize
+      && document.activeElement === element ? state.id : false;
+  }, { options, minimumSize: laidOutMinimumSize }, timeoutMs).catch(async error => {
+    const focused = await page.evaluate(() => window.__salmoneggSmoke.semantic.focusedSnapshot());
+    throw new Error(`Timed out waiting for ${label} to own native focus. Focus=${JSON.stringify(focused)}.`,
+      { cause: error });
+  });
+}
+
 async function setSemanticInputValue(page, options, value, label, timeoutMs) {
   // Navigation publishes editable peers before their first layout. Keyboard input can precede
   // that layout, so wait for this field's real bounds before transferring focus.
