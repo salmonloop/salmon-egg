@@ -40,21 +40,46 @@ public sealed class AcpClientAuthBoundaryTests
     [InlineData("true")]
     [InlineData("[]")]
     [InlineData("{}")]
-    public async Task InitializeAsync_RawNonStringDiscriminator_RejectsWithoutAuthenticating(string rawType)
+    public async Task InitializeAsync_RawNonStringDiscriminator_SkipsMethodWithoutAuthenticating(string rawType)
     {
         // Arrange
         using var peer = new RawAuthenticationPeer(
             $$"""{"id":"login","name":"Login","type":{{rawType}}}""");
 
         // Act
-        var initializeError = await Record.ExceptionAsync(peer.InitializeAsync);
+        var response = await peer.InitializeAsync();
         var authenticateError = await Record.ExceptionAsync(() => peer.Client.AuthenticateAsync(
             new AuthenticateParams("login"), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Empty(peer.AuthenticationRequests);
-        Assert.IsType<JsonException>(initializeError);
-        Assert.IsType<InvalidOperationException>(authenticateError);
+        Assert.Empty(response.AuthMethods!);
+        Assert.IsType<AcpException>(authenticateError);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task AuthenticateAsync_InvalidMethodBeforeAgent_StillSendsOnlyTheValidMethod(string rawType)
+    {
+        // Arrange
+        using var peer = new RawAuthenticationPeer(
+            $$"""{"id":"bad","name":"Bad","type":{{rawType}}},{"id":"login","name":"Login","type":"agent"}""");
+        var initialized = await peer.InitializeAsync();
+
+        // Act
+        await peer.Client.AuthenticateAsync(new AuthenticateParams("login"), TestContext.Current.CancellationToken);
+        var invalidError = await Record.ExceptionAsync(() => peer.Client.AuthenticateAsync(
+            new AuthenticateParams("bad"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("login", Assert.Single(initialized.AuthMethods!).Id);
+        using var request = JsonDocument.Parse(Assert.Single(peer.AuthenticationRequests));
+        Assert.Equal("login", request.RootElement.GetProperty("params").GetProperty("methodId").GetString());
+        Assert.Equal(JsonRpcErrorCode.InvalidParams, Assert.IsType<AcpException>(invalidError).ErrorCode);
     }
 
     [Theory]

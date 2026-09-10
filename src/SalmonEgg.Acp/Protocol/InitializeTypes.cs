@@ -948,17 +948,44 @@ namespace SalmonEgg.Acp.Protocol
 
         private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root, int protocolVersion, JsonSerializerOptions options)
         {
-            if (!root.TryGetProperty("authMethods", out var authMethods) || authMethods.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            if (!root.TryGetProperty("authMethods", out var authMethods))
             {
                 return null;
+            }
+
+            var result = new List<AuthMethodDefinition>();
+            if (authMethods.ValueKind != JsonValueKind.Array)
+            {
+                return result;
             }
 
             // Initialize selects the wire version before the client can bind its serializer to it.
             // Its children must already observe that version's required discriminator contract.
             var typeInfo = AcpProtocolVersion.IsSupported(protocolVersion)
-                ? AcpWireFormat.For(protocolVersion).TypeInfo<List<AuthMethodDefinition>>()
-                : (JsonTypeInfo<List<AuthMethodDefinition>>)options.GetTypeInfo(typeof(List<AuthMethodDefinition>));
-            return JsonSerializer.Deserialize(authMethods.GetRawText(), typeInfo);
+                ? AcpWireFormat.For(protocolVersion).TypeInfo<AuthMethodDefinition>()
+                : (JsonTypeInfo<AuthMethodDefinition>)options.GetTypeInfo(typeof(AuthMethodDefinition));
+            foreach (var item in authMethods.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (item.Deserialize(typeInfo) is { } method)
+                    {
+                        result.Add(method);
+                    }
+                }
+                catch (JsonException)
+                {
+                    // The parent authMethods field explicitly permits default-on-error and
+                    // skip-invalid-items. Standalone method parsing keeps its strict contract.
+                }
+            }
+
+            return result;
         }
 
         private static AgentCapabilities ReadAgentCapabilitiesV2(JsonElement root, JsonSerializerOptions options)
