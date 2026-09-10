@@ -145,8 +145,7 @@ public sealed class AuthMethodTypesTests
     [Theory]
     [InlineData("method")]
     [InlineData("list")]
-    [InlineData("initialize")]
-    public void DeserializeV2_AbsentRequiredDiscriminator_RejectsAtEveryRoot(string root)
+    public void DeserializeV2_AbsentRequiredDiscriminator_RejectsStandaloneRoots(string root)
     {
         // Arrange
         const string method = """{"methodId":"login","name":"Login"}""";
@@ -162,13 +161,72 @@ public sealed class AuthMethodTypesTests
                 case "list":
                     JsonSerializer.Deserialize($"[{method}]", Wire.V2<List<AuthMethodDefinition>>());
                     break;
-                default:
-                    JsonSerializer.Deserialize(
-                        $$"""{"protocolVersion":2,"capabilities":{},"authMethods":[{{method}}]}""",
-                        AcpJsonContext.Default.InitializeResponse);
-                    break;
             }
         });
+    }
+
+    [Theory]
+    [InlineData(AcpProtocolVersion.V1, "id")]
+    [InlineData(AcpProtocolVersion.V2, "methodId")]
+    public void DeserializeInitialize_InvalidAuthItems_PreservesValidAndUnknownMethods(int version, string idProperty)
+    {
+        // Arrange
+        var json = $$$"""
+            {"protocolVersion":{{{version}}},"info":{"name":"agent","version":"1.0"},"authMethods":[
+              null,42,[],
+              {"{{{idProperty}}}":"bad","name":"Bad","type":null},
+              {"{{{idProperty}}}":"good","name":"Good","type":"agent"},
+              {"{{{idProperty}}}":"future","name":"Future","type":"vendor_login","vendor":{"preserve":true}}
+            ]}
+            """;
+
+        // Act
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.InitializeResponse);
+        var replay = JsonSerializer.Serialize(response, AcpJsonContext.Default.InitializeResponse);
+
+        // Assert
+        Assert.NotNull(response);
+        Assert.Equal(["good", "future"], response.AuthMethods!.Select(method => method.Id));
+        Assert.False(response.AuthMethods[1].SupportsAuthenticateRequest);
+        using var document = JsonDocument.Parse(replay);
+        Assert.True(document.RootElement.GetProperty("authMethods")[1].GetProperty("vendor").GetProperty("preserve").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{}")]
+    public void DeserializeInitialize_InvalidAuthCollection_UsesEmptyDefault(string rawValue)
+    {
+        // Arrange
+        var json = $$"""{"protocolVersion":1,"authMethods":{{rawValue}}}""";
+
+        // Act
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.InitializeResponse);
+
+        // Assert
+        Assert.NotNull(response);
+        Assert.Empty(response.AuthMethods!);
+    }
+
+    [Fact]
+    public void DeserializeInitializeV2_AbsentMethodDiscriminator_SkipsInvalidItem()
+    {
+        // Arrange
+        const string json = """
+            {"protocolVersion":2,"info":{"name":"agent","version":"1.0"},"capabilities":{},"authMethods":[
+              {"methodId":"bad","name":"Bad"},
+              {"methodId":"good","name":"Good","type":"agent"}
+            ]}
+            """;
+
+        // Act
+        var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.InitializeResponse);
+
+        // Assert
+        Assert.Equal("good", Assert.Single(response!.AuthMethods!).Id);
     }
 
     [Theory]
