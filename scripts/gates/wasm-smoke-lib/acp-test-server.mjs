@@ -219,6 +219,13 @@ export async function startAcpWebSocketServer(options = {}) {
         }
       };
     },
+    notifyClient: (method, params) => {
+      const socket = deferredSessionNew?.socket ?? sessionNewSocket;
+      if (!socket || socket.destroyed) {
+        throw new Error("No live ACP session connection is available for a client notification.");
+      }
+      writeJsonRpc(socket, { jsonrpc: "2.0", method, params });
+    },
     waitForInitialize: async () => {
       if (initializeRequest) {
         return initializeRequest;

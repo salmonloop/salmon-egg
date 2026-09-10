@@ -47,8 +47,34 @@ export async function verifyStandalonePermissionQueue(page, server) {
     assert.equal(item.request.responses().length, 1);
   }
 
+  await waitForPermissionDismissal(page, [first, second], choiceIds);
+
+  const cancelled = makeRequest(3);
+  await waitForSemanticText(page, new RegExp(cancelled.title), "permission before peer cancellation");
+  const cancelChoice = { labels: [cancelled.optionName], role: "button" };
+  await waitForControlEnabledState(page, cancelChoice, true, "peer-cancelled permission initially actionable");
+  const cancelState = await waitForLaidOutControl(page, cancelChoice, "peer-cancelled permission initially laid out");
+  assert.equal(cancelState.enabled, true);
+  choiceIds.push(cancelState.id);
+  assert.equal(cancelled.request.responses().length, 0);
+  server.notifyClient("$/cancel_request", { requestId: cancelled.request.id });
+  const response = await cancelled.request.waitForResponse();
+  assert.equal(response.jsonrpc, "2.0");
+  assert.equal(response.id, cancelled.request.id);
+  assert.equal(response.error?.code, -32800);
+  assert.equal(Object.hasOwn(response, "result"), false,
+    "Peer cancellation must return the protocol error rather than an authorization outcome.");
+  assert.equal(cancelled.request.responses().length, 1);
+  await waitForPermissionDismissal(page, [first, second, cancelled], choiceIds);
+  assert.equal(cancelled.request.responses().length, 1,
+    "Automatic cancellation dismissal must not send a second response.");
+  console.log("WASM permissions: native choices advance two requests; peer cancellation returns -32800 and retires the third without user input");
+  return [first.request, second.request, cancelled.request];
+}
+
+async function waitForPermissionDismissal(page, items, choiceIds) {
   // Uno flattens the semantic tree: a zero-sized or old hidden group does not prove that
-  // its action peers disappeared. Require every panel and both actual choices to retire.
+  // its action peers disappeared. Require every panel and all actual choices to retire.
   await page.waitForFunction(({ choiceIds, choiceNames }) => {
     const dismissed = element => !element || Boolean(element.closest("[hidden]"));
     const panels = Array.from(document.querySelectorAll(
@@ -58,7 +84,5 @@ export async function verifyStandalonePermissionQueue(page, server) {
       .filter(element => choiceNames.includes(element.getAttribute("aria-label")));
     return panels.every(dismissed) && choices.every(dismissed)
       && choiceIds.every(id => dismissed(document.getElementById(id)));
-  }, { choiceIds, choiceNames: [first.optionName, second.optionName] });
-  console.log("WASM permissions: two real standalone prompts, native choices, queue advancement, one reply each and final dismissal");
-  return [first.request, second.request];
+  }, { choiceIds, choiceNames: items.map(item => item.optionName) });
 }
