@@ -24,6 +24,7 @@ export async function verifyStandalonePermissionQueue(page, server) {
   const first = makeRequest(1);
   await waitForSemanticText(page, new RegExp(first.title), "first standalone permission");
   const second = makeRequest(2);
+  const choiceIds = [];
   assert.equal(first.request.responses().length, 0);
   assert.equal(second.request.responses().length, 0);
 
@@ -33,6 +34,7 @@ export async function verifyStandalonePermissionQueue(page, server) {
     await waitForControlEnabledState(page, button, true, "current permission choice enabled");
     const state = await waitForLaidOutControl(page, button, "current permission choice laid out");
     assert.equal(state.enabled, true);
+    choiceIds.push(state.id);
     await page.locator(`#${state.id}`).focus();
     assert.equal(await page.evaluate(() => document.activeElement?.id), state.id,
       "The actual native permission Button must own focus before Enter.");
@@ -45,10 +47,18 @@ export async function verifyStandalonePermissionQueue(page, server) {
     assert.equal(item.request.responses().length, 1);
   }
 
-  await page.waitForFunction(() => {
-    const panel = document.querySelector("#uno-semantics-root [xamlautomationid='ChatView.PermissionRequest']");
-    return !panel || Boolean(panel.closest("[hidden]")) || panel.getBoundingClientRect().height === 0;
-  });
+  // Uno flattens the semantic tree: a zero-sized or old hidden group does not prove that
+  // its action peers disappeared. Require every panel and both actual choices to retire.
+  await page.waitForFunction(({ choiceIds, choiceNames }) => {
+    const dismissed = element => !element || Boolean(element.closest("[hidden]"));
+    const panels = Array.from(document.querySelectorAll(
+      "#uno-semantics-root [xamlautomationid='ChatView.PermissionRequest']"));
+    const choices = Array.from(document.querySelectorAll(
+      "#uno-semantics-root button,#uno-semantics-root [role='button']"))
+      .filter(element => choiceNames.includes(element.getAttribute("aria-label")));
+    return panels.every(dismissed) && choices.every(dismissed)
+      && choiceIds.every(id => dismissed(document.getElementById(id)));
+  }, { choiceIds, choiceNames: [first.optionName, second.optionName] });
   console.log("WASM permissions: two real standalone prompts, native choices, queue advancement, one reply each and final dismissal");
   return [first.request, second.request];
 }
