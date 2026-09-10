@@ -228,8 +228,9 @@ public sealed class V2WireContractTests
 
         // Act / Assert
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(json, Wire.V2<McpServer>()));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(
-            $$"""{"cwd":"/tmp","mcpServers":[{{json}}]}""", Wire.V2<SessionNewParams>()));
+        var request = JsonSerializer.Deserialize(
+            $$"""{"cwd":"/tmp","mcpServers":[{{json}}]}""", Wire.V2<SessionNewParams>());
+        Assert.Empty(request!.McpServers);
     }
 
     [Fact]

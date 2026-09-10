@@ -62,22 +62,27 @@ internal sealed class DefaultableObjectJsonConverter<T> : JsonConverter<T> where
         => JsonSerializer.Serialize(writer, value, (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
 }
 
-internal sealed class DefaultableConfigOptionsJsonConverter : JsonConverter<List<ConfigOption>>
+internal sealed class DefaultableProtocolListJsonConverter<T> : JsonConverter<List<T>> where T : class
 {
     public override bool HandleNull => true;
 
-    public override List<ConfigOption> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override List<T> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
-        var result = new List<ConfigOption>();
+        var result = new List<T>();
         if (document.RootElement.ValueKind != JsonValueKind.Array)
         {
             return result;
         }
 
-        var typeInfo = (JsonTypeInfo<ConfigOption>)options.GetTypeInfo(typeof(ConfigOption));
+        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
         foreach (var item in document.RootElement.EnumerateArray())
         {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
             try
             {
                 if (item.Deserialize(typeInfo) is { } option)
@@ -87,20 +92,20 @@ internal sealed class DefaultableConfigOptionsJsonConverter : JsonConverter<List
             }
             catch (JsonException)
             {
-                // Only configOptions has this pair of explicit schema recovery annotations:
-                // x-deserialize-default-on-error and x-deserialize-skip-invalid-items.
+                // Attach only to object-array properties with both schema recovery annotations:
+                // default-on-error and skip-invalid-items. Standalone roots remain strict.
             }
         }
 
         return result;
     }
 
-    public override void Write(Utf8JsonWriter writer, List<ConfigOption> value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, List<T> value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
         if (value is not null)
         {
-            var typeInfo = (JsonTypeInfo<ConfigOption>)options.GetTypeInfo(typeof(ConfigOption));
+            var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
             foreach (var option in value)
             {
                 JsonSerializer.Serialize(writer, option, typeInfo);

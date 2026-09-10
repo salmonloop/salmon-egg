@@ -207,5 +207,5 @@ public sealed class V2WireReviewBoundaryTests
             : RoundTrip($$"""{"protocolVersion":2,"info":{"name":"client","version":"1"},"capabilities":{{capabilities}}}""", AcpJsonContext.Default.InitializeParams);
 
     private static string RoundTrip<T>(string json, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo)
-        => JsonSerializer.Serialize(JsonSerializer.Deserialize(json, typeInfo), typeInfo);
+        => JsonSerializer.Serialize<T>(JsonSerializer.Deserialize(json, typeInfo)!, typeInfo);
 }
