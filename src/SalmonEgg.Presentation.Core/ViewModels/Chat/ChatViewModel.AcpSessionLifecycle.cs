@@ -1996,8 +1996,8 @@ public partial class ChatViewModel
         {
             viewModel.ShowCancellationRetry(
                 ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
-                ResolveLocalizerText("Permission_AgentCancelled",
-                    "The agent cancelled this request. Retry cancellation to dismiss it."), bindingChanged: false);
+                ResolveLocalizerText("Permission_Cancelled",
+                    "This request was cancelled. Retry cancellation to dismiss it."), bindingChanged: false);
         }
     }
 

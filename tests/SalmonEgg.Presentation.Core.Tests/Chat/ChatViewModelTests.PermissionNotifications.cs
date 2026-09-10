@@ -1,18 +1,23 @@
 using System.ComponentModel;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 public partial class ChatViewModelTests
 {
-    [Fact]
-    public async Task PermissionNotification_PeerCancellationWriteFails_ShowsOnlyExplicitCancellationRetry()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PermissionNotification_CancellationWriteFails_ShowsNeutralExplicitCancellationRetry(bool peerCancels)
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "Permission_Cancelled", "此请求已取消，请重试取消。");
+        await using var fixture = CreateViewModel(dispatcher, localizer: localizer);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("permission", "remote-1", "tool");
@@ -34,7 +39,8 @@ public partial class ChatViewModelTests
         try
         {
             // Act
-            peer.CancelPermission("permission");
+            if (peerCancels) peer.CancelPermission("permission");
+            else await AwaitWithSynchronizationContextAsync(dispatcher, prompt.RespondCommand.ExecuteAsync(null));
             await AwaitPermissionUiSignalAsync(dispatcher, retryProjected.Task);
 
             // Assert: the existing SDK request owns a visible retry without a store refresh.
@@ -42,13 +48,15 @@ public partial class ChatViewModelTests
             Assert.Same(prompt, fixture.ViewModel.StandalonePermissionRequest);
             Assert.Single(prompt.Options);
             Assert.False(prompt.Options[0].IsAllow);
+            Assert.Equal("此请求已取消，请重试取消。", prompt.Description);
             Assert.False(changedOffUi);
             Assert.Equal(1, attempts);
             Assert.Empty(peer.Responses);
             peer.ResponseSend = null;
             await AwaitWithSynchronizationContextAsync(dispatcher, obsoleteAllow.SelectCommand.ExecuteAsync(null));
-            Assert.Equal(JsonRpcErrorCode.Cancelled,
-                Assert.Single(peer.Responses).GetProperty("error").GetProperty("code").GetInt32());
+            var response = Assert.Single(peer.Responses);
+            if (peerCancels) Assert.Equal(JsonRpcErrorCode.Cancelled, response.GetProperty("error").GetProperty("code").GetInt32());
+            else Assert.Equal("cancelled", response.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
             Assert.Null(fixture.ViewModel.PendingPermissionRequest);
         }
         finally

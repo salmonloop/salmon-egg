@@ -1747,8 +1747,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
                 ResolveLocalizerText("Permission_BindingChanged",
                     "This request is no longer valid because the conversation changed. Retry cancellation to dismiss it."),
-                ResolveLocalizerText("Permission_AgentCancelled",
-                    "The agent cancelled this request. Retry cancellation to dismiss it."))).ConfigureAwait(false);
+                ResolveLocalizerText("Permission_Cancelled",
+                    "This request was cancelled. Retry cancellation to dismiss it."))).ConfigureAwait(false);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // New-session draft lives on the connection store and is not part of the chat-store
