@@ -142,8 +142,7 @@ public partial class ChatViewModel
                         Error = cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage
                     };
                 await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
-                await ApplyNewSessionDraftProjectionAsync(
-                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -158,7 +157,7 @@ public partial class ChatViewModel
             var existingDraft = connectionState.NewSessionDraft;
             if (IsReusableNewSessionDraft(existingDraft, profileId!, connectionInstanceId!, normalizedCwd))
             {
-                await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -189,8 +188,7 @@ public partial class ChatViewModel
                     AcpSessionUpdateDelta.Empty,
                     isConfigAuthoritative: false);
                 await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(creatingDraft)).ConfigureAwait(false);
-                await ApplyNewSessionDraftProjectionAsync(
-                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
 
                 var request = new PendingNewSessionDraftRequest(
                     requestKey,
@@ -219,8 +217,7 @@ public partial class ChatViewModel
                     Error = ex.Message
                 };
             await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -364,7 +361,7 @@ public partial class ChatViewModel
             var draft = connectionState.NewSessionDraft;
             if (draft is null)
             {
-                await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -451,10 +448,6 @@ public partial class ChatViewModel
         }
     }
 
-    internal async Task ApplyLatestNewSessionDraftProjectionAsync()
-        => await ApplyNewSessionDraftProjectionAsync(
-            await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
-
     private void QueueNewSessionDraftModeSelection(SessionModeViewModel? mode)
     {
         try
@@ -529,7 +522,7 @@ public partial class ChatViewModel
                     new SessionSetConfigOptionParams(draft.RemoteSessionId!, modeConfigId!, modeId)).ConfigureAwait(false);
                 if (response.ConfigOptions is null)
                 {
-                    await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+                    await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                     return;
                 }
 
@@ -551,8 +544,7 @@ public partial class ChatViewModel
 
             var updatedDraft = MergeNewSessionDraftDelta(draft, delta);
             await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(updatedDraft)).ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -560,8 +552,7 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to switch ACP new-session draft mode.");
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -603,7 +594,7 @@ public partial class ChatViewModel
                 new SessionSetConfigOptionParams(draft.RemoteSessionId!, modelConfigId!, modelValue)).ConfigureAwait(false);
             if (response.ConfigOptions is null)
             {
-                await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 return;
             }
 
@@ -616,8 +607,7 @@ public partial class ChatViewModel
 
             var updatedDraft = MergeNewSessionDraftDelta(draft, delta);
             await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(updatedDraft)).ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -625,8 +615,7 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to switch ACP new-session draft model.");
-            await ApplyNewSessionDraftProjectionAsync(
-                await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -634,13 +623,22 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task ApplyNewSessionDraftProjectionAsync(ChatConnectionState connectionState)
+    internal async Task ApplyLatestNewSessionDraftProjectionAsync()
     {
+        var projectionVersion = Interlocked.Increment(ref _newSessionDraftProjectionVersion);
+        var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
         var draft = ResolveEffectiveNewSessionDraft(connectionState);
         var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
         var connectionProjection = CreateProjection(storeState, connectionState);
         await PostToUiAsync(() =>
         {
+            // Store subscriptions and command completions can finish out of order. Only the
+            // latest refresh may project a snapshot, and clearing a draft invalidates queued work.
+            if (_disposed || projectionVersion != Volatile.Read(ref _newSessionDraftProjectionVersion))
+            {
+                return;
+            }
+
             ApplyConversationStatusProjection(connectionProjection);
             ApplyConnectionAndAgentProjection(connectionProjection);
 
@@ -688,6 +686,7 @@ public partial class ChatViewModel
 
     private void ClearNewSessionDraftProjection()
     {
+        Interlocked.Increment(ref _newSessionDraftProjectionVersion);
         IsNewSessionDraftLoading = false;
         IsNewSessionDraftReady = false;
         NewSessionDraftErrorMessage = string.Empty;
@@ -720,13 +719,12 @@ public partial class ChatViewModel
         var current = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
         if (current.NewSessionDraft is null)
         {
-            await ApplyNewSessionDraftProjectionAsync(current).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
             return;
         }
 
         await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
-        await ApplyNewSessionDraftProjectionAsync(
-            await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+        await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
     }
 
     private async Task PublishRequiredProfileConnectionFailureDraftAsync(
@@ -755,8 +753,7 @@ public partial class ChatViewModel
                 : errorMessage
         };
         await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
-        await ApplyNewSessionDraftProjectionAsync(
-            await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+        await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
     }
 
     private void SetSelectedNewSessionDraftModeWithoutDispatch(SessionModeViewModel? mode)
@@ -1077,8 +1074,7 @@ public partial class ChatViewModel
                 shouldDiscardResponse = true;
                 ClearDesiredNewSessionDraftRequestKey();
                 await _chatConnectionStore.Dispatch(new ClearNewSessionDraftAction()).ConfigureAwait(false);
-                await ApplyNewSessionDraftProjectionAsync(
-                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
             }
             else if (!ShouldAdoptNewSessionDraftRequestResponse(connectionState, request.RequestKey))
             {
@@ -1096,8 +1092,7 @@ public partial class ChatViewModel
                     _acpSessionUpdateProjector.ProjectSessionNew(response),
                     response.ConfigOptions is not null);
                 await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(readyDraft)).ConfigureAwait(false);
-                await ApplyNewSessionDraftProjectionAsync(
-                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 Logger.LogInformation(
                     "Applied ACP new-session draft response. profileId={ProfileId} connectionInstanceId={ConnectionInstanceId} remoteSessionId={RemoteSessionId} modeCount={ModeCount}",
                     request.ProfileId,
@@ -1155,8 +1150,7 @@ public partial class ChatViewModel
                         Error = exception.Message
                     };
                 await _chatConnectionStore.Dispatch(new SetNewSessionDraftAction(failed)).ConfigureAwait(false);
-                await ApplyNewSessionDraftProjectionAsync(
-                    await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConfigureAwait(false);
+                await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
                 appliedFailure = true;
             }
         }

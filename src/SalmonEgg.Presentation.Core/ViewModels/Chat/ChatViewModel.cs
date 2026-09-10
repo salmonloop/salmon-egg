@@ -156,6 +156,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ObservableCollection<SessionModeViewModel> _newSessionDraftModeOptions = new();
     private readonly ObservableCollection<OptionValueViewModel> _newSessionDraftModelOptions = new();
     private readonly SemaphoreSlim _newSessionDraftGate = new(1, 1);
+    private long _newSessionDraftProjectionVersion;
     private IChatService? _chatService;
     private IReadOnlyList<McpServer> _currentMcpServers = Array.Empty<McpServer>();
     private IReadOnlyList<OptionValueViewModel> _modelOptions = Array.Empty<OptionValueViewModel>();
@@ -1613,8 +1614,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
 
             await RefreshProjectionAsync(state, token, ct).ConfigureAwait(false);
-            var latestConnectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(latestConnectionState).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }, out _connectionStateSubscription);
     }
 
@@ -1741,8 +1741,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             // New-session draft lives on the connection store and is not part of the chat-store
             // projection. Re-apply it so held draft fault messages re-run NormalizeNewSessionDraftError
             // against the current language (except English identity sentinels).
-            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-            await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
+            await ApplyLatestNewSessionDraftProjectionAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

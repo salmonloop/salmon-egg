@@ -6629,18 +6629,6 @@ public partial class ChatViewModelTests
         return (Task)method!.Invoke(viewModel, [null])!;
     }
 
-    private static Task ApplyNewSessionDraftProjectionAsync(ChatViewModel viewModel, ChatConnectionState connectionState)
-    {
-        var method = typeof(ChatViewModel).GetMethod(
-            "ApplyNewSessionDraftProjectionAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            binder: null,
-            types: [typeof(ChatConnectionState)],
-            modifiers: null);
-        Assert.NotNull(method);
-        return (Task)method!.Invoke(viewModel, [connectionState])!;
-    }
-
     private static JsonElement ParseJsonParams(string json)
     {
         using var document = JsonDocument.Parse(json);
@@ -7365,16 +7353,13 @@ public partial class ChatViewModelTests
             if (_uiDispatcher is QueueingSynchronizationContext queuedDispatcher)
             {
                 await queuedDispatcher.RunUntilIdleAsync();
-                var latestConnectionState = await GetConnectionStateAsync();
                 await queuedDispatcher.RunUntilCompletedAsync(
-                    ChatViewModelTests.ApplyNewSessionDraftProjectionAsync(ViewModel, latestConnectionState));
+                    ViewModel.ApplyLatestNewSessionDraftProjectionAsync());
                 await queuedDispatcher.RunUntilIdleAsync();
                 return;
             }
 
-            var connectionState = await GetConnectionStateAsync();
-            var projectionTask = ChatViewModelTests.ApplyNewSessionDraftProjectionAsync(ViewModel, connectionState);
-            await projectionTask;
+            await ViewModel.ApplyLatestNewSessionDraftProjectionAsync();
         }
 
         public async ValueTask DisposeAsync()
@@ -7585,6 +7570,7 @@ public partial class ChatViewModelTests
         public IState<ChatState> State { get; }
         public ChatState LatestState { get; private set; }
         public Func<ChatAction, ValueTask>? AfterDispatch { get; set; }
+        public Func<ValueTask<ChatState>>? ReadState { get; set; }
 
         public IReadOnlyCollection<ChatAction> Actions => _actions.ToArray();
 
@@ -7623,7 +7609,7 @@ public partial class ChatViewModelTests
         }
 
         public ValueTask<ChatState> GetCurrentStateAsync()
-            => ValueTask.FromResult(LatestState);
+            => ReadState?.Invoke() ?? ValueTask.FromResult(LatestState);
     }
 
     [Fact]
