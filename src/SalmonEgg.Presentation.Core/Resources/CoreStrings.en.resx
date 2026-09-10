@@ -1322,8 +1322,8 @@ Create the corresponding Markdown file in:
   <data name="Permission_RetryCancellation" xml:space="preserve">
     <value>Retry cancellation</value>
   </data>
-  <data name="Permission_AgentCancelled" xml:space="preserve">
-    <value>The agent cancelled this request. Retry cancellation to dismiss it.</value>
+  <data name="Permission_Cancelled" xml:space="preserve">
+    <value>This request was cancelled. Retry cancellation to dismiss it.</value>
   </data>
   <data name="Permission_BindingChanged" xml:space="preserve">
     <value>This request is no longer valid because the conversation changed. Retry cancellation to dismiss it.</value>
