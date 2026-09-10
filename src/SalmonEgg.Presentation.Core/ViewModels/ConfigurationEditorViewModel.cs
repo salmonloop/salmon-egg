@@ -344,7 +344,7 @@ public partial class ConfigurationEditorViewModel(
             var validationResult = await _validator.ValidateAsync(candidate);
             if (!validationResult.IsValid)
             {
-                var errors = string.Join("; ", validationResult.Errors);
+                var errors = string.Join("; ", validationResult.Errors.Select(FormatValidationFailure));
                 SetError(_localizer["AgentProfileEditor_ValidationFailedFormat", errors]);
                 return;
             }

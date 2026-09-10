@@ -542,7 +542,9 @@ public sealed class ServerConfigurationHandler
                 patch.CredentialScheme);
         }
 
-        error = CredentialBindingPolicy.GetValidationError(config);
+        error = CredentialBindingPolicy.GetValidationError(config) is { } bindingError
+            ? CredentialBindingPolicy.GetDiagnosticMessage(bindingError)
+            : null;
         return error is null;
     }
 

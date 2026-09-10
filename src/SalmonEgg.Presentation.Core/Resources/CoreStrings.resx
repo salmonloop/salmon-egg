@@ -1414,4 +1414,31 @@
   <data name="AgentProfileEditor_CredentialUnbound" xml:space="preserve"><value>未绑定；不会自动发送已保存的凭据。</value></data>
   <data name="AgentProfileEditor_CredentialUnsupported" xml:space="preserve"><value>不支持的凭据类型</value></data>
   <data name="AgentProfileEditor_CredentialSaveFailed" xml:space="preserve"><value>无法保存配置。请检查安全存储是否可用，然后重试。</value></data>
+  <data name="CredentialBinding_UnsupportedBinding" xml:space="preserve">
+    <value>凭据来源或发送方式不受支持。请选择 Token 或 API Key，并指定环境变量或请求头。</value>
+  </data>
+  <data name="CredentialBinding_DestinationChanged" xml:space="preserve">
+    <value>配置目标已更改。请重新绑定凭据，确认允许将凭据发送到新目标。</value>
+  </data>
+  <data name="CredentialBinding_EnvironmentRequiresStdio" xml:space="preserve">
+    <value>环境变量凭据需要配置本地 Agent 的启动命令。</value>
+  </data>
+  <data name="CredentialBinding_InvalidEnvironmentName" xml:space="preserve">
+    <value>请填写环境变量名称，且不能包含等号或控制字符。</value>
+  </data>
+  <data name="CredentialBinding_ReservedEnvironmentName" xml:space="preserve">
+    <value>PATH 和 PATHEXT 由启动器管理。请选择 Agent 用于接收凭据的环境变量。</value>
+  </data>
+  <data name="CredentialBinding_EnvironmentHasScheme" xml:space="preserve">
+    <value>环境变量凭据不使用请求头方案，请清空该项。</value>
+  </data>
+  <data name="CredentialBinding_InvalidHeaderEndpoint" xml:space="preserve">
+    <value>请求头凭据需要匹配的 HTTP 或 WebSocket 地址，且地址不能包含用户信息或片段标识。</value>
+  </data>
+  <data name="CredentialBinding_InvalidHeaderName" xml:space="preserve">
+    <value>请选择用于身份验证的请求头名称，不要使用传输层保留的请求头。</value>
+  </data>
+  <data name="CredentialBinding_InvalidHeaderScheme" xml:space="preserve">
+    <value>请求头方案只能填写一个 HTTP 标记；如需直接发送凭据原值，请留空。</value>
+  </data>
 </root>

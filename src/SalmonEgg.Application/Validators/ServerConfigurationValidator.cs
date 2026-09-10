@@ -1,5 +1,6 @@
 using System;
 using FluentValidation;
+using FluentValidation.Results;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 
@@ -75,7 +76,12 @@ namespace SalmonEgg.Application.Validators
             {
                 if (CredentialBindingPolicy.GetValidationError(configuration) is { } error)
                 {
-                    context.AddFailure(nameof(ServerConfiguration.CredentialBinding), error);
+                    context.AddFailure(new ValidationFailure(nameof(ServerConfiguration.CredentialBinding),
+                        CredentialBindingPolicy.GetDiagnosticMessage(error))
+                    {
+                        ErrorCode = $"{nameof(CredentialBindingValidationError)}.{error}",
+                        CustomState = error,
+                    });
                 }
             });
 
