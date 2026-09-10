@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Protocol;
@@ -312,6 +313,11 @@ namespace SalmonEgg.Acp.Client
     {
         private readonly Func<string, string?, Task<bool>>? _tryRespond;
         private readonly Func<bool>? _canRespond;
+        private readonly Func<bool>? _isResponsePrepared;
+        private readonly Func<bool>? _isCancellationRequested;
+        private readonly IAcpClientLogger? _logger;
+        private int _changeVersion;
+        private int _notificationScheduled;
 
         /// <summary>
         /// Creates new permission request event arguments.
@@ -331,6 +337,7 @@ namespace SalmonEgg.Acp.Client
             MessageId = messageId;
             SessionId = sessionId;
             ToolCall = toolCall;
+            Title = ReadToolCallTitle(toolCall);
             Options = options;
             Respond = respond;
         }
@@ -348,6 +355,17 @@ namespace SalmonEgg.Acp.Client
             _canRespond = canRespond;
         }
 
+        internal PermissionRequestEventArgs(
+            object messageId, string sessionId, object? toolCall, List<PermissionOption> options,
+            Func<string, string?, Task<bool>> tryRespond, Func<bool> canRespond,
+            Func<bool> isResponsePrepared, Func<bool> isCancellationRequested, IAcpClientLogger? logger = null)
+            : this(messageId, sessionId, toolCall, options, tryRespond, canRespond)
+        {
+            _isResponsePrepared = isResponsePrepared;
+            _isCancellationRequested = isCancellationRequested;
+            _logger = logger;
+        }
+
         /// <summary>
         /// The message ID of the original request.
         /// </summary>
@@ -363,6 +381,12 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public object? ToolCall { get; init; }
 
+        /// <summary>The permission title supplied by the peer, or null when the protocol omits it.</summary>
+        public string? Title { get; init; }
+
+        /// <summary>The optional explanation supplied by the peer.</summary>
+        public string? Description { get; init; }
+
         /// <summary>
         /// The list of available permission options.
         /// </summary>
@@ -376,6 +400,23 @@ namespace SalmonEgg.Acp.Client
         /// <summary>Whether the receiving client still owns this exact unanswered request.</summary>
         /// <remarks>Events created by the legacy public constructor have no client lifetime query.</remarks>
         public bool CanRespond => _canRespond?.Invoke() ?? true;
+
+        /// <summary>Whether an answer is prepared or being sent, without confirmation of delivery.</summary>
+        /// <remarks>A failed write resets this value so the original request may be retried.</remarks>
+        public bool IsResponsePrepared => _isResponsePrepared?.Invoke() ?? false;
+
+        /// <summary>Whether the original owner has withdrawn selection and only cancellation may be retried.</summary>
+        public bool IsCancellationRequested => _isCancellationRequested?.Invoke() ?? false;
+
+        /// <summary>Raised asynchronously when the original request's response availability changes.</summary>
+        /// <remarks>
+        /// Notifications may coalesce. Subscribe, then read the current properties; marshal UI updates
+        /// to the UI thread and unsubscribe when the interaction leaves the view. Observer exceptions
+        /// cannot change the response result or prevent other observers from receiving a notification.
+        /// Unsubscribing does not retract an already captured callback; check ownership again after
+        /// dispatching. Observers run sequentially for this request, outside the response send path.
+        /// </remarks>
+        public event EventHandler? Changed;
 
         /// <summary>Responds through the original request owner and reports whether sending succeeded.</summary>
         /// <remarks>
@@ -393,6 +434,66 @@ namespace SalmonEgg.Acp.Client
             await Respond(outcome, optionId).ConfigureAwait(false);
             return true;
         }
+
+        internal void NotifyChanged()
+        {
+            if (Changed is null) return;
+            Interlocked.Increment(ref _changeVersion);
+            if (Interlocked.CompareExchange(ref _notificationScheduled, 1, 0) == 0)
+            {
+                ThreadPool.QueueUserWorkItem(static state => state.DrainChanges(), this, preferLocal: false);
+            }
+        }
+
+        private void DrainChanges()
+        {
+            while (true)
+            {
+                var version = Volatile.Read(ref _changeVersion);
+                var subscribers = Changed;
+                if (subscribers is not null)
+                {
+                    foreach (EventHandler subscriber in subscribers.GetInvocationList())
+                    {
+                        try
+                        {
+                            subscriber(this, EventArgs.Empty);
+                        }
+                        catch (Exception error)
+                        {
+                            LogObserverFailure(error);
+                        }
+                    }
+                }
+                if (version != Volatile.Read(ref _changeVersion)) continue;
+                Volatile.Write(ref _notificationScheduled, 0);
+                if (version == Volatile.Read(ref _changeVersion)
+                    || Interlocked.CompareExchange(ref _notificationScheduled, 1, 0) != 0) return;
+            }
+        }
+
+        private void LogObserverFailure(Exception error)
+        {
+            try
+            {
+                _logger?.Log(AcpClientLogLevel.Error, "PERMISSION_OBSERVER_FAILED",
+                    "A permission availability observer failed.", nameof(PermissionRequestEventArgs), error);
+            }
+            catch (Exception)
+            {
+                // Even a faulty host logger cannot fault this ThreadPool callback or skip sibling
+                // observers. There is no second logger to report that host failure without recursion.
+            }
+        }
+
+        private static string? ReadToolCallTitle(object? toolCall)
+            => toolCall switch
+            {
+                ToolCallUpdate update => update.Title,
+                JsonElement { ValueKind: JsonValueKind.Object } value when value.TryGetProperty("title", out var title)
+                    && title.ValueKind == JsonValueKind.String => title.GetString(),
+                _ => null
+            };
     }
 
     public enum FileSystemRequestKind

@@ -83,6 +83,24 @@ Disconnecting, completing a request, or reusing its ID invalidates the old event
 remain retryable while the original request is still current. A host must dismiss only the prompt
 associated with the successful response, even if the active conversation or connection has changed.
 
+`IsResponsePrepared` means an answer is in flight without confirming delivery. A failed write
+makes the original request retryable. When `IsCancellationRequested` is true, offer cancellation
+retry instead of authorization. `Title` and `Description` expose the peer's prompt text without a
+draft-type dependency; missing titles should use the host's localized fallback.
+
+Subscribe to the request's `Changed` event and immediately read its properties to cover the
+subscription window. Notifications are asynchronous and may coalesce; marshal UI projection to its
+dispatcher, recheck request ownership there, and unsubscribe when the interaction is removed.
+An already captured callback may still run after unsubscription. Observers for one request execute
+sequentially, outside the send path; slow observers cannot delay delivery. Observer failures are
+logged and isolated, including a host logger that itself throws.
+
+ACP v1 peer `$/cancel_request` for a permission request latches cancellation on that original owner.
+An answer already being written may finish successfully; otherwise cancellation returns `-32800`.
+Failed cancellation writes retain the owner for explicit retry, and later user selection cannot
+replace the cancellation. Queued callbacks retain the connection that originally received them,
+so a delayed cancellation cannot withdraw a replacement request after reconnecting.
+
 The existing public constructor and `Respond` callback retain their signatures. For events created
 through that constructor, the SDK cannot query a client lifetime: `CanRespond` returns true, and
 normal completion of the supplied `Task` callback makes `TryRespondAsync` return true. Exceptions

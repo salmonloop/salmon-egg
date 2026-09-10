@@ -32,6 +32,23 @@ public sealed class AcpPermissionResponseOwnershipTests
     }
 
     [Fact]
+    public void Constructor_LegacyToolPayload_ExposesStableTitleWithoutDraftDependency()
+    {
+        // Arrange
+        using var tool = JsonDocument.Parse("""{"toolCallId":"call","title":"Review file change"}""");
+
+        // Act
+        var request = new PermissionRequestEventArgs("permission", "session", tool.RootElement.Clone(), [],
+            static (_, _) => Task.CompletedTask);
+
+        // Assert
+        Assert.Equal("Review file change", request.Title);
+        Assert.Null(request.Description);
+        Assert.False(request.IsResponsePrepared);
+        Assert.False(request.IsCancellationRequested);
+    }
+
+    [Fact]
     public async Task TryRespondAsync_LegacyCallbackFails_PreservesException()
     {
         // Arrange

@@ -180,6 +180,21 @@ Require(await compatibleTransport.SendMessageAsync("best-effort", AcpTransportSe
     CancellationToken.None), "Default overload did not dispatch to the legacy transport.");
 Require(legacy.SendCount == 2, "Legacy/default dispatch must call the underlying send exactly once each.");
 
+// Permission availability is stable host API: consumers must not need a draft opt-in.
+using var permissionDocument = JsonDocument.Parse("""{"toolCallId":"call","title":"Review change"}""");
+var permissionReplies = 0;
+var permission = new PermissionRequestEventArgs("permission", "session", permissionDocument.RootElement.Clone(), [],
+    (_, _) => { permissionReplies++; return Task.CompletedTask; }) { Description = "Review requested access." };
+EventHandler observer = (_, _) => { };
+permission.Changed += observer;
+Require(permission.Title == "Review change" && permission.Description == "Review requested access.",
+    "Stable permission text is unavailable.");
+Require(permission.CanRespond && !permission.IsResponsePrepared && !permission.IsCancellationRequested,
+    "Legacy permission availability changed.");
+Require(await permission.TryRespondAsync("cancelled"), "Legacy permission callback did not complete.");
+permission.Changed -= observer;
+Require(permissionReplies == 1, "Original permission callback must run exactly once.");
+
 Console.WriteLine(typeof(SessionListParams).FullName);
 
 static void Require(bool condition, string message)
