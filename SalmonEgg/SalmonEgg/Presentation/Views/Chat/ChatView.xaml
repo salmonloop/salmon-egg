@@ -516,8 +516,17 @@
                                                               Visibility="{x:Bind IsMultiSelectField, Converter={StaticResource BoolToVisibilityConverter}}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="elicitationVm:ElicitationMultiSelectOptionViewModel">
-                                                            <CheckBox Content="{x:Bind Value}"
-                                                                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}"/>
+                                                            <CheckBox AutomationProperties.Name="{x:Bind DisplayName}"
+                                                                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}">
+                                                                <StackPanel Spacing="{StaticResource ChatElicitationHeadingSpacing}">
+                                                                    <TextBlock Text="{x:Bind DisplayName}"
+                                                                               TextWrapping="WrapWholeWords" />
+                                                                    <TextBlock Text="{x:Bind Description}"
+                                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                                               TextWrapping="WrapWholeWords"
+                                                                               Visibility="{x:Bind HasDescription, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                                </StackPanel>
+                                                            </CheckBox>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
