@@ -160,6 +160,132 @@ public partial class ChatViewModelTests
         }
     }
 
+    [Fact]
+    public async Task PermissionNotification_QueuedBeforeServiceReplacement_DoesNotChangeOldOrReplacementPrompt()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var oldPeer = await PermissionUiPeer.CreateAsync();
+        using var currentPeer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, oldPeer);
+        oldPeer.Request("permission", "remote-1", "old-tool");
+        await dispatcher.RunUntilIdleAsync();
+        var oldPrompt = fixture.ViewModel.PendingPermissionRequest!;
+        var oldTitle = oldPrompt.Title;
+        var oldOption = oldPrompt.Options[0];
+        var request = Assert.Single(oldPeer.Requests);
+        var queued = NewPermissionSignal();
+        var settled = NewPermissionSignal();
+        EventHandler observer = (_, _) =>
+        {
+            if (request.IsCancellationRequested) queued.TrySetResult(true);
+            if (!request.CanRespond) settled.TrySetResult(true);
+        };
+        request.Changed += observer;
+        oldPeer.ResponseSend = (_, _) => Task.FromResult(false);
+        try
+        {
+            // The SDK invokes this observer after the host's subscriber queued its UI work.
+            oldPeer.CancelPermission("permission");
+            await queued.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.True(dispatcher.PendingCount > 0);
+
+            // Act: replace on the UI thread before pumping the already queued old notification.
+            RunPermissionUiAction(dispatcher, () => fixture.ViewModel.ReplaceChatService(currentPeer.Service));
+            Assert.Null(oldPrompt.UnsubscribeRequestChanges);
+            currentPeer.Request("permission", "remote-1", "new-tool");
+            await dispatcher.RunUntilIdleAsync();
+            var currentPrompt = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+            oldPeer.ResponseSend = null;
+            Assert.True(await request.TryRespondAsync("cancelled"));
+            await settled.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await dispatcher.RunUntilIdleAsync();
+
+            // Assert: neither the captured notification nor a later SDK change may revive the old UI.
+            Assert.Equal(oldTitle, oldPrompt.Title);
+            Assert.Same(oldOption, Assert.Single(oldPrompt.Options));
+            Assert.NotSame(oldPrompt, currentPrompt);
+            Assert.Contains("new-tool", currentPrompt.ToolCallJson);
+            Assert.Same(currentPrompt, fixture.ViewModel.PendingPermissionRequest);
+            Assert.Empty(currentPeer.Responses);
+            await AwaitWithSynchronizationContextAsync(dispatcher,
+                currentPrompt.RespondCommand.ExecuteAsync(currentPrompt.Options[0]));
+            Assert.Equal("allow", Assert.Single(currentPeer.Responses).GetProperty("result")
+                .GetProperty("outcome").GetProperty("optionId").GetString());
+        }
+        finally
+        {
+            request.Changed -= observer;
+        }
+    }
+
+    [Fact]
+    public async Task PermissionNotification_QueuedBeforeDisposal_DetachesAndDoesNotMutateDisposedProjection()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+        peer.Request("permission", "remote-1", "tool");
+        await dispatcher.RunUntilIdleAsync();
+        var prompt = fixture.ViewModel.PendingPermissionRequest!;
+        var title = prompt.Title;
+        var option = prompt.Options[0];
+        Assert.NotNull(prompt.UnsubscribeRequestChanges);
+        var request = Assert.Single(peer.Requests);
+        var queued = NewPermissionSignal();
+        var settled = NewPermissionSignal();
+        EventHandler observer = (_, _) =>
+        {
+            if (request.IsCancellationRequested) queued.TrySetResult(true);
+            if (!request.CanRespond) settled.TrySetResult(true);
+        };
+        request.Changed += observer;
+        peer.ResponseSend = (_, _) => Task.FromResult(false);
+        try
+        {
+            peer.CancelPermission("permission");
+            await queued.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.True(dispatcher.PendingCount > 0);
+
+            // Act: disposal retires the UI subscriber before its captured callback can run.
+            RunPermissionUiAction(dispatcher, fixture.ViewModel.Dispose);
+            Assert.Null(prompt.UnsubscribeRequestChanges);
+            await dispatcher.RunUntilIdleAsync();
+            peer.ResponseSend = null;
+            Assert.True(await request.TryRespondAsync("cancelled"));
+            await settled.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await dispatcher.RunUntilIdleAsync();
+
+            // Assert: the old projection stays unchanged while the original SDK owner settles.
+            Assert.Equal(title, prompt.Title);
+            Assert.Same(option, Assert.Single(prompt.Options));
+            Assert.Null(prompt.UnsubscribeRequestChanges);
+            Assert.Equal(JsonRpcErrorCode.Cancelled,
+                Assert.Single(peer.Responses).GetProperty("error").GetProperty("code").GetInt32());
+        }
+        finally
+        {
+            request.Changed -= observer;
+        }
+    }
+
+    private static void RunPermissionUiAction(QueueingSynchronizationContext dispatcher, Action action)
+    {
+        var previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(dispatcher);
+            action();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
     private static TaskCompletionSource<bool> NewPermissionSignal()
         => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
