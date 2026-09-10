@@ -39,7 +39,7 @@ hosts must enable optional capabilities only after implementing their interactio
 
 | Surface | Current behavior | Remaining work |
 | --- | --- | --- |
-| Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. | Hosts must implement interactive login before opting into `ClientCapabilities.Auth.Terminal`. SalmonEgg provides a consented Windows PTY host; its platform acceptance is tracked in [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
+| Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. | Hosts must implement interactive login before opting into `ClientCapabilities.Auth.Terminal`. The Windows PTY host is implemented, but SalmonEgg does not advertise it until packaged-application acceptance completes; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
@@ -66,9 +66,11 @@ interoperability with a public v2 Agent, and it does not enable public live v2 i
 Terminal methods append their arguments to the invocation used by the active stdio connection and
 override its effective environment. SalmonEgg asks for consent before starting a separate PTY,
 reclaims that process tree on cancellation, and reconnects through its existing connection owner
-only after a normal zero exit. Terminal methods never reach `authenticate`. This host is advertised
-only on interactive Windows hosts; other platforms remain disabled until their process exit and
-cleanup semantics have equivalent acceptance coverage. The real Windows process gate and remaining
+only after a normal zero exit. Terminal methods never reach `authenticate`. Product capability
+advertisement remains disabled, including on Windows, until the packaged application's consent,
+terminal interaction, exit, reconnect, retry and cancellation paths pass the GUI gate. The dedicated
+Windows process gate opts in explicitly to validate ConPTY independently of product rollout. Other
+platforms also need trustworthy process exit and cleanup semantics. The process gate and remaining
 GUI prerequisites are described in the repository's `BUILD_GUIDE.md`.
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command

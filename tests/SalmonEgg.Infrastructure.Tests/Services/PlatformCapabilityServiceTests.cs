@@ -1,4 +1,10 @@
 using System.Runtime.InteropServices;
+using Moq;
+using SalmonEgg.Acp.Client;
+using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Services;
 using Xunit;
 
@@ -7,11 +13,11 @@ namespace SalmonEgg.Infrastructure.Tests.Services;
 public sealed class PlatformCapabilityServiceTests
 {
     [Theory]
-    [InlineData(true, true, true, true)]
+    [InlineData(true, true, true, false)]
     [InlineData(true, true, false, false)]
     [InlineData(true, false, true, false)]
     [InlineData(false, true, true, false)]
-    public void SupportsTerminalAuthentication_RequiresWindowsProcessHostAndInteractiveSurface(
+    public void SupportsTerminalAuthentication_ProductHost_RemainsDisabledUntilApplicationGatePasses(
         bool windows, bool desktop, bool terminalSurface, bool expected)
     {
         // Arrange
@@ -20,6 +26,33 @@ public sealed class PlatformCapabilityServiceTests
 
         // Act / Assert
         Assert.Equal(expected, service.SupportsTerminalAuthentication);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ProductionTerminalFactory_DoesNotAdvertiseUnverifiedAuthentication()
+    {
+        // Arrange
+        var platform = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(true, true, true),
+            target => target == OSPlatform.Windows);
+        await using var factory = new TerminalAuthenticationSessionFactory(platform);
+        var client = new Mock<IAcpClient>();
+        InitializeParams? sent = null;
+        client.Setup(value => value.InitializeAsync(It.IsAny<InitializeParams>(), It.IsAny<CancellationToken>()))
+            .Callback<InitializeParams, CancellationToken>((request, _) => sent = request)
+            .ReturnsAsync(new InitializeResponse(1, new AgentInfo("agent", "1"), new AgentCapabilities()));
+        var invocation = new Mock<IStdioInvocationSource>();
+        invocation.SetupGet(value => value.StdioInvocation).Returns(
+            new StdioInvocationSnapshot("agent", [], new Dictionary<string, string>(), "/work", true));
+        using var chat = new ChatService(client.Object, Mock.Of<IErrorLogger>(), new SessionManager(),
+            invocation.Object, factory);
+
+        // Act
+        await chat.InitializeAsync(new InitializeParams(new ClientInfo("client", "1"), ClientCapabilityDefaults.Create()));
+
+        // Assert
+        Assert.NotNull(sent);
+        Assert.False(factory.IsSupported);
+        Assert.False(sent.ClientCapabilities.Auth?.Terminal == true);
     }
 
     [Fact]
