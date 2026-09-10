@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -11,14 +12,23 @@ using Microsoft.Extensions.Localization;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 
-public sealed partial class ElicitationRequestViewModel : ObservableObject
+public sealed partial class ElicitationRequestViewModel : ObservableObject, IDisposable
 {
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly bool _hasUnsupportedRequiredFields;
     private string? _errorResourceKey;
+    private ElicitationRequestState? _requestState;
+    private IExternalUriLauncher _uriLauncher = UnsupportedExternalUriLauncher.Instance;
+    private ExternalUriTarget? _urlTarget;
+    private Func<Action, Task>? _dispatchAsync;
+    private CancellationTokenRegistration _connectionClosedRegistration;
+    private Func<Task>? _dismiss;
+    private bool _urlDispatched;
+    private bool _disposed;
 
     public ElicitationRequestViewModel(
         object messageId,
@@ -54,11 +64,42 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
     public ObservableCollection<ElicitationFieldViewModel> Fields { get; } = new();
 
-    public Func<ElicitationAcceptContent, Task<bool>>? OnAccept { get; set; }
+    public Func<ElicitationAcceptContent?, Task<bool>>? OnAccept { get; set; }
 
     public Func<Task<bool>>? OnDecline { get; set; }
 
     public Func<Task<bool>>? OnCancel { get; set; }
+
+    public bool IsUrl { get; private set; }
+
+    public string FullUrl { get; private set; } = string.Empty;
+
+    public string UrlHost => _urlTarget?.Host ?? string.Empty;
+
+    public bool HasUrlWarning => _urlTarget?.HasAmbiguousHost ?? false;
+
+    public string AgentName { get; private set; } = string.Empty;
+
+    public bool IsAwaitingCompletion => IsUrl && _requestState?.ResponseAction == ElicitationActions.Accept;
+
+    public bool IsCompleted => IsUrl && (_requestState?.IsCompleted ?? false);
+
+    public bool ShowReopen => IsAwaitingCompletion && !IsCompleted;
+
+    public bool CanReopen => ShowReopen && !_disposed && !IsSubmitting && _urlTarget is not null
+        && _uriLauncher.IsSupported && !(_requestState?.ConnectionClosed.IsCancellationRequested ?? false);
+
+    public bool CanRespond => !_disposed && !IsSubmitting && (_requestState?.CanRespond ?? true);
+
+    public bool CanCancel => !_disposed && !IsSubmitting && (_requestState?.CanCancel ?? true);
+
+    public string SubmitText => IsUrl
+        ? (_urlDispatched ? Localize("Elicitation_RetryResponse", "Retry response") : Localize("Elicitation_OpenBrowser", "Open in browser"))
+        : Localize("Elicitation_Submit", "Submit");
+
+    public string UrlStatus => IsCompleted
+        ? Localize("Elicitation_UrlCompleted", "The agent reports that the external step is complete.")
+        : Localize("Elicitation_UrlWaiting", "Opening was requested. If no page appeared, allow popups and choose Open again. Waiting for the agent to confirm completion.");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSubmit))]
@@ -70,14 +111,27 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
-    public bool CanSubmit => !IsSubmitting && !_hasUnsupportedRequiredFields && ValidateFields();
+    public bool CanSubmit => CanRespond && (IsUrl
+        ? _urlTarget is not null && _uriLauncher.IsSupported
+        : !_hasUnsupportedRequiredFields && ValidateFields());
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]
     private async Task SubmitAsync()
     {
+        if (!CanRespond)
+        {
+            return;
+        }
+
         if (OnAccept is null)
         {
             SetLocalizedError("Elicitation_SubmitUnavailable", "This form cannot be submitted right now.");
+            return;
+        }
+
+        if (IsUrl)
+        {
+            await OpenAndAcceptAsync().ConfigureAwait(true);
             return;
         }
 
@@ -103,9 +157,14 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
         await RespondAsync(() => OnAccept(content)).ConfigureAwait(true);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRespond))]
     private async Task DeclineAsync()
     {
+        if (!CanRespond)
+        {
+            return;
+        }
+
         if (OnDecline is null)
         {
             SetLocalizedError("Elicitation_ResponseUnavailable", "This request can no longer be answered.");
@@ -115,9 +174,14 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
         await RespondAsync(OnDecline).ConfigureAwait(true);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCancel))]
     private async Task CancelAsync()
     {
+        if (!CanCancel)
+        {
+            return;
+        }
+
         if (OnCancel is null)
         {
             SetLocalizedError("Elicitation_ResponseUnavailable", "This request can no longer be answered.");
@@ -129,7 +193,103 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
 
     partial void OnIsSubmittingChanged(bool value)
     {
-        SubmitCommand.NotifyCanExecuteChanged();
+        RefreshCommands();
+    }
+
+    [RelayCommand]
+    private async Task DismissAsync()
+    {
+        if (_dismiss is not null && IsAwaitingCompletion)
+        {
+            await _dismiss().ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanReopen))]
+    private async Task ReopenAsync()
+    {
+        if (!CanReopen)
+        {
+            return;
+        }
+
+        ClearError();
+        IsSubmitting = true;
+        try
+        {
+            // This is a new explicit user gesture. It never sends another ACP response.
+            var result = await _uriLauncher.OpenAsync(_urlTarget!,
+                _requestState?.ConnectionClosed ?? CancellationToken.None).ConfigureAwait(true);
+            if (result is not (ExternalUriOpenResult.Opened or ExternalUriOpenResult.Dispatched))
+            {
+                SetLocalizedError("Elicitation_OpenFailed", "The browser could not be opened. Allow popups and try again, or cancel.");
+            }
+        }
+        catch
+        {
+            SetLocalizedError("Elicitation_OpenFailed", "The browser could not be opened. Allow popups and try again, or cancel.");
+        }
+        finally
+        {
+            IsSubmitting = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_requestState is not null)
+        {
+            _requestState.Changed -= OnRequestStateChanged;
+        }
+
+        _connectionClosedRegistration.Dispose();
+        FullUrl = string.Empty;
+        _urlTarget = null;
+        OnAccept = null;
+        OnDecline = null;
+        OnCancel = null;
+        foreach (var field in Fields)
+        {
+            field.Changed -= OnFieldChanged;
+        }
+
+        RefreshCommands();
+    }
+
+    internal void AttachRequest(
+        ElicitationRequestEventArgs args,
+        IExternalUriLauncher uriLauncher,
+        Func<Action, Task> dispatchAsync,
+        Func<Task> dismiss,
+        string agentName)
+    {
+        _requestState = args.State;
+        _dispatchAsync = dispatchAsync;
+        _dismiss = dismiss;
+        AgentName = agentName;
+        _uriLauncher = uriLauncher;
+        if (args.Request is UrlElicitationRequest url)
+        {
+            IsUrl = true;
+            FullUrl = url.Url;
+            if (!ExternalUriTarget.TryCreate(url.Url, out _urlTarget))
+            {
+                SetLocalizedError("Elicitation_UnsafeUrl", "This address cannot be opened safely. Decline or cancel this request.");
+            }
+            else if (!uriLauncher.IsSupported)
+            {
+                SetLocalizedError("Elicitation_UrlUnavailable", "This device cannot safely open this request. Decline or cancel it.");
+            }
+        }
+
+        _requestState.Changed += OnRequestStateChanged;
+        _connectionClosedRegistration = _requestState.ConnectionClosed.Register(OnConnectionClosed);
     }
 
     public void ReprojectLocalizedState()
@@ -142,6 +302,56 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(_errorResourceKey))
         {
             ErrorMessage = Localize(_errorResourceKey, ErrorMessage);
+        }
+
+        OnPropertyChanged(nameof(SubmitText));
+        OnPropertyChanged(nameof(UrlStatus));
+    }
+
+    private async Task OpenAndAcceptAsync()
+    {
+        if (_urlTarget is null || !_uriLauncher.IsSupported)
+        {
+            return;
+        }
+
+        ClearError();
+        IsSubmitting = true;
+        try
+        {
+            // No await may precede the launcher: browser popup permission belongs to this click.
+            if (!_urlDispatched)
+            {
+                var result = await _uriLauncher.OpenAsync(_urlTarget,
+                    _requestState?.ConnectionClosed ?? CancellationToken.None).ConfigureAwait(true);
+                if (result is not (ExternalUriOpenResult.Opened or ExternalUriOpenResult.Dispatched))
+                {
+                    SetLocalizedError("Elicitation_OpenFailed", "The browser could not be opened. Allow popups and try again, or cancel.");
+                    return;
+                }
+
+                _urlDispatched = true;
+            }
+
+            if (_disposed || !(_requestState?.CanRespond ?? true))
+            {
+                return;
+            }
+
+            if (!await OnAccept!(null).ConfigureAwait(true))
+            {
+                SetLocalizedError("Elicitation_ResponseFailed", "The response could not be sent. Please try again.");
+            }
+        }
+        catch
+        {
+            // A launcher or response exception can contain an OAuth URL. Only bounded copy is shown.
+            SetLocalizedError("Elicitation_ResponseFailed", "The response could not be sent. Please try again.");
+        }
+        finally
+        {
+            IsSubmitting = false;
+            RefreshUrlState();
         }
     }
 
@@ -156,16 +366,91 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject
                 SetLocalizedError("Elicitation_ResponseFailed", "The response could not be sent. Please try again.");
             }
         }
-        catch (Exception ex)
+        catch
         {
-            SetRawError(string.IsNullOrWhiteSpace(ex.Message)
-                ? Localize("Elicitation_ResponseFailed", "The response could not be sent. Please try again.")
-                : ex.Message);
+            SetLocalizedError("Elicitation_ResponseFailed", "The response could not be sent. Please try again.");
         }
         finally
         {
             IsSubmitting = false;
         }
+    }
+
+    private void OnRequestStateChanged(object? sender, EventArgs args)
+    {
+        _ = ProjectRequestStateAsync(connectionClosed: false);
+    }
+
+    private void OnConnectionClosed()
+    {
+        _ = ProjectRequestStateAsync(connectionClosed: true);
+    }
+
+    private async Task ProjectRequestStateAsync(bool connectionClosed)
+    {
+        if (_dispatchAsync is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Task? dismissTask = null;
+            await _dispatchAsync(() =>
+            {
+                if (!_disposed)
+                {
+                    // Session cancellation also answers through the SDK, without a card command.
+                    // Only a committed terminal response retires this exact projection.
+                    if (IsUrl && _requestState?.ResponseAction is ElicitationActions.Cancel or ElicitationActions.Decline)
+                    {
+                        dismissTask = _dismiss?.Invoke();
+                        return;
+                    }
+
+                    if (connectionClosed)
+                    {
+                        FullUrl = string.Empty;
+                        _urlTarget = null;
+                        SetLocalizedError("Elicitation_RequestExpired", "This request has expired. Reconnect to continue.");
+                        OnPropertyChanged(nameof(FullUrl));
+                        OnPropertyChanged(nameof(UrlHost));
+                    }
+
+                    RefreshUrlState();
+                }
+            }).ConfigureAwait(false);
+            if (dismissTask is not null)
+            {
+                await dismissTask.ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // A shutting-down dispatcher cannot project; command guards still read the SDK state.
+        }
+    }
+
+    private void RefreshUrlState()
+    {
+        OnPropertyChanged(nameof(IsAwaitingCompletion));
+        OnPropertyChanged(nameof(IsCompleted));
+        OnPropertyChanged(nameof(ShowReopen));
+        OnPropertyChanged(nameof(UrlStatus));
+        OnPropertyChanged(nameof(SubmitText));
+        RefreshCommands();
+    }
+
+    private void RefreshCommands()
+    {
+        OnPropertyChanged(nameof(CanRespond));
+        OnPropertyChanged(nameof(CanCancel));
+        OnPropertyChanged(nameof(CanSubmit));
+        OnPropertyChanged(nameof(CanReopen));
+        SubmitCommand.NotifyCanExecuteChanged();
+        DeclineCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+        ReopenCommand.NotifyCanExecuteChanged();
     }
 
     private bool ValidateFields()
@@ -711,13 +996,28 @@ public static class ElicitationInteractionViewModelFactory
     public static ElicitationRequestViewModel Create(
         ElicitationRequestEventArgs args,
         Func<ElicitationRequestViewModel, Task> clearPendingRequestAsync,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IExternalUriLauncher? uriLauncher = null,
+        Func<Action, Task>? dispatchAsync = null,
+        string agentName = "")
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(clearPendingRequestAsync);
 
+        if (args.Request is UrlElicitationRequest)
+        {
+            var urlViewModel = new ElicitationRequestViewModel(args.MessageId, args.SessionId, args.Request.Message, [], localizer);
+            urlViewModel.OnAccept = args.Accept;
+            urlViewModel.OnDecline = args.Decline;
+            urlViewModel.OnCancel = args.Cancel;
+            urlViewModel.AttachRequest(args, uriLauncher ?? UnsupportedExternalUriLauncher.Instance,
+                dispatchAsync ?? (action => { action(); return Task.CompletedTask; }),
+                () => clearPendingRequestAsync(urlViewModel), agentName);
+            return urlViewModel;
+        }
+
         var form = args.Request as FormElicitationRequest
-            ?? throw new ArgumentException("Only form elicitation requests can be rendered.", nameof(args));
+            ?? throw new ArgumentException("Unknown elicitation modes cannot be rendered.", nameof(args));
         var required = new HashSet<string>(form.RequestedSchema.Required ?? new List<string>(), StringComparer.Ordinal);
         var fields = new List<ElicitationFieldViewModel>();
         foreach (var property in form.RequestedSchema.Properties)
@@ -737,6 +1037,9 @@ public static class ElicitationInteractionViewModelFactory
         viewModel.OnAccept = async content => await RespondAndClearAsync(() => args.Accept(content), () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
         viewModel.OnDecline = async () => await RespondAndClearAsync(args.Decline, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
         viewModel.OnCancel = async () => await RespondAndClearAsync(args.Cancel, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
+        viewModel.AttachRequest(args, UnsupportedExternalUriLauncher.Instance,
+            dispatchAsync ?? (action => { action(); return Task.CompletedTask; }),
+            () => clearPendingRequestAsync(viewModel), agentName);
         return viewModel;
     }
 

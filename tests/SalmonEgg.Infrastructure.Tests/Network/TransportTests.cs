@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Moq;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Infrastructure.Network;
 using Websocket.Client;
@@ -227,6 +229,53 @@ namespace SalmonEgg.Infrastructure.Tests.Network
                 transport.SendAsync("{}", CancellationToken.None));
 
             Assert.Contains(TransportState.Error, states);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task WebSocketTransport_PrivateElicitationPayload_NeverEntersLogs(bool sendFails)
+        {
+            // Arrange
+            const string canary = "private-url-canary";
+            const string message = """{"jsonrpc":"2.0","id":1,"method":"elicitation/create","params":{"mode":"url","url":"https://example.com/authorize?token=private-url-canary"}}""";
+            using var reconnections = new Subject<ReconnectionInfo>();
+            using var disconnections = new Subject<DisconnectionInfo>();
+            using var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var running);
+            client.Setup(x => x.Start()).Returns(Task.CompletedTask).Callback(() => running.Value = true);
+            if (sendFails)
+            {
+                client.Setup(x => x.Send(message)).Throws(new WebSocketException(canary));
+            }
+            else
+            {
+                client.Setup(x => x.Send(message)).Returns(true);
+            }
+            var sink = new CapturingLogSink();
+            using var logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
+            using var transport = new WebSocketTransport(logger, null, TimeSpan.FromSeconds(5), (_, _) => client.Object);
+            var delivered = new List<string>();
+            using var subscription = transport.Messages.Subscribe(delivered.Add);
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", TestContext.Current.CancellationToken);
+
+            // Act
+            messages.OnNext(ResponseMessage.TextMessage(message));
+            if (sendFails)
+            {
+                await Assert.ThrowsAsync<WebSocketException>(() => transport.SendAsync(message, TestContext.Current.CancellationToken));
+            }
+            else
+            {
+                await transport.SendAsync(message, TestContext.Current.CancellationToken);
+            }
+
+            // Assert
+            Assert.Equal(message, Assert.Single(delivered));
+            Assert.NotEmpty(sink.Events);
+            Assert.DoesNotContain(sink.Events, entry => entry.RenderMessage().Contains(canary, StringComparison.Ordinal)
+                || (entry.Exception?.ToString().Contains(canary, StringComparison.Ordinal) ?? false)
+                || entry.Properties.Values.Any(value => value.ToString().Contains(canary, StringComparison.Ordinal)));
         }
 
         [Fact]
@@ -563,6 +612,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         private sealed class Box<T>(T value)
         {
             public T Value { get; set; } = value;
+        }
+
+        private sealed class CapturingLogSink : ILogEventSink
+        {
+            public List<LogEvent> Events { get; } = [];
+
+            public void Emit(LogEvent logEvent) => Events.Add(logEvent);
         }
     }
 }

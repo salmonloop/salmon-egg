@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -18,12 +19,13 @@ internal static class AcpInitializeTimeout
         string? profileId,
         string? conversationId,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IPlatformCapabilityService? platformCapabilities = null)
     {
         try
         {
             return await chatService
-                .InitializeAsync(AcpInitializeRequestFactory.CreateDefault())
+                .InitializeAsync(AcpInitializeRequestFactory.CreateDefault(platformCapabilities))
                 .WaitAsync(timeout, cancellationToken)
                 .ConfigureAwait(false);
         }

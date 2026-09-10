@@ -71,6 +71,23 @@ jobs:
       - name: Run Skia Desktop GUI smoke
         run: ./scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 
+      # This checks the native launcher only. Native URL capability stays disabled until the
+      # product's GUI consent-to-browser path has its own platform gate as well.
+      - name: Run Linux external browser isolation probe
+        timeout-minutes: 3
+        env:
+          DOTNET_PROCESSOR_COUNT: "2"
+          DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+          MSBUILDDISABLENODEREUSE: "1"
+        run: |
+          test -x /usr/bin/google-chrome
+          test -x /usr/bin/xdg-open
+          dotnet build scripts/gates/linux-elicitation-probe/linux-elicitation-probe.csproj \
+            --configuration Release -p:UseSharedCompilation=false
+          timeout --signal=TERM --kill-after=10s 70s python3 scripts/gates/linux-elicitation-browser-smoke.py \
+            scripts/gates/linux-elicitation-probe/bin/Release/net10.0/SalmonEgg.Gates.LinuxElicitationProbe.dll \
+            --dotnet "$(command -v dotnet)" --chromium /usr/bin/google-chrome
+
   deterministic-gui-smokes:
     name: Deterministic GUI Smoke Gates
     # This repository currently has no self-hosted Windows runner registered, so a dispatched run of

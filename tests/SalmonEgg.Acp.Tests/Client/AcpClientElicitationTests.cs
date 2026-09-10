@@ -97,6 +97,279 @@ public sealed class AcpClientElicitationTests
         Assert.Equal("""["api","ui"]""", accepted.Content["targets"].RawValue.GetRawText());
     }
 
+    [Fact]
+    public async Task ElicitationState_CompletionBeforeConsent_PreservesIndependentFacts()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var sent = CaptureSentMessages();
+        var request = ReceiveRequest(client, parser, 601, UrlParamsJson);
+
+        // Act
+        RaiseNotification(parser, ElicitationMethods.Complete, """{"elicitationId":"oauth-1"}""");
+
+        // Assert
+        Assert.True(request.State.IsCompleted);
+        Assert.True(request.State.CanRespond);
+        Assert.Empty(sent);
+        Assert.True(await request.Accept(null));
+        Assert.False(request.State.CanRespond);
+        Assert.True(request.State.IsCompleted);
+        var response = await WaitForResponseAsync(parser, sent, 601);
+        Assert.Equal("""{"action":"accept"}""", response.Result!.Value.GetRawText());
+    }
+
+    [Fact]
+    public async Task ElicitationState_ThrowingObserver_DoesNotUndoResponseOrStopOtherObservers()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var sent = CaptureSentMessages();
+        var request = ReceiveRequest(client, parser, 602, UrlParamsJson);
+        var notifications = 0;
+        request.State.Changed += (_, _) => throw new InvalidOperationException("Subscriber failure");
+        request.State.Changed += (_, _) => notifications++;
+
+        // Act
+        Assert.True(await request.Accept(null));
+        RaiseNotification(parser, ElicitationMethods.Complete, """{"elicitationId":"oauth-1"}""");
+
+        // Assert
+        Assert.False(request.State.CanRespond);
+        Assert.True(request.State.IsCompleted);
+        Assert.True(notifications >= 2);
+        Assert.False(await request.Cancel());
+        Assert.Single(sent);
+    }
+
+    [Fact]
+    public async Task ElicitationState_Disconnect_InvalidatesOldRequest()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var sent = CaptureSentMessages();
+        var request = ReceiveRequest(client, parser, 603, UrlParamsJson);
+
+        // Act
+        await client.DisconnectAsync();
+
+        // Assert
+        Assert.True(request.State.ConnectionClosed.IsCancellationRequested);
+        Assert.False(request.State.CanRespond);
+        Assert.False(await request.Accept(null));
+        Assert.Empty(sent);
+    }
+
+    [Fact]
+    public async Task ElicitationState_ThrowingDisconnectObserver_DoesNotInterruptTeardown()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var request = ReceiveRequest(client, parser, 605, UrlParamsJson);
+        var logged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _loggerMock.Setup(l => l.Log(AcpClientLogLevel.Warning, "CONNECTION_OBSERVER_FAILED",
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Exception?>()))
+            .Callback(() => logged.TrySetResult());
+        using var registration = request.State.ConnectionClosed.Register(
+            () => throw new InvalidOperationException("private-url-canary"));
+
+        // Act
+        await client.DisconnectAsync();
+
+        // Assert
+        await logged.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.False(client.IsInitialized);
+        Assert.False(request.State.CanRespond);
+        _transportMock.Verify(t => t.DisconnectAsync(), Times.Once);
+        _loggerMock.Verify(l => l.Log(It.IsAny<AcpClientLogLevel>(), It.IsAny<string>(),
+            It.Is<string>(message => message.Contains("private-url-canary", StringComparison.Ordinal))), Times.Never);
+    }
+
+    [Fact]
+    public async Task ElicitationState_DisconnectObservers_RunAfterPendingRequestsAreReleased()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        CaptureSentMessages();
+        var request = ReceiveRequest(client, parser, 606, UrlParamsJson);
+        Task<bool>? pendingRead = null;
+        var observerCouldRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = request.State.ConnectionClosed.Register(() =>
+        {
+            pendingRead = Task.Run(request.Cancel, TestContext.Current.CancellationToken);
+            observerCouldRead.TrySetResult(pendingRead.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+        });
+
+        // Act
+        await client.DisconnectAsync();
+
+        // Assert
+        Assert.True(await observerCouldRead.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
+            "Disconnect must not invoke consumers while holding the pending-request lock.");
+        Assert.NotNull(pendingRead);
+        Assert.False(await pendingRead.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ElicitationState_BlockingDisconnectObserver_DoesNotDelayDisconnectOrPendingCancellation()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        CaptureSentMessages();
+        var request = ReceiveRequest(client, parser, 607, UrlParamsJson);
+        var pending = client.CreateSessionAsync(new SessionNewParams(Path.GetTempPath(), null), TestContext.Current.CancellationToken);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = request.State.ConnectionClosed.Register(() =>
+        {
+            started.TrySetResult();
+            release.Task.GetAwaiter().GetResult();
+        });
+        var disconnect = Task.Run(client.DisconnectAsync, TestContext.Current.CancellationToken);
+
+        try
+        {
+            // Act
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await disconnect.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.False(client.IsInitialized);
+            Assert.False(request.State.CanRespond);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await disconnect.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ElicitationState_DisconnectObserver_CanReconnectWithoutOldCleanupClearingNewState()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var previous = ReceiveRequest(client, parser, 608, UrlParamsJson);
+        var allowReconnect = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = previous.State.ConnectionClosed.Register(() =>
+        {
+            try
+            {
+                allowReconnect.Task.GetAwaiter().GetResult();
+                client.DisconnectAsync().GetAwaiter().GetResult();
+                InitializeClientAsync(client, UrlCapabilities()).GetAwaiter().GetResult();
+                reconnected.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                reconnected.TrySetException(ex);
+            }
+        });
+
+        // Act
+        try
+        {
+            await client.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            allowReconnect.TrySetResult();
+        }
+
+        await reconnected.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await registration.DisposeAsync();
+        var sent = CaptureSentMessages();
+        var current = ReceiveRequest(client, parser, 608, UrlParamsJson);
+
+        // Assert
+        Assert.True(client.IsInitialized);
+        Assert.False(await previous.Accept(null));
+        Assert.False(current.State.ConnectionClosed.IsCancellationRequested);
+        Assert.True(await current.Accept(null));
+        Assert.Single(sent);
+    }
+
+    [Fact]
+    public async Task ElicitationState_DisposeObserver_CannotReinitializeDisposedClient()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var request = ReceiveRequest(client, parser, 611, UrlParamsJson);
+        var sent = CaptureSentMessages();
+        var attempted = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = request.State.ConnectionClosed.Register(() =>
+        {
+            try
+            {
+                client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1"), UrlCapabilities()),
+                    TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+                attempted.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                attempted.TrySetResult(ex);
+            }
+        });
+
+        // Act
+        client.Dispose();
+
+        // Assert
+        Assert.IsType<ObjectDisposedException>(
+            await attempted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.False(client.IsInitialized);
+        Assert.Empty(sent);
+        _transportMock.Verify(t => t.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ElicitationState_CompletedRequestIdReused_KeepsOldProjectionUnavailable()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        CaptureSentMessages();
+        var previous = ReceiveRequest(client, parser, 604, UrlParamsJson);
+
+        // Act
+        Assert.True(await previous.Decline());
+        var current = ReceiveRequest(client, parser, 604, UrlParamsJson.Replace("oauth-1", "oauth-2", StringComparison.Ordinal));
+
+        // Assert
+        Assert.False(previous.State.CanRespond);
+        Assert.True(current.State.CanRespond);
+        Assert.False(await previous.Accept(null));
+        Assert.True(await current.Cancel());
+    }
+
+    [Fact]
+    public async Task ElicitationState_PublicConstructor_ResponseUpdatesAvailability()
+    {
+        // Arrange
+        var replies = 0;
+        var request = new ElicitationRequestEventArgs("legacy", new FormElicitationRequest(),
+            _ => { replies++; return Task.FromResult(true); },
+            () => Task.FromResult(true), () => Task.FromResult(true));
+
+        // Act
+        Assert.True(await request.Accept(null));
+
+        // Assert
+        Assert.False(request.State.CanRespond);
+        Assert.False(await request.Accept(null));
+        Assert.Equal(1, replies);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -953,6 +1226,57 @@ public sealed class AcpClientElicitationTests
         Assert.False(await request.Decline());
         Assert.False(await request.Cancel());
         Assert.Empty(sentMessages);
+    }
+
+    [Fact]
+    public async Task ElicitationComplete_ThrowingObserver_DoesNotLeakPrivateDataOrSkipOtherObservers()
+    {
+        // Arrange
+        const string canary = "private-url-canary";
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var request = ReceiveRequest(client, parser, 609, UrlParamsJson);
+        var completed = false;
+        var errors = new List<string>();
+        client.ErrorOccurred += (_, message) => errors.Add(message);
+        client.ElicitationCompleted += (_, _) => throw new InvalidOperationException(canary);
+        client.ElicitationCompleted += (_, _) => completed = true;
+
+        // Act
+        RaiseNotification(parser, ElicitationMethods.Complete, """{"elicitationId":"oauth-1"}""");
+
+        // Assert
+        Assert.True(request.State.IsCompleted);
+        Assert.True(completed);
+        Assert.Empty(errors);
+        _loggerMock.Verify(l => l.Log(It.IsAny<AcpClientLogLevel>(), It.IsAny<string>(),
+            It.Is<string>(message => message.Contains(canary, StringComparison.Ordinal)),
+            It.IsAny<string?>(), It.IsAny<Exception?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ElicitationResponse_PrivateTransportException_ProducesOnlyBoundedDiagnostic()
+    {
+        // Arrange
+        const string canary = "private-url-canary";
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var request = ReceiveRequest(client, parser, 610, UrlParamsJson);
+        var errors = new List<string>();
+        client.ErrorOccurred += (_, message) => errors.Add(message);
+        _transportMock.Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException(canary));
+
+        // Act
+        var sent = await request.Accept(null);
+
+        // Assert
+        Assert.False(sent);
+        Assert.True(request.State.CanRespond);
+        Assert.DoesNotContain(canary, Assert.Single(errors), StringComparison.Ordinal);
+        _loggerMock.Verify(l => l.Log(It.IsAny<AcpClientLogLevel>(), It.IsAny<string>(),
+            It.Is<string>(message => message.Contains(canary, StringComparison.Ordinal)),
+            It.IsAny<string?>(), It.IsAny<Exception?>()), Times.Never);
     }
 
     private static ClientCapabilities UrlCapabilities()

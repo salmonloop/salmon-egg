@@ -1801,4 +1801,16 @@
   <data name="CommandLine_UsageHintTitle.Text" xml:space="preserve">
     <value>试一下</value>
   </data>
+  <data name="ChatViewElicitationUrlConsent.Text" xml:space="preserve">
+    <value>请核对完整地址。只有点击“在浏览器中打开”才会访问此网页；这不代表外部操作已经完成。</value>
+  </data>
+  <data name="ChatViewElicitationUrlWarning.Text" xml:space="preserve">
+    <value>请仔细核对域名：它包含国际化字符、数字地址或非常规端口，可能与熟悉的网站不同。</value>
+  </data>
+  <data name="ChatViewElicitationDismissButton.Content" xml:space="preserve">
+    <value>关闭提示</value>
+  </data>
+  <data name="ChatViewElicitationReopenButton.Content" xml:space="preserve">
+    <value>再次打开</value>
+  </data>
 </root>

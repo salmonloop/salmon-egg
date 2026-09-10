@@ -241,6 +241,7 @@ cp "${REPO_ROOT}/scripts/gates/wasm-capability-boundary-smoke.mjs" "${PLAYWRIGHT
 cp "${REPO_ROOT}/scripts/gates/wasm-gamepad-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-acp-full-chain-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-credential-editor-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-elicitation-module-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp -R "${REPO_ROOT}/scripts/gates/wasm-smoke-lib" "${PLAYWRIGHT_WORKDIR}/"
 
 echo "[gate] Install Playwright package"
@@ -288,5 +289,20 @@ echo "[gate] Run WASM credential editor smoke"
 run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-credential-editor-smoke.mjs" \
   "${BASE_URL}"
+echo "[gate] Run WASM external URL module smoke"
+ELICITATION_MODULE="$("${PYTHON_BIN}" - "${WWWROOT}" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+modules = list(root.glob("**/_framework/salmon-egg-wasm-shell.js"))
+if len(modules) != 1:
+    raise SystemExit(f"Expected exactly one built URL module under {root}; found {len(modules)}.")
+print(modules[0])
+PY
+)"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-elicitation-module-smoke.mjs" \
+  "${ELICITATION_MODULE}"
 
 echo "[gate] WASM smoke gates passed"

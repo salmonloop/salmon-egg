@@ -108,6 +108,54 @@ public sealed class AcpClientLifecycleTests
     }
 
     [Fact]
+    public async Task DisconnectAsync_ReentrantObserverCannotInitializeUntilPhysicalTeardownCompletes()
+    {
+        using var fixture = new LifecycleFixture();
+        await fixture.InitializeAsync();
+        var request = fixture.ReceiveUrlRequest();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observed = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Transport.Setup(x => x.DisconnectAsync()).Returns(async () =>
+        {
+            started.TrySetResult();
+            await release.Task;
+            return true;
+        });
+        using var registration = request.State.ConnectionClosed.Register(() =>
+        {
+            try
+            {
+                started.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+                fixture.InitializeAsync().GetAwaiter().GetResult();
+                observed.TrySetResult(null);
+            }
+            catch (Exception exception)
+            {
+                observed.TrySetResult(exception);
+            }
+        });
+        var disconnect = fixture.Client.DisconnectAsync();
+        try
+        {
+            Assert.True(request.State.ConnectionClosed.IsCancellationRequested);
+            Assert.False(await request.Cancel());
+            Assert.IsType<InvalidOperationException>(await observed.Task.WaitAsync(
+                TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+            Assert.Equal(1, fixture.InitializeFrames);
+            Assert.False(disconnect.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await disconnect;
+        }
+
+        await fixture.InitializeAsync();
+        Assert.True(fixture.Client.IsInitialized);
+    }
+
+    [Fact]
     public async Task DisconnectAsync_DisposeDuringTeardownCannotReinitialize()
     {
         using var fixture = new LifecycleFixture();
@@ -160,8 +208,20 @@ public sealed class AcpClientLifecycleTests
         }
 
         public Task<InitializeResponse> InitializeAsync() => Client.InitializeAsync(
-            new InitializeParams(new ClientInfo("lifecycle", "1"), new ClientCapabilities()), TestContext.Current.CancellationToken)
+            new InitializeParams(new ClientInfo("lifecycle", "1"), new ClientCapabilities
+            {
+                Elicitation = new ElicitationCapabilities { Url = new ElicitationUrlCapabilities() }
+            }), TestContext.Current.CancellationToken)
             .WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        public ElicitationRequestEventArgs ReceiveUrlRequest()
+        {
+            ElicitationRequestEventArgs? received = null;
+            Client.ElicitationRequestReceived += (_, request) => received = request;
+            Transport.Raise(x => x.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
+                """{"jsonrpc":"2.0","id":71,"method":"elicitation/create","params":{"mode":"url","sessionId":"session","elicitationId":"consent","url":"https://example.com/authorize","message":"Authorize"}}"""));
+            return Assert.IsType<ElicitationRequestEventArgs>(received);
+        }
 
         public void Dispose() => Client.Dispose();
     }

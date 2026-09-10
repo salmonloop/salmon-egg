@@ -385,6 +385,15 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<ITerminalAuthenticationInteraction, TerminalAuthenticationInteraction>();
         services.AddSingleton<TerminalAuthenticationCoordinator>();
+#if __WASM__
+#pragma warning disable CA1416 // This registration exists only in the browser target.
+        services.AddSingleton<IExternalUriLauncher, WasmElicitationUriLauncher>();
+#pragma warning restore CA1416
+#else
+        // Native URL elicitation stays off until the real GUI consent-to-browser chain is gated.
+        // The Linux launcher has its own browser isolation probe; that does not prove the GUI path.
+        services.AddSingleton<IExternalUriLauncher>(UnsupportedExternalUriLauncher.Instance);
+#endif
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
 #if __WASM__
         if (OperatingSystem.IsBrowser())
@@ -634,7 +643,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
-                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>());
+                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
+                platformCapabilities: sp.GetRequiredService<IPlatformCapabilityService>());
         });
         services.AddSingleton(sp =>
         {

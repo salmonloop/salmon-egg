@@ -42,7 +42,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. | Hosts must implement interactive login before opting into `ClientCapabilities.Auth.Terminal`. The Windows PTY host is implemented, but SalmonEgg does not advertise it until packaged-application acceptance completes; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
-| URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
+| URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it only on WASM through its platform capability service. | Native GUI consent-to-browser validation and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
 | ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, message/tool/terminal projections, permission request handling, and version-gated JSON-RPC batches are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Configuration workflows, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 Internal v2 batch validation follows the upstream schema at
@@ -207,6 +207,26 @@ through that constructor, the SDK cannot query a client lifetime: `CanRespond` r
 normal completion of the supplied `Task` callback makes `TryRespondAsync` return true. Exceptions
 from that callback remain observable. Callbacks received from `AcpClient` retain the actual send
 result without casting a `Task` to `Task<bool>`.
+
+### URL consent and completion
+
+Hosts display the complete URL and destination host before navigation. Opening requires an explicit
+user action and an isolated external browser context; WASM uses native `noopener,noreferrer` and
+rejects application-origin URLs. A browser dispatch does not prove that a popup opened, so the UI
+allows a new explicit **Open again** action without sending a second ACP response. An `accept`
+response carries no form content and acknowledges consent only; `elicitation/complete` independently
+marks the existing request complete. Unknown or duplicate completion IDs do nothing.
+
+The state is scoped to the connection that received the request. Hosts observe `State.Changed` and
+`State.ConnectionClosed`, marshal updates to their UI thread, and stop using expired callbacks.
+Connection shutdown marks the token cancelled and clears pending requests synchronously; host
+cancellation callbacks run asynchronously and cannot delay disconnect. Callback failures are
+observed without logging their potentially private data.
+
+SalmonEgg currently presents session-scoped requests. Request-scoped requests are explicitly
+cancelled when no conversation surface can present them. Windows, Linux, macOS, Android, and iOS do
+not advertise URL elicitation yet. The separate Linux launcher probe verifies real `xdg-open` and
+browser isolation; it does not substitute for native GUI acceptance or five-platform validation.
 
 ## ACP v2 draft surface (SEACP002)
 

@@ -1801,4 +1801,16 @@
   <data name="CommandLine_UsageHintTitle.Text" xml:space="preserve">
     <value>Try it</value>
   </data>
+  <data name="ChatViewElicitationUrlConsent.Text" xml:space="preserve">
+    <value>Review the complete address. Choosing Open in browser gives consent to visit it; it does not confirm the external step is complete.</value>
+  </data>
+  <data name="ChatViewElicitationUrlWarning.Text" xml:space="preserve">
+    <value>Check the domain carefully: it uses international characters, a numeric address, or an unusual port and may differ from a familiar website.</value>
+  </data>
+  <data name="ChatViewElicitationDismissButton.Content" xml:space="preserve">
+    <value>Close notice</value>
+  </data>
+  <data name="ChatViewElicitationReopenButton.Content" xml:space="preserve">
+    <value>Open again</value>
+  </data>
 </root>

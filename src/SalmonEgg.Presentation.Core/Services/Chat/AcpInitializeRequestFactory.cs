@@ -1,10 +1,11 @@
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
 internal static class AcpInitializeRequestFactory
 {
-    public static InitializeParams CreateDefault()
+    public static InitializeParams CreateDefault(IPlatformCapabilityService? platformCapabilities = null)
         => new()
         {
             ProtocolVersion = AcpProtocolVersion.Default,
@@ -14,6 +15,18 @@ internal static class AcpInitializeRequestFactory
                 Title = "SalmonEgg",
                 Version = "1.0.0"
             },
-            ClientCapabilities = ClientCapabilityDefaults.Create()
+            ClientCapabilities = CreateCapabilities(platformCapabilities)
         };
+
+    private static ClientCapabilities CreateCapabilities(IPlatformCapabilityService? platformCapabilities)
+    {
+        var defaults = ClientCapabilityDefaults.Create();
+        return defaults with
+        {
+            Elicitation = defaults.Elicitation! with
+            {
+                Url = platformCapabilities?.SupportsUrlElicitation == true ? new ElicitationUrlCapabilities() : null
+            }
+        };
+    }
 }

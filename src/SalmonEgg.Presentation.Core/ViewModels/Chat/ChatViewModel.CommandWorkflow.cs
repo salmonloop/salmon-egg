@@ -457,7 +457,7 @@ public partial class ChatViewModel
             IsPromptSubmitInFlight: IsPromptSubmitInFlight,
             IsVoiceInputListening: IsVoiceInputListening,
             VoiceInputTransportState: _voiceInputTransportState,
-            HasPendingAskUserRequest: PendingAskUserRequest is not null || PendingElicitationRequest is not null,
+            HasPendingAskUserRequest: PendingAskUserRequest is not null || PendingElicitationRequest is { IsAwaitingCompletion: false },
             ShouldShowLoadingOverlayPresenter: ShouldShowLoadingOverlayPresenter,
             IsSessionActive: IsSessionActive,
             HasChatService: _chatService is not null,
@@ -1767,6 +1767,7 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ElicitationSubmitCommand));
         OnPropertyChanged(nameof(ElicitationDeclineCommand));
         OnPropertyChanged(nameof(ElicitationCancelCommand));
+        NotifyElicitationUrlProjectionChanged();
         NotifyComposerProjectionChanged();
     }
 
@@ -1777,6 +1778,23 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ElicitationSubmitCommand));
         OnPropertyChanged(nameof(ElicitationDeclineCommand));
         OnPropertyChanged(nameof(ElicitationCancelCommand));
+        NotifyElicitationUrlProjectionChanged();
+        NotifyComposerProjectionChanged();
+    }
+
+    private void NotifyElicitationUrlProjectionChanged()
+    {
+        OnPropertyChanged(nameof(ElicitationAgentName));
+        OnPropertyChanged(nameof(ElicitationIsUrl));
+        OnPropertyChanged(nameof(ElicitationFullUrl));
+        OnPropertyChanged(nameof(ElicitationUrlHost));
+        OnPropertyChanged(nameof(ElicitationHasUrlWarning));
+        OnPropertyChanged(nameof(ElicitationIsAwaitingCompletion));
+        OnPropertyChanged(nameof(ElicitationUrlStatus));
+        OnPropertyChanged(nameof(ElicitationSubmitText));
+        OnPropertyChanged(nameof(ElicitationDismissCommand));
+        OnPropertyChanged(nameof(ElicitationReopenCommand));
+        OnPropertyChanged(nameof(ElicitationShowReopen));
     }
 
     partial void OnPendingAskUserRequestChanged(AskUserRequestViewModel? value)

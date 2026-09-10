@@ -302,6 +302,142 @@ public sealed class AcpClientBatchTests
         Assert.Empty(peer.Errors);
     }
 
+    [Theory]
+    [InlineData("accept")]
+    [InlineData("cancel")]
+    public async Task Batch_UrlSiblingRetries_CommitsStateAndNotifiesEveryOriginalRequest(string action)
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync();
+        var requests = new List<ElicitationRequestEventArgs>();
+        peer.Client.ElicitationRequestReceived += (_, request) => requests.Add(request);
+        peer.Deliver("[" + Url("1", "first-url") + "," + Url("2", "second-url") + "]");
+        var committed = new List<string>();
+        requests[0].State.Changed += (_, _) =>
+        {
+            if (requests[0].State.ResponseAction is { } value) committed.Add(value);
+        };
+        peer.FailNextResponse = true;
+        var firstAnswer = action == "accept" ? requests[0].Accept(null) : requests[0].Cancel();
+        var secondAnswer = requests[1].Decline();
+        Assert.False(await firstAnswer.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.False(await secondAnswer.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.Null(requests[0].State.ResponseAction);
+        Assert.Empty(committed);
+
+        // Act
+        Assert.True(await requests[1].Decline().WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+
+        // Assert
+        Assert.Equal(action, requests[0].State.ResponseAction);
+        Assert.Equal(action, Assert.Single(committed));
+        Assert.False(requests[0].State.CanRespond);
+        Assert.Equal(2, Assert.Single(peer.Responses).GetArrayLength());
+        peer.Deliver("""{"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"first-url"}}""");
+        Assert.Equal(action == "accept", requests[0].State.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Batch_UrlCancellationFailure_ProjectsCancellationWithoutInventingDelivery()
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync();
+        ElicitationRequestEventArgs? request = null;
+        peer.Client.ElicitationRequestReceived += (_, value) => request = value;
+        peer.Deliver("[" + Url("1", "cancel-url") + "]");
+        Assert.NotNull(request);
+        var cancellationObserved = false;
+        request.State.Changed += (_, _) => cancellationObserved |= !request.State.CanRespond && request.State.CanCancel;
+        peer.FailNextResponse = true;
+
+        // Act
+        await peer.Client.CancelSessionAsync(new SessionCancelParams("session"), TestToken)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestToken);
+
+        // Assert
+        Assert.True(cancellationObserved);
+        Assert.False(request.State.CanRespond);
+        Assert.True(request.State.CanCancel);
+        Assert.Null(request.State.ResponseAction);
+        Assert.Empty(peer.Responses);
+        Assert.True(await request.Cancel().WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.Equal("cancel", request.State.ResponseAction);
+        Assert.False(request.State.CanCancel);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task UrlPeerCancellation_CompletesOrRetainsTheOriginalResponseOwner(bool batched, bool firstSendFails)
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync();
+        ElicitationRequestEventArgs? request = null;
+        peer.Client.ElicitationRequestReceived += (_, value) => request = value;
+        var url = Url("1", "peer-cancel");
+        peer.Deliver(batched ? "[" + url + "]" : url);
+        Assert.NotNull(request);
+        var completed = 0;
+        request.State.Changed += (_, _) =>
+        {
+            if (!request.State.CanRespond && !request.State.CanCancel) completed++;
+        };
+        peer.FailNextResponse = firstSendFails;
+
+        // Act
+        peer.Deliver(Cancel("1"));
+
+        // Assert
+        Assert.False(request.State.CanRespond);
+        if (firstSendFails)
+        {
+            Assert.True(request.State.CanCancel);
+            Assert.Null(request.State.ResponseAction);
+            Assert.Empty(peer.Responses);
+            Assert.True(await request.Cancel().WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        }
+        Assert.Null(request.State.ResponseAction);
+        Assert.False(request.State.CanCancel);
+        Assert.True(completed > 0);
+        var frame = Assert.Single(peer.Responses);
+        var response = batched ? frame[0] : frame;
+        Assert.Equal(JsonRpcErrorCode.Cancelled, response.GetProperty("error").GetProperty("code").GetInt32());
+        Assert.False(await request.Accept(null));
+        peer.Deliver("""{"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"peer-cancel"}}""");
+        Assert.False(request.State.IsCompleted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UrlPeerCancellation_OriginalAcceptWriteWinsOrCancellationFollows(bool acceptSent)
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync();
+        ElicitationRequestEventArgs? request = null;
+        peer.Client.ElicitationRequestReceived += (_, value) => request = value;
+        peer.Deliver(Url("1", "during-write"));
+        Assert.NotNull(request);
+        var write = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.NextResponseWrite = write.Task;
+        var answer = request.Accept(null);
+
+        // Act
+        peer.Deliver(Cancel("1"));
+        write.TrySetResult(acceptSent);
+        await answer.WaitAsync(TimeSpan.FromSeconds(5), TestToken);
+
+        // Assert
+        Assert.Equal(acceptSent ? ElicitationActions.Accept : null, request.State.ResponseAction);
+        Assert.False(request.State.CanCancel);
+        Assert.False(request.State.CanRespond);
+        var response = Assert.Single(peer.Responses);
+        if (acceptSent) Assert.Equal("accept", response.GetProperty("result").GetProperty("action").GetString());
+        else Assert.Equal(JsonRpcErrorCode.Cancelled, response.GetProperty("error").GetProperty("code").GetInt32());
+    }
+
     [Fact]
     public async Task Batch_V1OnlyMethods_AreRejectedInsideDraftBatch()
     {
@@ -936,6 +1072,7 @@ public sealed class AcpClientBatchTests
 
         // Assert
         Assert.Equal(sent ? "accept" : "cancel", Assert.Single(peer.Responses)[0].GetProperty("result").GetProperty("action").GetString());
+        Assert.Equal(sent ? "accept" : "cancel", url.State.ResponseAction);
         Assert.Equal(sent ? 1 : 0, completions.Count);
         Assert.False(await url.Accept(null));
     }
@@ -1186,6 +1323,11 @@ public sealed class AcpClientBatchTests
 
     private static string SessionResponse(JsonRpcRequest request, string sessionId)
         => "{\"jsonrpc\":\"2.0\",\"id\":" + request.Id + ",\"result\":{\"sessionId\":\"" + sessionId + "\"}}";
+
+    private static string Url(string id, string elicitationId)
+        => "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"elicitation/create\",\"params\":{"
+            + "\"sessionId\":\"session\",\"mode\":\"url\",\"elicitationId\":\"" + elicitationId
+            + "\",\"url\":\"https://agent.example/authorize\",\"message\":\"Authorize\"}}";
 
     private sealed class BatchPeer : IAcpTransport
     {
