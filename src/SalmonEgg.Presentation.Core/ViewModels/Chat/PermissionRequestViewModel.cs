@@ -9,6 +9,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class PermissionRequestViewModel : ObservableObject
 {
+    private bool _showsCancellationRetry;
+
     [ObservableProperty]
     private ObservableCollection<PermissionOptionViewModel> _options = new();
 
@@ -27,16 +29,28 @@ public partial class PermissionRequestViewModel : ObservableObject
     internal Task? BindingCancellationTask { get; set; }
     internal bool BindingCancellationAttempted { get; set; }
     internal Func<bool>? IsRequestAvailable { get; set; }
+    internal Func<bool>? IsResponsePrepared { get; set; }
+    internal Func<bool>? IsRequestCancellationRequested { get; set; }
+    internal Action? UnsubscribeRequestChanges { get; set; }
     internal bool IsAvailable => IsRequestAvailable?.Invoke() ?? true;
+    internal bool IsAwaitingInput => IsAvailable && IsResponsePrepared?.Invoke() != true;
+    internal bool IsCancellationOnly => BindingCancellationAttempted || IsRequestCancellationRequested?.Invoke() == true;
 
     public Func<string, string?, Task>? OnRespond { get; set; }
 
-    internal void ShowCancellationRetry(string title, string description)
+    internal void ShowCancellationRetry(string title, string description, bool bindingChanged)
     {
-        BindingCancellationAttempted = true;
+        if (bindingChanged) BindingCancellationAttempted = true;
         ToolCallId = null;
         Title = title;
         Description = description;
+        if (_showsCancellationRetry)
+        {
+            Options[0].Name = title;
+            Options[0].Description = description;
+            return;
+        }
+        _showsCancellationRetry = true;
         Options.Clear();
         Options.Add(new PermissionOptionViewModel
         {
@@ -46,20 +60,27 @@ public partial class PermissionRequestViewModel : ObservableObject
         });
     }
 
-    internal void ReprojectLocalizedText(string defaultTitle, string cancellationTitle, string cancellationDescription)
+    internal void DetachRequest()
     {
-        if (!BindingCancellationAttempted)
+        UnsubscribeRequestChanges?.Invoke();
+        UnsubscribeRequestChanges = null;
+    }
+
+    internal void ReprojectLocalizedText(
+        string defaultTitle, string cancellationTitle, string bindingCancellationDescription, string peerCancellationDescription)
+    {
+        if (!_showsCancellationRetry)
         {
             Title = string.IsNullOrWhiteSpace(RequestTitle) ? defaultTitle : RequestTitle;
             return;
         }
 
         Title = cancellationTitle;
-        Description = cancellationDescription;
+        Description = BindingCancellationAttempted ? bindingCancellationDescription : peerCancellationDescription;
         foreach (var option in Options)
         {
             option.Name = cancellationTitle;
-            option.Description = cancellationDescription;
+            option.Description = Description;
         }
     }
 
@@ -71,7 +92,7 @@ public partial class PermissionRequestViewModel : ObservableObject
             return;
         }
 
-        if (option != null)
+        if (option != null && !IsCancellationOnly)
         {
             await OnRespond("selected", option.OptionId);
         }

@@ -111,10 +111,10 @@ public sealed class ChatConversationPanelStateCoordinator
             return null;
         }
 
-        requests.RemoveAll(static request => !request.IsAvailable);
-        var candidates = requests.Where(request => toolCallId is null
-            || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal));
-        return candidates.FirstOrDefault(static request => !request.BindingCancellationAttempted)
+        RemoveUnavailablePermissionRequests(requests);
+        var candidates = requests.Where(request => request.IsAwaitingInput && (toolCallId is null
+            || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal)));
+        return candidates.FirstOrDefault(static request => !request.IsCancellationOnly)
             ?? candidates.FirstOrDefault();
     }
 
@@ -130,13 +130,20 @@ public sealed class ChatConversationPanelStateCoordinator
 
         // The first unanswered request retains its surface; later requests wait or attach to their
         // own tool card. Invalidated SDK identities cannot keep an obsolete prompt in front.
-        requests.RemoveAll(static pending => !pending.IsAvailable);
+        RemoveUnavailablePermissionRequests(requests);
         requests.Add(request);
     }
 
     public bool RemovePermissionRequest(string conversationId, PermissionRequestViewModel request)
-        => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
-            && requests.Remove(request);
+    {
+        if (!_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
+            || !requests.Remove(request)) return false;
+        request.DetachRequest();
+        return true;
+    }
+
+    internal bool ContainsPermissionRequest(string conversationId, PermissionRequestViewModel request)
+        => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests) && requests.Contains(request);
 
     internal IReadOnlyList<(string ConversationId, PermissionRequestViewModel Request)> GetObsoletePermissionRequests(
         IImmutableDictionary<string, ConversationBindingSlice>? bindings)
@@ -156,13 +163,21 @@ public sealed class ChatConversationPanelStateCoordinator
         return obsolete;
     }
 
-    public void ClearPermissionRequests() => _pendingPermissionRequestsByConversation.Clear();
+    public void ClearPermissionRequests()
+    {
+        foreach (var requests in _pendingPermissionRequestsByConversation.Values)
+        {
+            foreach (var request in requests) request.DetachRequest();
+        }
+        _pendingPermissionRequestsByConversation.Clear();
+    }
 
-    internal void ReprojectPermissionLocalizedText(string defaultTitle, string cancellationTitle, string cancellationDescription)
+    internal void ReprojectPermissionLocalizedText(
+        string defaultTitle, string cancellationTitle, string bindingCancellationDescription, string peerCancellationDescription)
     {
         foreach (var request in _pendingPermissionRequestsByConversation.Values.SelectMany(static requests => requests))
         {
-            request.ReprojectLocalizedText(defaultTitle, cancellationTitle, cancellationDescription);
+            request.ReprojectLocalizedText(defaultTitle, cancellationTitle, bindingCancellationDescription, peerCancellationDescription);
         }
     }
 
@@ -219,9 +234,22 @@ public sealed class ChatConversationPanelStateCoordinator
         _selectedTerminalIdByConversation.Remove(conversationId);
         _pendingAskUserRequestsByConversation.Remove(conversationId);
         _pendingElicitationRequestsByConversation.Remove(conversationId);
-        _pendingPermissionRequestsByConversation.Remove(conversationId);
+        if (_pendingPermissionRequestsByConversation.Remove(conversationId, out var permissions))
+        {
+            foreach (var permission in permissions) permission.DetachRequest();
+        }
 
         return isCurrentConversation ? EmptySelection() : NoUiChange();
+    }
+
+    private static void RemoveUnavailablePermissionRequests(List<PermissionRequestViewModel> requests)
+    {
+        for (var index = requests.Count - 1; index >= 0; index--)
+        {
+            if (requests[index].IsAvailable) continue;
+            requests[index].DetachRequest();
+            requests.RemoveAt(index);
+        }
     }
 
     private TerminalPanelSessionViewModel? ResolveSelectedTerminal(

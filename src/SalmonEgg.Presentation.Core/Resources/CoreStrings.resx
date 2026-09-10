@@ -1328,6 +1328,9 @@
   <data name="Permission_RetryCancellation" xml:space="preserve">
     <value>Retry cancellation</value>
   </data>
+  <data name="Permission_AgentCancelled" xml:space="preserve">
+    <value>智能体已取消此请求。请重试取消以关闭提示。</value>
+  </data>
   <data name="Permission_BindingChanged" xml:space="preserve">
     <value>This request is no longer valid because the conversation changed. Retry cancellation to dismiss it.</value>
   </data>
