@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'msix-tooling.ps1')
 
 # Improve UTF-8 output when invoked from Windows PowerShell / cmd.
 try {
@@ -89,28 +90,6 @@ function Get-MSBuildPath {
     }
 
     return $msbuild
-}
-
-# The bundled CLI is published by scripts/release/publish-cli-binary.sh, the same script the release
-# workflow runs, so this local package embeds the same binary users get. That means this script needs a
-# POSIX shell; Git for Windows provides one, and the repository's other gates already assume it.
-function Get-BashPath {
-    $onPath = Get-Command bash -ErrorAction SilentlyContinue
-    if ($onPath) {
-        return $onPath.Source
-    }
-
-    $candidates = @(
-        (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Git\bin\bash.exe')
-    )
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
-            return $candidate
-        }
-    }
-
-    throw "bash.exe not found. The MSIX package embeds the salmon-egg CLI, published by scripts/release/publish-cli-binary.sh; install Git for Windows so this script can run it."
 }
 
 function Get-CertificateFromStore {
@@ -778,16 +757,24 @@ foreach ($referenceProject in $referenceProjects) {
 # than as a missing package file several minutes into MakeAppx.
 $bundledCliLogPath = Join-Path $msixLogDir "$logStamp-bundled-cli.log"
 $publishCliScript = Join-Path $repoRoot 'scripts\release\publish-cli-binary.sh'
-Invoke-LoggedProcess `
-    -FilePath (Get-BashPath) `
-    -Arguments @(
-        $publishCliScript,
-        '--rid', 'win-x64',
-        '--configuration', $Configuration
-    ) `
-    -LogPath $bundledCliLogPath `
-    -StepName 'Publishing the bundled salmon-egg CLI' `
-    -DisplayCommand "bash publish-cli-binary.sh --rid win-x64 --configuration $Configuration"
+$previousNuGetAudit = [Environment]::GetEnvironmentVariable('NuGetAudit', [EnvironmentVariableTarget]::Process)
+try {
+    # Match the local MSIX restore above. A transient vulnerability-feed failure must not turn the
+    # CLI's nested restore into NU1900-as-error after the package graph has already restored.
+    $env:NuGetAudit = 'false'
+    Invoke-LoggedProcess `
+        -FilePath (Get-BashPath) `
+        -Arguments @(
+            $publishCliScript,
+            '--rid', 'win-x64',
+            '--configuration', $Configuration
+        ) `
+        -LogPath $bundledCliLogPath `
+        -StepName 'Publishing the bundled salmon-egg CLI' `
+        -DisplayCommand "bash publish-cli-binary.sh --rid win-x64 --configuration $Configuration"
+} finally {
+    [Environment]::SetEnvironmentVariable('NuGetAudit', $previousNuGetAudit, [EnvironmentVariableTarget]::Process)
+}
 
 $bundledCli = Join-Path $repoRoot 'artifacts\cli-bin\win-x64\salmon-egg.exe'
 if (-not (Test-Path -LiteralPath $bundledCli)) {

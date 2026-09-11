@@ -202,6 +202,10 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Verify local MSIX Git Bash resolution
+        shell: pwsh
+        run: ./scripts/gates/run-msix-git-bash-resolution-gate.ps1
+
       - name: Restore WinUI app for isolated MSIX build
         shell: pwsh
         run: |
