@@ -302,7 +302,7 @@ public partial class ChatViewModelTests
         var commands = new AcpChatCoordinator(Mock.Of<IAcpChatServiceFactory>(),
             NullLogger<AcpChatCoordinator>.Instance, Mock.Of<ITransportSupportPolicy>(),
             Mock.Of<IAcpMcpServerProvider>(), Mock.Of<IAcpSessionCommandOrchestrator>());
-        return CreateViewModel(dispatcher, acpConnectionCommands: commands, localizer: localizer,
+        return CreateInteractionViewModel(dispatcher, acpConnectionCommands: commands, localizer: localizer,
             externalUriLauncher: externalUriLauncher,
             shellNavigationRuntimeState: shellNavigationRuntimeState,
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(store,
