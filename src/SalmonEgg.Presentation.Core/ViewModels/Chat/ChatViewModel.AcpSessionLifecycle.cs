@@ -1764,21 +1764,23 @@ public partial class ChatViewModel
         });
     }
 
-    private void OnElicitationRequestReceived(object? sender, ElicitationRequestEventArgs e)
+    private void ProcessElicitationRequest(IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request)
     {
-        var requestingAgent = (sender as IChatService)?.AgentInfo;
-        _ = ProcessElicitationRequestAsync(e, requestingAgent?.Title ?? requestingAgent?.Name ?? CurrentAgentDisplayText);
+        var requestingAgent = service.AgentInfo;
+        _ = ProcessElicitationRequestAsync(service, foregroundGeneration, request,
+            requestingAgent?.Title ?? requestingAgent?.Name ?? CurrentAgentDisplayText);
     }
 
-    private async Task ProcessElicitationRequestAsync(ElicitationRequestEventArgs e, string agentName)
+    private async Task ProcessElicitationRequestAsync(
+        IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request, string agentName)
     {
-        var foregroundServiceGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
         try
         {
             var projection = await _interactionEventBridge.BuildElicitationRequestAsync(
-                e,
+                request,
                 (conversationId, request) => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId, request)),
-                Logger, PostToUiAsync, agentName).ConfigureAwait(false);
+                Logger, PostToUiAsync, agentName,
+                unshown => CancelUndisplayedElicitationAsync(service, foregroundGeneration, unshown)).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -1789,7 +1791,8 @@ public partial class ChatViewModel
             {
                 // Routing and dispatcher work may finish after the foreground owner was replaced.
                 // A stale form must not occupy the new connection's only interaction slot.
-                if (_disposed || !e.State.CanRespond || foregroundServiceGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
+                if (_disposed || !request.State.CanRespond || !service.IsConnected
+                    || foregroundGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
                 {
                     return;
                 }
@@ -1802,14 +1805,32 @@ public partial class ChatViewModel
                 projection.Value.ViewModel.Dispose();
                 // This surface holds one form per conversation. Keep the visible request and cancel
                 // the unshown one instead of replacing an interaction the user still needs to answer.
-                await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
+                await CancelUndisplayedElicitationAsync(service, foregroundGeneration, request).ConfigureAwait(false);
             }
         }
         catch (Exception)
         {
-            Logger.LogError("Error processing elicitation request");
-            await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(e, Logger).ConfigureAwait(false);
+            await CancelUndisplayedElicitationAsync(service, foregroundGeneration, request).ConfigureAwait(false);
         }
+    }
+
+    private async Task CancelUndisplayedElicitationAsync(
+        IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request)
+    {
+        if (await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(request, Logger).ConfigureAwait(false)) return;
+
+        await PostToUiAsync(async () =>
+        {
+            if (_disposed || foregroundGeneration != Volatile.Read(ref _foregroundChatServiceGeneration)
+                || !service.IsConnected || !request.State.CanCancel) return;
+
+            // This surface has no request-scoped retry. Release only the service captured when
+            // subscribing; forwarded senders and the current service may identify a different owner.
+            await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(service, this,
+                ResolveLocalizerText("Elicitation_CancellationFailedDisconnected",
+                    "Could not cancel a request that cannot be displayed. The connection was closed. Reconnect to the agent."))
+                .ConfigureAwait(true);
+        }).ConfigureAwait(false);
     }
 
     private void RemovePendingElicitationRequestState(string conversationId, ElicitationRequestViewModel request)

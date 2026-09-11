@@ -1483,4 +1483,7 @@
   <data name="Elicitation_RequestExpired" xml:space="preserve">
     <value>这个请求已失效。请重新连接后继续。</value>
   </data>
+  <data name="Elicitation_CancellationFailedDisconnected" xml:space="preserve">
+    <value>无法取消未能显示的请求，已断开此连接。请重新连接 Agent。</value>
+  </data>
 </root>

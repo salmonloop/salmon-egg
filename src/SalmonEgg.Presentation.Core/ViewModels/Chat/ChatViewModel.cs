@@ -231,6 +231,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly Dictionary<RemoteSessionRecoveryLeaseKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
     private int _foregroundChatServiceGeneration;
     private EventHandler<PermissionRequestEventArgs>? _permissionRequestHandler;
+    private EventHandler<ElicitationRequestEventArgs>? _elicitationRequestHandler;
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
     private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
@@ -3390,7 +3391,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         chatService.TerminalRequestReceived += OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
         chatService.AskUserRequestReceived += OnAskUserRequestReceived;
-        chatService.ElicitationRequestReceived += OnElicitationRequestReceived;
+        _elicitationRequestHandler = (_, request) => ProcessElicitationRequest(chatService, foregroundGeneration, request);
+        chatService.ElicitationRequestReceived += _elicitationRequestHandler;
         chatService.ErrorOccurred += OnErrorOccurred;
 
         _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
@@ -3408,7 +3410,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
         chatService.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
         chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
-        chatService.ElicitationRequestReceived -= OnElicitationRequestReceived;
+        if (_elicitationRequestHandler is not null)
+        {
+            chatService.ElicitationRequestReceived -= _elicitationRequestHandler;
+            _elicitationRequestHandler = null;
+        }
         chatService.ErrorOccurred -= OnErrorOccurred;
     }
 
