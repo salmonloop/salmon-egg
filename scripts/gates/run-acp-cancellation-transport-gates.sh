@@ -23,8 +23,9 @@ timeout --signal=TERM --kill-after=10s 180s "$dotnet_bin" test \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.StdioCancelRequestFullStackTests \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.WebSocketCancelRequestFullStackTests \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.StreamableHttpCancelRequestFullStackTests \
+  --filter-class SalmonEgg.Infrastructure.Tests.Transport.StreamableHttpPermissionRetryFullStackTests \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.NetworkCancellationErrorOwnershipTests \
-  --minimum-expected-tests 6 \
+  --minimum-expected-tests 8 \
   --output Detailed > "$log_file" 2>&1 || {
     cat "$log_file"
     exit 1
@@ -41,7 +42,7 @@ import sys
 text = pathlib.Path(sys.argv[1]).read_text()
 passed = re.findall(r'^\s+succeeded:\s+(\d+)\s*$', text, re.M)
 skipped = re.findall(r'^\s+skipped:\s+(\d+)\s*$', text, re.M)
-if not passed or int(passed[-1]) < 6 or not skipped or int(skipped[-1]) != 0:
+if not passed or int(passed[-1]) < 8 or not skipped or int(skipped[-1]) != 0:
     raise SystemExit('Cancellation transport gate did not execute every real transport case without skips.')
-print('[gate] Real stdio, WebSocket, HTTP/2 + SSE, and error-ownership contracts passed with no skipped cases.')
+print('[gate] Real stdio, WebSocket, HTTP/2 + SSE cancellation and permission retries passed with no skipped cases.')
 PY

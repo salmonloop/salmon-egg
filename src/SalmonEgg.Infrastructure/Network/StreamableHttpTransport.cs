@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -9,6 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Infrastructure.Network
@@ -46,11 +48,11 @@ namespace SalmonEgg.Infrastructure.Network
 
         // 出站请求 id → (method, params.sessionId):用于在响应回流时识别
         // session/new(会话 id 在 result)与 session/load(会话 id 在请求参数)以开启会话级流。
-        private readonly ConcurrentDictionary<string, PendingRequest> _pendingRequests = new();
+        private readonly ConcurrentDictionary<AcpRequestId, PendingRequest> _pendingRequests = new();
 
-        // 会话级流上收到的服务端请求 id → sessionId:client 回发的 JSON-RPC 响应
-        // (如权限响应)按草案须带 Acp-Session-Id,而响应体本身不携带 sessionId。
-        private readonly ConcurrentDictionary<string, string> _inboundRequestSessions = new();
+        // 服务端请求 id → 所属流:权限回复须带 Acp-Session-Id,连接级请求则不带;
+        // 响应体本身不携带 sessionId,所以路由必须保留到 POST 成功。
+        private readonly ConcurrentDictionary<AcpRequestId, InboundRequestRoute> _inboundRequestSessions = new();
 
         private readonly ConcurrentDictionary<string, Lazy<Task>> _sessionStreams = new();
 
@@ -298,10 +300,16 @@ namespace SalmonEgg.Infrastructure.Network
                     "Streamable HTTP transport has no connection id yet; initialize must complete first.");
             }
 
-            var sessionId = ResolveOutboundSessionId(peek);
-            if (peek.Id is not null && !peek.IsResponse)
+            InboundRequestRoute? responseRoute = null;
+            if (peek.IsResponse && peek.Id is { } responseId)
             {
-                _pendingRequests[peek.Id] = new PendingRequest(peek.Method, peek.ParamsSessionId);
+                _inboundRequestSessions.TryGetValue(responseId, out responseRoute);
+            }
+
+            var sessionId = peek.IsResponse ? responseRoute?.SessionId : ResolveOutboundSessionId(peek);
+            if (peek.Id is { } requestId && !peek.IsResponse)
+            {
+                _pendingRequests[requestId] = new PendingRequest(peek.Method, peek.ParamsSessionId);
             }
 
             using var request = CreateJsonPost(message, includeConnectionId: true, sessionId);
@@ -310,25 +318,25 @@ namespace SalmonEgg.Infrastructure.Network
 
             // 草案:除 initialize 外一律 202,真实响应走 SSE 流。对 200 附带 JSON 正文的
             // 服务器保持宽松接收,把正文当作已送达的消息转发,不视为协议错误。
-            if (response.StatusCode != System.Net.HttpStatusCode.Accepted)
+            var body = response.StatusCode != System.Net.HttpStatusCode.Accepted
+                ? await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false)
+                : null;
+
+            // A failed POST leaves the request retryable. After success remove only the route
+            // captured for this response: the peer may already have reused the id on an SSE stream.
+            if (responseRoute is not null && peek.Id is { } completedId)
             {
-                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(body))
-                {
-                    HandleInboundMessage(body, streamSessionId: null);
-                }
+                _inboundRequestSessions.TryRemove(new KeyValuePair<AcpRequestId, InboundRequestRoute>(completedId, responseRoute));
+            }
+
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                HandleInboundMessage(body, streamSessionId: null);
             }
         }
 
-        private string? ResolveOutboundSessionId(MessagePeek peek)
+        private static string? ResolveOutboundSessionId(MessagePeek peek)
         {
-            if (peek.IsResponse)
-            {
-                return peek.Id is not null && _inboundRequestSessions.TryRemove(peek.Id, out var sessionId)
-                    ? sessionId
-                    : null;
-            }
-
             // 草案明确列出的会话级 POST 是 session/prompt、session/cancel 与权限响应;
             // 其余带 sessionId 的方法(set_mode/close 等)的响应被声明在连接级流,
             // 故按连接级发送。草案定稿若扩大会话级清单,此判定须同步。
@@ -500,7 +508,7 @@ namespace SalmonEgg.Infrastructure.Network
         private void HandleInboundMessage(string message, string? streamSessionId)
         {
             var peek = MessagePeek.From(message);
-            if (peek.IsResponse && peek.Id is not null && _pendingRequests.TryRemove(peek.Id, out var pending))
+            if (peek.IsResponse && peek.Id is { } responseId && _pendingRequests.TryRemove(responseId, out var pending))
             {
                 // session/new 的会话 id 在 result;session/load 的会话 id 来自请求参数。
                 // 两者都要求随即开启会话级 SSE 流,否则该会话的更新与 prompt 响应永远收不到。
@@ -515,9 +523,9 @@ namespace SalmonEgg.Infrastructure.Network
                     EnsureSessionStream(establishedSessionId!);
                 }
             }
-            else if (!peek.IsResponse && peek.Method is not null && peek.Id is not null && streamSessionId is not null)
+            else if (!peek.IsResponse && peek.Method is not null && peek.Id is { } requestId)
             {
-                _inboundRequestSessions[peek.Id] = streamSessionId;
+                _inboundRequestSessions[requestId] = new InboundRequestRoute(streamSessionId);
             }
 
             // 多个 SSE 流与 POST 内联正文并发到达;串行化发布以维持下游依赖的到达序单线程契约。
@@ -591,6 +599,12 @@ namespace SalmonEgg.Infrastructure.Network
 
         private readonly record struct PendingRequest(string? Method, string? SessionId);
 
+        // Reference identity distinguishes successive requests even when both id and session match.
+        private sealed class InboundRequestRoute(string? sessionId)
+        {
+            public string? SessionId { get; } = sessionId;
+        }
+
         /// <summary>
         /// 只读窥探出/入站 JSON-RPC 消息的路由要素;负载本身原样透传,绝不改写。
         /// 非法 JSON 不在传输层拒绝(由协议层裁决),返回空要素按连接级处理。
@@ -599,7 +613,7 @@ namespace SalmonEgg.Infrastructure.Network
         {
             public string? Method { get; init; }
 
-            public string? Id { get; init; }
+            public AcpRequestId? Id { get; init; }
 
             public string? ParamsSessionId { get; init; }
 
@@ -624,11 +638,11 @@ namespace SalmonEgg.Infrastructure.Network
                         method = methodElement.GetString();
                     }
 
-                    string? id = null;
+                    AcpRequestId? id = null;
                     if (root.TryGetProperty("id", out var idElement)
-                        && idElement.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+                        && AcpRequestId.TryFromEnvelopeId(idElement, out var requestId))
                     {
-                        id = idElement.ValueKind == JsonValueKind.String ? idElement.GetString() : idElement.GetRawText();
+                        id = requestId;
                     }
 
                     string? paramsSessionId = null;

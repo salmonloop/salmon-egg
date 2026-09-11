@@ -158,6 +158,203 @@ public sealed class StreamableHttpTransportTests : IDisposable
         Assert.Equal("sess-9", permissionPost.SessionId);
     }
 
+    [Theory]
+    [InlineData("77", "\"77\"")]
+    [InlineData("\"77\"", "77")]
+    [InlineData("null", "\"null\"")]
+    public async Task PermissionResponses_WithDistinctIdTypes_KeepTheirSessionRoutes(string firstId, string secondId)
+    {
+        // Arrange: ids that look alike in diagnostics still name different JSON-RPC requests.
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await OpenSessionAsync("second", 3);
+        await EmitPermissionAsync("first", firstId);
+        await EmitPermissionAsync("second", secondId);
+
+        // Act
+        await _transport.SendAsync(PermissionResponse(firstId), TestContext.Current.CancellationToken);
+        await _transport.SendAsync(PermissionResponse(secondId), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("first", _server.Posts.Single(post => post.Body == PermissionResponse(firstId)).SessionId);
+        Assert.Equal("second", _server.Posts.Single(post => post.Body == PermissionResponse(secondId)).SessionId);
+    }
+
+    [Theory]
+    [InlineData("first")]
+    [InlineData("second")]
+    [InlineData(null)]
+    public async Task PermissionResponse_WhenPeerReusesIdDuringPostCompletion_PreservesTheNewRoute(string? nextSession)
+    {
+        // Arrange: SSE can deliver the next request before the previous POST completion is observed.
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await OpenSessionAsync("second", 3);
+        await EmitPermissionAsync("first", "77");
+        var posted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var accepted = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        const string connectionResponse = "{\"jsonrpc\":\"2.0\",\"id\":77,\"result\":{}}";
+        _server.PostResponse = (post, ct) =>
+        {
+            if (post.Body == connectionResponse) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
+            posted.TrySetResult();
+            return accepted.Task.WaitAsync(ct);
+        };
+
+        // Act
+        var previousResponse = _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+        await posted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        if (nextSession is not null)
+        {
+            await EmitPermissionAsync(nextSession, "77", "next");
+        }
+        else
+        {
+            const string connectionRequest = "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"_ping\",\"params\":{}}";
+            await _server.EmitOnConnectionStreamAsync(connectionRequest);
+            await WaitForAsync(() => _received.Contains(connectionRequest));
+            await _transport.SendAsync(connectionResponse, TestContext.Current.CancellationToken);
+            Assert.Null(_server.Posts.Single(post => post.Body == connectionResponse).SessionId);
+        }
+        accepted.SetResult(new HttpResponseMessage(HttpStatusCode.Accepted));
+        await previousResponse;
+        _server.PostResponse = null;
+        await _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+
+        // Assert: this also covers reuse on the same session, where comparing only the strings fails.
+        var replies = _server.Posts.Where(post => post.Body == PermissionResponse("77")).ToArray();
+        Assert.Equal(2, replies.Length);
+        Assert.Equal("first", replies[0].SessionId);
+        Assert.Equal(nextSession, replies[1].SessionId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PermissionResponse_WhenPostThrowsOrIsCancelled_RetainsRouteForRetry(bool cancel)
+    {
+        // Arrange
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await EmitPermissionAsync("first", "77");
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        _server.PostResponse = async (_, ct) =>
+        {
+            if (cancel)
+            {
+                cancellation.Cancel();
+                await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            }
+            throw new HttpRequestException("Temporary write failure.");
+        };
+
+        // Act
+        if (cancel)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _transport.SendAsync(PermissionResponse("77"), cancellation.Token));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<HttpRequestException>(() => _transport.SendAsync(PermissionResponse("77"), cancellation.Token));
+        }
+        _server.PostResponse = null;
+        await _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var replies = _server.Posts.Where(post => post.Body == PermissionResponse("77")).ToArray();
+        Assert.Equal(2, replies.Length);
+        Assert.All(replies, post => Assert.Equal("first", post.SessionId));
+    }
+
+    [Fact]
+    public async Task PermissionResponse_AfterSuccessfulPost_DoesNotLeakRouteIntoConnectionRequest()
+    {
+        // Arrange
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await EmitPermissionAsync("first", "77");
+        await _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+
+        // Act: a later connection-level request legitimately reuses the now-completed id.
+        const string connectionRequest = "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"_ping\",\"params\":{}}";
+        await _server.EmitOnConnectionStreamAsync(connectionRequest);
+        await WaitForAsync(() => _received.Contains(connectionRequest));
+        const string response = "{\"jsonrpc\":\"2.0\",\"id\":77,\"result\":{}}";
+        await _transport.SendAsync(response, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(_server.Posts.Single(post => post.Body == response).SessionId);
+    }
+
+    [Fact]
+    public async Task PermissionResponse_WithInlineConnectionRequest_ReentrantReplyUsesTheNewScope()
+    {
+        // Arrange: the peer's successful POST body can contain its next request.
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await EmitPermissionAsync("first", "77");
+        const string connectionRequest = "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"_ping\",\"params\":{}}";
+        const string connectionResponse = "{\"jsonrpc\":\"2.0\",\"id\":77,\"result\":{}}";
+        var replied = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = _transport.Messages.Subscribe(message =>
+        {
+            if (message == connectionRequest)
+            {
+                replied.SetResult(_transport.SendAsync(connectionResponse, TestContext.Current.CancellationToken));
+            }
+        });
+        _server.PostResponse = (post, _) => Task.FromResult(post.Body == connectionResponse
+            ? new HttpResponseMessage(HttpStatusCode.Accepted)
+            : new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(connectionRequest, Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        await _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+        var reply = await replied.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await reply;
+
+        // Assert
+        Assert.Null(_server.Posts.Single(post => post.Body == connectionResponse).SessionId);
+    }
+
+    [Fact]
+    public async Task PermissionResponse_WhenOldPostCompletesAfterReconnect_PreservesTheNewConnectionRoute()
+    {
+        // Arrange: a server can finish an accepted POST after the original connection closes.
+        await InitializeAsync();
+        await OpenSessionAsync("first", 2);
+        await EmitPermissionAsync("first", "77");
+        var posted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var accepted = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _server.PostResponse = (_, _) =>
+        {
+            posted.SetResult();
+            return accepted.Task;
+        };
+        var oldResponse = _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+        await posted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Act: the new connection receives another request with the same id and session spelling.
+        await _transport.DisconnectAsync();
+        _server.PostResponse = null;
+        _server.RestartStreams();
+        await _transport.ConnectAsync(Endpoint, TestContext.Current.CancellationToken);
+        await _transport.SendAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}", TestContext.Current.CancellationToken);
+        await WaitForAsync(() => _server.ConnectionStreamRequests.Count == 2);
+        await OpenSessionAsync("first", 3);
+        await EmitPermissionAsync("first", "77", "new-connection");
+        accepted.SetResult(new HttpResponseMessage(HttpStatusCode.Accepted));
+        await oldResponse;
+        await _transport.SendAsync(PermissionResponse("77"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var replies = _server.Posts.Where(post => post.Body == PermissionResponse("77")).ToArray();
+        Assert.Equal(2, replies.Length);
+        Assert.All(replies, post => Assert.Equal("first", post.SessionId));
+    }
+
     [Fact]
     public async Task Disconnect_SendsDeleteWithConnectionId()
     {
@@ -206,6 +403,23 @@ public sealed class StreamableHttpTransportTests : IDisposable
         await WaitForAsync(() => _server.ConnectionStreamRequests.Count == 1);
     }
 
+    private async Task OpenSessionAsync(string sessionId, int requestId)
+    {
+        await _transport.SendAsync($$$$"""{"jsonrpc":"2.0","id":{{{{requestId}}}},"method":"session/new","params":{}}""", TestContext.Current.CancellationToken);
+        await _server.EmitOnConnectionStreamAsync($$$$"""{"jsonrpc":"2.0","id":{{{{requestId}}}},"result":{"sessionId":"{{{{sessionId}}}}"}}""");
+        await WaitForAsync(() => _server.SessionStreamRequests.Any(request => request.SessionId == sessionId));
+    }
+
+    private async Task EmitPermissionAsync(string sessionId, string id, string toolCallId = "tool")
+    {
+        var message = $$$$"""{"jsonrpc":"2.0","id":{{{{id}}}},"method":"session/request_permission","params":{"sessionId":"{{{{sessionId}}}}","toolCall":{"toolCallId":"{{{{toolCallId}}}}"}}}""";
+        await _server.EmitOnSessionStreamAsync(sessionId, message);
+        await WaitForAsync(() => _received.Contains(message));
+    }
+
+    private static string PermissionResponse(string id)
+        => $$$$"""{"jsonrpc":"2.0","id":{{{{id}}}},"result":{"outcome":{"outcome":"cancelled"}}}""";
+
     private static async Task WaitForAsync(Func<bool> condition, int timeoutSeconds = 5)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(timeoutSeconds);
@@ -232,7 +446,7 @@ public sealed class StreamableHttpTransportTests : IDisposable
     private sealed class FakeAcpServerHandler : HttpMessageHandler
     {
         private readonly ConcurrentDictionary<string, Pipe> _sessionPipes = new();
-        private readonly Pipe _connectionPipe = new();
+        private Pipe _connectionPipe = new();
 
         public bool OmitConnectionIdOnInitialize { get; set; }
 
@@ -241,6 +455,8 @@ public sealed class StreamableHttpTransportTests : IDisposable
         public bool HangDeleteRequests { get; set; }
 
         public bool HangInitializeRequests { get; set; }
+
+        public Func<PostRequest, CancellationToken, Task<HttpResponseMessage>>? PostResponse { get; set; }
 
         public ConcurrentQueue<PostRequest> Posts { get; } = new();
 
@@ -255,6 +471,13 @@ public sealed class StreamableHttpTransportTests : IDisposable
 
         public Task EmitOnSessionStreamAsync(string sessionId, string message)
             => WriteSseAsync(_sessionPipes.GetOrAdd(sessionId, _ => new Pipe()), message);
+
+        public void RestartStreams()
+        {
+            _connectionPipe = new Pipe();
+            _sessionPipes.Clear();
+            SessionStreamRequests.Clear();
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -303,8 +526,11 @@ public sealed class StreamableHttpTransportTests : IDisposable
                     return response;
                 }
 
-                Posts.Enqueue(new PostRequest(body, connectionId, sessionId));
-                return new HttpResponseMessage(HttpStatusCode.Accepted);
+                var post = new PostRequest(body, connectionId, sessionId);
+                Posts.Enqueue(post);
+                return PostResponse is { } respond
+                    ? await respond(post, cancellationToken)
+                    : new HttpResponseMessage(HttpStatusCode.Accepted);
             }
 
             var accept = string.Join(",", request.Headers.Accept.Select(header => header.ToString()));
