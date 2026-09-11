@@ -12,6 +12,7 @@ export async function startAcpWebSocketServer(options = {}) {
   let deferNextSessionNewResponse = options.deferSessionNewResponse === true;
   let deferredSessionNew;
   let sessionPromptRequest;
+  let deferredPrompt;
   let clientRequestSequence = 0;
   let resolveInitialize;
   let resolveSessionNew;
@@ -145,6 +146,12 @@ export async function startAcpWebSocketServer(options = {}) {
         if (message.method === "session/prompt") {
           sessionPromptRequest = message;
           resolveSessionPrompt(message);
+          if (deferredPrompt) {
+            deferredPrompt.socket = socket;
+            deferredPrompt.request = message;
+            deferredPrompt.resolve(message);
+            continue;
+          }
           writeSessionUpdate(socket, sessionId, {
             sessionUpdate: "agent_message_chunk",
             content: {
@@ -159,6 +166,15 @@ export async function startAcpWebSocketServer(options = {}) {
               stopReason: "end_turn",
               userMessageId: message.params?.messageId ?? null
             }
+          });
+        }
+
+        if (message.method === "session/cancel" && deferredPrompt?.request
+          && deferredPrompt.socket === socket) {
+          deferredPrompt.cancellations.push(message);
+          writeJsonRpc(socket, {
+            jsonrpc: "2.0", id: deferredPrompt.request.id,
+            result: { stopReason: "cancelled" }
           });
         }
       }
@@ -181,6 +197,18 @@ export async function startAcpWebSocketServer(options = {}) {
   return {
     url: `ws://127.0.0.1:${port}/acp`,
     sessionId,
+    deferNextPrompt: () => {
+      if (deferredPrompt) throw new Error("A deferred prompt is already active.");
+      let resolve;
+      const received = new Promise(settle => { resolve = settle; });
+      const pending = { resolve, request: null, socket: null, cancellations: [] };
+      deferredPrompt = pending;
+      return {
+        waitForRequest: () => waitWithTimeout(received, "Timed out waiting for the held prompt.", 30_000),
+        cancellations: () => [...pending.cancellations],
+        release: () => { if (deferredPrompt === pending) deferredPrompt = undefined; }
+      };
+    },
     completeSessionNew: () => {
       if (!deferredSessionNew) {
         throw new Error("No deferred session/new request remains to complete.");
