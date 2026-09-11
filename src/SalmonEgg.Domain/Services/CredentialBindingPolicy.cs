@@ -68,6 +68,8 @@ public static class CredentialBindingPolicy
         CredentialBindingValidationError.InvalidHeaderEndpoint => "A header credential requires a matching HTTP or WebSocket endpoint without user information or a fragment.",
         CredentialBindingValidationError.InvalidHeaderName => "Choose an authentication header name, not a transport-controlled header.",
         CredentialBindingValidationError.InvalidHeaderScheme => "Use one HTTP token for the header scheme, or leave it empty for a raw value.",
+        CredentialBindingValidationError.MissingCredential => "The bound credential is not set. Set it in secure storage or remove the credential binding before connecting.",
+        CredentialBindingValidationError.UnsupportedCredentialCharacters => "The credential contains characters unsupported by its destination. Replace the stored credential.",
         _ => throw new ArgumentOutOfRangeException(nameof(error), error, null),
     };
 

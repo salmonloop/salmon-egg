@@ -1438,6 +1438,12 @@ Create the corresponding Markdown file in:
   <data name="CredentialBinding_InvalidHeaderScheme" xml:space="preserve">
     <value>Use one HTTP token for the header scheme, or leave it empty for a raw value.</value>
   </data>
+  <data name="CredentialBinding_MissingCredential" xml:space="preserve">
+    <value>The bound credential is not set. Set it in secure storage or remove the credential binding before connecting.</value>
+  </data>
+  <data name="CredentialBinding_UnsupportedCredentialCharacters" xml:space="preserve">
+    <value>The credential contains characters unsupported by its destination. Replace the stored credential.</value>
+  </data>
   <data name="ChatAuth_TerminalTitle" xml:space="preserve">
     <value>Sign in to agent</value>
   </data>

@@ -17,7 +17,7 @@ public static class CredentialBindingResolver
         ArgumentNullException.ThrowIfNull(configuration);
         if (CredentialBindingPolicy.GetValidationError(configuration) is { } error)
         {
-            return CredentialBindingResolution.Failure(CredentialBindingPolicy.GetDiagnosticMessage(error));
+            return CredentialBindingResolution.Failure(error);
         }
 
         var environment = new Dictionary<string, string>(configuration.StdioEnvironment, StringComparer.Ordinal);
@@ -33,13 +33,12 @@ public static class CredentialBindingResolver
             : configuration.Authentication?.ApiKey;
         if (string.IsNullOrEmpty(secret))
         {
-            return CredentialBindingResolution.Failure(
-                "The bound credential is not set. Set it in secure storage or remove the credential binding before connecting.");
+            return CredentialBindingResolution.Failure(CredentialBindingValidationError.MissingCredential);
         }
 
         if (secret.Contains('\0') || (binding.Target == CredentialTarget.Header && secret.Any(character => character < ' ' || character > '~')))
         {
-            return CredentialBindingResolution.Failure("The credential contains characters unsupported by its destination. Replace the stored credential.");
+            return CredentialBindingResolution.Failure(CredentialBindingValidationError.UnsupportedCredentialCharacters);
         }
 
         if (binding.Target == CredentialTarget.Environment)

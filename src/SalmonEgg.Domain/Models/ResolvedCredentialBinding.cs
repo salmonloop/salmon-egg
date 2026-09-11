@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Domain.Models;
 
@@ -33,19 +34,23 @@ public sealed class ResolvedCredentialBinding
 
 public sealed class CredentialBindingResolution
 {
-    private CredentialBindingResolution(ResolvedCredentialBinding? value, string? error)
+    private CredentialBindingResolution(ResolvedCredentialBinding? value, CredentialBindingValidationError? errorKind)
     {
         Value = value;
-        Error = error;
+        ErrorKind = errorKind;
     }
 
     public ResolvedCredentialBinding? Value { get; }
 
-    public string? Error { get; }
+    /// <summary>Stable failure category for a host's localized presentation.</summary>
+    public CredentialBindingValidationError? ErrorKind { get; }
+
+    /// <summary>English diagnostic for non-UI callers; never contains the credential value.</summary>
+    public string? Error => ErrorKind is { } error ? CredentialBindingPolicy.GetDiagnosticMessage(error) : null;
 
     public bool IsSuccess => Value is not null;
 
     internal static CredentialBindingResolution Success(ResolvedCredentialBinding value) => new(value, null);
 
-    internal static CredentialBindingResolution Failure(string error) => new(null, error);
+    internal static CredentialBindingResolution Failure(CredentialBindingValidationError error) => new(null, error);
 }

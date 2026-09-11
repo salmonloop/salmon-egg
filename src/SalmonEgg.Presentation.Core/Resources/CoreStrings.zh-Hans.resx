@@ -1444,6 +1444,12 @@
   <data name="CredentialBinding_InvalidHeaderScheme" xml:space="preserve">
     <value>请求头方案只能填写一个 HTTP 标记；如需直接发送凭据原值，请留空。</value>
   </data>
+  <data name="CredentialBinding_MissingCredential" xml:space="preserve">
+    <value>尚未设置已绑定的凭据。请先保存 Token 或 API Key，或移除凭据绑定后再连接。</value>
+  </data>
+  <data name="CredentialBinding_UnsupportedCredentialCharacters" xml:space="preserve">
+    <value>凭据包含目标不支持的字符。请替换已保存的凭据后再连接。</value>
+  </data>
   <data name="ChatAuth_TerminalTitle" xml:space="preserve">
     <value>登录智能体</value>
   </data>

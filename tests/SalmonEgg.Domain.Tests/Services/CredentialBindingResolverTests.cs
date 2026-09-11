@@ -16,6 +16,8 @@ public sealed class CredentialBindingResolverTests
         var resolved = CredentialBindingResolver.Resolve(profile);
 
         Assert.True(resolved.IsSuccess);
+        Assert.Null(resolved.ErrorKind);
+        Assert.Null(resolved.Error);
         Assert.DoesNotContain(Secret, resolved.Value!.Environment.Values);
         Assert.Null(resolved.Value.HeaderValue);
     }
@@ -74,6 +76,7 @@ public sealed class CredentialBindingResolverTests
         var resolved = CredentialBindingResolver.Resolve(profile);
 
         Assert.False(resolved.IsSuccess);
+        Assert.Equal(CredentialBindingValidationError.DestinationChanged, resolved.ErrorKind);
         Assert.Contains("Bind the credential again", resolved.Error);
         Assert.DoesNotContain(Secret, resolved.Error);
     }
@@ -109,6 +112,7 @@ public sealed class CredentialBindingResolverTests
 
         Assert.False(resolved.IsSuccess);
         Assert.Null(resolved.Value);
+        Assert.Equal(CredentialBindingValidationError.MissingCredential, resolved.ErrorKind);
         Assert.Contains("not set", resolved.Error);
     }
 
@@ -126,6 +130,8 @@ public sealed class CredentialBindingResolverTests
         var resolved = CredentialBindingResolver.Resolve(profile);
 
         Assert.False(resolved.IsSuccess);
+        Assert.Equal(scheme is null ? CredentialBindingValidationError.InvalidHeaderName
+            : CredentialBindingValidationError.InvalidHeaderScheme, resolved.ErrorKind);
         Assert.DoesNotContain(Secret, resolved.Error);
     }
 
@@ -139,6 +145,7 @@ public sealed class CredentialBindingResolverTests
         var resolved = CredentialBindingResolver.Resolve(profile);
 
         Assert.False(resolved.IsSuccess);
+        Assert.Equal(CredentialBindingValidationError.UnsupportedCredentialCharacters, resolved.ErrorKind);
         Assert.DoesNotContain(Secret, resolved.Error);
     }
 

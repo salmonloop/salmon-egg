@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
@@ -12,6 +13,8 @@ using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -34,6 +37,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly ILogger<AcpChatCoordinator> _logger;
     private readonly int _sessionUpdateBufferLimit;
     private readonly IPlatformCapabilityService? _platformCapabilities;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
     private AcpChatServiceAdapter? _activeChatServiceAdapter;
     private readonly object _applyScopeLock = new();
     private readonly object _poolConnectionGateSync = new();
@@ -53,7 +57,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionPoolManager? connectionPoolManager = null,
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit,
-        IPlatformCapabilityService? platformCapabilities = null)
+        IPlatformCapabilityService? platformCapabilities = null,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -83,6 +88,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _sessionUpdateBufferLimit = sessionUpdateBufferLimit;
         _platformCapabilities = platformCapabilities;
+        _localizer = localizer;
     }
 
     public async Task<AcpTransportApplyResult> ConnectToProfileAsync(
@@ -1155,7 +1161,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             }
 
             await DisconnectProfileInPoolAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException(result.Error);
+            var message = result.ErrorKind is { } error && _localizer is not null
+                ? CredentialBindingErrorMessageFormatter.Format(error, _localizer)
+                : result.Error;
+            throw new InvalidOperationException(message);
         }
 
         return result.Value!.HasHeader || result.Value.Environment.Count > 0 ? result.Value : null;
