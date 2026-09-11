@@ -33,6 +33,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SalmonEgg.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="SalmonEgg.Acp.Desktop.Tests" />
   </ItemGroup>
 
 </Project>

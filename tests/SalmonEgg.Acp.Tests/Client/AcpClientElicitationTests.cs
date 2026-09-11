@@ -373,12 +373,14 @@ public sealed class AcpClientElicitationTests
     }
 
     [Fact]
-    public async Task ElicitationCreate_SubscriberThrowsAfterReplacement_PreservesNewRequest()
+    public async Task ElicitationCreate_SubscriberThrowsAfterCompletedIdIsReused_PreservesNewRequest()
     {
         // Arrange
         var parser = new MessageParser();
         using var client = await CreateInitializedClientAsync(ClientCapabilityDefaults.Create());
         var sent = CaptureSentMessages();
+        ElicitationRequestEventArgs? original = null;
+        Task<bool>? originalAnswer = null;
         ElicitationRequestEventArgs? current = null;
         var replacing = false;
         client.ElicitationRequestReceived += (_, request) =>
@@ -388,6 +390,9 @@ public sealed class AcpClientElicitationTests
                 current = request;
                 return;
             }
+            original = request;
+            originalAnswer = request.Accept(null);
+            Assert.True(originalAnswer.IsCompletedSuccessfully);
             replacing = true;
             RaiseRequest(parser, 342, ElicitationMethods.Create, FormParamsJson);
             throw new InvalidOperationException("Previous host failed.");
@@ -397,10 +402,16 @@ public sealed class AcpClientElicitationTests
         RaiseRequest(parser, 342, ElicitationMethods.Create, FormParamsJson);
 
         // Assert
-        Assert.Empty(sent);
+        Assert.NotNull(originalAnswer);
+        Assert.True(await originalAnswer);
+        Assert.NotNull(original);
+        Assert.False(await original.Cancel());
+        var first = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(Assert.Single(sent)));
+        Assert.Equal(ElicitationActions.Accept, first.Result!.Value.GetProperty("action").GetString());
         Assert.NotNull(current);
         Assert.True(await current.Cancel());
-        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(Assert.Single(sent)));
+        Assert.Equal(2, sent.Count);
+        var response = Assert.IsType<JsonRpcResponse>(parser.ParseMessage(sent.Last()));
         Assert.Equal(ElicitationActions.Cancel, response.Result!.Value.GetProperty("action").GetString());
     }
 

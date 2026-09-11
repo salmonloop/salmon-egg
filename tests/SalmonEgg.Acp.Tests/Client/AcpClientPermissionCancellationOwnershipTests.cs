@@ -521,7 +521,7 @@ public sealed class AcpClientPermissionCancellationOwnershipTests
     }
 
     [Fact]
-    public async Task Changed_RequestIdReplaced_NotifiesOnlyOriginalRequestIsUnavailable()
+    public async Task Changed_CompletedRequestIdReused_NotifiesOnlyOriginalRequestIsUnavailable()
     {
         // Arrange
         using var peer = await PermissionPeer.CreateAsync();
@@ -536,17 +536,18 @@ public sealed class AcpClientPermissionCancellationOwnershipTests
         try
         {
             // Act
-            peer.Request();
+            Assert.True(await original.TryRespondAsync("selected", "allow").WaitAsync(WaitTimeout, TestToken));
             await replaced.Task.WaitAsync(WaitTimeout, TestToken);
+            peer.Request();
             var replacement = peer.Requests.Last();
 
             // Assert
             Assert.False(original.CanRespond);
             Assert.False(await original.TryRespondAsync("cancelled").WaitAsync(WaitTimeout, TestToken));
             Assert.True(replacement.CanRespond);
-            Assert.Empty(peer.Attempts);
+            Assert.Single(peer.Attempts);
             Assert.True(await replacement.TryRespondAsync("selected", "allow").WaitAsync(WaitTimeout, TestToken));
-            Assert.Single(peer.Responses);
+            Assert.Equal(2, peer.Responses.Count);
             Assert.Empty(peer.Errors);
         }
         finally
