@@ -23,7 +23,8 @@ public sealed class AcpDraftPermissionTests
         peer.Request("{\"sessionId\":\"one\",\"title\":\"Approve operation?\",\"description\":\"Please review\","
             + Options + subject + "}");
         var request = Assert.Single(peer.Requests);
-        await request.Respond("selected", "allow");
+        Assert.True(request.CanRespond);
+        Assert.True(await request.TryRespondAsync("selected", "allow"));
 
         // Assert
         var draft = request.GetDraftRequest();
@@ -35,6 +36,7 @@ public sealed class AcpDraftPermissionTests
         Assert.Equal(draft.Description, request.Description);
         Assert.Null(draft.Subject);
         Assert.Null(request.ToolCall);
+        Assert.False(request.CanRespond);
         Assert.Equal("selected", Outcome(Assert.Single(peer.Responses)));
         Assert.Empty(peer.Errors);
     }
@@ -309,13 +311,15 @@ public sealed class AcpDraftPermissionTests
         var count = peer.Responses.Count;
 
         // Act
-        await old.Respond("selected", "allow");
+        Assert.False(old.CanRespond);
+        Assert.False(await old.TryRespondAsync("selected", "allow"));
 
         // Assert
         Assert.Equal(count, peer.Responses.Count);
         var current = peer.Requests[^1];
         Assert.Equal("New prompt", current.GetDraftRequest()!.Title);
-        await current.Respond("selected", "allow");
+        Assert.True(current.CanRespond);
+        Assert.True(await current.TryRespondAsync("selected", "allow"));
         Assert.Equal(count + 1, peer.Responses.Count);
         Assert.Equal("selected", Outcome(peer.Responses[^1]));
         Assert.Empty(peer.Errors);
@@ -369,10 +373,12 @@ public sealed class AcpDraftPermissionTests
         await Assert.ThrowsAsync<AcpException>(() => request.Respond("selected", "forged"));
         Assert.Empty(peer.Attempts);
         peer.ResponseSend = (_, _) => Task.FromResult(false);
-        await request.Respond("selected", "allow");
+        Assert.False(await request.TryRespondAsync("selected", "allow"));
+        Assert.True(request.CanRespond);
         Assert.Empty(peer.Responses);
         peer.ResponseSend = null;
-        await request.Respond("selected", "allow");
+        Assert.True(await request.TryRespondAsync("selected", "allow"));
+        Assert.False(request.CanRespond);
         Assert.Equal("allow", Assert.Single(peer.Responses).Result!.Value.GetProperty("outcome").GetProperty("optionId").GetString());
         Assert.Equal("allow", Assert.Single(request.GetDraftRequest()!.Options).OptionId);
     }
