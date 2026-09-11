@@ -410,15 +410,18 @@ public sealed class AcpClientBatchTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task UrlPeerCancellation_OriginalAcceptWriteWinsOrCancellationFollows(bool acceptSent)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task UrlPeerCancellation_OriginalAcceptWriteWinsOrCancellationFollows(bool batched, bool acceptSent)
     {
         // Arrange
         using var peer = await BatchPeer.CreateAsync();
         ElicitationRequestEventArgs? request = null;
         peer.Client.ElicitationRequestReceived += (_, value) => request = value;
-        peer.Deliver(Url("1", "during-write"));
+        var url = Url("1", "during-write");
+        peer.Deliver(batched ? "[" + url + "]" : url);
         Assert.NotNull(request);
         var write = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.NextResponseWrite = write.Task;
@@ -433,7 +436,8 @@ public sealed class AcpClientBatchTests
         Assert.Equal(acceptSent ? ElicitationActions.Accept : null, request.State.ResponseAction);
         Assert.False(request.State.CanCancel);
         Assert.False(request.State.CanRespond);
-        var response = Assert.Single(peer.Responses);
+        var frame = Assert.Single(peer.Responses);
+        var response = batched ? frame[0] : frame;
         if (acceptSent) Assert.Equal("accept", response.GetProperty("result").GetProperty("action").GetString());
         else Assert.Equal(JsonRpcErrorCode.Cancelled, response.GetProperty("error").GetProperty("code").GetInt32());
     }
