@@ -20,6 +20,8 @@ public static class CredentialBindingErrorMessageFormatter
             CredentialBindingValidationError.InvalidHeaderEndpoint => "CredentialBinding_InvalidHeaderEndpoint",
             CredentialBindingValidationError.InvalidHeaderName => "CredentialBinding_InvalidHeaderName",
             CredentialBindingValidationError.InvalidHeaderScheme => "CredentialBinding_InvalidHeaderScheme",
+            CredentialBindingValidationError.MissingCredential => "CredentialBinding_MissingCredential",
+            CredentialBindingValidationError.UnsupportedCredentialCharacters => "CredentialBinding_UnsupportedCredentialCharacters",
             _ => throw new ArgumentOutOfRangeException(nameof(error), error, null),
         };
         return localizer[resourceKey];

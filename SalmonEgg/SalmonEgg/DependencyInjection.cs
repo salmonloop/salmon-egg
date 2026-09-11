@@ -644,7 +644,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
-                platformCapabilities: sp.GetRequiredService<IPlatformCapabilityService>());
+                platformCapabilities: sp.GetRequiredService<IPlatformCapabilityService>(),
+                localizer: sp.GetRequiredService<IStringLocalizer<CoreStrings>>());
         });
         services.AddSingleton(sp =>
         {

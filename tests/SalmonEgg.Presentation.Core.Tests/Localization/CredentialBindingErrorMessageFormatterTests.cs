@@ -20,6 +20,8 @@ public sealed class CredentialBindingErrorMessageFormatterTests
     [InlineData(CredentialBindingValidationError.InvalidHeaderEndpoint, "请求头凭据需要匹配的 HTTP 或 WebSocket 地址，且地址不能包含用户信息或片段标识。")]
     [InlineData(CredentialBindingValidationError.InvalidHeaderName, "请选择用于身份验证的请求头名称，不要使用传输层保留的请求头。")]
     [InlineData(CredentialBindingValidationError.InvalidHeaderScheme, "请求头方案只能填写一个 HTTP 标记；如需直接发送凭据原值，请留空。")]
+    [InlineData(CredentialBindingValidationError.MissingCredential, "尚未设置已绑定的凭据。请先保存 Token 或 API Key，或移除凭据绑定后再连接。")]
+    [InlineData(CredentialBindingValidationError.UnsupportedCredentialCharacters, "凭据包含目标不支持的字符。请替换已保存的凭据后再连接。")]
     public void Format_ChineseFailureCategory_UsesSpecificExplanation(CredentialBindingValidationError error, string expected)
     {
         // Arrange

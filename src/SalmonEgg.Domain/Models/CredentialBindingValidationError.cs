@@ -14,4 +14,6 @@ public enum CredentialBindingValidationError
     InvalidHeaderEndpoint,
     InvalidHeaderName,
     InvalidHeaderScheme,
+    MissingCredential,
+    UnsupportedCredentialCharacters,
 }
