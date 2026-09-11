@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  clickVisibleControl,
   collectVisibleInteractiveDebug,
   typeIntoVisibleTextField,
   waitForControlEnabledState,
@@ -27,7 +28,8 @@ export async function verifyRemainingFormInputs(page, server) {
   requests.push(await verifyMultiSelectForm(page, server, suffix));
   requests.push(await verifyTitledMultiSelectForm(page, server, suffix));
   requests.push(await verifyDeclinedForm(page, server, suffix));
-  console.log("WASM form inputs: integer/number validation, bounded and titled multi-select, native Decline, typed replies and dismissal");
+  requests.push(...await verifySessionCancelledForm(page, server, suffix));
+  console.log("WASM form inputs: integer/number validation, bounded and titled multi-select, native Decline, session cancellation, next form, typed replies and dismissal");
   return requests;
 }
 
@@ -145,6 +147,47 @@ async function verifyDeclinedForm(page, server, suffix) {
   await activateFormAction(page, form, "Decline");
   await verifyResponseAndDismissal(page, form, { action: "decline" });
   return form.request;
+}
+
+async function verifySessionCancelledForm(page, server, suffix) {
+  const pending = server.deferNextPrompt();
+  const input = { automationIds: ["InputBox"], labels: [] };
+  const send = { automationIds: ["ChatInputArea.Send"], labels: [] };
+  const stop = { automationIds: ["ChatInputArea.Cancel"], labels: [] };
+  const prompt = `WASM prompt held for form cancellation ${suffix}`;
+  try {
+    await typeIntoVisibleTextField(page, input, prompt, "prompt before cancellation form", formTimeoutMs);
+    await waitForControlEnabledState(page, send, true, "held prompt ready to send");
+    await clickVisibleControl(page, send);
+    const request = await pending.waitForRequest();
+    assert.equal(request.params.sessionId, server.sessionId);
+    assert.ok(request.params.prompt.some(block => block.type === "text" && block.text === prompt),
+      "This round's input must reach the peer before cancellation is exercised.");
+
+    const form = await openForm(page, server, `WASM session-cancelled form ${suffix}`, {
+      input: { type: "string", title: `Cancelled form field ${suffix}` }
+    });
+    await waitForControlEnabledState(page, stop, true, "Stop remains available during the form");
+    await clickVisibleControl(page, stop);
+    await verifyResponseAndDismissal(page, form, { action: "cancel" });
+    assert.equal(pending.cancellations().length, 1, "Stop must send one session/cancel notification.");
+    assert.equal(pending.cancellations()[0].params.sessionId, server.sessionId);
+    pending.release();
+
+    const next = await openForm(page, server, `WASM form after session cancellation ${suffix}`, {
+      input: { type: "string", title: `Next form field ${suffix}` }
+    });
+    assert.equal(next.request.responses().length, 0, "The previous form must not auto-cancel this next request.");
+    await activateFormAction(page, next, "Cancel");
+    await verifyResponseAndDismissal(page, next, { action: "cancel" });
+    await waitForValue(page, () => {
+      const field = window.__salmoneggSmoke.semantic.resolveEditableField({ automationIds: ["InputBox"], labels: [] });
+      return field?.id && !field.disabled && !field.state.hidden;
+    }, null, "composer enabled after the cancelled form retires");
+    return [form.request, next.request];
+  } finally {
+    pending.release();
+  }
 }
 
 async function openForm(page, server, prompt, properties) {
