@@ -2105,8 +2105,14 @@ public partial class ChatViewModel
         var conversationRequest = _panelStateCoordinator.GetPendingPermissionRequest(
             CurrentSessionId, toolCallId: null, PendingPermissionRequest);
         var unboundCancellation = _panelStateCoordinator.GetUnboundPermissionCancellation(PendingPermissionRequest);
-        PendingPermissionRequest = unboundCancellation is { IsSendingResponse: true }
-            ? unboundCancellation : conversationRequest ?? unboundCancellation;
+        // A bound answer and an unbound cancellation can share the same physical batch write.
+        // Keep the current member while either authoritative collection still selects that sender.
+        if (PendingPermissionRequest is not { IsSendingResponse: true } current
+            || (!ReferenceEquals(current, conversationRequest) && !ReferenceEquals(current, unboundCancellation)))
+        {
+            PendingPermissionRequest = unboundCancellation is { IsSendingResponse: true }
+                ? unboundCancellation : conversationRequest ?? unboundCancellation;
+        }
         ShowPermissionDialog = PendingPermissionRequest is not null;
         StandalonePermissionRequest = PendingPermissionRequest is { } pending
             && (pending.ToolCallId is null || !string.Equals(_visibleTranscriptConversationId, CurrentSessionId, StringComparison.Ordinal)
