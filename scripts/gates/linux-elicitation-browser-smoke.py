@@ -15,6 +15,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+BrowserVisitTimeout = 45.0
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -27,6 +29,8 @@ def main():
     # Reap the opener's browser descendants after the short-lived probe has exited.
     assert ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) == 0
     received = threading.Event()
+    visited = threading.Event()
+    first_visit_at = None
     reports = []
     visits = []
     nonce = os.urandom(12).hex()
@@ -36,10 +40,14 @@ def main():
             pass
 
         def do_GET(self):
+            nonlocal first_visit_at
             if not self.path.startswith("/authorize?"):
                 self.send_error(404)
                 return
             visits.append(self.path)
+            if first_visit_at is None:
+                first_visit_at = time.monotonic()
+            visited.set()
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -87,13 +95,19 @@ def main():
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, start_new_session=True)
             try:
+                browser_wait_started = time.monotonic()
                 output, errors = process.communicate(url + "\n", timeout=25)
                 if pid_file.exists():
                     browser_pid = int(pid_file.read_text())
                 assert process.returncode == 0, "Launcher failed: " + redact_diagnostic(output + errors, private_values)
                 assert output.strip() == "Opened", redact_diagnostic(output, private_values)
                 assert errors == "", redact_diagnostic(errors, private_values)
-                assert received.wait(15), describe_browser_failure(browser_log, browser_pid, private_values)
+                # This is a browser cold-start gate, not an application's interaction timeout.
+                # Hosted Chrome was still in kernel I/O wait (D, empty stderr) at the former
+                # 15-second assertion. Use one bounded phase-aware budget including opener time;
+                # observe real page/report events, and fail early when the browser has exited.
+                wait_for_browser_report(received, visited, browser_log, browser_pid, private_values,
+                    browser_wait_started + BrowserVisitTimeout)
                 assert len(visits) == 1, f"Expected one browser visit; observed {len(visits)}."
                 assert reports == [{"opener": True, "referrer": "", "privateValue": "page-private-canary"}]
                 assert browser_pid is not None
@@ -104,6 +118,8 @@ def main():
                     assert canary not in output + errors
                 print(f"Linux URL launcher passed: artifact={options.probe}; real xdg-open; "
                     "separate sandboxed browser; one visit; no opener/referrer/debug bridge; private output discarded.")
+                print(f"Browser timing: first visit={first_visit_at - browser_wait_started:.2f}s; "
+                    f"report={time.monotonic() - browser_wait_started:.2f}s; budget={BrowserVisitTimeout:.0f}s.")
             finally:
                 # The probe, opener and browser all belong to this isolated gate's process group.
                 # The production launcher itself deliberately never owns or kills the user's browser.
@@ -121,20 +137,39 @@ def redact_diagnostic(text, private_values):
     return re.sub(r"\b(?:https?|wss?|file)://\S+", "<redacted-url>", text)
 
 
-def describe_browser_failure(log_path, browser_pid, private_values):
+def read_browser_state(browser_pid):
+    if browser_pid is None:
+        return "handler-not-invoked", None
+    try:
+        process = Path(f"/proc/{browser_pid}")
+        state = process.joinpath("stat").read_text().rsplit(")", 1)[1].split()[0]
+        return state, process.joinpath("wchan").read_text().strip()
+    except FileNotFoundError:
+        return "exited", None
+
+
+def wait_for_browser_report(received, visited, log_path, browser_pid, private_values, deadline):
+    while not received.is_set():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AssertionError(describe_browser_failure(log_path, browser_pid, private_values, visited.is_set()))
+        state, _wait_channel = read_browser_state(browser_pid)
+        if state in ("handler-not-invoked", "exited", "Z", "X"):
+            raise AssertionError(describe_browser_failure(log_path, browser_pid, private_values, visited.is_set()))
+        # Event.wait returns immediately when the actual page reports; there is no startup sleep.
+        received.wait(min(0.1, remaining))
+
+
+def describe_browser_failure(log_path, browser_pid, private_values, page_visited=False):
     # Chrome startup errors must remain observable without publishing the controlled URL or
     # private page/handler output. The raw file lives only in this gate's private temp directory.
     details = log_path.read_text(errors="replace") if log_path.exists() else ""
     diagnostic = redact_diagnostic(details, private_values)[-8000:]
-    if browser_pid is None:
-        state = "handler-not-invoked"
-    else:
-        try:
-            state = Path(f"/proc/{browser_pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-        except FileNotFoundError:
-            state = "exited"
-    return "The real browser never visited the controlled external page. " \
-        + f"Browser process state={state}; stderr={diagnostic or '<empty>'}"
+    state, wait_channel = read_browser_state(browser_pid)
+    phase = "page-script-report" if page_visited else "browser-start-and-navigation"
+    return "The real browser did not complete the controlled external page check. " \
+        + f"Phase={phase}; process state={state}; wait channel={wait_channel or '<none>'}; " \
+        + f"stderr={diagnostic or '<empty>'}"
 
 
 def stop_owned_processes(process):
