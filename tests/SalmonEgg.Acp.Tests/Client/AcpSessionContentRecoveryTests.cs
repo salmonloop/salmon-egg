@@ -149,6 +149,124 @@ public sealed class AcpSessionContentRecoveryTests
     }
 
     [Theory]
+    [InlineData("false")]
+    [InlineData("17")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public void ReplaySession_InvalidOptionalMediaFields_PreservesImageAndResourcePayloads(string invalid)
+    {
+        // Arrange
+        var image = "{\"type\":\"image\",\"data\":\"YQ==\",\"mimeType\":\"image/png\",\"uri\":" + invalid + "}";
+        var link = "{\"type\":\"resource_link\",\"uri\":\"file:///kept\",\"name\":\"kept\",\"title\":" + invalid
+            + ",\"description\":" + invalid + ",\"mimeType\":" + invalid + ",\"size\":false}";
+        var textResource = "{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\",\"text\":\"kept\",\"mimeType\":" + invalid + "}}";
+        var blobResource = "{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\",\"blob\":\"YQ==\",\"mimeType\":" + invalid + "}}";
+
+        // Act
+        var blocks = AcpSessionDraftExtensions.ReplaySession("session",
+            [Update(image, false), Update(link, true), Update(textResource, true), Update(blobResource, true)]).Messages[0].Content;
+
+        // Assert
+        Assert.Equal(4, blocks.Length);
+        var recoveredImage = Assert.IsType<ImageContentBlock>(blocks[0]);
+        Assert.Equal("YQ==", recoveredImage.Data);
+        Assert.Equal("image/png", recoveredImage.MimeType);
+        Assert.Null(recoveredImage.Uri);
+        var recoveredLink = Assert.IsType<ResourceLinkContentBlock>(blocks[1]);
+        Assert.Equal("file:///kept", recoveredLink.Uri);
+        Assert.Equal("kept", recoveredLink.Name);
+        Assert.Null(recoveredLink.Title);
+        Assert.Null(recoveredLink.Description);
+        Assert.Null(recoveredLink.MimeType);
+        Assert.Null(recoveredLink.Size);
+        Assert.Equal("kept", Assert.IsType<ResourceContentBlock>(blocks[2]).Resource.Text);
+        Assert.Equal("YQ==", Assert.IsType<ResourceContentBlock>(blocks[3]).Resource.Blob);
+        Assert.Null(Assert.IsType<ResourceContentBlock>(blocks[2]).Resource.MimeType);
+        Assert.Null(Assert.IsType<ResourceContentBlock>(blocks[3]).Resource.MimeType);
+        foreach (var content in new[] { image, link, textResource, blobResource })
+        {
+            Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(content, Wire.V1<ContentBlock>()));
+        }
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("\"large\"")]
+    [InlineData("1.25")]
+    [InlineData("9223372036854775808")]
+    public void ResourceLink_InvalidOptionalSize_DefaultsWithoutDiscardingValidFields(string size)
+    {
+        // Arrange
+        var content = "{\"type\":\"resource_link\",\"uri\":\"file:///kept\",\"name\":\"kept\",\"title\":\"title\",\"size\":" + size + "}";
+
+        // Act
+        var link = JsonSerializer.Deserialize(content, Wire.V2<ResourceLinkContentBlock>())!;
+
+        // Assert
+        Assert.Equal("title", link.Title);
+        Assert.Null(link.Size);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(content, Wire.V1<ResourceLinkContentBlock>()));
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"image\",\"mimeType\":\"image/png\"}")]
+    [InlineData("{\"type\":\"image\",\"data\":42,\"mimeType\":\"image/png\"}")]
+    [InlineData("{\"type\":\"audio\",\"data\":\"YQ==\",\"mimeType\":false}")]
+    [InlineData("{\"type\":\"resource_link\",\"name\":\"name\",\"uri\":false}")]
+    [InlineData("{\"type\":\"resource_link\",\"uri\":\"file:///kept\",\"name\":false}")]
+    [InlineData("{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\"}}")]
+    [InlineData("{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\",\"text\":null,\"blob\":null}}")]
+    [InlineData("{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\",\"text\":17,\"blob\":false}}")]
+    public void ReplaySession_InvalidRequiredMediaFields_RejectsChunksAndSkipsInvalidWholeItems(string content)
+    {
+        // Arrange / Act / Assert
+        Assert.Throws<JsonException>(() => AcpSessionDraftExtensions.ReplaySession("session", [Update(content, true)]));
+        Assert.Empty(AcpSessionDraftExtensions.ReplaySession("session", [Update(content, false)]).Messages[0].Content);
+    }
+
+    [Theory]
+    [InlineData("\"text\":\"kept\",\"blob\":17", "kept", null)]
+    [InlineData("\"text\":17,\"blob\":\"YQ==\"", null, "YQ==")]
+    [InlineData("\"text\":\"kept\",\"blob\":\"YQ==\"", "kept", null)]
+    [InlineData("\"text\":\"\"", "", null)]
+    [InlineData("\"blob\":\"\"", null, "")]
+    public void ReplaySession_EmbeddedResourceUnion_UsesTheFirstValidSchemaBranch(string fields, string? text, string? blob)
+    {
+        // Arrange
+        var content = "{\"type\":\"resource\",\"resource\":{\"uri\":\"file:///kept\"," + fields + ",\"mimeType\":false}}";
+
+        // Act
+        var resource = Assert.IsType<ResourceContentBlock>(AcpSessionDraftExtensions.ReplaySession("session", [Update(content, true)]).Messages[0].Content[0]).Resource;
+
+        // Assert
+        Assert.Equal(text, resource.Text);
+        Assert.Equal(blob, resource.Blob);
+        Assert.Null(resource.MimeType);
+    }
+
+    [Fact]
+    public void ResourceLink_OptionalFieldRecovery_PreservesArbitraryValidSiblings()
+        => FsCheckPropertyRunner.Run(this, nameof(OptionalFieldRecoveryProperty));
+
+    private void OptionalFieldRecoveryProperty(string? title, long size, byte seed)
+    {
+        // Arrange
+        var invalid = new[] { "false", "17", "{}", "[]", "null" }[seed % 5];
+        var fields = "{\"type\":\"resource_link\",\"uri\":\"file:///kept\",\"name\":\"kept\",\"title\":"
+            + JsonSerializer.Serialize(title, AcpJsonContext.Default.String) + ",\"description\":" + invalid
+            + ",\"size\":" + size.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}";
+
+        // Act
+        var link = Assert.IsType<ResourceLinkContentBlock>(AcpSessionDraftExtensions.ReplaySession("session", [Update(fields, false)]).Messages[0].Content[0]);
+
+        // Assert
+        Assert.Equal(title, link.Title);
+        Assert.Equal(size, link.Size);
+        Assert.Null(link.Description);
+        Assert.Equal("file:///kept", link.Uri);
+    }
+
+    [Theory]
     [InlineData("\"annotations\":false")]
     [InlineData("\"_meta\":false")]
     [InlineData("\"annotations\":{\"priority\":false}")]

@@ -81,6 +81,32 @@ catch (JsonException)
     invalidTextRejected = true;
 }
 Require(invalidTextRejected, "Required text type errors must remain rejected.");
+
+var media = AcpSessionDraftExtensions.ReplaySession("media-recovery",
+[
+    Parse("""{"sessionUpdate":"agent_message","messageId":"m","content":[{"type":"image","data":"YQ==","mimeType":"image/png","uri":false}]}"""),
+    Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"m","content":{"type":"resource_link","uri":"file:///kept","name":"kept","title":false,"description":17,"mimeType":{},"size":"large"}}"""),
+    Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"m","content":{"type":"resource","resource":{"uri":"file:///kept","text":"resource text","mimeType":false}}}"""),
+    Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"m","content":{"type":"resource","resource":{"uri":"file:///kept","blob":"YQ==","mimeType":false}}}""")
+]).Messages.Single().Content;
+Require(media.Length == 4 && media[0] is ImageContentBlock { Data: "YQ==", MimeType: "image/png", Uri: null },
+    "Invalid optional image URI must not discard valid media.");
+Require(media[1] is ResourceLinkContentBlock { Uri: "file:///kept", Name: "kept", Title: null, Description: null, MimeType: null, Size: null },
+    "Optional resource-link fields must default independently of its required identity.");
+Require(media[2] is ResourceContentBlock { Resource: { Text: "resource text", MimeType: null } }
+    && media[3] is ResourceContentBlock { Resource: { Blob: "YQ==", MimeType: null } },
+    "Optional embedded-resource media types must not discard either valid union branch.");
+var invalidResourceRejected = false;
+try
+{
+    AcpSessionDraftExtensions.ReplaySession("invalid-resource",
+    [Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"m","content":{"type":"resource","resource":{"uri":"file:///kept","text":17,"blob":false}}}""")]);
+}
+catch (JsonException)
+{
+    invalidResourceRejected = true;
+}
+Require(invalidResourceRejected, "An embedded resource must satisfy a required text or blob branch.");
 Console.WriteLine("draft-projection-consumer-ok");
 
 static JsonElement Parse(string json)

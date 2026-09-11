@@ -138,7 +138,7 @@ namespace SalmonEgg.Acp.Content
             {
                 Data = ReadRequiredContentString(root, "data", options)!,
                 MimeType = ReadRequiredContentString(root, "mimeType", options)!,
-                Uri = ReadString(root, "uri"),
+                Uri = ReadOptionalContentString(root, "uri", options),
                 Annotations = ReadAnnotations(root, options),
                 Meta = ReadMetadata(root, options)
             };
@@ -163,10 +163,10 @@ namespace SalmonEgg.Acp.Content
             {
                 Uri = ReadRequiredContentString(root, "uri", options)!,
                 Name = ReadRequiredContentString(root, "name", options),
-                MimeType = ReadString(root, "mimeType"),
-                Title = ReadString(root, "title"),
-                Description = ReadString(root, "description"),
-                Size = ReadInt64(root, "size"),
+                MimeType = ReadOptionalContentString(root, "mimeType", options),
+                Title = ReadOptionalContentString(root, "title", options),
+                Description = ReadOptionalContentString(root, "description", options),
+                Size = ReadOptionalContentSize(root, options),
                 RawIcons = root.TryGetProperty("icons", out var icons) ? icons.Clone() : null,
                 Annotations = ReadAnnotations(root, options),
                 Meta = ReadMetadata(root, options)
@@ -214,12 +214,46 @@ namespace SalmonEgg.Acp.Content
                 throw new JsonException("Embedded resource payload must be a JSON object.");
             }
 
+            if (AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2)
+            {
+                return ReadDraftEmbeddedResource(element, options);
+            }
+
             return new EmbeddedResource
             {
                 Uri = ReadRequiredContentString(element, "uri", options)!,
                 MimeType = ReadString(element, "mimeType")!,
                 Text = ReadString(element, "text"),
                 Blob = ReadString(element, "blob"),
+                Meta = ReadMetadata(element, options)
+            };
+        }
+
+        private static EmbeddedResource ReadDraftEmbeddedResource(JsonElement element, JsonSerializerOptions options)
+        {
+            // The pinned v2 resource union is untagged: try text before blob, as the upstream
+            // reader does. The other branch's fields cannot invalidate an otherwise valid branch.
+            string? text = null;
+            string? blob = null;
+            if (element.TryGetProperty("text", out var rawText) && rawText.ValueKind == JsonValueKind.String)
+            {
+                text = rawText.GetString();
+            }
+            else if (element.TryGetProperty("blob", out var rawBlob) && rawBlob.ValueKind == JsonValueKind.String)
+            {
+                blob = rawBlob.GetString();
+            }
+            else
+            {
+                throw new JsonException("ACP v2 embedded resource requires string 'text' or 'blob'.");
+            }
+
+            return new EmbeddedResource
+            {
+                Uri = ReadRequiredContentString(element, "uri", options)!,
+                MimeType = ReadOptionalContentString(element, "mimeType", options)!,
+                Text = text,
+                Blob = blob,
                 Meta = ReadMetadata(element, options)
             };
         }
@@ -260,6 +294,20 @@ namespace SalmonEgg.Acp.Content
             => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
                 ? AcpMetaJson.ReadOrDefault(root)
                 : AcpMetaJson.Read(root);
+
+        // Only the v2 fields marked x-deserialize-default-on-error call these readers. Required
+        // strings keep the strict reader, and unversioned/v1 contracts keep their existing behavior.
+        private static string? ReadOptionalContentString(JsonElement root, string propertyName, JsonSerializerOptions options)
+            => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
+                ? root.TryGetProperty(propertyName, out var field) && field.ValueKind == JsonValueKind.String
+                    ? field.GetString() : null
+                : ReadString(root, propertyName);
+
+        private static long? ReadOptionalContentSize(JsonElement root, JsonSerializerOptions options)
+            => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
+                ? root.TryGetProperty("size", out var field) && field.ValueKind == JsonValueKind.Number && field.TryGetInt64(out var size)
+                    ? size : null
+                : ReadInt64(root, "size");
 
         private static string? ReadRequiredContentString(JsonElement root, string propertyName, JsonSerializerOptions options)
         {
