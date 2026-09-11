@@ -882,6 +882,9 @@
   <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
     <value>为什么没检测到？</value>
   </data>
+  <data name="AcpSetup_RuntimePathDetails.Text" xml:space="preserve">
+    <value>程序路径与检测详情</value>
+  </data>
   <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
     <value>自定义命令的完整路径</value>
   </data>

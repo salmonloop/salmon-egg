@@ -71,6 +71,20 @@ jobs:
       - name: Run Skia Desktop GUI smoke
         run: ./scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 
+      - name: Verify ACP setup path editing with native keyboard input
+        timeout-minutes: 3
+        run: |
+          python3 scripts/gates/skia-acp-setup-path-smoke.py \
+            --no-build --artifacts "${RUNNER_TEMP}/acp-setup-path-smoke"
+
+      - name: Upload ACP setup path evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: acp-setup-path-smoke
+          path: ${{ runner.temp }}/acp-setup-path-smoke
+          if-no-files-found: ignore
+
       # This checks the native launcher only. Native URL capability stays disabled until the
       # product's GUI consent-to-browser path has its own platform gate as well.
       - name: Run Linux external browser isolation probe

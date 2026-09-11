@@ -582,6 +582,9 @@ Create the corresponding Markdown file in:
   <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
     <value>Value not allowed. Pick one from the list.</value>
   </data>
+  <data name="AcpSetup_Validation_RuntimeBatchLauncherNotSupported" xml:space="preserve">
+    <value>This adapter cannot use a Windows batch file as its agent runtime. Choose the native executable (such as claude.exe), or clear the custom runtime path to use the adapter's bundled runtime.</value>
+  </data>
   <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
     <value>Failed to delete the agent profile. Please try again later.</value>
   </data>

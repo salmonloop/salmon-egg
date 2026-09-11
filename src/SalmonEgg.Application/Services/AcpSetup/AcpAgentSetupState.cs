@@ -61,5 +61,24 @@ public sealed class AcpSetupDraft
     public AcpCommandOverrides CommandOverrides { get; init; } = AcpCommandOverrides.Empty;
 
     public AcpLaunchPlan BuildLaunchPlan()
-        => AcpLaunchPlanBuilder.Build(Adapter.LaunchTemplate, ParameterValues, CommandOverrides);
+    {
+        var plan = AcpLaunchPlanBuilder.Build(Adapter.LaunchTemplate, ParameterValues, CommandOverrides);
+        var environmentVariable = Adapter.RuntimeCommandEnvironmentVariable;
+        if (string.IsNullOrWhiteSpace(environmentVariable)
+            || !CommandOverrides.TryGetOverride(Agent.Runtime.ProbeCommand, out var runtimeCommand))
+        {
+            return plan;
+        }
+
+        var environment = new Dictionary<string, string>(plan.Environment, StringComparer.Ordinal)
+        {
+            [environmentVariable] = runtimeCommand
+        };
+        return new AcpLaunchPlan
+        {
+            Command = plan.Command,
+            Arguments = plan.Arguments,
+            Environment = environment
+        };
+    }
 }

@@ -193,39 +193,43 @@
                                                            Style="{StaticResource CaptionTextBlockStyle}"
                                                            TextWrapping="Wrap"
                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-
-                                                <Expander x:Name="AgentProbeDiagnosticsExpander"
-                                                          IsExpanded="False"
-                                                          HorizontalAlignment="Stretch"
-                                                          HorizontalContentAlignment="Stretch">
-                                                    <Expander.Header>
-                                                        <TextBlock x:Uid="AcpSetup_WhyNotFound"/>
-                                                    </Expander.Header>
-                                                    <StackPanel Spacing="8">
-                                                        <TextBlock x:Uid="AcpSetup_PathHint"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                                   TextWrapping="Wrap"
-                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                                        <TextBlock Text="{x:Bind ProbeDetail, Mode=OneWay}"
-                                                                   Visibility="{x:Bind HasProbeDetail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                                   FontFamily="Consolas"
-                                                                   TextWrapping="Wrap"
-                                                                   IsTextSelectionEnabled="True"
-                                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                                                        <TextBox x:Uid="AcpSetup_CustomCommand"
-                                                                 Text="{x:Bind CustomCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                 AutomationProperties.AutomationId="AcpSetup.Agents.CustomCommand"/>
-                                                        <Button x:Name="VerifyCustomCommandButton"
-                                                                x:Uid="AcpSetup_VerifyCustomCommand"
-                                                                Tag="{x:Bind}"
-                                                                Click="OnVerifyAgentRowClick"
-                                                                IsEnabled="{x:Bind HasCustomCommand, Mode=OneWay}"
-                                                                AutomationProperties.AutomationId="AcpSetup.Agents.VerifyCustomCommand"
-                                                                HorizontalAlignment="Left"/>
-                                                    </StackPanel>
-                                                </Expander>
                                             </StackPanel>
+
+                                            <!-- Editing invalidates the probe, so the path input must not
+                                                 share the missing-only install surface's visibility. -->
+                                            <Expander x:Name="AgentProbeDiagnosticsExpander"
+                                                      IsExpanded="False"
+                                                      Visibility="{x:Bind IsRuntimePathEditorVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                      AutomationProperties.AutomationId="AcpSetup.Agents.PathDetails"
+                                                      HorizontalAlignment="Stretch"
+                                                      HorizontalContentAlignment="Stretch">
+                                                <Expander.Header>
+                                                    <TextBlock x:Uid="AcpSetup_RuntimePathDetails"/>
+                                                </Expander.Header>
+                                                <StackPanel Spacing="8">
+                                                    <TextBlock x:Uid="AcpSetup_PathHint"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               TextWrapping="Wrap"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                    <TextBlock Text="{x:Bind ProbeDetail, Mode=OneWay}"
+                                                               Visibility="{x:Bind HasProbeDetail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               FontFamily="Consolas"
+                                                               TextWrapping="Wrap"
+                                                               IsTextSelectionEnabled="True"
+                                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                    <TextBox x:Uid="AcpSetup_CustomCommand"
+                                                             Text="{x:Bind CustomCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             AutomationProperties.AutomationId="AcpSetup.Agents.CustomCommand"/>
+                                                    <Button x:Name="VerifyCustomCommandButton"
+                                                            x:Uid="AcpSetup_VerifyCustomCommand"
+                                                            Tag="{x:Bind}"
+                                                            Click="OnVerifyAgentRowClick"
+                                                            IsEnabled="{x:Bind HasCustomCommand, Mode=OneWay}"
+                                                            AutomationProperties.AutomationId="AcpSetup.Agents.VerifyCustomCommand"
+                                                            HorizontalAlignment="Left"/>
+                                                </StackPanel>
+                                            </Expander>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>

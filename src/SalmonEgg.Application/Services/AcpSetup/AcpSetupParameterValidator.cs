@@ -11,9 +11,8 @@ public readonly record struct AcpSetupParameterViolation(string ParameterKey, st
 
 /// <summary>
 /// Validates wizard parameter values before a launch plan is tested or saved. Deliberately limited to
-/// checks that are certainly wrong regardless of agent: missing required values and values outside a
-/// declared closed set. Anything agent-specific is left to the connectivity test, which reports real
-/// failures instead of guesses.
+/// checks established by the launch contract: required values, closed sets, and unsupported runtime
+/// entry points. Other agent-specific behavior is left to the connectivity test.
 /// </summary>
 public static class AcpSetupParameterValidator
 {
@@ -28,6 +27,23 @@ public static class AcpSetupParameterValidator
     /// Localization key reported when a value falls outside the parameter's declared closed set.
     /// </summary>
     public const string ValueNotAllowedKey = "AcpSetup_Validation_ValueNotAllowed";
+
+    public const string RuntimeBatchLauncherNotSupportedKey = "AcpSetup_Validation_RuntimeBatchLauncherNotSupported";
+
+    public static IReadOnlyList<AcpSetupParameterViolation> Validate(AcpSetupDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        var violations = new List<AcpSetupParameterViolation>(Validate(draft.Adapter.LaunchTemplate, draft.ParameterValues));
+        if (!draft.Adapter.SupportsWindowsRuntimeBatchLauncher
+            && !string.IsNullOrWhiteSpace(draft.Adapter.RuntimeCommandEnvironmentVariable)
+            && draft.CommandOverrides.TryGetOverride(draft.Agent.Runtime.ProbeCommand, out var path)
+            && IsWindowsBatchLauncher(path))
+        {
+            violations.Add(new AcpSetupParameterViolation(draft.Agent.Runtime.ProbeCommand, RuntimeBatchLauncherNotSupportedKey));
+        }
+
+        return violations;
+    }
 
     public static IReadOnlyList<AcpSetupParameterViolation> Validate(
         AcpLaunchTemplate template,
@@ -76,5 +92,21 @@ public static class AcpSetupParameterValidator
         }
 
         return false;
+    }
+
+    private static bool IsWindowsBatchLauncher(string path)
+    {
+        // Detect Windows drive, backslash and UNC syntax without consulting the host platform.
+        // POSIX permits .cmd executable names and multiple leading slashes; those remain probeable.
+        var uncShareSeparator = path.StartsWith("//", StringComparison.Ordinal)
+            ? path.IndexOf('/', 2)
+            : -1;
+        var windowsPath = (path.Length > 2 && char.IsAsciiLetter(path[0]) && path[1] == ':'
+                && path[2] is '\\' or '/')
+            || path.Contains('\\')
+            || (uncShareSeparator > 2 && uncShareSeparator + 1 < path.Length
+                && path[uncShareSeparator + 1] != '/');
+        return windowsPath && (path.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".bat", StringComparison.OrdinalIgnoreCase));
     }
 }

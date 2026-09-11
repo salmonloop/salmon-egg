@@ -275,6 +275,14 @@ scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 
 Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI 或完整控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。NumberBox 的 DEBUG probe 不是通用语义自动化替代品：它只为已知模板回归走 authoritative 页面导航，使用生产控件已有的 `AutomationId` 定位真实 NumberBox，并读取已实现视觉树的原生状态。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容、隐藏测试 UI 或返回预设结果的 test hook 冒充语义自动化。
 
+ACP 向导路径编辑门禁同样使用本次 Debug Skia 产物、独立 Xvfb 和临时 AppData：
+
+```bash
+python3 scripts/gates/skia-acp-setup-path-smoke.py --artifacts /tmp/acp-setup-path-smoke
+```
+
+目录须为空或尚未存在。脚本默认构建当前工作树；仅在同一工作树刚完成 Debug Desktop 构建后使用 `--no-build`，CI 会复用上一 Skia 步骤的产物。门禁经正式设置入口和原生按钮进入向导，要求真实探测确认 Qwen 未安装（本机已安装时可用 `--agent goose` 选择另一确实缺失的目录项），再用 XTest 逐字符输入、清空及重新输入，逐次断言控件仍可见、焦点仍属于该输入框且绑定值一致。它记录产物路径、DLL 哈希、提交与工作树状态、PID 和每次采样；结束时回收自身进程组。此验证限 Linux Skia，不代替 Windows WinUI/MSIX 或 WASM 验收。修改编辑区可见性后，须临时恢复缺失状态控制的旧可见性并确认首字采样失败，再恢复修复重跑。
+
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；

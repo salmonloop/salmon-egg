@@ -957,6 +957,9 @@
   <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
     <value>Why was nothing found?</value>
   </data>
+  <data name="AcpSetup_RuntimePathDetails.Text" xml:space="preserve">
+    <value>Program path and detection details</value>
+  </data>
   <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
     <value>Full path to the command</value>
   </data>

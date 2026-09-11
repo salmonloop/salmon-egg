@@ -584,6 +584,9 @@
   <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
     <value>取值不在允许范围内，请从列表中选择。</value>
   </data>
+  <data name="AcpSetup_Validation_RuntimeBatchLauncherNotSupported" xml:space="preserve">
+    <value>此适配器不能使用 Windows 批处理文件作为 Agent 运行时。请选择原生可执行程序（例如 claude.exe），或清空自定义运行时路径以使用适配器自带的运行时。</value>
+  </data>
   <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
     <value>删除 Agent 配置失败，请稍后重试。</value>
   </data>
