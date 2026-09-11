@@ -2402,6 +2402,7 @@ namespace SalmonEgg.Acp.Client
                     (outcome, optionId) => TrySendPermissionOutcomeResponseAsync(pending.MessageId, outcome, optionId, pending),
                     () => CanRespondToPermissionRequest(pending),
                     () => IsPermissionResponsePrepared(pending),
+                    () => IsPermissionResponsePrepared(pending),
                     () => IsPermissionCancellationRequested(pending), _logger)
                 {
                     DraftRequest = snapshot,
