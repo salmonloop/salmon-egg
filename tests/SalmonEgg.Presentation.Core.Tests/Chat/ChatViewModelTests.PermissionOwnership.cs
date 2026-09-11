@@ -673,17 +673,21 @@ public partial class ChatViewModelTests
     private sealed class PermissionUiPeer : IAcpTransport
     {
         private readonly AcpClient _client;
+        private readonly ClientCapabilities _capabilities;
         private bool _disposed;
 
-        private PermissionUiPeer()
+        private PermissionUiPeer(ClientCapabilities? capabilities = null)
         {
+            _capabilities = capabilities ?? ClientCapabilityDefaults.Create();
             _client = new AcpClient(this, Mock.Of<IAcpClientLogger>());
             _client.PermissionRequestReceived += (_, request) => Requests.Enqueue(request);
+            _client.ElicitationRequestReceived += (_, request) => Elicitations.Enqueue(request);
             Service = new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>());
         }
 
         public ChatService Service { get; }
         public ConcurrentQueue<PermissionRequestEventArgs> Requests { get; } = new();
+        public ConcurrentQueue<ElicitationRequestEventArgs> Elicitations { get; } = new();
         public ConcurrentQueue<JsonElement> Responses { get; } = new();
         public Func<JsonElement, CancellationToken, Task<bool>>? ResponseSend { get; set; }
         public Func<Task<bool>>? DisconnectSend { get; set; }
@@ -692,9 +696,9 @@ public partial class ChatViewModelTests
         public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
         public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred { add { } remove { } }
 
-        public static async Task<PermissionUiPeer> CreateAsync()
+        public static async Task<PermissionUiPeer> CreateAsync(ClientCapabilities? capabilities = null)
         {
-            var peer = new PermissionUiPeer();
+            var peer = new PermissionUiPeer(capabilities);
             await peer.InitializeAsync();
             return peer;
         }
@@ -712,6 +716,16 @@ public partial class ChatViewModelTests
 
         public void CancelPermission(string id)
             => Receive($$$"""{"jsonrpc":"2.0","method":"$/cancel_request","params":{"requestId":"{{{id}}}"}}""");
+
+        public void Elicit(string id, string mode, string scope = "unbound-session")
+        {
+            var scopeJson = scope == "request" ? "\"requestId\":12"
+                : "\"sessionId\":\"" + (scope == "bound-session" ? "remote-1" : "unbound") + "\"";
+            var modeJson = mode == "url"
+                ? "\"elicitationId\":\"url-" + id + "\",\"url\":\"https://example.com/authorize\""
+                : "\"requestedSchema\":{\"type\":\"object\",\"properties\":{}}";
+            Receive($$$"""{"jsonrpc":"2.0","id":"{{{id}}}","method":"elicitation/create","params":{ {{{scopeJson}}},"mode":"{{{mode}}}","message":"Choose",{{{modeJson}}} }}""");
+        }
 
         public Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
         {
@@ -763,6 +777,6 @@ public partial class ChatViewModelTests
 
         private Task<InitializeResponse> InitializeAsync()
             => _client.InitializeAsync(new InitializeParams(new ClientInfo("Permission UI test", "1"),
-                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
+                _capabilities), TestContext.Current.CancellationToken);
     }
 }

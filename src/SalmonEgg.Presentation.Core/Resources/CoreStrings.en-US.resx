@@ -1477,4 +1477,7 @@ Create the corresponding Markdown file in:
   <data name="Elicitation_RequestExpired" xml:space="preserve">
     <value>This request has expired. Reconnect to continue.</value>
   </data>
+  <data name="Elicitation_CancellationFailedDisconnected" xml:space="preserve">
+    <value>Could not cancel a request that cannot be displayed. The connection was closed. Reconnect to the agent.</value>
+  </data>
 </root>
