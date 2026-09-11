@@ -1333,6 +1333,60 @@ public sealed class AcpClientBatchTests
             + "\"sessionId\":\"session\",\"mode\":\"url\",\"elicitationId\":\"" + elicitationId
             + "\",\"url\":\"https://agent.example/authorize\",\"message\":\"Authorize\"}}";
 
+    [Fact]
+    public async Task Batch_ExplicitFormCancellation_ReplacesPreparedAcceptBeforeSiblingResponds()
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync();
+        var forms = new List<ElicitationRequestEventArgs>();
+        peer.Client.ElicitationRequestReceived += (_, request) => forms.Add(request);
+        peer.Deliver("[" + Form("1") + "," + Form("2") + "]");
+        var accepting = forms[0].Accept(null);
+
+        // Act
+        var cancelling = forms[0].Cancel();
+        var sibling = forms[1].Decline();
+
+        // Assert
+        Assert.True(await cancelling.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.True(await accepting.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.True(await sibling.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        var response = Assert.Single(peer.Responses);
+        Assert.Equal("cancel", response[0].GetProperty("result").GetProperty("action").GetString());
+        Assert.Equal("decline", response[1].GetProperty("result").GetProperty("action").GetString());
+        Assert.Equal("cancel", forms[0].State.ResponseAction);
+        Assert.False(forms[0].State.CanCancel);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Elicitation_ExplicitCancelWhileAcceptWrites_WaitsForTheActualTerminalResponse(bool acceptSucceeds)
+    {
+        // Arrange
+        using var peer = await BatchPeer.CreateAsync(AcpProtocolVersion.V1);
+        ElicitationRequestEventArgs? form = null;
+        peer.Client.ElicitationRequestReceived += (_, request) => form = request;
+        peer.Deliver(Form("1"));
+        var write = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.NextResponseWrite = write.Task;
+        var accepting = form!.Accept(null);
+
+        // Act
+        var cancelling = form.Cancel();
+        Assert.False(cancelling.IsCompleted);
+        Assert.Empty(peer.Responses);
+        Assert.False(form.State.CanRespond);
+        write.TrySetResult(acceptSucceeds);
+
+        // Assert
+        Assert.True(await cancelling.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        Assert.Equal(acceptSucceeds, await accepting.WaitAsync(TimeSpan.FromSeconds(5), TestToken));
+        var response = Assert.Single(peer.Responses);
+        Assert.Equal(acceptSucceeds ? "accept" : "cancel", response.GetProperty("result").GetProperty("action").GetString());
+        Assert.Equal(acceptSucceeds ? "accept" : "cancel", form.State.ResponseAction);
+    }
+
     private sealed class BatchPeer : IAcpTransport
     {
         private readonly int _version;

@@ -27,6 +27,12 @@ public interface IChatStore
     /// before downstream reactive projections have observed it.
     /// </summary>
     ValueTask<ChatState> GetCurrentStateAsync();
+
+    /// <summary>
+    /// Returns the same committed state without yielding, or null before the store has established it.
+    /// Used by browser-gesture authorization, which cannot await without losing user activation.
+    /// </summary>
+    ChatState? ReadCommittedState() => null;
 }
 
 /// <summary>
@@ -81,6 +87,8 @@ public sealed class ChatStore : IChatStore
 
     public async ValueTask<ChatState> GetCurrentStateAsync()
         => Volatile.Read(ref _cachedState) ?? await State ?? ChatState.Empty;
+
+    public ChatState? ReadCommittedState() => Volatile.Read(ref _cachedState);
 
     private bool TryAdvanceProjectedGeneration(long generation)
     {

@@ -15,7 +15,8 @@ public partial class ChatViewModelTests
         await using var fixture = CreateViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var previousService = CreateConnectedChatService();
-        await syncContext.RunUntilCompletedAsync(viewModel.ReplaceChatServiceAsync(previousService.Object, TestContext.Current.CancellationToken));
+        await syncContext.RunUntilCompletedAsync(viewModel.ReplaceChatServiceAsync(
+            RegisterInteractionMock(fixture, previousService.Object, "profile-1"), TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -39,7 +40,7 @@ public partial class ChatViewModelTests
         try
         {
             SynchronizationContext.SetSynchronizationContext(syncContext);
-            viewModel.ReplaceChatService(currentService.Object);
+            viewModel.ReplaceChatService(RegisterInteractionMock(fixture, currentService.Object, "profile-1"));
         }
         finally
         {
@@ -70,7 +71,8 @@ public partial class ChatViewModelTests
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var service = CreateConnectedChatService();
-        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(service.Object, TestContext.Current.CancellationToken));
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(
+            RegisterInteractionMock(fixture, service.Object, "profile-1"), TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -100,7 +102,8 @@ public partial class ChatViewModelTests
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var service = CreateConnectedChatService();
-        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(service.Object, TestContext.Current.CancellationToken));
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(
+            RegisterInteractionMock(fixture, service.Object, "profile-1"), TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -110,7 +113,8 @@ public partial class ChatViewModelTests
         await syncContext.RunUntilIdleAsync();
         var cancelled = 0;
         var replacement = ((IAcpChatCoordinatorSink)fixture.ViewModel).ReplaceChatServiceAsync(
-            CreateConnectedChatService().Object, ServiceReplaceIntent.PoolOnly, TestContext.Current.CancellationToken);
+            RegisterInteractionMock(fixture, CreateConnectedChatService().Object, "profile-other"),
+            ServiceReplaceIntent.PoolOnly, TestContext.Current.CancellationToken);
         service.Raise(chat => chat.ElicitationRequestReceived += null,
             new ElicitationRequestEventArgs("form-1", new FormElicitationRequest
             {
@@ -134,7 +138,7 @@ public partial class ChatViewModelTests
         await using var fixture = CreateViewModel();
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
-        viewModel.ReplaceChatService(chatService.Object);
+        viewModel.ReplaceChatService(RegisterInteractionMock(fixture, chatService.Object, "profile-1"));
         var initialState = (await fixture.GetStateAsync()) with
         {
             HydratedConversationId = "conv-1",

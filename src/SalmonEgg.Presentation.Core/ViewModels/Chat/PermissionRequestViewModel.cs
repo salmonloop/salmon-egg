@@ -29,6 +29,7 @@ public partial class PermissionRequestViewModel : ObservableObject
     internal Task? BindingCancellationTask { get; set; }
     internal bool BindingCancellationAttempted { get; set; }
     internal Func<bool>? IsRequestAvailable { get; set; }
+    internal Func<bool>? IsBindingCurrent { get; set; }
     internal Func<bool>? IsResponsePrepared { get; set; }
     internal Func<bool>? IsResponseSending { get; set; }
     internal Func<bool>? IsRequestCancellationRequested { get; set; }

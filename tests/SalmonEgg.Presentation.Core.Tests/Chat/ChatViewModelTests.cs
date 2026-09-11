@@ -87,9 +87,11 @@ public partial class ChatViewModelTests
         IAiContentReportLauncher? aiContentReportLauncher = null,
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         bool enableWorkspacePersistence = false,
-        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null)
+        TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null,
+        IExternalUriLauncher? externalUriLauncher = null)
     {
         var stateOwner = new object();
+        connectionSessionRegistry ??= new InMemoryAcpConnectionSessionRegistry();
         var connectionStateOwner = new object();
         var attentionStateOwner = new object();
         var state = State.Value(stateOwner, () => ChatState.Empty);
@@ -238,7 +240,8 @@ public partial class ChatViewModelTests
                 uiInteractionService: uiInteractionService,
                 aiContentReportLauncher: aiContentReportLauncher,
                 shellLayoutMetricsSink: shellLayoutMetricsSink,
-                terminalAuthenticationCoordinator: terminalAuthenticationCoordinator);
+                terminalAuthenticationCoordinator: terminalAuthenticationCoordinator,
+                externalUriLauncher: externalUriLauncher);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -258,7 +261,8 @@ public partial class ChatViewModelTests
                 vmLogger,
                 stateOwner,
                 connectionStateOwner,
-                attentionStateOwner);
+                attentionStateOwner,
+                connectionSessionRegistry);
         }
         finally
         {
@@ -7239,6 +7243,7 @@ public partial class ChatViewModelTests
         public IChatConnectionStore ConnectionStore => _connectionStore;
         public RecordingChatStore ChatStore => _chatStore;
         public Mock<ILogger<ChatViewModel>> ViewModelLogger { get; }
+        public IAcpConnectionSessionRegistry InteractionRegistry { get; }
 
         public ViewModelFixture(
             ChatViewModel viewModel,
@@ -7258,7 +7263,8 @@ public partial class ChatViewModelTests
             Mock<ILogger<ChatViewModel>> viewModelLogger,
             object stateOwner,
             object connectionStateOwner,
-            object attentionStateOwner)
+            object attentionStateOwner,
+            IAcpConnectionSessionRegistry interactionRegistry)
         {
             ViewModel = viewModel;
             _state = state;
@@ -7278,6 +7284,7 @@ public partial class ChatViewModelTests
             _stateOwner = stateOwner;
             _connectionStateOwner = connectionStateOwner;
             _attentionStateOwner = attentionStateOwner;
+            InteractionRegistry = interactionRegistry;
         }
 
         public Task<ChatState> GetStateAsync() => Task.FromResult(_chatStore.LatestState);
@@ -7612,6 +7619,8 @@ public partial class ChatViewModelTests
 
         public ValueTask<ChatState> GetCurrentStateAsync()
             => ReadState?.Invoke() ?? ValueTask.FromResult(LatestState);
+
+        public ChatState? ReadCommittedState() => LatestState;
     }
 
     [Fact]
@@ -8708,7 +8717,7 @@ public partial class ChatViewModelTests
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
         var permissionResponses = new List<string>();
-        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(RegisterInteractionMock(fixture, chatService.Object, "profile-1"), TestContext.Current.CancellationToken));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -8751,7 +8760,7 @@ public partial class ChatViewModelTests
         chatService.Setup(service => service.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .Returns(Task.CompletedTask);
         var permissionResponses = new List<string>();
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(RegisterInteractionMock(fixture, chatService.Object, "profile-a"), TestContext.Current.CancellationToken));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -8807,7 +8816,7 @@ public partial class ChatViewModelTests
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         var chatService = CreateConnectedChatService();
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(RegisterInteractionMock(fixture, chatService.Object, "profile-1"), TestContext.Current.CancellationToken));
 
         await fixture.UpdateStateAsync(state => state with
         {

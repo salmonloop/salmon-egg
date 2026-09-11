@@ -27,6 +27,10 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
     private Func<Action, Task>? _dispatchAsync;
     private CancellationTokenRegistration _connectionClosedRegistration;
     private Func<Task>? _dismiss;
+    private Func<bool>? _isBindingCurrent;
+    private Func<Task<bool>>? _cancelInvalidBinding;
+    private bool _bindingWithdrawn;
+    private bool _dismissRequested;
     private bool _urlDispatched;
     private bool _disposed;
 
@@ -87,11 +91,53 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
     public bool ShowReopen => IsAwaitingCompletion && !IsCompleted;
 
     public bool CanReopen => ShowReopen && !_disposed && !IsSubmitting && _urlTarget is not null
-        && _uriLauncher.IsSupported && !(_requestState?.ConnectionClosed.IsCancellationRequested ?? false);
+        && _uriLauncher.IsSupported && IsBindingCurrent && !(_requestState?.ConnectionClosed.IsCancellationRequested ?? false);
 
-    public bool CanRespond => !_disposed && !IsSubmitting && (_requestState?.CanRespond ?? true);
+    public bool CanRespond => !_disposed && !IsSubmitting && IsBindingCurrent && (_requestState?.CanRespond ?? true);
 
     public bool CanCancel => !_disposed && !IsSubmitting && (_requestState?.CanCancel ?? true);
+
+    private bool IsBindingCurrent => !_bindingWithdrawn && (_isBindingCurrent?.Invoke() ?? true);
+
+    internal void BindToConversation(Func<bool> isBindingCurrent, Func<Task<bool>> cancelInvalidBinding)
+    {
+        _isBindingCurrent = isBindingCurrent;
+        _cancelInvalidBinding = cancelInvalidBinding;
+    }
+
+    internal void ReconcileBinding()
+    {
+        if (_disposed || _bindingWithdrawn || IsBindingCurrent) return;
+        _bindingWithdrawn = true;
+        FullUrl = string.Empty;
+        _urlTarget = null;
+        OnPropertyChanged(nameof(FullUrl));
+        OnPropertyChanged(nameof(UrlHost));
+        RefreshCommands();
+        _ = CancelInvalidBindingAsync();
+    }
+
+    private async Task CancelInvalidBindingAsync()
+    {
+        try
+        {
+            if (_requestState?.CanCancel == true && _cancelInvalidBinding is not null)
+            {
+                if (!await _cancelInvalidBinding().ConfigureAwait(true))
+                {
+                    SetLocalizedError("Elicitation_ResponseFailed", "The response could not be sent. Please try again.");
+                }
+            }
+            else if (_dismiss is not null)
+            {
+                await DismissOnceAsync().ConfigureAwait(true);
+            }
+        }
+        catch
+        {
+            SetLocalizedError("Elicitation_RequestExpired", "This request has expired. Reconnect to continue.");
+        }
+    }
 
     public string SubmitText => IsUrl
         ? (_urlDispatched ? Localize("Elicitation_RetryResponse", "Retry response") : Localize("Elicitation_OpenBrowser", "Open in browser"))
@@ -199,9 +245,24 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
     [RelayCommand]
     private async Task DismissAsync()
     {
-        if (_dismiss is not null && IsAwaitingCompletion)
+        if (IsAwaitingCompletion)
+        {
+            await DismissOnceAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task DismissOnceAsync()
+    {
+        if (_dismissRequested || _dismiss is null) return;
+        _dismissRequested = true;
+        try
         {
             await _dismiss().ConfigureAwait(true);
+        }
+        catch
+        {
+            _dismissRequested = false;
+            throw;
         }
     }
 
@@ -254,6 +315,8 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
         OnAccept = null;
         OnDecline = null;
         OnCancel = null;
+        _isBindingCurrent = null;
+        _cancelInvalidBinding = null;
         foreach (var field in Fields)
         {
             field.Changed -= OnFieldChanged;
@@ -333,7 +396,7 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
                 _urlDispatched = true;
             }
 
-            if (_disposed || !(_requestState?.CanRespond ?? true))
+            if (_disposed || !IsBindingCurrent || !(_requestState?.CanRespond ?? true))
             {
                 return;
             }
@@ -402,9 +465,10 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
                 {
                     // Session cancellation also answers through the SDK, without a card command.
                     // Only a committed terminal response retires this exact projection.
-                    if (IsUrl && _requestState?.ResponseAction is ElicitationActions.Cancel or ElicitationActions.Decline)
+                    if (!connectionClosed && !(_requestState?.ConnectionClosed.IsCancellationRequested ?? false)
+                        && _requestState is { CanCancel: false } && (!IsAwaitingCompletion || _bindingWithdrawn))
                     {
-                        dismissTask = _dismiss?.Invoke();
+                        dismissTask = DismissOnceAsync();
                         return;
                     }
 
@@ -1034,24 +1098,13 @@ public static class ElicitationInteractionViewModelFactory
         var hasUnsupportedRequiredFields = required.Except(fields.Select(static field => field.Name), StringComparer.Ordinal).Any();
         var viewModel = new ElicitationRequestViewModel(args.MessageId, args.SessionId, args.Request.Message,
             fields, localizer, hasUnsupportedRequiredFields);
-        viewModel.OnAccept = async content => await RespondAndClearAsync(() => args.Accept(content), () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
-        viewModel.OnDecline = async () => await RespondAndClearAsync(args.Decline, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
-        viewModel.OnCancel = async () => await RespondAndClearAsync(args.Cancel, () => clearPendingRequestAsync(viewModel)).ConfigureAwait(true);
+        viewModel.OnAccept = args.Accept;
+        viewModel.OnDecline = args.Decline;
+        viewModel.OnCancel = args.Cancel;
         viewModel.AttachRequest(args, UnsupportedExternalUriLauncher.Instance,
             dispatchAsync ?? (action => { action(); return Task.CompletedTask; }),
             () => clearPendingRequestAsync(viewModel), agentName);
         return viewModel;
-    }
-
-    private static async Task<bool> RespondAndClearAsync(Func<Task<bool>> respond, Func<Task> clear)
-    {
-        if (!await respond().ConfigureAwait(true))
-        {
-            return false;
-        }
-
-        await clear().ConfigureAwait(true);
-        return true;
     }
 
     private static ElicitationFieldViewModel? CreateField(

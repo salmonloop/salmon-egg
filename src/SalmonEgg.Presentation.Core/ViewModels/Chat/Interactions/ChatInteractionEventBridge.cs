@@ -86,7 +86,8 @@ public sealed class ChatInteractionEventBridge
         ILogger logger,
         Func<Action, Task>? dispatchAsync = null,
         string agentName = "",
-        Func<ElicitationRequestEventArgs, Task>? cancelUndisplayedAsync = null)
+        Func<ElicitationRequestEventArgs, Task>? cancelUndisplayedAsync = null,
+        Func<string, ValueTask<string?>>? resolveConversationAsync = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(clearPendingRequestAsync);
@@ -99,12 +100,14 @@ public sealed class ChatInteractionEventBridge
             return null;
         }
 
+        // The application supplies its captured connection-scoped resolver. The default is retained
+        // for hosts that own only a single connection and use this bridge independently of ChatViewModel.
         string? conversationId;
         try
         {
-            conversationId = await _authoritativeRemoteSessionRouter
-                .ResolveConversationIdAsync(args.SessionId)
-                .ConfigureAwait(false);
+            conversationId = resolveConversationAsync is null
+                ? await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(args.SessionId).ConfigureAwait(false)
+                : await resolveConversationAsync(args.SessionId).ConfigureAwait(false);
         }
         catch (Exception)
         {

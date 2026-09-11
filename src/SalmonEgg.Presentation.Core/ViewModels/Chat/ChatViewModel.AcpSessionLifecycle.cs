@@ -1767,20 +1767,28 @@ public partial class ChatViewModel
     private void ProcessElicitationRequest(IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request)
     {
         var requestingAgent = service.AgentInfo;
-        _ = ProcessElicitationRequestAsync(service, foregroundGeneration, request,
+        _ = ProcessElicitationRequestAsync(CaptureInteractionSource(service, foregroundGeneration), request,
             requestingAgent?.Title ?? requestingAgent?.Name ?? CurrentAgentDisplayText);
     }
 
     private async Task ProcessElicitationRequestAsync(
-        IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request, string agentName)
+        InteractionRequestSource source, ElicitationRequestEventArgs request, string agentName)
     {
         try
         {
+            ConversationBindingSlice? binding = null;
             var projection = await _interactionEventBridge.BuildElicitationRequestAsync(
                 request,
                 (conversationId, request) => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId, request)),
                 Logger, PostToUiAsync, agentName,
-                unshown => CancelUndisplayedElicitationAsync(service, foregroundGeneration, unshown)).ConfigureAwait(false);
+                unshown => CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, unshown),
+                async remoteSessionId =>
+                {
+                    var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+                    var conversationId = ResolveInteractionConversation(state, remoteSessionId, source);
+                    binding = state.ResolveBinding(conversationId);
+                    return conversationId;
+                }).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -1791,12 +1799,12 @@ public partial class ChatViewModel
             {
                 // Routing and dispatcher work may finish after the foreground owner was replaced.
                 // A stale form must not occupy the new connection's only interaction slot.
-                if (_disposed || !request.State.CanRespond || !service.IsConnected
-                    || foregroundGeneration != Volatile.Read(ref _foregroundChatServiceGeneration))
+                if (binding is null || !request.State.CanRespond || !IsInteractionBindingCurrent(source, binding))
                 {
                     return;
                 }
 
+                AttachElicitationOwnership(projection.Value.ViewModel, source, binding, request);
                 displayed = _panelStateCoordinator.TryStoreElicitationRequest(projection.Value.ConversationId, projection.Value.ViewModel);
                 PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(CurrentSessionId);
             }).ConfigureAwait(true);
@@ -1805,12 +1813,12 @@ public partial class ChatViewModel
                 projection.Value.ViewModel.Dispose();
                 // This surface holds one form per conversation. Keep the visible request and cancel
                 // the unshown one instead of replacing an interaction the user still needs to answer.
-                await CancelUndisplayedElicitationAsync(service, foregroundGeneration, request).ConfigureAwait(false);
+                await CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, request).ConfigureAwait(false);
             }
         }
         catch (Exception)
         {
-            await CancelUndisplayedElicitationAsync(service, foregroundGeneration, request).ConfigureAwait(false);
+            await CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, request).ConfigureAwait(false);
         }
     }
 
@@ -1892,39 +1900,39 @@ public partial class ChatViewModel
 
     private void ProcessPermissionRequest(IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
     {
-        _ = ProcessPermissionRequestAsync(service, foregroundGeneration, request);
+        _ = ProcessPermissionRequestAsync(CaptureInteractionSource(service, foregroundGeneration), request);
     }
 
-    private async Task ProcessPermissionRequestAsync(IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
+    private async Task ProcessPermissionRequestAsync(InteractionRequestSource source, PermissionRequestEventArgs request)
     {
         try
         {
             var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-            var conversationId = _authoritativeRemoteSessionRouter.ResolveConversationId(state, request.SessionId);
+            var conversationId = ResolveInteractionConversation(state, request.SessionId, source);
             var binding = state.ResolveBinding(conversationId);
             await PostToUiAsync(async () =>
             {
-                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                if (!IsInteractionSourceActive(source) || !request.CanRespond)
                 {
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(conversationId) || binding is null)
+                if (string.IsNullOrWhiteSpace(conversationId) || binding is null || !IsInteractionConnectionCurrent(source))
                 {
-                    await CancelUndisplayedPermissionAsync(service, foregroundGeneration, request).ConfigureAwait(true);
+                    await CancelUndisplayedPermissionAsync(source, request).ConfigureAwait(true);
                     return;
                 }
 
                 var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
-                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                if (!IsInteractionSourceActive(source) || !request.CanRespond)
                 {
                     return;
                 }
 
-                var viewModel = CreateOwnedPermissionRequest(service, foregroundGeneration, request, conversationId, binding);
+                var viewModel = CreateOwnedPermissionRequest(source, request, conversationId, binding);
                 _panelStateCoordinator.StorePermissionRequest(conversationId, viewModel);
-                SubscribePermissionRequestChanges(service, foregroundGeneration, request, conversationId, viewModel);
-                RefreshPermissionRequestProjection(service, foregroundGeneration, request, conversationId, viewModel);
+                SubscribePermissionRequestChanges(source, request, conversationId, viewModel);
+                RefreshPermissionRequestProjection(source, request, conversationId, viewModel);
                 ReconcilePermissionBindings(currentState.Bindings);
                 SyncPermissionRequestProjection();
             }).ConfigureAwait(false);
@@ -1932,34 +1940,33 @@ public partial class ChatViewModel
         catch (Exception error)
         {
             Logger.LogError("Error processing permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
-            if (IsPermissionSourceCurrent(service, foregroundGeneration))
+            if (IsInteractionSourceActive(source))
             {
-                await CancelUndisplayedPermissionAsync(service, foregroundGeneration, request).ConfigureAwait(false);
+                await CancelUndisplayedPermissionAsync(source, request).ConfigureAwait(false);
             }
         }
     }
 
     private PermissionRequestViewModel CreateOwnedPermissionRequest(
-        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        InteractionRequestSource source, PermissionRequestEventArgs request,
         string? conversationId, ConversationBindingSlice? binding)
     {
         PermissionRequestViewModel? viewModel = null;
         viewModel = _interactionEventBridge.CreatePermissionRequestViewModel(
             request,
-            async (_, outcome, optionId) =>
+            (_, outcome, optionId) =>
             {
                 var bindingCurrent = conversationId is not null && binding is not null
-                    && await IsPermissionBindingCurrentAsync(conversationId, binding).ConfigureAwait(false);
-                if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+                    && IsInteractionBindingCurrent(source, binding);
+                if (!IsInteractionSourceActive(source) || !request.CanRespond)
                 {
-                    return false;
+                    return Task.FromResult(false);
                 }
 
                 // A binding change withdraws the old choice, but the original request still
                 // requires an answer. Its callback keeps that cancellation on its own client.
                 var canSelect = bindingCurrent && viewModel?.IsCancellationOnly != true;
-                return await request.TryRespondAsync(canSelect ? outcome : "cancelled",
-                    canSelect ? optionId : null).ConfigureAwait(false);
+                return request.TryRespondAsync(canSelect ? outcome : "cancelled", canSelect ? optionId : null);
             },
             () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
         viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
@@ -1968,7 +1975,8 @@ public partial class ChatViewModel
             ? ResolveLocalizerText("Permission_DefaultTitle", "Permission required") : viewModel.RequestTitle;
         viewModel.Binding = binding;
         viewModel.Description = request.Description ?? string.Empty;
-        viewModel.IsRequestAvailable = () => IsPermissionSourceCurrent(service, foregroundGeneration) && request.CanRespond;
+        viewModel.IsRequestAvailable = () => IsInteractionSourceActive(source) && request.CanRespond;
+        viewModel.IsBindingCurrent = () => binding is not null && IsInteractionBindingCurrent(source, binding);
         viewModel.IsResponsePrepared = () => request.IsResponsePrepared;
         viewModel.IsResponseSending = () => request.IsResponseSending;
         viewModel.IsRequestCancellationRequested = () => request.IsCancellationRequested;
@@ -1976,17 +1984,17 @@ public partial class ChatViewModel
     }
 
     private void SubscribePermissionRequestChanges(
-        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        InteractionRequestSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
         EventHandler changed = (_, _) => _ = ProcessPermissionRequestChangedAsync(
-            service, foregroundGeneration, request, conversationId, viewModel);
+            source, request, conversationId, viewModel);
         request.Changed += changed;
         viewModel.UnsubscribeRequestChanges = () => request.Changed -= changed;
     }
 
     private async Task ProcessPermissionRequestChangedAsync(
-        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        InteractionRequestSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
         try
@@ -1998,7 +2006,7 @@ public partial class ChatViewModel
                 // A captured SDK callback can outlive unsubscription, a binding change or replacement.
                 // Only the exact projection still held by this conversation may change its surface.
                 if (_disposed || !_panelStateCoordinator.ContainsPermissionRequest(conversationId, viewModel)) return;
-                RefreshPermissionRequestProjection(service, foregroundGeneration, request, conversationId, viewModel);
+                RefreshPermissionRequestProjection(source, request, conversationId, viewModel);
                 ReconcilePermissionBindings(state.Bindings);
                 SyncPermissionRequestProjection();
             }).ConfigureAwait(false);
@@ -2010,10 +2018,10 @@ public partial class ChatViewModel
     }
 
     private void RefreshPermissionRequestProjection(
-        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request,
+        InteractionRequestSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
-        if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond)
+        if (!IsInteractionSourceActive(source) || !request.CanRespond)
         {
             RemovePermissionRequestProjection(conversationId, viewModel);
         }
@@ -2025,15 +2033,6 @@ public partial class ChatViewModel
                     "This request was cancelled. Retry cancellation to dismiss it."), bindingChanged: false);
         }
     }
-
-    private bool IsPermissionSourceCurrent(IChatService service, int foregroundGeneration)
-        // A PoolOnly replacement can leave the original service live for its background conversation.
-        // Its request callback remains authoritative even while another service is in the foreground.
-        => !_disposed && foregroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
-            && service.IsConnected;
-
-    private async Task<bool> IsPermissionBindingCurrentAsync(string conversationId, ConversationBindingSlice binding)
-        => (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false)).ResolveBinding(conversationId) == binding;
 
     private void ReconcilePermissionBindings(IImmutableDictionary<string, ConversationBindingSlice>? bindings)
     {
@@ -2051,7 +2050,7 @@ public partial class ChatViewModel
         try
         {
             if (request.Binding is null || !request.IsAvailable || request.OnRespond is null
-                || await IsPermissionBindingCurrentAsync(conversationId, request.Binding).ConfigureAwait(true))
+                || request.IsBindingCurrent?.Invoke() == true)
             {
                 return;
             }
@@ -2076,7 +2075,7 @@ public partial class ChatViewModel
     }
 
     private async Task CancelUndisplayedPermissionAsync(
-        IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
+        InteractionRequestSource source, PermissionRequestEventArgs request)
     {
         try
         {
@@ -2089,10 +2088,10 @@ public partial class ChatViewModel
 
         await PostToUiAsync(async () =>
         {
-            if (!IsPermissionSourceCurrent(service, foregroundGeneration) || !request.CanRespond) return;
+            if (!IsInteractionSourceActive(source) || !request.CanRespond) return;
             if (string.IsNullOrWhiteSpace(CurrentSessionId) || !IsChatShellVisibleForRemoteUi)
             {
-                await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(service, this,
+                await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(source.Service, this,
                     ResolveLocalizerText("Permission_CancellationFailedDisconnected",
                         "Could not cancel an undisplayed permission request. The connection was closed. Reconnect to the agent."))
                     .ConfigureAwait(true);
@@ -2100,14 +2099,14 @@ public partial class ChatViewModel
             }
             // No conversation owns this request, so retain only its cancellation on the existing
             // interaction owner. A later selection or reused id cannot turn it into permission.
-            var viewModel = CreateOwnedPermissionRequest(service, foregroundGeneration, request, null, null);
+            var viewModel = CreateOwnedPermissionRequest(source, request, null, null);
             viewModel.ShowCancellationRetry(
                 ResolveLocalizerText("Permission_RetryCancellation", "Retry cancellation"),
                 ResolveLocalizerText("Permission_Cancelled",
                     "This request was cancelled. Retry cancellation to dismiss it."), bindingChanged: false);
             _panelStateCoordinator.StoreUnboundPermissionCancellation(viewModel);
-            SubscribePermissionRequestChanges(service, foregroundGeneration, request, null, viewModel);
-            RefreshPermissionRequestProjection(service, foregroundGeneration, request, null, viewModel);
+            SubscribePermissionRequestChanges(source, request, null, viewModel);
+            RefreshPermissionRequestProjection(source, request, null, viewModel);
             SyncPermissionRequestProjection();
         }).ConfigureAwait(false);
     }

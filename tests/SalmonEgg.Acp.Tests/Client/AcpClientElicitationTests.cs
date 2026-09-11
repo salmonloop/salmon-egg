@@ -810,10 +810,11 @@ public sealed class AcpClientElicitationTests
             .Returns(sendResult.Task);
         var request = ReceiveRequest(client, parser, 312, UrlParamsJson);
         var accepted = request.Accept(null);
+        var cancelled = request.Cancel();
 
         try
         {
-            Assert.False(await request.Cancel());
+            Assert.False(cancelled.IsCompleted);
             Assert.Single(sentMessages);
         }
         finally
@@ -822,9 +823,41 @@ public sealed class AcpClientElicitationTests
         }
 
         Assert.True(await accepted);
+        Assert.True(await cancelled.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         var response = await WaitForResponseAsync(parser, sentMessages, 312);
         Assert.Equal("""{"action":"accept"}""", response.Result!.Value.GetRawText());
         Assert.Empty(sentMessages);
+    }
+
+    [Fact]
+    public async Task ElicitationResponse_DisconnectSettlesExplicitCancellation_WhenTransportIgnoresCancellation()
+    {
+        // Arrange
+        var parser = new MessageParser();
+        using var client = await CreateInitializedClientAsync(UrlCapabilities());
+        var physicalWrite = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _transportMock.Setup(transport => transport.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(physicalWrite.Task);
+        var request = ReceiveRequest(client, parser, 313, UrlParamsJson);
+        var accepted = request.Accept(null);
+        var cancelled = request.Cancel();
+        Assert.False(cancelled.IsCompleted);
+
+        // Act
+        try
+        {
+            await client.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            // Assert: disposing the connection cannot be held by the uncooperative physical write.
+            Assert.False(await cancelled.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.False(request.State.CanRespond);
+            Assert.Null(request.State.ResponseAction);
+        }
+        finally
+        {
+            physicalWrite.TrySetResult(false);
+            await accepted.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
     }
 
     [Fact]

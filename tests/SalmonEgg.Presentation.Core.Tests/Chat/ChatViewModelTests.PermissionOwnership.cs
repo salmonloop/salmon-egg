@@ -5,10 +5,12 @@ using Moq;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -25,7 +27,11 @@ public partial class ChatViewModelTests
         using var oldPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, oldPeer);
-        dispatcher.Enqueue(() => fixture.ViewModel.ReplaceChatService(currentPeer.Service));
+        dispatcher.Enqueue(() =>
+        {
+            RegisterInteractionService(fixture, currentPeer.Service);
+            fixture.ViewModel.ReplaceChatService(currentPeer.Service);
+        });
         oldPeer.Request("permission", "remote-1", "old-tool");
 
         // Act
@@ -52,6 +58,7 @@ public partial class ChatViewModelTests
         oldPeer.Request("permission", "remote-1", "old-tool");
         await dispatcher.RunUntilIdleAsync();
         var oldPrompt = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+        RegisterInteractionService(fixture, currentPeer.Service);
         await AwaitWithSynchronizationContextAsync(dispatcher,
             fixture.ViewModel.ReplaceChatServiceAsync(currentPeer.Service, TestContext.Current.CancellationToken));
         currentPeer.Request("permission", "remote-1", "current-tool");
@@ -93,6 +100,7 @@ public partial class ChatViewModelTests
         try
         {
             await AwaitWithSynchronizationContextAsync(dispatcher, started.Task);
+            RegisterInteractionService(fixture, currentPeer.Service);
             await AwaitWithSynchronizationContextAsync(dispatcher,
                 fixture.ViewModel.ReplaceChatServiceAsync(currentPeer.Service, TestContext.Current.CancellationToken));
             currentPeer.Request("permission", "remote-1", "current-tool");
@@ -500,6 +508,11 @@ public partial class ChatViewModelTests
         using var originalPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, originalPeer);
+        RegisterInteractionService(fixture, currentPeer.Service, "profile-other");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Bindings = state.Bindings!.SetItem("conv-2", new("conv-2", "remote-2", "profile-other"))
+        });
         originalPeer.Request("permission", "remote-1", "tool-one");
         await dispatcher.RunUntilIdleAsync();
         var original = fixture.ViewModel.PendingPermissionRequest!;
@@ -642,6 +655,7 @@ public partial class ChatViewModelTests
     private static async Task AttachPermissionPeerAsync(
         ViewModelFixture fixture, QueueingSynchronizationContext dispatcher, PermissionUiPeer peer, IChatService? service = null)
     {
+        RegisterInteractionService(fixture, (AcpChatServiceAdapter)(service ?? peer.Service));
         await AwaitWithSynchronizationContextAsync(dispatcher,
             fixture.ViewModel.ReplaceChatServiceAsync(service ?? peer.Service, TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
@@ -652,6 +666,23 @@ public partial class ChatViewModelTests
                 .Add("conv-2", new("conv-2", "remote-2", "profile"))
         });
         await dispatcher.RunUntilIdleAsync();
+    }
+
+    private static void RegisterInteractionService(
+        ViewModelFixture fixture, AcpChatServiceAdapter service, string profileId = "profile", string? connectionId = null)
+        => fixture.InteractionRegistry.Upsert(new(profileId, service,
+            new InitializeResponse(1, new AgentInfo("Peer", "1"), new AgentCapabilities()),
+            new AcpConnectionReuseKey(TransportType.WebSocket, "", "", ""), connectionId ?? Guid.NewGuid().ToString("N")));
+
+    private static AcpChatServiceAdapter RegisterInteractionMock(
+        ViewModelFixture fixture, IChatService service, string profileId)
+    {
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(update => adapter!.PublishBufferedUpdate(update), new ImmediateUiDispatcher());
+        adapter = new AcpChatServiceAdapter(service, eventAdapter);
+        eventAdapter.ReleaseUnscopedBufferedUpdates(lowTrust: false);
+        RegisterInteractionService(fixture, adapter, profileId);
+        return adapter;
     }
 
     private static async Task SelectPermissionConversationAsync(ViewModelFixture fixture, string conversationId)
@@ -682,10 +713,12 @@ public partial class ChatViewModelTests
             _client = new AcpClient(this, Mock.Of<IAcpClientLogger>());
             _client.PermissionRequestReceived += (_, request) => Requests.Enqueue(request);
             _client.ElicitationRequestReceived += (_, request) => Elicitations.Enqueue(request);
-            Service = new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>());
+            Service = new AcpChatServiceAdapter(
+                new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>()),
+                new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
         }
 
-        public ChatService Service { get; }
+        public AcpChatServiceAdapter Service { get; }
         public ConcurrentQueue<PermissionRequestEventArgs> Requests { get; } = new();
         public ConcurrentQueue<ElicitationRequestEventArgs> Elicitations { get; } = new();
         public ConcurrentQueue<JsonElement> Responses { get; } = new();

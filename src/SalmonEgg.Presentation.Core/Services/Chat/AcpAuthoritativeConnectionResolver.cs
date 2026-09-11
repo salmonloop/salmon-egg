@@ -18,6 +18,26 @@ internal sealed class AcpAuthoritativeConnectionResolver
         _connectionSessionRegistry = connectionSessionRegistry;
     }
 
+    public bool TryResolveSourceConnection(IChatService service, out AcpAuthoritativeConnectionSnapshot snapshot)
+    {
+        snapshot = default;
+        if (_connectionSessionRegistry is null
+            || !_connectionSessionRegistry.TryGetProfileId(service, out var profileId)
+            || !_connectionSessionRegistry.TryGetByProfile(profileId, out var session)
+            || !ReferenceEquals(session.Service, service)
+            || string.IsNullOrWhiteSpace(session.ConnectionInstanceId)
+            || !service.IsConnected)
+        {
+            return false;
+        }
+
+        snapshot = new(service, profileId, session.ConnectionInstanceId);
+        return true;
+    }
+
+    public bool IsSourceConnectionCurrent(AcpAuthoritativeConnectionSnapshot expected)
+        => TryResolveSourceConnection(expected.ChatService, out var current) && current == expected;
+
     public bool TryResolveReadyForegroundConnection(
         IChatService? foregroundChatService,
         ChatConnectionState connectionState,
