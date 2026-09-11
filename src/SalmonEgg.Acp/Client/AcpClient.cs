@@ -1207,18 +1207,22 @@ namespace SalmonEgg.Acp.Client
             {
                 if (sent)
                 {
-                    _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(idStr, pending));
-                    if (response is null)
+                    // A shared batch commits the response actually written before waking its
+                    // original callers. Their continuations cannot overwrite that terminal fact.
+                    if (_pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(idStr, pending)))
                     {
-                        pending.ElicitationState!.Invalidate();
-                    }
-                    else
-                    {
-                        pending.ElicitationState!.MarkResponseSent(response.Action);
-                    }
-                    if (response is not ElicitationAcceptResponse)
-                    {
-                        RemovePendingUrlElicitation(pending);
+                        if (response is null)
+                        {
+                            pending.ElicitationState!.Invalidate();
+                        }
+                        else
+                        {
+                            pending.ElicitationState!.MarkResponseSent(response.Action);
+                        }
+                        if (response is not ElicitationAcceptResponse)
+                        {
+                            RemovePendingUrlElicitation(pending);
+                        }
                     }
                 }
                 else if (!IsBatchedResponse(pending) && !isCancellationResponse
