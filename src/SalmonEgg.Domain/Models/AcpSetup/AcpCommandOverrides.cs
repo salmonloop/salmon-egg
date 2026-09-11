@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace SalmonEgg.Domain.Models.AcpSetup;
 
@@ -63,7 +64,15 @@ public sealed class AcpCommandOverrides
     /// when they supplied none.
     /// </summary>
     public string Resolve(string command)
-        => string.IsNullOrWhiteSpace(command)
-            ? command
-            : _overrides.TryGetValue(command, out var path) ? path : command;
+        => TryGetOverride(command, out var path) ? path : command;
+
+    /// <summary>
+    /// Distinguishes an explicit path from the unchanged catalog command, so an adapter can keep using
+    /// its bundled runtime when no separate runtime was selected.
+    /// </summary>
+    public bool TryGetOverride(string command, [NotNullWhen(true)] out string? path)
+    {
+        path = null;
+        return !string.IsNullOrWhiteSpace(command) && _overrides.TryGetValue(command, out path);
+    }
 }

@@ -55,6 +55,7 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsMissing))]
     [NotifyPropertyChangedFor(nameof(IsUndetermined))]
     [NotifyPropertyChangedFor(nameof(IsChecking))]
+    [NotifyPropertyChangedFor(nameof(IsRuntimePathEditorVisible))]
     [NotifyPropertyChangedFor(nameof(Version))]
     [NotifyPropertyChangedFor(nameof(HasVersion))]
     [NotifyPropertyChangedFor(nameof(ProbeDetail))]
@@ -93,6 +94,13 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     public bool IsUndetermined => Runtime.Availability == AcpComponentAvailability.Undetermined;
 
     public bool IsChecking => Runtime.Availability == AcpComponentAvailability.Checking;
+
+    /// <summary>
+    /// Keeps the path editor available while an edit invalidates its previous probe, including when the
+    /// user clears the path to try again. Probe availability must not remove the focused input mid-edit.
+    /// </summary>
+    public bool IsRuntimePathEditorVisible
+        => IsMissing || HasCustomCommand || (IsUndetermined && CommandRevision > 0);
 
     public string Version => Runtime.Version ?? string.Empty;
 
@@ -255,9 +263,20 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCustomCommand))]
     [NotifyPropertyChangedFor(nameof(SelectedCandidate))]
+    [NotifyPropertyChangedFor(nameof(IsRuntimePathEditorVisible))]
     private string _customCommand = string.Empty;
 
     public bool HasCustomCommand => !string.IsNullOrWhiteSpace(CustomCommand);
+
+    internal long CommandRevision { get; private set; }
+
+    partial void OnCustomCommandChanged(string value)
+    {
+        // A path edited away and back is still a new request. Its previous probe cannot approve it.
+        CommandRevision++;
+        RuntimeToolchain = null;
+        Runtime = AcpComponentProbeResult.Undetermined(Agent.Runtime.Id);
+    }
 
     /// <summary>
     /// Raised when the user asks this row to be installed; the owning wizard subscribes because it

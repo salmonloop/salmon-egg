@@ -778,6 +778,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // Diagnostics-only NumberBox theme probe. Navigation, focus cycling, and realized-template
         // sampling remain owned by the independent probe; the page only exposes the live shell root.
         NumberBoxThemeProbeDriver.TryStart(App.ServiceProvider, this);
+
+        // The opt-in setup probe owns navigation and sampling; the shell only supplies its live root.
+        AcpSetupRuntimePathProbeDriver.TryStart(App.ServiceProvider, this);
     }
 
     private void OnMainPageGettingFocus(object? sender, GettingFocusEventArgs e)

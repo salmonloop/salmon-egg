@@ -49,4 +49,22 @@ public sealed class AcpAdapterDescriptor
     public required AcpComponentDescriptor Component { get; init; }
 
     public required AcpLaunchTemplate LaunchTemplate { get; init; }
+
+    /// <summary>
+    /// The adapter distribution supplies its own agent runtime, so a separate runtime installation is
+    /// optional. This differs from a built-in adapter, where the agent executable itself speaks ACP.
+    /// </summary>
+    public bool IncludesRuntime { get; init; }
+
+    /// <summary>
+    /// The adapter's documented environment variable for selecting a separately installed runtime.
+    /// Empty when the adapter has no such contract; an absent runtime override preserves its default.
+    /// </summary>
+    public string RuntimeCommandEnvironmentVariable { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Whether the adapter invokes an overridden runtime through a Windows shell. Direct-process
+    /// adapters cannot consume a Windows batch launcher even when the wizard can probe that launcher.
+    /// </summary>
+    public bool SupportsWindowsRuntimeBatchLauncher { get; init; } = true;
 }

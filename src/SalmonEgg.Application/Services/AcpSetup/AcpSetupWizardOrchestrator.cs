@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Application.Common;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Domain.Services;
@@ -221,9 +222,7 @@ public sealed class AcpSetupWizardOrchestrator
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        var violations = AcpSetupParameterValidator.Validate(
-            draft.Adapter.LaunchTemplate,
-            draft.ParameterValues);
+        var violations = AcpSetupParameterValidator.Validate(draft);
         if (violations.Count > 0)
         {
             return AcpSetupTestResult.Failure(
@@ -240,18 +239,25 @@ public sealed class AcpSetupWizardOrchestrator
     /// <summary>
     /// Persists the draft as a new stdio connection profile and returns it. The caller is expected to have
     /// tested the draft first; this method does not re-test, so a caller that skips testing saves an
-    /// unverified configuration deliberately rather than by accident.
+    /// unverified configuration deliberately rather than by accident. Known launch-contract failures
+    /// still return the validator's remediation key without writing a configuration.
     /// </summary>
-    public async Task<ServerConfiguration> SaveDraftAsync(
+    public async Task<Result<ServerConfiguration>> SaveDraftAsync(
         AcpSetupDraft draft,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(draft);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var violations = AcpSetupParameterValidator.Validate(draft);
+        if (violations.Count > 0)
+        {
+            return Result<ServerConfiguration>.Failure(violations[0].MessageKey);
+        }
+
         var configuration = CreateConfiguration(draft);
         await _configurationService.SaveConfigurationAsync(configuration).ConfigureAwait(false);
-        return configuration;
+        return Result<ServerConfiguration>.Success(configuration);
     }
 
     internal static ServerConfiguration CreateConfiguration(AcpSetupDraft draft)

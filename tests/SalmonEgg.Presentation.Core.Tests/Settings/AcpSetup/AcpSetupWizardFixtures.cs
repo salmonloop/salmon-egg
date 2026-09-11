@@ -363,9 +363,11 @@ internal static class AcpSetupWizardFixtures
 
     public static AcpAdapterDescriptor ExecutableAdapter(
         string id = "adapter.executable",
+        bool includesRuntime = false,
         params AcpSetupParameterDefinition[] parameters)
         => new()
         {
+            IncludesRuntime = includesRuntime,
             Component = new AcpComponentDescriptor
             {
                 Id = id,

@@ -48,6 +48,9 @@ internal static class AcpAgentCatalogEntries
         string adapterProbeCommand,
         string adapterPackageId,
         Uri adapterDocumentation,
+        bool includesRuntime,
+        string runtimeCommandEnvironmentVariable,
+        bool supportsWindowsRuntimeBatchLauncher,
         IReadOnlyList<AcpSetupParameterDefinition> parameters)
         => new()
         {
@@ -70,6 +73,9 @@ internal static class AcpAgentCatalogEntries
             {
                 new AcpAdapterDescriptor
                 {
+                    IncludesRuntime = includesRuntime,
+                    RuntimeCommandEnvironmentVariable = runtimeCommandEnvironmentVariable,
+                    SupportsWindowsRuntimeBatchLauncher = supportsWindowsRuntimeBatchLauncher,
                     Component = new AcpComponentDescriptor
                     {
                         Id = adapterId,
@@ -169,6 +175,13 @@ internal static class AcpAgentCatalogEntries
             adapterProbeCommand: "claude-agent-acp",
             adapterPackageId: "@agentclientprotocol/claude-agent-acp",
             adapterDocumentation: new Uri("https://github.com/agentclientprotocol/claude-agent-acp"),
+            // The adapter SDK bundles Claude Code; an explicit executable overrides that runtime.
+            // https://github.com/agentclientprotocol/claude-agent-acp/blob/v0.76.0/src/acp-agent.ts#L1441-L1478
+            includesRuntime: true,
+            runtimeCommandEnvironmentVariable: "CLAUDE_CODE_EXECUTABLE",
+            // v0.76.0 uses execFile for auth and its SDK spawns the selected runtime without a shell.
+            // https://github.com/agentclientprotocol/claude-agent-acp/blob/v0.76.0/src/acp-agent.ts#L2369-L2372
+            supportsWindowsRuntimeBatchLauncher: false,
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateCodex()
@@ -184,6 +197,11 @@ internal static class AcpAgentCatalogEntries
             adapterProbeCommand: "codex-acp",
             adapterPackageId: "@agentclientprotocol/codex-acp",
             adapterDocumentation: new Uri("https://github.com/agentclientprotocol/codex-acp"),
+            // The adapter includes Codex and accepts CODEX_PATH for a selected installation.
+            // https://github.com/agentclientprotocol/codex-acp/blob/v1.11.0/README.md#L38-L42
+            includesRuntime: true,
+            runtimeCommandEnvironmentVariable: "CODEX_PATH",
+            supportsWindowsRuntimeBatchLauncher: true,
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateGeminiCli()

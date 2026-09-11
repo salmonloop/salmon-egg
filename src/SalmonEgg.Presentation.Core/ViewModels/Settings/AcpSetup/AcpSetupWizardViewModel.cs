@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -32,12 +33,34 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 {
     private const int MaxInstallOutputLines = 200;
 
+    /// <summary>
+    /// The selected row's properties that the wizard's own gates read.
+    /// </summary>
+    /// <remarks>
+    /// The gates live on the wizard but decide on facts the row holds, and the generated
+    /// <c>NotifyCanExecuteChangedFor</c> only reaches fields declared beside the command — it cannot see
+    /// across objects. This subscription is therefore the sole route by which a row's answer reaches the
+    /// buttons, and a fact the gates read but this list omits leaves them showing the verdict they were
+    /// last told. Naming them in one place is what keeps the next gate that reads a row fact from having
+    /// to rediscover that.
+    /// </remarks>
+    private static readonly string[] GateBearingRowProperties =
+    [
+        nameof(AcpSetupAgentRowViewModel.IsMissing),
+        nameof(AcpSetupAgentRowViewModel.IsChecking),
+        nameof(AcpSetupAgentRowViewModel.HasCustomCommand)
+    ];
+
     private readonly AcpSetupWizardOrchestrator _orchestrator;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly ILogger<AcpSetupWizardViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private bool _suppressAdapterSelectionProbe;
+    private bool _adapterProbeRequested;
+    private long _selectionRevision;
+    private long _adapterRevision;
+    private long _draftRevision;
 
     public AcpSetupWizardViewModel(
         AcpSetupWizardOrchestrator orchestrator,
@@ -58,6 +81,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             row.InstallRequested += InstallAgentRow;
             row.InstallToolchainRequested += InstallAgentToolchain;
             row.VerifyRequested += VerifyAgentRow;
+            row.PropertyChanged += OnAgentRowPropertyChanged;
             Agents.Add(row);
         }
     }
@@ -127,6 +151,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpSetupAgentRowViewModel? _selectedAgent;
 
+    partial void OnSelectedAgentChanged(AcpSetupAgentRowViewModel? value)
+    {
+        _selectionRevision++;
+        _adapterProbeRequested = false;
+        SelectedAdapter = null;
+        Adapters.Clear();
+        InvalidateVerification();
+    }
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
@@ -150,17 +183,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// </summary>
     partial void OnSelectedAdapterChanged(AcpAdapterDescriptor? value)
     {
+        _adapterRevision++;
         AdapterProbe = null;
         AdapterToolchain = null;
-        TestResult = null;
-        Verification = ProfileVerification.Unknown;
+        InvalidateVerification();
         Parameters.Clear();
         LaunchCommandPreview = string.Empty;
         AdapterCustomCommand = string.Empty;
 
         if (!_suppressAdapterSelectionProbe && value is not null && IsOnComponentSetup)
         {
-            _ = DetectAdapterCommand.ExecuteAsync(null);
+            _adapterProbeRequested = true;
+            if (!IsBusy)
+            {
+                _ = DetectAdapterCommand.ExecuteAsync(null);
+            }
         }
     }
 
@@ -224,8 +261,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     partial void OnAdapterCustomCommandChanged(string value)
     {
-        TestResult = null;
-        Verification = ProfileVerification.Unknown;
+        _adapterRevision++;
+        AdapterProbe = null;
+        AdapterToolchain = null;
+        InvalidateVerification();
         RefreshLaunchCommandPreview();
     }
 
@@ -456,15 +495,34 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRunOperation))]
     private async Task DetectAgentsAsync(CancellationToken cancellationToken)
     {
+        var revisions = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var row in Agents)
+        {
+            revisions[row.AgentId] = row.CommandRevision;
+        }
+
+        var overrides = CollectCommandOverrides();
         await RunOperationAsync(
             async token =>
             {
                 _orchestrator.InvalidateSearchPaths();
-                MarkAgentsChecking();
-                var states = await _orchestrator
-                    .DetectAgentsAsync(CollectCommandOverrides(), token)
-                    .ConfigureAwait(false);
-                await _uiDispatcher.EnqueueAsync(() => ApplyRuntimeProbes(states)).ConfigureAwait(false);
+                await _uiDispatcher.EnqueueAsync(MarkAgentsChecking).ConfigureAwait(false);
+                try
+                {
+                    var states = await _orchestrator
+                        .DetectAgentsAsync(overrides, token).ConfigureAwait(false);
+                    await _uiDispatcher.EnqueueAsync(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            ApplyRuntimeProbes(states, revisions);
+                        }
+                    }).ConfigureAwait(false);
+                }
+                finally
+                {
+                    await _uiDispatcher.EnqueueAsync(ResetCheckingAgents).ConfigureAwait(false);
+                }
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -483,15 +541,26 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             return;
         }
 
+        var revision = row.CommandRevision;
+        var overrides = CollectCommandOverrides();
         _ = RunOperationAsync(
             async token =>
             {
+                _orchestrator.InvalidateSearchPaths();
                 var probe = await _orchestrator
-                    .DetectComponentAsync(row.Agent.Runtime, CollectCommandOverrides(), token)
+                    .DetectComponentAsync(row.Agent.Runtime, overrides, token)
                     .ConfigureAwait(false);
+                var toolchain = await _orchestrator
+                    .DetectToolchainAsync(row.Agent.Runtime, overrides, token).ConfigureAwait(false);
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
+                        if (token.IsCancellationRequested || row.CommandRevision != revision)
+                        {
+                            return;
+                        }
+
+                        row.RuntimeToolchain = toolchain;
                         row.Runtime = probe;
                         OnPropertyChanged(nameof(StepPositionText));
                     })
@@ -505,11 +574,14 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     {
         var agent = SelectedAgent;
         var adapter = SelectedAdapter;
-        if (adapter is null)
+        if (adapter is null || IsBusy)
         {
             return;
         }
 
+        _adapterProbeRequested = false;
+        var context = CaptureAdapterOperation(adapter);
+        var overrides = CollectCommandOverrides();
         await RunOperationAsync(
             async token =>
             {
@@ -517,31 +589,28 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 // toolchain-missing surface offers, so it must look at the machine rather than at the
                 // search that was current when the wizard first said the toolchain was absent.
                 _orchestrator.InvalidateSearchPaths();
-                await ProbeAdapterAsync(agent, adapter, CollectCommandOverrides(), token).ConfigureAwait(false);
+                await ProbeAdapterAsync(context, overrides, token).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ProbeAdapterAsync(
-        AcpSetupAgentRowViewModel? agent,
-        AcpAdapterDescriptor adapter,
+        AdapterOperation context,
         AcpCommandOverrides overrides,
         CancellationToken cancellationToken)
     {
         var probe = await _orchestrator
-            .DetectComponentAsync(adapter.Component, overrides, cancellationToken)
+            .DetectComponentAsync(context.Adapter.Component, overrides, cancellationToken)
             .ConfigureAwait(false);
         var toolchain = await _orchestrator
-            .DetectToolchainAsync(adapter.Component, overrides, cancellationToken)
+            .DetectToolchainAsync(context.Adapter.Component, overrides, cancellationToken)
             .ConfigureAwait(false);
 
         await _uiDispatcher.EnqueueAsync(() =>
         {
             // Native selection can change during a process probe. A late result belongs to the
             // captured agent and adapter, and must never approve their replacements.
-            if (!cancellationToken.IsCancellationRequested
-                && ReferenceEquals(SelectedAgent, agent)
-                && ReferenceEquals(SelectedAdapter, adapter))
+            if (IsCurrentAdapterOperation(context, cancellationToken))
             {
                 AdapterProbe = probe;
                 AdapterToolchain = toolchain;
@@ -582,10 +651,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         // it, rather than showing the previous log until the first line of this one arrives.
         ResetInstallOutput();
 
+        var revision = row.CommandRevision;
+        var overrides = CollectCommandOverrides();
         _ = RunOperationAsync(
             async token =>
             {
-                var overrides = CollectCommandOverrides();
                 var (install, probe) = await _orchestrator
                     .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
@@ -600,6 +670,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
+                        if (token.IsCancellationRequested || row.CommandRevision != revision)
+                        {
+                            return;
+                        }
+
                         row.Runtime = probe;
                         row.RuntimeToolchain = toolchain;
                         OnPropertyChanged(nameof(StepPositionText));
@@ -622,16 +697,22 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         }
 
         ResetInstallOutput();
+        var revision = row.CommandRevision;
+        var overrides = CollectCommandOverrides();
         _ = RunOperationAsync(
             async token =>
             {
-                var overrides = CollectCommandOverrides();
                 var (install, toolchain) = await _orchestrator
                     .InstallToolchainAsync(row.Agent.Runtime, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
 
                 await _uiDispatcher.EnqueueAsync(() =>
                 {
+                    if (token.IsCancellationRequested || row.CommandRevision != revision)
+                    {
+                        return;
+                    }
+
                     row.RuntimeToolchain = toolchain;
                     ReportToolchainInstallFailure(install);
                 }).ConfigureAwait(false);
@@ -643,16 +724,17 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private async Task InstallToolchainAsync(CancellationToken cancellationToken)
     {
         var adapter = SelectedAdapter;
-        if (adapter is null)
+        if (adapter is null || !CanInstallToolchain())
         {
             return;
         }
 
         ResetInstallOutput();
+        var context = CaptureAdapterOperation(adapter);
+        var overrides = CollectCommandOverrides();
         await RunOperationAsync(
             async token =>
             {
-                var overrides = CollectCommandOverrides();
                 var (install, toolchain) = await _orchestrator
                     .InstallToolchainAsync(adapter.Component, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
@@ -661,7 +743,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 {
                     // A ComboBox change can land while the downloader is running; never apply an old
                     // adapter's result to the newly selected one.
-                    if (ReferenceEquals(SelectedAdapter, adapter))
+                    if (IsCurrentAdapterOperation(context, token))
                     {
                         AdapterToolchain = toolchain;
                         ReportToolchainInstallFailure(install);
@@ -678,7 +760,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private async Task InstallAdapterAsync(CancellationToken cancellationToken)
     {
         var adapter = SelectedAdapter;
-        if (adapter is null)
+        if (adapter is null || !CanInstallAdapter())
         {
             return;
         }
@@ -686,10 +768,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         // Same reason as the row install: one shared surface, so each install starts from its own log.
         ResetInstallOutput();
 
+        var context = CaptureAdapterOperation(adapter);
+        var overrides = CollectCommandOverrides();
         await RunOperationAsync(
             async token =>
             {
-                var overrides = CollectCommandOverrides();
                 var (install, probe) = await _orchestrator
                     .InstallComponentAsync(adapter.Component, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
@@ -700,7 +783,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
-                        if (ReferenceEquals(SelectedAdapter, adapter))
+                        if (IsCurrentAdapterOperation(context, token))
                         {
                             AdapterProbe = probe;
                             AdapterToolchain = toolchain;
@@ -732,6 +815,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanTest))]
     private async Task TestAsync(CancellationToken cancellationToken)
     {
+        if (!CanTest())
+        {
+            return;
+        }
+
         var draft = BuildDraft();
         if (draft is null)
         {
@@ -743,6 +831,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         // the draft.
         TestResult = null;
         Verification = ProfileVerification.Unknown;
+        var revision = _draftRevision;
 
         await RunOperationAsync(
             async token =>
@@ -751,6 +840,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
+                        if (token.IsCancellationRequested || _draftRevision != revision)
+                        {
+                            return;
+                        }
+
                         TestResult = result;
                         Verification = result.IsSuccess
                             ? ProfileVerification.Verified(_timeProvider.GetUtcNow())
@@ -762,7 +856,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             cancellationToken).ConfigureAwait(false);
     }
 
-    private bool CanTest() => !IsBusy && SelectedAdapter is not null;
+    // Reads the same runtime prerequisite as the two step gates. Resolving an adapter is not the same as
+    // being able to launch it: a handshake against a runtime the user has not installed yet can only fail,
+    // and it would report that absence as a connectivity fault.
+    private bool CanTest() => !IsBusy && SelectedAdapter is not null && !IsRuntimeInstallRequired;
 
     /// <summary>
     /// Deliberately accepts an untested draft and moves to naming it. This is distinct from automatic step
@@ -810,7 +907,19 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 var saved = await _orchestrator.SaveDraftAsync(draft, token).ConfigureAwait(false);
-                await _uiDispatcher.EnqueueAsync(() => SavedProfile = saved).ConfigureAwait(false);
+                await _uiDispatcher.EnqueueAsync(() =>
+                {
+                    if (saved.IsSuccess)
+                    {
+                        SavedProfile = saved.Value;
+                        return;
+                    }
+
+                    TestResult = AcpSetupTestResult.Failure(AcpSetupTestStage.Validation, null, saved.Error);
+                    Verification = ProfileVerification.Unknown;
+                    ApplyValidationMessages(TestResult);
+                    Step = AcpSetupWizardStep.Test;
+                }).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -863,7 +972,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     private bool CanGoNext() => !IsBusy && Step switch
     {
-        AcpSetupWizardStep.AgentSelection => SelectedAgent is { IsMissing: false, IsChecking: false },
+        AcpSetupWizardStep.AgentSelection => SelectedAgent is { IsChecking: false } && !IsRuntimeInstallRequired,
         AcpSetupWizardStep.ComponentSetup => CanAdvanceFromComponentSetup(),
         AcpSetupWizardStep.Parameters => true,
         AcpSetupWizardStep.Test => IsTestSuccessful,
@@ -880,6 +989,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
         var overrides = CollectCommandOverrides();
         var command = overrides.Resolve(row.ProbeCommand);
+        // Captured before the probe starts, because re-selecting this same row is a new request for the
+        // same object: identity would still match while the intent behind this walk has been replaced.
+        var selectionRevision = _selectionRevision;
+        var commandRevision = row.CommandRevision;
         await RunOperationAsync(async token =>
         {
             // Entering the wizard does not run the optional catalog sweep. Check the selected
@@ -891,6 +1004,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 .DetectToolchainAsync(row.Agent.Runtime, overrides, token).ConfigureAwait(false);
 
             AcpAdapterDescriptor? adapter = null;
+            AdapterOperation? context = null;
             await _uiDispatcher.EnqueueAsync(() =>
             {
                 if (!IsCurrentSelection())
@@ -901,24 +1015,31 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 row.RuntimeToolchain = toolchain;
                 row.Runtime = runtime;
                 OnPropertyChanged(nameof(StepPositionText));
-                if (row.IsMissing)
+
+                // PrepareComponentSetup resolves the adapter, and whether an absent runtime blocks the walk
+                // is a fact about that adapter. Preparing first is what lets the gate below see it.
+                PrepareComponentSetup();
+                if (IsRuntimeInstallRequired)
                 {
                     return;
                 }
 
-                PrepareComponentSetup();
                 adapter = SelectedAdapter;
+                if (adapter is not null)
+                {
+                    context = CaptureAdapterOperation(adapter);
+                }
             }).ConfigureAwait(false);
 
-            if (adapter is null)
+            if (adapter is null || context is null)
             {
                 return;
             }
 
-            await ProbeAdapterAsync(row, adapter, overrides, token).ConfigureAwait(false);
+            await ProbeAdapterAsync(context.Value, overrides, token).ConfigureAwait(false);
             await _uiDispatcher.EnqueueAsync(() =>
             {
-                if (!IsCurrentSelection() || !ReferenceEquals(SelectedAdapter, adapter))
+                if (!IsCurrentSelection() || !IsCurrentAdapterOperation(context.Value, token))
                 {
                     return;
                 }
@@ -936,6 +1057,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             bool IsCurrentSelection()
                 => !token.IsCancellationRequested
                     && ReferenceEquals(SelectedAgent, row)
+                    && _selectionRevision == selectionRevision
+                    && row.CommandRevision == commandRevision
                     && string.Equals(command, CollectCommandOverrides().Resolve(row.ProbeCommand), StringComparison.Ordinal);
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -946,9 +1069,18 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// </summary>
     private bool CanAdvanceFromComponentSetup()
         => SelectedAdapter is not null
-            && SelectedAgent?.IsMissing != true
+            && !IsRuntimeInstallRequired
             && AdapterProbe is not null
             && !IsAdapterMissing;
+
+    /// <summary>
+    /// A missing standalone runtime is optional when the adapter supplies it, unless the user chose a
+    /// custom runtime path. Before component setup, the recommended adapter owns the same decision.
+    /// </summary>
+    private bool IsRuntimeInstallRequired
+        => SelectedAgent is { IsMissing: true } row
+            && (row.HasCustomCommand
+                || (SelectedAdapter ?? row.Agent.ResolveRecommendedAdapter())?.IncludesRuntime != true);
 
     private void AdvancePastComponentSetup()
     {
@@ -1269,19 +1401,42 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Shows every row as being looked at. Callers marshal to the UI thread themselves, so the sweep can
+    /// guarantee the checking state is visible before detection starts and retired after it ends.
+    /// </summary>
     private void MarkAgentsChecking()
     {
-        _uiDispatcher.Enqueue(() =>
+        foreach (var row in Agents)
         {
-            foreach (var row in Agents)
+            row.Runtime = new AcpComponentProbeResult
             {
-                row.Runtime = new AcpComponentProbeResult
-                {
-                    ComponentId = row.Agent.Runtime.Id,
-                    Availability = AcpComponentAvailability.Checking
-                };
+                ComponentId = row.Agent.Runtime.Id,
+                Availability = AcpComponentAvailability.Checking
+            };
+        }
+    }
+
+    /// <summary>
+    /// Retires the checking state from any row still wearing it.
+    /// </summary>
+    /// <remarks>
+    /// Runs whether the sweep completed, failed, or was cancelled. Checking is a transient display state
+    /// that also blocks the walk (<c>IsChecking</c> gates Next), so a sweep that ends without answering a
+    /// row must hand it back as undetermined — a question nobody is asking any more — rather than leaving
+    /// the user looking at a spinner they cannot cancel out of.
+    /// </remarks>
+    private void ResetCheckingAgents()
+    {
+        foreach (var row in Agents)
+        {
+            if (row.IsChecking)
+            {
+                row.Runtime = AcpComponentProbeResult.Undetermined(row.Agent.Runtime.Id);
             }
-        });
+        }
+
+        OnPropertyChanged(nameof(StepPositionText));
     }
 
     /// <remarks>
@@ -1289,7 +1444,9 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// the component probe is what raises the flags the view reads — so writing it last means the view
     /// never renders a "missing" row against a toolchain answer from the previous sweep.
     /// </remarks>
-    private void ApplyRuntimeProbes(IReadOnlyList<AcpAgentDetectionState> states)
+    private void ApplyRuntimeProbes(
+        IReadOnlyList<AcpAgentDetectionState> states,
+        IReadOnlyDictionary<string, long> requestedRevisions)
     {
         var byAgentId = new Dictionary<string, AcpAgentDetectionState>(StringComparer.Ordinal);
         foreach (var state in states)
@@ -1299,11 +1456,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
         foreach (var row in Agents)
         {
-            if (byAgentId.TryGetValue(row.AgentId, out var state))
+            if (!byAgentId.TryGetValue(row.AgentId, out var state))
             {
-                row.RuntimeToolchain = state.RuntimeToolchain;
-                row.Runtime = state.Runtime;
+                continue;
             }
+
+            // The sweep probed the paths as they stood when it started. A row whose path the user edited
+            // since then was asked a different question, so this answer cannot speak for it.
+            if (!requestedRevisions.TryGetValue(row.AgentId, out var requested)
+                || row.CommandRevision != requested)
+            {
+                continue;
+            }
+
+            row.RuntimeToolchain = state.RuntimeToolchain;
+            row.Runtime = state.Runtime;
         }
 
         OnPropertyChanged(nameof(StepPositionText));
@@ -1437,6 +1604,104 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         ErrorMessage = install.ErrorDetail ?? Localize(InstallFailedKey, "Installation failed.");
     }
 
+    // ── Operation identity ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Discards any verdict attached to the draft as it stood, and retires the operations that were
+    /// working towards one.
+    /// </summary>
+    /// <remarks>
+    /// One entry point, called from every edit that changes what would be launched — agent, adapter, and
+    /// adapter path. The revision it bumps is what a completing test compares against: without it, a test
+    /// that started before an edit could land its pass afterwards and let a draft nobody tested be saved
+    /// as verified.
+    /// </remarks>
+    private void InvalidateVerification()
+    {
+        _draftRevision++;
+        TestResult = null;
+        Verification = ProfileVerification.Unknown;
+    }
+
+    /// <summary>
+    /// Identifies one adapter operation by the selection that started it.
+    /// </summary>
+    /// <remarks>
+    /// Reference equality on the descriptors is not sufficient. Re-selecting the same adapter, or editing
+    /// its path away and back, restores the same objects while asking a new question — so the counters
+    /// are what distinguish "still the same request" from "looks like it".
+    /// </remarks>
+    private readonly record struct AdapterOperation(
+        AcpSetupAgentRowViewModel? Agent,
+        AcpAdapterDescriptor Adapter,
+        long SelectionRevision,
+        long AdapterRevision);
+
+    private AdapterOperation CaptureAdapterOperation(AcpAdapterDescriptor adapter)
+        => new(SelectedAgent, adapter, _selectionRevision, _adapterRevision);
+
+    /// <summary>
+    /// Whether a completed adapter operation still speaks for the current selection.
+    /// </summary>
+    private bool IsCurrentAdapterOperation(AdapterOperation context, CancellationToken cancellationToken)
+        => !cancellationToken.IsCancellationRequested
+            && ReferenceEquals(SelectedAgent, context.Agent)
+            && ReferenceEquals(SelectedAdapter, context.Adapter)
+            && _selectionRevision == context.SelectionRevision
+            && _adapterRevision == context.AdapterRevision;
+
+    /// <summary>
+    /// Reacts to a row editing its own runtime path, and re-asks the gates that read its state.
+    /// </summary>
+    /// <remarks>
+    /// The row owns its path and revision; the wizard owns the draft's verdict and the deferred adapter
+    /// probe. A path edit therefore has to reach here: the runtime it names is part of what a saved
+    /// profile launches, so a verdict obtained against the previous path is no longer proof of anything.
+    /// <para>
+    /// Invalidating that verdict is not itself a signal to the gates. It writes values that are already
+    /// cleared on the path the user is most likely to take — supplying a path for a runtime just reported
+    /// absent — and an unchanged value raises nothing, so the notification has to be explicit.
+    /// </para>
+    /// </remarks>
+    private void OnAgentRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, SelectedAgent))
+        {
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(AcpSetupAgentRowViewModel.CustomCommand), StringComparison.Ordinal))
+        {
+            InvalidateVerification();
+            RefreshLaunchCommandPreview();
+        }
+
+        if (Array.IndexOf(GateBearingRowProperties, e.PropertyName) >= 0)
+        {
+            GoNextCommand.NotifyCanExecuteChanged();
+            TestCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    /// <summary>
+    /// Runs an adapter probe that a selection change asked for while an operation held the wizard busy.
+    /// </summary>
+    /// <remarks>
+    /// The selection handler cannot start one itself: <see cref="RunOperationAsync"/> admits a single
+    /// operation, so a probe started under the busy flag would return immediately and leave the new
+    /// adapter permanently unprobed — which reads to the user as a Next button that never enables.
+    /// Deferring to here means the request survives the operation that displaced it.
+    /// </remarks>
+    private void RunDeferredAdapterProbe()
+    {
+        if (!_adapterProbeRequested || IsBusy || SelectedAdapter is null || !IsOnComponentSetup)
+        {
+            return;
+        }
+
+        _ = DetectAdapterCommand.ExecuteAsync(null);
+    }
+
     private bool CanRunOperation() => !IsBusy;
 
     /// <summary>
@@ -1515,7 +1780,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             // pointing at a disposed source, where Cancel throws ObjectDisposedException inside a command
             // handler.
             _operationCancellation = null;
-            await _uiDispatcher.EnqueueAsync(() => IsBusy = false).ConfigureAwait(false);
+            await _uiDispatcher
+                .EnqueueAsync(() =>
+                {
+                    IsBusy = false;
+                    RunDeferredAdapterProbe();
+                })
+                .ConfigureAwait(false);
             cancellation.Dispose();
         }
     }
