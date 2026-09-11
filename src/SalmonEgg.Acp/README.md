@@ -112,7 +112,8 @@ copies because wire DTO collections are mutable; editing a returned
 DTO cannot alter an existing snapshot or client state. A full `replayFrom: { type: "start" }` begins
 a fresh projection, while resume without replay retains prior history. Overlapping full replays
 are rejected because session updates carry no request id that could separate them; cancelling the
-local wait retains this claim until the peer responds or the connection ends.
+local wait or receiving an unknown write outcome retains this claim until the peer responds or the
+connection ends. Only a request that never started transport I/O releases the claim immediately.
 
 A snapshot is a current view, not a lossless event archive. `UnprojectedUpdates` retains recent
 unhandled updates verbatim within `MaxUnprojectedUpdates` (64 entries) and
@@ -127,7 +128,9 @@ The [pinned v2 schema](https://github.com/agentclientprotocol/agent-client-proto
 explicitly allows default-on-error for optional patch fields and skip-invalid-items for message,
 tool-content, and location arrays. Those recoveries apply only to the v2 contracts that declare
 them. Required identities and chunks remain strict, unknown string discriminators survive, and
-v1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
+content annotations and metadata recover their own optional fields before an enclosing list may
+discard an invalid content item. Valid text survives malformed hints; required text type errors
+remain invalid. V1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
 history and asserts replacement, append, clear, terminal bytes, and snapshot isolation.
 
 `AcpPermissionDraftExtensions.ReadRequest(parameters)` parses recorded v2 permission params;

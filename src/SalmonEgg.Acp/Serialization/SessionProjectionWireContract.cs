@@ -8,13 +8,20 @@ using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Acp.Serialization;
 
-// The v2 schema explicitly grants recovery to patch fields, not to the ids or streamed items.
+// The v2 schema grants recovery to optional metadata and patch fields, never required chunk content or ids.
 // Keep this on the negotiated resolver so v1 and unversioned serializers retain their contracts.
 internal static class SessionProjectionWireContract
 {
     internal static void Apply(JsonTypeInfo info)
     {
-        if (typeof(WholeMessageUpdate).IsAssignableFrom(info.Type))
+        if (info.Type == typeof(Annotations))
+        {
+            Property(info, "audience").CustomConverter = new DefaultableListJsonConverter<string>();
+            Property(info, "priority").CustomConverter = new DefaultableNullableJsonConverter<double>();
+            Property(info, "lastModified").CustomConverter = new DefaultableStringJsonConverter();
+            DefaultMetadata(info);
+        }
+        else if (typeof(WholeMessageUpdate).IsAssignableFrom(info.Type))
         {
             Property(info, "content").CustomConverter = new DefaultableListJsonConverter<ContentBlock>();
             DefaultMetadata(info);

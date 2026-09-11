@@ -612,26 +612,16 @@ namespace SalmonEgg.Acp.Client
             }
 
             AcpSessionProjection? replay = null;
-            try
-            {
-                return await SendRequestAsync(
-                    request,
-                    cancellationToken,
-                    connectionToken,
-                    responseObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
-                    beforeSend: () => replay = _sessionWork.BeginReplay(@params.SessionId, connectionToken)).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && replay is not null)
-            {
-                // Cancelling the wait cannot retract streamed replay. Its response or disconnect
-                // releases the claim; another full replay must not interleave uncorrelated updates.
-                throw;
-            }
-            catch
-            {
-                _sessionWork.EndReplay(@params.SessionId, replay, connectionToken);
-                throw;
-            }
+            // A cancelled wait or failed write cannot retract replay the peer may already be
+            // streaming. The request owner alone distinguishes an unsent request from one awaiting
+            // its terminal response; the replay claim must have that same lifetime.
+            return await SendRequestAsync(
+                request,
+                cancellationToken,
+                connectionToken,
+                responseObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
+                requestNotSentObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
+                beforeSend: () => replay = _sessionWork.BeginReplay(@params.SessionId, connectionToken)).ConfigureAwait(false);
         }
 
         private static bool RequestsFullReplay(JsonRpcRequest request)

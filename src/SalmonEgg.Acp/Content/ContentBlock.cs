@@ -87,12 +87,12 @@ namespace SalmonEgg.Acp.Content
 
             return discriminator switch
             {
-                "text" => ReadText(root),
-                "image" => ReadImage(root),
-                "audio" => ReadAudio(root),
-                "resource_link" => ReadResourceLink(root),
-                "resource" => ReadResource(root),
-                _ => ReadUnknown(root, discriminator)
+                "text" => ReadText(root, options),
+                "image" => ReadImage(root, options),
+                "audio" => ReadAudio(root, options),
+                "resource_link" => ReadResourceLink(root, options),
+                "resource" => ReadResource(root, options),
+                _ => ReadUnknown(root, discriminator, options)
             };
         }
 
@@ -121,60 +121,60 @@ namespace SalmonEgg.Acp.Content
             }
         }
 
-        private static TextContentBlock ReadText(JsonElement root)
+        private static TextContentBlock ReadText(JsonElement root, JsonSerializerOptions options)
         {
             var block = new TextContentBlock
             {
-                Text = ReadString(root, "text")!,
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Text = ReadRequiredContentString(root, "text", options)!,
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options)
             };
             return block;
         }
 
-        private static ImageContentBlock ReadImage(JsonElement root)
+        private static ImageContentBlock ReadImage(JsonElement root, JsonSerializerOptions options)
         {
             var block = new ImageContentBlock
             {
-                Data = ReadString(root, "data")!,
-                MimeType = ReadString(root, "mimeType")!,
+                Data = ReadRequiredContentString(root, "data", options)!,
+                MimeType = ReadRequiredContentString(root, "mimeType", options)!,
                 Uri = ReadString(root, "uri"),
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options)
             };
             return block;
         }
 
-        private static AudioContentBlock ReadAudio(JsonElement root)
+        private static AudioContentBlock ReadAudio(JsonElement root, JsonSerializerOptions options)
         {
             var block = new AudioContentBlock
             {
-                Data = ReadString(root, "data")!,
-                MimeType = ReadString(root, "mimeType")!,
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Data = ReadRequiredContentString(root, "data", options)!,
+                MimeType = ReadRequiredContentString(root, "mimeType", options)!,
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options)
             };
             return block;
         }
 
-        internal static ResourceLinkContentBlock ReadResourceLink(JsonElement root)
+        internal static ResourceLinkContentBlock ReadResourceLink(JsonElement root, JsonSerializerOptions options)
         {
             var block = new ResourceLinkContentBlock
             {
-                Uri = ReadString(root, "uri")!,
-                Name = ReadString(root, "name"),
+                Uri = ReadRequiredContentString(root, "uri", options)!,
+                Name = ReadRequiredContentString(root, "name", options),
                 MimeType = ReadString(root, "mimeType"),
                 Title = ReadString(root, "title"),
                 Description = ReadString(root, "description"),
                 Size = ReadInt64(root, "size"),
                 RawIcons = root.TryGetProperty("icons", out var icons) ? icons.Clone() : null,
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options)
             };
             return block;
         }
 
-        private static ResourceContentBlock ReadResource(JsonElement root)
+        private static ResourceContentBlock ReadResource(JsonElement root, JsonSerializerOptions options)
         {
             if (!root.TryGetProperty("resource", out var resourceElement)
                 || resourceElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -184,14 +184,14 @@ namespace SalmonEgg.Acp.Content
 
             var block = new ResourceContentBlock
             {
-                Resource = ReadEmbeddedResource(resourceElement),
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Resource = ReadEmbeddedResource(resourceElement, options),
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options)
             };
             return block;
         }
 
-        private static ContentBlock ReadUnknown(JsonElement root, string discriminator)
+        private static ContentBlock ReadUnknown(JsonElement root, string discriminator, JsonSerializerOptions options)
         {
             // Unknown discriminators take the passthrough path: the spec requires a receiver to preserve the raw
             // payload of content types it does not recognize, leaving the decision to accept or reject them to the
@@ -201,13 +201,13 @@ namespace SalmonEgg.Acp.Content
             return new ContentBlock
             {
                 UnknownTypeDiscriminator = discriminator,
-                Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root),
+                Annotations = ReadAnnotations(root, options),
+                Meta = ReadMetadata(root, options),
                 RawPayload = root.Clone()
             };
         }
 
-        private static EmbeddedResource ReadEmbeddedResource(JsonElement element)
+        private static EmbeddedResource ReadEmbeddedResource(JsonElement element, JsonSerializerOptions options)
         {
             if (element.ValueKind != JsonValueKind.Object)
             {
@@ -216,20 +216,28 @@ namespace SalmonEgg.Acp.Content
 
             return new EmbeddedResource
             {
-                Uri = ReadString(element, "uri")!,
+                Uri = ReadRequiredContentString(element, "uri", options)!,
                 MimeType = ReadString(element, "mimeType")!,
                 Text = ReadString(element, "text"),
                 Blob = ReadString(element, "blob"),
-                Meta = AcpMetaJson.Read(element)
+                Meta = ReadMetadata(element, options)
             };
         }
 
-        private static Annotations? ReadAnnotations(JsonElement root)
+        private static Annotations? ReadAnnotations(JsonElement root, JsonSerializerOptions options)
         {
             if (!root.TryGetProperty("annotations", out var annotationsElement)
                 || annotationsElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
                 return null;
+            }
+
+            if (AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2)
+            {
+                // The v2 content contract at 5ebaf0aceb04a4ba6574cd63fa6355352dc6d931 defaults each optional field before the
+                // containing content list decides whether an item is invalid. The generated
+                // annotation contract also preserves valid siblings when one hint is malformed.
+                return DefaultableObjectJsonConverter<Annotations>.ReadValue(annotationsElement, options);
             }
 
             if (annotationsElement.ValueKind != JsonValueKind.Object)
@@ -246,6 +254,21 @@ namespace SalmonEgg.Acp.Content
             };
 
             return annotations;
+        }
+
+        private static Dictionary<string, object?>? ReadMetadata(JsonElement root, JsonSerializerOptions options)
+            => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
+                ? AcpMetaJson.ReadOrDefault(root)
+                : AcpMetaJson.Read(root);
+
+        private static string? ReadRequiredContentString(JsonElement root, string propertyName, JsonSerializerOptions options)
+        {
+            var value = ReadString(root, propertyName);
+            if (value is null && AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2)
+            {
+                throw new JsonException($"ACP v2 content requires string '{propertyName}'.");
+            }
+            return value;
         }
 
         private static List<string>? ReadStringList(JsonElement root, string propertyName)

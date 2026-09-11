@@ -60,6 +60,27 @@ var recent = AcpSessionDraftExtensions.ReplaySession("bounded-history",
 Require(recent.UnprojectedUpdates.Length == AcpSessionSnapshot.MaxUnprojectedUpdates
     && recent.OmittedUnprojectedUpdateCount == 1 && snapshot.OmittedUnprojectedUpdateCount == 0,
     "Unprojected evidence must be bounded and omissions must remain visible on each snapshot.");
+
+var recovered = AcpSessionDraftExtensions.ReplaySession("content-recovery",
+[
+    Parse("""{"sessionUpdate":"agent_message","messageId":"a","content":[{"type":"text","text":"kept","annotations":false}]}"""),
+    Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"a","content":{"type":"text","text":" tail","_meta":false}}""")
+]);
+Require(Text(recovered.Messages.Single()) == "kept tail",
+    "Schema-defaultable annotations and metadata must not discard content or reject chunks.");
+Require(recovered.Messages[0].Content.All(static block => block.Annotations is null && block.Meta is null),
+    "Invalid optional content fields must default without becoming peer metadata.");
+var invalidTextRejected = false;
+try
+{
+    AcpSessionDraftExtensions.ReplaySession("invalid-content",
+    [Parse("""{"sessionUpdate":"agent_message_chunk","messageId":"a","content":{"type":"text","text":42}}""")]);
+}
+catch (JsonException)
+{
+    invalidTextRejected = true;
+}
+Require(invalidTextRejected, "Required text type errors must remain rejected.");
 Console.WriteLine("draft-projection-consumer-ok");
 
 static JsonElement Parse(string json)
