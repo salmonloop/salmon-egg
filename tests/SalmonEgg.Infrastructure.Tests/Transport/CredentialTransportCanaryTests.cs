@@ -3,19 +3,24 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.IO.Pipelines;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Porta.Pty;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Application.Services.Acp;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Network;
 using SalmonEgg.Infrastructure.Transport;
+using SalmonEgg.Infrastructure.Services;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -158,6 +163,84 @@ public sealed class CredentialTransportCanaryTests
     }
 
     [Fact]
+    public async Task BoundStdio_ActualEnvironmentSnapshot_ReachesTerminalAuthenticationSpawn()
+    {
+        // Arrange: this gate reads a real child environment, without enabling product terminal auth.
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Requires the real Linux /proc process environment and /bin/sh.");
+        var directory = Path.Combine(Path.GetTempPath(), "acp-terminal-credential-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var script = Path.Combine(directory, "agent.sh");
+        await File.WriteAllTextAsync(script, """
+            printf '{"jsonrpc":"2.0","method":"canary/ready","params":{"pid":%s}}\n' "$$"
+            while IFS= read -r line; do :; done
+            """, TestContext.Current.CancellationToken);
+        var profile = new ServerConfiguration
+        {
+            Transport = TransportType.Stdio,
+            StdioCommand = "/bin/sh",
+            StdioArguments = [script, "literal argument"],
+            Authentication = new AuthenticationConfig { Token = Secret },
+        };
+        profile.CredentialBinding = CredentialBindingPolicy.Create(profile, CredentialSource.Token,
+            CredentialTarget.Environment, "SALMONEGG_CREDENTIAL_CANARY");
+        var sourceFactory = new CapturedStdioFactory();
+        var platform = new Mock<IPlatformCapabilityService>();
+        platform.SetupGet(value => value.SupportsStdioTransport).Returns(true);
+        platform.SetupGet(value => value.SupportsTerminalAuthentication).Returns(true);
+        using var logger = new LoggerConfiguration().CreateLogger();
+        var transportFactory = new TransportFactory(logger, new TransportSupportPolicy(platform.Object), sourceFactory);
+        var chatFactory = new ChatServiceFactory(transportFactory, Mock.Of<IErrorLogger>(),
+            new SessionManager(), new AcpClientFactory(Mock.Of<IErrorLogger>(), new SessionManager(),
+                Mock.Of<ITerminalSessionManager>()), logger,
+            decorateChatService: service => new DelayedLoadChatService(service, TimeSpan.FromMilliseconds(1)));
+
+        try
+        {
+            using var chat = chatFactory.CreateChatService(profile);
+            var transport = Assert.IsType<StdioTransport>(sourceFactory.Created);
+            var ready = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            transport.MessageReceived += (_, message) =>
+            {
+                using var frame = JsonDocument.Parse(message.Message);
+                ready.TrySetResult(frame.RootElement.GetProperty("params").GetProperty("pid").GetInt32());
+            };
+
+            // Act
+            Assert.True(await transport.ConnectAsync(TestContext.Current.CancellationToken));
+            var pid = await ready.Task.WaitAsync(Deadline, TestContext.Current.CancellationToken);
+            var snapshot = Assert.IsType<StdioInvocationSnapshot>(Assert.IsAssignableFrom<IStdioInvocationSource>(chat).StdioInvocation);
+            var environment = await File.ReadAllTextAsync($"/proc/{pid}/environ", TestContext.Current.CancellationToken);
+            Assert.Contains("SALMONEGG_CREDENTIAL_CANARY=" + Secret + '\0', environment);
+            profile.Authentication!.Token = "edited-after-launch";
+            var login = snapshot.WithAuthenticationMethod(["login argument"],
+                new Dictionary<string, string> { ["LOGIN_MODE"] = "interactive" });
+            using var pty = new CapturedPty();
+            PtyOptions? options = null;
+            await using var terminalFactory = new TerminalAuthenticationSessionFactory(platform.Object,
+                (request, _) => { options = request; return Task.FromResult<IPtyConnection>(pty); });
+            await using var terminal = await terminalFactory.StartAsync(login, TestContext.Current.CancellationToken);
+
+            // Assert: the actual running process snapshot, not a re-read edited profile, feeds the PTY.
+            Assert.NotNull(options);
+            Assert.Equal(Secret, options.Environment["SALMONEGG_CREDENTIAL_CANARY"]);
+            Assert.Equal("interactive", options.Environment["LOGIN_MODE"]);
+            Assert.Equal(snapshot.Arguments.Concat(["login argument"]), options.CommandLine);
+            Assert.Equal(snapshot.Command, options.App);
+            Assert.Equal(snapshot.WorkingDirectory, options.Cwd);
+            Assert.DoesNotContain(Secret, snapshot.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain(Secret, string.Join(" ", options.CommandLine), StringComparison.Ordinal);
+            Assert.True(await chat.DisconnectAsync());
+            Assert.False(Directory.Exists($"/proc/{pid}"));
+            Assert.Null(((IStdioInvocationSource)chat).StdioInvocation);
+        }
+        finally
+        {
+            sourceFactory.Created?.Dispose();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Factory_UnsupportedWebSocketHeaders_FailsBeforeCreatingConnection()
     {
         var profile = CreateProfile(TransportType.WebSocket, "wss://agent.example/acp", Secret);
@@ -186,6 +269,41 @@ public sealed class CredentialTransportCanaryTests
     };
 
     private sealed record CapturedRequest(string Method, string Path, string Credential, string Body);
+
+    private sealed class CapturedStdioFactory : IStdioTransportFactory
+    {
+        public SalmonEgg.Domain.Interfaces.Transport.ITransport? Created { get; private set; }
+
+        public SalmonEgg.Domain.Interfaces.Transport.ITransport Create(string command, string[] args,
+            Encoding encoding, IReadOnlyDictionary<string, string>? environment = null)
+            => Created = new DesktopStdioTransportFactory().Create(command, args, encoding, environment);
+    }
+
+    private sealed class CapturedPty : IPtyConnection
+    {
+        private readonly Pipe _output = new();
+        private readonly Stream _reader;
+        private readonly MemoryStream _input = new();
+        private bool _disposed;
+
+        public CapturedPty() => _reader = _output.Reader.AsStream();
+        public event EventHandler<PtyExitedEventArgs>? ProcessExited { add { } remove { } }
+        public Stream ReaderStream => _reader;
+        public Stream WriterStream => _input;
+        public int Pid => 1;
+        public int ExitCode => 0;
+        public bool WaitForExit(int milliseconds) => true;
+        public void Kill() { }
+        public void Resize(int cols, int rows) { }
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _output.Writer.Complete();
+            _reader.Dispose();
+            _input.Dispose();
+        }
+    }
 
     private sealed class RecordingLogSink : ILogEventSink
     {

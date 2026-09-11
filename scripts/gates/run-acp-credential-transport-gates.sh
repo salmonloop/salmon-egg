@@ -21,7 +21,7 @@ timeout --signal=TERM --kill-after=10s 180s "$dotnet_bin" test \
   --no-ansi \
   -p:UseSharedCompilation=false \
   --filter-class SalmonEgg.Infrastructure.Tests.Transport.CredentialTransportCanaryTests \
-  --minimum-expected-tests 8 \
+  --minimum-expected-tests 9 \
   --output Detailed > "$log_file" 2>&1 || {
     cat "$log_file"
     exit 1
@@ -36,7 +36,7 @@ import sys
 text = pathlib.Path(sys.argv[1]).read_text()
 passed = re.findall(r'^\s+succeeded:\s+(\d+)\s*$', text, re.M)
 skipped = re.findall(r'^\s+skipped:\s+(\d+)\s*$', text, re.M)
-if not passed or int(passed[-1]) < 8 or not skipped or int(skipped[-1]) != 0:
+if not passed or int(passed[-1]) < 9 or not skipped or int(skipped[-1]) != 0:
     raise SystemExit('Credential transport gate requires every real process and endpoint case with zero skips.')
 print('[gate] Credential destination, real child environment, HTTP/2 + SSE, WebSocket, and redirect isolation passed.')
 PY
