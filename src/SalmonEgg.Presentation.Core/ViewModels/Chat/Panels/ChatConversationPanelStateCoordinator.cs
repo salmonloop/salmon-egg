@@ -95,6 +95,9 @@ public sealed class ChatConversationPanelStateCoordinator
         return _pendingElicitationRequestsByConversation.TryAdd(conversationId, request);
     }
 
+    internal IReadOnlyList<ElicitationRequestViewModel> GetElicitationRequests()
+        => _pendingElicitationRequestsByConversation.Values.ToArray();
+
     public bool RemoveElicitationRequest(string conversationId, ElicitationRequestViewModel request)
     {
         // A response can finish after disconnect and another form's arrival, even with the same id.
@@ -208,7 +211,8 @@ public sealed class ChatConversationPanelStateCoordinator
             var currentBinding = bindings?.GetValueOrDefault(conversationId);
             foreach (var request in requests)
             {
-                if (request.Binding is not null && request.Binding != currentBinding && request.IsAvailable)
+                if (request.Binding is not null && request.IsAvailable
+                    && (request.Binding != currentBinding || request.IsBindingCurrent?.Invoke() == false))
                 {
                     obsolete.Add((conversationId, request));
                 }

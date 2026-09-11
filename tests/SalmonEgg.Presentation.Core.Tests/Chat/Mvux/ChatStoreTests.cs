@@ -13,6 +13,23 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat.Mvux;
 public class ChatStoreTests
 {
     [Fact]
+    public async Task ReadCommittedState_AfterBindingUpdate_ReturnsTheSameAuthoritativeSnapshot()
+    {
+        // Arrange
+        await using var state = State.Value(new object(), () => ChatState.Empty);
+        var store = new ChatStore(state);
+        Assert.Null(store.ReadCommittedState());
+
+        // Act
+        await store.Dispatch(new SetBindingSliceAction(new("conversation", "remote", "profile")));
+
+        // Assert
+        var asynchronous = await store.GetCurrentStateAsync();
+        Assert.Same(asynchronous, store.ReadCommittedState());
+        Assert.Equal("profile", store.ReadCommittedState()!.ResolveBinding("conversation")?.ProfileId);
+    }
+
+    [Fact]
     public async Task GivenStore_WhenDispatchAction_ThenStateIsUpdatedViaReducer()
     {
         // Arrange

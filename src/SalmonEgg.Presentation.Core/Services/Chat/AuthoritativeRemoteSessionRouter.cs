@@ -10,6 +10,9 @@ public interface IAuthoritativeRemoteSessionRouter
     ValueTask<string?> ResolveConversationIdAsync(string remoteSessionId, CancellationToken cancellationToken = default);
 
     string? ResolveConversationId(ChatState state, string remoteSessionId);
+
+    string? ResolveConversationId(ChatState state, string remoteSessionId, string profileId)
+        => AuthoritativeRemoteSessionRouter.ResolveProfileConversationId(state, remoteSessionId, profileId);
 }
 
 public sealed class AuthoritativeRemoteSessionRouter : IAuthoritativeRemoteSessionRouter
@@ -49,5 +52,26 @@ public sealed class AuthoritativeRemoteSessionRouter : IAuthoritativeRemoteSessi
         }
 
         return null;
+    }
+
+    internal static string? ResolveProfileConversationId(ChatState state, string remoteSessionId, string profileId)
+    {
+        if (string.IsNullOrWhiteSpace(remoteSessionId) || string.IsNullOrWhiteSpace(profileId) || state.Bindings is null)
+        {
+            return null;
+        }
+
+        string? match = null;
+        foreach (var binding in state.Bindings)
+        {
+            if (string.Equals(binding.Value.RemoteSessionId, remoteSessionId, StringComparison.Ordinal)
+                && string.Equals(binding.Value.ProfileId, profileId, StringComparison.Ordinal))
+            {
+                if (match is not null) return null;
+                match = binding.Key;
+            }
+        }
+
+        return match;
     }
 }

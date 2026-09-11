@@ -1137,11 +1137,7 @@ namespace SalmonEgg.Acp.Client
             CancellationToken connectionCancellation;
             JsonRpcResponse responseMessage;
             var isPeerCancellation = false;
-            if (cancelForSession)
-            {
-                pending.ElicitationState!.RequestCancellation();
-                pending.ElicitationState.NotifyChanged();
-            }
+            Task<bool>? cancellationResponse = null;
 
             lock (_lock)
             {
@@ -1153,22 +1149,37 @@ namespace SalmonEgg.Acp.Client
                     return false;
                 }
 
-                if (pending.ElicitationState!.IsResponseInFlight
-                    || (pending.ElicitationState.IsCancellationRequested && response is not ElicitationCancelResponse))
-                {
-                    return false;
-                }
+                cancellationResponse = PrepareElicitationCancellation(pending, response, cancelForSession);
 
-                // Claim without removing: a failed send must remain retryable, while a second action
-                // cannot race the first one onto the wire. The callback owns this exact request object,
-                // so reusing its JSON-RPC id never lets an old form answer a later request.
-                pending.ElicitationState!.IsResponseInFlight = true;
-                pending.PreparedElicitationResponse = response;
-                pending.HasPreparedElicitationFailure = false;
-                connectionCancellation = _messageLoopCts?.Token ?? CancellationToken.None;
-                isPeerCancellation = response is ElicitationCancelResponse && pending.PreparedCancellationResponse?.IsError == true;
-                responseMessage = isPeerCancellation ? pending.PreparedCancellationResponse!
-                    : new JsonRpcResponse(pending.MessageId, ToElement<CreateElicitationResponse>(response));
+                if (cancellationResponse is not null)
+                {
+                    responseMessage = null!;
+                    connectionCancellation = pending.ConnectionToken;
+                }
+                else
+                {
+                    if (pending.ElicitationState!.IsResponseInFlight
+                        || (pending.ElicitationState.IsCancellationRequested && response is not ElicitationCancelResponse))
+                    {
+                        return false;
+                    }
+
+                    // Claim without removing: a failed send must remain retryable, while a second action
+                    // cannot race the first one onto the wire. The callback owns this exact request object,
+                    // so reusing its JSON-RPC id never lets an old form answer a later request.
+                    pending.ElicitationState!.IsResponseInFlight = true;
+                    pending.PreparedElicitationResponse = response;
+                    pending.HasPreparedElicitationFailure = false;
+                    connectionCancellation = _messageLoopCts?.Token ?? CancellationToken.None;
+                    isPeerCancellation = response is ElicitationCancelResponse && pending.PreparedCancellationResponse?.IsError == true;
+                    responseMessage = isPeerCancellation ? pending.PreparedCancellationResponse!
+                        : new JsonRpcResponse(pending.MessageId, ToElement<CreateElicitationResponse>(response));
+                }
+            }
+
+            if (cancellationResponse is not null)
+            {
+                return await cancellationResponse.ConfigureAwait(false);
             }
 
             var sent = false;
@@ -1186,6 +1197,54 @@ namespace SalmonEgg.Acp.Client
                 {
                     await SendPendingElicitationCancellationAsync(pending, connectionCancellation).ConfigureAwait(false);
                 }
+            }
+        }
+
+        // Called under the request lock; cancellation shares the existing pending/batch owner.
+        private Task<bool>? PrepareElicitationCancellation(
+            PendingInboundRequest pending, CreateElicitationResponse response, bool cancelForSession)
+        {
+            if (!cancelForSession && response is not ElicitationCancelResponse) return null;
+            pending.ElicitationState!.RequestCancellation();
+            Task<bool>? responseTask = null;
+            if (pending.MessageId is not null && _responseRoutes.TryGetValue(pending.MessageId, out var route)
+                && route.Batch is { } batch)
+            {
+                pending.PreparedCancellationResponse ??= new JsonRpcResponse(pending.MessageId, ToElement(response));
+                pending.PreparedElicitationResponse = response;
+                pending.ElicitationState.IsResponseInFlight = true;
+                responseTask = batch.SubmitCancellation(route.Index, pending.PreparedCancellationResponse);
+            }
+            else if (pending.ElicitationState.IsResponseInFlight)
+            {
+                // Session stop sends its notification without waiting for an already accepted write.
+                // Explicit cancellation callers wait for the result of the original request.
+                responseTask = cancelForSession ? Task.FromResult(false) : WaitForElicitationSettlementAsync(pending);
+            }
+            pending.ElicitationState.NotifyChanged();
+            return responseTask;
+        }
+
+        private static async Task<bool> WaitForElicitationSettlementAsync(PendingInboundRequest pending)
+        {
+            var state = pending.ElicitationState!;
+            var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            EventHandler? changed = null;
+            changed = (_, _) =>
+            {
+                if (state.CanCancel && state.IsResponseInFlight) return;
+                completed.TrySetResult(!state.CanCancel);
+            };
+            state.Changed += changed;
+            using var closed = state.ConnectionClosed.Register(() => completed.TrySetResult(false));
+            try
+            {
+                changed(null, EventArgs.Empty);
+                return await completed.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                state.Changed -= changed;
             }
         }
 

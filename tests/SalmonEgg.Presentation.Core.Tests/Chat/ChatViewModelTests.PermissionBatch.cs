@@ -12,6 +12,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -393,10 +394,12 @@ public partial class ChatViewModelTests
         {
             _client = new AcpClient(this, Mock.Of<IAcpClientLogger>());
             _client.PermissionRequestReceived += (_, request) => Requests.Enqueue(request);
-            Service = new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>());
+            Service = new AcpChatServiceAdapter(
+                new ChatService(_client, Mock.Of<IErrorLogger>(), Mock.Of<ISessionManager>()),
+                new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
         }
 
-        internal ChatService Service { get; }
+        internal AcpChatServiceAdapter Service { get; }
         internal ConcurrentQueue<PermissionRequestEventArgs> Requests { get; } = new();
         internal ConcurrentQueue<JsonElement> Responses { get; } = new();
         internal bool FailNextResponse { get; set; }

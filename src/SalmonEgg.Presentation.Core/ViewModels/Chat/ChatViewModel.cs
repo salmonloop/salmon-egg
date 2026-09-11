@@ -1855,6 +1855,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             ApplySessionIdentityProjection(projection, out sessionChanged);
             ReconcilePermissionBindings(projection.Bindings);
+            ReconcileElicitationBindings();
             ApplyPromptAndProfileProjection(projection, sessionChanged);
             ApplyTranscriptAndPlanProjection(projection, sessionChanged);
             ApplyConversationStatusProjection(projection);

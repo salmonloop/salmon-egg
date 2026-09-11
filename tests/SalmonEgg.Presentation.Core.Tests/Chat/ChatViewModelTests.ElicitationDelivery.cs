@@ -7,6 +7,7 @@ using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Localization;
 
@@ -292,7 +293,9 @@ public partial class ChatViewModelTests
     private static ClientCapabilities UrlElicitationCapabilities()
         => ClientCapabilityDefaults.Create() with { Elicitation = new() { Form = new(), Url = new() } };
 
-    private static ViewModelFixture CreateElicitationDeliveryFixture(QueueingSynchronizationContext dispatcher)
+    private static ViewModelFixture CreateElicitationDeliveryFixture(
+        QueueingSynchronizationContext dispatcher, IExternalUriLauncher? externalUriLauncher = null,
+        IShellNavigationRuntimeState? shellNavigationRuntimeState = null)
     {
         var localizer = new MutableTestCoreStringLocalizer();
         localizer.Set("zh-Hans", "Elicitation_CancellationFailedDisconnected", ElicitationDisconnectedMessage);
@@ -300,6 +303,8 @@ public partial class ChatViewModelTests
             NullLogger<AcpChatCoordinator>.Instance, Mock.Of<ITransportSupportPolicy>(),
             Mock.Of<IAcpMcpServerProvider>(), Mock.Of<IAcpSessionCommandOrchestrator>());
         return CreateViewModel(dispatcher, acpConnectionCommands: commands, localizer: localizer,
+            externalUriLauncher: externalUriLauncher,
+            shellNavigationRuntimeState: shellNavigationRuntimeState,
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(store,
                 NullLogger<AcpConnectionCoordinator>.Instance, Mock.Of<IAcpMcpServerResolver>(),
                 Mock.Of<IAcpRemoteSessionRecoveryContextResolver>()));
