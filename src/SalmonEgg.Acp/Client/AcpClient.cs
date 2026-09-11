@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
@@ -35,6 +36,11 @@ namespace SalmonEgg.Acp.Client
         private sealed record PendingOutboundRequest(
             TaskCompletionSource<JsonRpcResponse> Completion,
             Action<JsonRpcResponse>? ResponseObserver);
+
+        private sealed record InboundResponseRoute(
+            CancellationToken ConnectionToken,
+            InboundResponseBatch? Batch = null,
+            int Index = -1);
 
         private sealed class PendingInboundRequest
         {
@@ -76,9 +82,21 @@ namespace SalmonEgg.Acp.Client
 
             public bool IsPermissionCancellationRequested { get; set; }
 
-            public JsonRpcResponse? PreparedCancellationResponse { get; set; }
+            public JsonRpcResponse? PreparedPermissionResponse { get; set; }
 
             public PermissionRequestEventArgs? PermissionEvent { get; set; }
+
+            public CreateElicitationResponse? PreparedElicitationResponse { get; set; }
+
+            public bool HasPreparedElicitationFailure { get; set; }
+
+            public bool IsAskUserResponseInFlight { get; set; }
+
+            public JsonRpcResponse? PreparedAskUserResponse { get; set; }
+
+            public JsonRpcResponse? AskUserCancellationResponse { get; set; }
+
+            public JsonRpcResponse? PreparedCancellationResponse { get; set; }
 
             public PendingInboundRequest WithSessionId(string sessionId)
                 => new(Method, MessageId, ConnectionToken, sessionId, AskUserRequest, ElicitationRequest);
@@ -99,9 +117,14 @@ namespace SalmonEgg.Acp.Client
         private readonly IAcpTerminalSessionManager _terminalSessionManager;
         private readonly IAcpClientLogger _logger;
         private readonly AcpSessionWorkController _sessionWork = new();
-        private readonly ConcurrentDictionary<string, PendingOutboundRequest> _pendingRequests = new();
+        private readonly ConcurrentDictionary<AcpRequestId, PendingOutboundRequest> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
-        private readonly ConcurrentDictionary<string, PendingInboundRequest> _pendingInboundRequests = new();
+        private readonly ConcurrentDictionary<AcpRequestId, PendingInboundRequest> _pendingInboundRequests = new();
+        // Routes belong to the parsed id object, not just its value: an old callback must never
+        // answer a new request that reuses the id. Weak keys retain that protection after teardown
+        // without retaining every completed request for the lifetime of the client.
+        private readonly ConditionalWeakTable<object, InboundResponseRoute> _responseRoutes = new();
+        private readonly HashSet<InboundResponseBatch> _responseBatches = [];
         // URL completion outlives the JSON-RPC response. Both indexes refer to the same request identity;
         // the lock also protects response claims and connection teardown from stale callbacks.
         private readonly Dictionary<string, PendingInboundRequest> _pendingUrlElicitations = new(StringComparer.Ordinal);
@@ -1108,7 +1131,7 @@ namespace SalmonEgg.Acp.Client
             object messageId,
             CreateElicitationResponse response)
         {
-            var idStr = messageId?.ToString() ?? string.Empty;
+            var idStr = RequestKey(messageId);
             return TryGetPendingInboundRequest(idStr, out var pending)
                 ? TrySendElicitationResponseAsync(pending, response)
                 : Task.FromResult(false);
@@ -1119,13 +1142,14 @@ namespace SalmonEgg.Acp.Client
             CreateElicitationResponse response,
             bool cancelForSession = false)
         {
-            var idStr = pending.MessageId?.ToString() ?? string.Empty;
+            var idStr = RequestKey(pending.MessageId);
             CancellationToken connectionCancellation;
             lock (_lock)
             {
                 if (_disposed || !_transport.IsConnected || pending.ElicitationRequest is null
                     || !TryGetPendingInboundRequest(idStr, out var current)
-                    || !ReferenceEquals(current, pending))
+                    || !ReferenceEquals(current, pending)
+                    || (pending.PreparedCancellationResponse is not null && response is not ElicitationCancelResponse))
                 {
                     return false;
                 }
@@ -1145,6 +1169,8 @@ namespace SalmonEgg.Acp.Client
                 // cannot race the first one onto the wire. The callback owns this exact request object,
                 // so reusing its JSON-RPC id never lets an old form answer a later request.
                 pending.IsElicitationResponseInFlight = true;
+                pending.PreparedElicitationResponse = response;
+                pending.HasPreparedElicitationFailure = false;
                 connectionCancellation = _messageLoopCts?.Token ?? CancellationToken.None;
             }
 
@@ -1167,12 +1193,12 @@ namespace SalmonEgg.Acp.Client
 
         private bool CompleteElicitationResponse(PendingInboundRequest pending, CreateElicitationResponse? response, bool sent)
         {
-            var idStr = pending.MessageId?.ToString() ?? string.Empty;
+            var idStr = RequestKey(pending.MessageId);
             lock (_lock)
             {
                 if (sent)
                 {
-                    _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(idStr, pending));
+                    _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(idStr, pending));
                     if (response is not ElicitationAcceptResponse)
                     {
                         RemovePendingUrlElicitation(pending);
@@ -1214,9 +1240,10 @@ namespace SalmonEgg.Acp.Client
             Task<bool> responseTask;
             lock (_lock)
             {
-                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                if (!TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
                     || !ReferenceEquals(current, pending) || !IsInboundRequestCurrent(pending)
-                    || pending.IsElicitationResponseInFlight || pending.IsElicitationCancellationRequested)
+                    || pending.IsElicitationResponseInFlight || pending.IsElicitationCancellationRequested
+                    || pending.PreparedCancellationResponse is not null)
                 {
                     return;
                 }
@@ -1224,6 +1251,7 @@ namespace SalmonEgg.Acp.Client
                 // Host failures share the original response claim. They cannot overwrite a reply
                 // already sent, consume a replacement id, or escape onto a later connection.
                 pending.IsElicitationResponseInFlight = true;
+                pending.HasPreparedElicitationFailure = true;
                 responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
                     JsonRpcError.CreateInternalError("Failed to process elicitation/create request.")),
                     pending.ConnectionToken);
@@ -1267,11 +1295,7 @@ namespace SalmonEgg.Acp.Client
 
             // Only respond once per inbound request id. Unknown or stale ids are not a
             // protocol payload, so they should not fail ACP schema validation.
-            var idStr = messageId.ToString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return false;
-            }
+            var idStr = RequestKey(messageId);
 
             PendingInboundRequest pending;
             Task<bool> responseTask;
@@ -1279,7 +1303,8 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!TryGetPendingInboundRequest(idStr, out pending)
                     || (expectedRequest is not null && !ReferenceEquals(pending, expectedRequest))
-                    || pending.Method != "session/request_permission" || !IsInboundRequestCurrent(pending))
+                    || pending.Method != "session/request_permission" || !IsInboundRequestCurrent(pending)
+                    || (pending.PreparedCancellationResponse is not null && outcome != "cancelled"))
                 {
                     return false;
                 }
@@ -1288,19 +1313,33 @@ namespace SalmonEgg.Acp.Client
                     pending.IsPermissionCancellationRequested = true;
                     pending.PermissionEvent?.NotifyChanged();
                 }
-                if (pending.IsPermissionResponseInFlight
-                    || (pending.IsPermissionCancellationRequested && outcome != "cancelled"))
+                if (outcome == "cancelled" && pending.MessageId is not null
+                    && _responseRoutes.TryGetValue(pending.MessageId, out var route) && route.Batch is { } batch)
                 {
-                    return false;
+                    // A prepared slot is still owned by this batch. Withdraw it before waiting for
+                    // sibling inputs; the immutable in-flight array may already be the single reply.
+                    pending.PreparedCancellationResponse ??= new JsonRpcResponse(pending.MessageId,
+                        ToElement<PermissionOutcomeResult>(CreatePermissionOutcome(pending, "cancelled", null)));
+                    pending.PreparedPermissionResponse = pending.PreparedCancellationResponse;
+                    pending.IsPermissionResponseInFlight = true;
+                    responseTask = batch.SubmitCancellation(route.Index, pending.PreparedCancellationResponse);
                 }
+                else
+                {
+                    if (pending.IsPermissionResponseInFlight
+                        || (pending.IsPermissionCancellationRequested && outcome != "cancelled"))
+                    {
+                        return false;
+                    }
 
-                // Invalid UI choices must not consume the request or enable a second response. The
-                // offered ids are captured before invoking consumers, whose DTO lists are mutable.
-                var response = pending.PreparedCancellationResponse
-                    ?? new JsonRpcResponse(pending.MessageId,
-                        ToElement<PermissionOutcomeResult>(CreatePermissionOutcome(pending, outcome, optionId)));
-                pending.IsPermissionResponseInFlight = true;
-                responseTask = SendResponseAsync(response, pending.ConnectionToken);
+                    // Invalid UI choices must not consume the request or enable a second response.
+                    // Offered ids are captured before consumers can mutate their DTO lists.
+                    pending.PreparedPermissionResponse = pending.PreparedCancellationResponse
+                        ?? new JsonRpcResponse(pending.MessageId,
+                            ToElement<PermissionOutcomeResult>(CreatePermissionOutcome(pending, outcome, optionId)));
+                    pending.IsPermissionResponseInFlight = true;
+                    responseTask = SendResponseAsync(pending.PreparedPermissionResponse, pending.ConnectionToken);
+                }
                 pending.PermissionEvent?.NotifyChanged();
             }
 
@@ -1312,16 +1351,17 @@ namespace SalmonEgg.Acp.Client
             Task<bool> responseTask;
             lock (_lock)
             {
-                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                if (!TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
                     || !ReferenceEquals(current, pending) || !IsInboundRequestCurrent(pending)
-                    || pending.IsPermissionResponseInFlight || pending.IsPermissionCancellationRequested)
+                    || pending.IsPermissionResponseInFlight || pending.IsPermissionCancellationRequested
+                    || pending.PreparedCancellationResponse is not null)
                 {
                     return false;
                 }
                 pending.IsPermissionResponseInFlight = true;
-                responseTask = SendResponseAsync(new JsonRpcResponse(pending.MessageId,
-                    JsonRpcError.CreateInternalError("Client failed to process inbound permission request.")),
-                    pending.ConnectionToken);
+                pending.PreparedPermissionResponse = new JsonRpcResponse(pending.MessageId,
+                    JsonRpcError.CreateInternalError("Client failed to process inbound permission request."));
+                responseTask = SendResponseAsync(pending.PreparedPermissionResponse, pending.ConnectionToken);
                 pending.PermissionEvent?.NotifyChanged();
             }
 
@@ -1374,33 +1414,30 @@ namespace SalmonEgg.Acp.Client
             lock (_lock)
             {
                 pending.IsPermissionResponseInFlight = false;
-                if (!TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                if (!TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
                     || !ReferenceEquals(current, pending))
                 {
                     return false;
                 }
                 if (sent)
                 {
-                    _pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(
-                        pending.MessageId!.ToString()!, pending));
+                    _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(
+                        RequestKey(pending.MessageId), pending));
                     pending.PermissionEvent?.NotifyChanged();
                     return false;
                 }
                 pending.PermissionEvent?.NotifyChanged();
                 // A cancellation that arrived while the user's answer was in flight still owns the
                 // next attempt. A failed cancellation stays retryable without a background retry loop.
-                return !isCancellation && pending.IsPermissionCancellationRequested
+                return !IsBatchedResponse(pending) && !isCancellation && pending.IsPermissionCancellationRequested
                     && IsInboundRequestCurrent(pending);
             }
         }
 
         private bool IsInboundRequestCurrent(PendingInboundRequest pending)
-            => IsCurrentConnection(pending.ConnectionToken);
-
-        private bool IsCurrentConnection(CancellationToken connectionToken)
-            => !_disposed && _transport.IsConnected && !connectionToken.IsCancellationRequested
-                && (connectionToken.CanBeCanceled
-                    ? _messageLoopCts?.Token == connectionToken
+            => !_disposed && _transport.IsConnected && !pending.ConnectionToken.IsCancellationRequested
+                && (pending.ConnectionToken.CanBeCanceled
+                    ? _messageLoopCts?.Token == pending.ConnectionToken
                     : _messageLoopCts is null);
 
         private bool CanRespondToPermissionRequest(PendingInboundRequest pending)
@@ -1408,7 +1445,7 @@ namespace SalmonEgg.Acp.Client
             lock (_lock)
             {
                 return IsInboundRequestCurrent(pending)
-                    && TryGetPendingInboundRequest(pending.MessageId?.ToString() ?? string.Empty, out var current)
+                    && TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
                     && ReferenceEquals(current, pending);
             }
         }
@@ -1417,7 +1454,11 @@ namespace SalmonEgg.Acp.Client
         {
             lock (_lock)
             {
-                return CanRespondToPermissionRequest(pending) && pending.IsPermissionResponseInFlight;
+                if (!CanRespondToPermissionRequest(pending)) return false;
+                return pending.MessageId is not null && _responseRoutes.TryGetValue(pending.MessageId, out var route)
+                    && route.Batch is { } batch
+                    ? batch.IsResponsePrepared(route.Index)
+                    : pending.IsPermissionResponseInFlight;
             }
         }
 
@@ -1429,9 +1470,19 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
+        private bool IsPermissionResponseSending(PendingInboundRequest pending)
+        {
+            lock (_lock)
+            {
+                if (!CanRespondToPermissionRequest(pending)) return false;
+                return pending.MessageId is not null && _responseRoutes.TryGetValue(pending.MessageId, out var route)
+                    && route.Batch is { } batch ? batch.IsSending : pending.IsPermissionResponseInFlight;
+            }
+        }
+
         private async Task<bool> TrySendFileSystemResponseAsync(object messageId, bool success, string? content, string? message)
         {
-            var idStr = messageId?.ToString() ?? string.Empty;
+            var idStr = RequestKey(messageId);
             if (!TryTakePendingInboundRequest(idStr, out var pending))
             {
                 return false;
@@ -1443,7 +1494,7 @@ namespace SalmonEgg.Acp.Client
                 var error = new JsonRpcError(
                     JsonRpcErrorCode.PermissionDenied,
                     string.IsNullOrWhiteSpace(message) ? "Permission denied" : message);
-                return await SendResponseAsync(new JsonRpcResponse(messageId, error)).ConfigureAwait(false);
+                return await SendResponseAsync(new JsonRpcResponse(pending.MessageId, error), pending.ConnectionToken).ConfigureAwait(false);
             }
 
             JsonElement result;
@@ -1458,33 +1509,104 @@ namespace SalmonEgg.Acp.Client
                 result = NullJsonElement();
             }
 
-            return await SendResponseAsync(new JsonRpcResponse(messageId, result)).ConfigureAwait(false);
+            return await SendResponseAsync(new JsonRpcResponse(pending.MessageId, result), pending.ConnectionToken).ConfigureAwait(false);
         }
 
-        private async Task<bool> TrySendAskUserResponseAsync(object messageId, IReadOnlyDictionary<string, string> answers)
+        private Task<bool> TrySendAskUserResponseAsync(object messageId, IReadOnlyDictionary<string, string> answers,
+            PendingInboundRequest? expectedRequest = null)
         {
-            var idStr = messageId?.ToString() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(idStr))
+            var idStr = RequestKey(messageId);
+            PendingInboundRequest pending;
+            JsonRpcResponse response;
+            lock (_lock)
             {
-                return false;
-            }
+                if (!TryGetPendingInboundRequest(idStr, out pending)
+                    || (expectedRequest is not null && !ReferenceEquals(pending, expectedRequest))
+                    || pending.AskUserRequest is null || !IsCurrentConnection(pending.ConnectionToken)
+                    || pending.IsAskUserResponseInFlight || pending.AskUserCancellationResponse is not null
+                    || pending.PreparedCancellationResponse is not null)
+                {
+                    return Task.FromResult(false);
+                }
 
-            if (!TryTakePendingInboundRequest(idStr, out var pending))
+                // Invalid UI answers must leave the same interaction available for correction.
+                AskUserContract.ValidateAnswers(pending.AskUserRequest, answers);
+                response = new JsonRpcResponse(pending.MessageId,
+                    ToElement(new AskUserResponse(pending.AskUserRequest.Questions, answers)));
+                pending.IsAskUserResponseInFlight = true;
+                pending.PreparedAskUserResponse = response;
+            }
+            return AwaitAskUserResponseAsync(pending, response);
+        }
+
+        private Task<bool> TrySendAskUserFailureResponseAsync(PendingInboundRequest pending, JsonRpcError error,
+            bool cancelForSession = false)
+        {
+            JsonRpcResponse response;
+            lock (_lock)
             {
-                return false;
-            }
+                if (!TryGetPendingInboundRequest(RequestKey(pending.MessageId), out var current)
+                    || !ReferenceEquals(current, pending) || !IsCurrentConnection(pending.ConnectionToken)
+                    || pending.PreparedCancellationResponse is not null)
+                {
+                    return Task.FromResult(false);
+                }
 
-            if (pending.AskUserRequest == null)
+                response = new JsonRpcResponse(pending.MessageId, error);
+                if (cancelForSession)
+                {
+                    pending.AskUserCancellationResponse = response;
+                }
+                if (pending.IsAskUserResponseInFlight
+                    || (!cancelForSession && pending.PreparedAskUserResponse is not null))
+                {
+                    return Task.FromResult(false);
+                }
+                pending.IsAskUserResponseInFlight = true;
+                pending.PreparedAskUserResponse = response;
+            }
+            return AwaitAskUserResponseAsync(pending, response);
+        }
+
+        private async Task<bool> AwaitAskUserResponseAsync(PendingInboundRequest pending, JsonRpcResponse response)
+        {
+            var sent = false;
+            try
             {
-                return false;
+                sent = await SendResponseAsync(response, pending.ConnectionToken).ConfigureAwait(false);
+                return sent;
             }
+            finally
+            {
+                var cancellation = CompleteAskUserResponse(pending, response, sent);
+                if (cancellation is not null)
+                {
+                    // One bounded follow-up preserves a cancel that arrived while a failed write
+                    // was in flight. The cancellation response cannot schedule itself again.
+                    await AwaitAskUserResponseAsync(pending, cancellation).ConfigureAwait(false);
+                }
+            }
+        }
 
-            AskUserContract.ValidateAnswers(pending.AskUserRequest, answers);
-            var response = new AskUserResponse(pending.AskUserRequest.Questions, answers);
-            return await SendResponseAsync(
-                new JsonRpcResponse(
-                    messageId,
-                    ToElement<AskUserResponse>(response))).ConfigureAwait(false);
+        private JsonRpcResponse? CompleteAskUserResponse(PendingInboundRequest pending, JsonRpcResponse response, bool sent)
+        {
+            lock (_lock)
+            {
+                var key = RequestKey(pending.MessageId);
+                if (sent)
+                {
+                    _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(key, pending));
+                }
+                else if (pending.AskUserCancellationResponse is { } cancellation && !ReferenceEquals(response, cancellation)
+                    && IsCurrentConnection(pending.ConnectionToken)
+                    && TryGetPendingInboundRequest(key, out var current) && ReferenceEquals(current, pending))
+                {
+                    pending.PreparedAskUserResponse = cancellation;
+                    return cancellation;
+                }
+                pending.IsAskUserResponseInFlight = false;
+                return null;
+            }
         }
 
         /// <summary>
@@ -1544,7 +1666,7 @@ namespace SalmonEgg.Acp.Client
         {
             Activity? activity = null;
             CancellationTokenSource? sendCancellation = null;
-            var requestIdStr = request.Id?.ToString() ?? string.Empty;
+            var requestIdStr = RequestKey(request.Id);
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             var requestWriteStarted = false;
             var retainPendingRequest = false;
@@ -1852,13 +1974,47 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// Sends a response (used to answer inbound requests).
         /// </summary>
-        private async Task<bool> SendResponseAsync(JsonRpcResponse response, CancellationToken cancellationToken = default)
+        private Task<bool> SendResponseAsync(JsonRpcResponse response, CancellationToken cancellationToken = default)
+        {
+            lock (_lock)
+            {
+                if (response.Id is not null && _responseRoutes.TryGetValue(response.Id, out var route))
+                {
+                    if (!IsCurrentConnection(route.ConnectionToken))
+                    {
+                        return Task.FromResult(false);
+                    }
+                    if (route.Batch is not null)
+                    {
+                        return route.Batch.SubmitAsync(route.Index, response);
+                    }
+                    cancellationToken = route.ConnectionToken;
+                }
+                else if (!cancellationToken.CanBeCanceled)
+                {
+                    cancellationToken = _messageLoopCts?.Token ?? default;
+                }
+            }
+
+            return SendResponseFrameAsync(_parser.SerializeMessage(response), cancellationToken);
+        }
+
+        private async Task<bool> SendResponseFrameAsync(string json, CancellationToken cancellationToken)
         {
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var json = _parser.SerializeMessage(response);
-                return await _transport.SendMessageAsync(json, cancellationToken).ConfigureAwait(false);
+                Task<bool> send;
+                lock (_lock)
+                {
+                    if (!IsCurrentConnection(cancellationToken))
+                    {
+                        return false;
+                    }
+                    // Claim the physical write before teardown can replace the connection. The
+                    // transport keeps the same token until that write has finished or cancelled.
+                    send = _transport.SendMessageAsync(json, cancellationToken);
+                }
+                return await send.ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1870,6 +2026,17 @@ namespace SalmonEgg.Acp.Client
                 return false;
             }
         }
+
+        private bool IsCurrentConnection(CancellationToken connectionToken)
+            => !_disposed && _transport.IsConnected && !connectionToken.IsCancellationRequested
+                && (connectionToken.CanBeCanceled
+                    ? _messageLoopCts?.Token == connectionToken
+                    : _messageLoopCts is null);
+
+        private static AcpRequestId RequestKey(object? messageId)
+            => AcpRequestId.TryFromEnvelopeId(messageId, out var key)
+                ? key
+                : throw new AcpException(JsonRpcErrorCode.InvalidRequest, "Invalid JSON-RPC request id.");
 
         /// <summary>
         /// Handles the transport message-received event.
@@ -1922,55 +2089,26 @@ namespace SalmonEgg.Acp.Client
 
             try
             {
-                var message = _parser.ParseMessage(AcpFrame.StripByteOrderMark(e.Message));
-
-
-                if (message is JsonRpcResponse response)
+                lock (_lock)
                 {
-                    var responseIdStr = response.Id?.ToString() ?? string.Empty;
-                    // Match the pending request.
-                    if (_pendingRequests.TryRemove(responseIdStr, out var pending))
+                    if (!IsCurrentConnection(connectionToken))
                     {
-                        pending.ResponseObserver?.Invoke(response);
-                        if (pending.Completion.TrySetResult(response))
-                        {
-                            return;
-                        }
-                        // The entry was still correlated, so the only thing that can already have
-                        // completed it is the caller's own cancellation: this is the terminal
-                        // response ACP requires the peer to send for a cancelled request (a partial
-                        // result, or -32800). Nobody is awaiting it, so record the outcome and let
-                        // the removal above close the correlation rather than dropping it silently.
-                        _logger.Log(
-                            AcpClientLogLevel.Information,
-                            "CANCELLED_REQUEST_SETTLED",
-                            response.IsError
-                                ? $"Cancelled request {responseIdStr} was settled by the peer with error {response.Error!.Code} ({JsonRpcErrorCode.GetErrorMessage(response.Error.Code)})."
-                                : $"Cancelled request {responseIdStr} was settled by the peer with a result.",
-                            nameof(OnMessageReceived));
+                        return;
                     }
-                }
-
-                else if (message is JsonRpcRequest request)
-                {
-                    // Agent -> client tool invocation (requires a JSON-RPC response).
-                    HandleRequest(request);
-                }
-                else if (message is JsonRpcNotification notification)
-                {
-                    // Handle the notification.
-                    HandleNotification(notification, connectionToken);
+                    var frame = _parser.ParseFrame(AcpFrame.StripByteOrderMark(e.Message), ProtocolVersion);
+                    DispatchFrame(frame, connectionToken);
                 }
             }
             catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.ParseError)
             {
-                // The frame looked like an ACP message (the transport only forwards '{'-leading
-                // lines) but did not parse, so the agent did intend to send something. JSON-RPC 2.0
-                // covers exactly this: reply -32700 with an explicit null id, since no id could be
-                // recovered. Lines that never looked like frames are filtered upstream as
-                // StdoutProtocolViolation and deliberately get no reply.
                 OnErrorOccurred($"Failed to process message: {ex.Message}");
-                _ = SendParseErrorResponseAsync(ex.Message, connectionToken);
+                _ = SendResponseFrameAsync(_parser.SerializeMessage(new JsonRpcResponse(
+                    null, JsonRpcError.CreateParseError(ex.Message))), connectionToken);
+            }
+            catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.InvalidRequest)
+            {
+                _ = SendResponseFrameAsync(_parser.SerializeMessage(new JsonRpcResponse(
+                    null, JsonRpcError.CreateInvalidRequest(ex.Message))), connectionToken);
             }
             catch (Exception ex)
             {
@@ -1978,32 +2116,188 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        /// <summary>
-        /// Replies to an unparseable ACP frame per JSON-RPC 2.0: code -32700, id explicitly null.
-        /// </summary>
-        private async Task SendParseErrorResponseAsync(string detail, CancellationToken connectionToken)
+        private void DispatchFrame(ParsedMessageFrame frame, CancellationToken connectionToken)
         {
-            try
+            var responseCount = frame.IsBatch && !frame.IsResponseBatch
+                ? frame.Items.Count(item => item.Message is JsonRpcRequest || (item.Error is not null && !item.IsResponse))
+                : 0;
+            InboundResponseBatch? batch = null;
+            if (responseCount > 0)
             {
-                Task<bool> responseTask;
-                lock (_lock)
-                {
-                    // An error observer may reconnect synchronously before this courtesy reply.
-                    // Claim the send on the receiving connection, including pre-initialize frames.
-                    if (!IsCurrentConnection(connectionToken)) return;
-                    responseTask = SendResponseAsync(new JsonRpcResponse(
-                        id: null,
-                        error: JsonRpcError.CreateParseError(detail)), connectionToken);
-                }
-                await responseTask.ConfigureAwait(false);
+                batch = new InboundResponseBatch(responseCount,
+                    responses => SendResponseFrameAsync(_parser.SerializeResponses(responses), connectionToken),
+                    responses => CompleteResponseBatch(batch!, responses), _logger,
+                    () => NotifyResponseBatchChanged(batch!),
+                    () => RetireUnretryableResponseBatch(batch!));
+                _responseBatches.Add(batch);
             }
-            catch (Exception ex)
+
+            var responseIndex = 0;
+            foreach (var item in frame.Items)
             {
-                // Never let the courtesy reply become a second failure surface.
-                _logger.Log(
-                    AcpClientLogLevel.Warning,
-                    "PARSE_ERROR_REPLY_FAILED",
-                    ex.Message);
+                if (!IsCurrentConnection(connectionToken))
+                {
+                    batch?.Abandon();
+                    return;
+                }
+                if (item.Error is not null)
+                {
+                    if (frame.IsResponseBatch || item.IsResponse)
+                    {
+                        _logger.Log(AcpClientLogLevel.Warning, "INVALID_BATCH_RESPONSE", item.Error);
+                    }
+                    else
+                    {
+                        _ = batch!.SubmitAsync(responseIndex++, new JsonRpcResponse(null,
+                            JsonRpcError.CreateInvalidRequest(item.Error)));
+                    }
+                    continue;
+                }
+
+                try
+                {
+                    switch (item.Message)
+                    {
+                        case JsonRpcResponse response:
+                            HandleResponse(response);
+                            break;
+                        case JsonRpcRequest request:
+                            _responseRoutes.Add(request.Id, new InboundResponseRoute(connectionToken, batch, responseIndex++));
+                            if (_pendingInboundRequests.ContainsKey(RequestKey(request.Id)))
+                            {
+                                _ = SendResponseAsync(new JsonRpcResponse(request.Id,
+                                    JsonRpcError.CreateInvalidRequest("The request id is already pending on this connection.")));
+                                break;
+                            }
+                            HandleRequest(request);
+                            break;
+                        case JsonRpcNotification notification:
+                            HandleNotification(notification, connectionToken);
+                            break;
+                    }
+                }
+                catch (Exception exception) when (frame.IsBatch)
+                {
+                    // One host subscriber cannot suppress later, independently valid batch items.
+                    // Notifications never get a reply; calls retain any answer already prepared.
+                    _logger.Log(AcpClientLogLevel.Error, "BATCH_ITEM_HANDLER_FAILED",
+                        "Failed to handle a batch item.", exception: exception);
+                    if (item.Message is JsonRpcRequest failedRequest)
+                    {
+                        FailPendingInboundRequest(failedRequest,
+                            JsonRpcError.CreateInternalError("The client could not handle this request."));
+                    }
+                }
+            }
+        }
+
+        private void CompleteResponseBatch(InboundResponseBatch batch, IReadOnlyList<JsonRpcResponse> responses)
+        {
+            lock (_lock)
+            {
+                _responseBatches.Remove(batch);
+                // A retry may be initiated by only one sibling. The batch owner commits every
+                // prepared form after the shared write succeeds, including siblings whose first
+                // send attempt already returned false.
+                foreach (var pending in _pendingInboundRequests.Values)
+                {
+                    if (pending.PreparedCancellationResponse is not null
+                        && pending.ElicitationRequest is null && pending.MessageId is not null
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var cancelRoute) && cancelRoute.Batch == batch)
+                    {
+                        _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(
+                            RequestKey(pending.MessageId), pending));
+                        pending.PermissionEvent?.NotifyChanged();
+                        RemovePendingUrlElicitation(pending);
+                        continue;
+                    }
+                    if ((pending.PreparedElicitationResponse is not null || pending.HasPreparedElicitationFailure
+                            || (pending.ElicitationRequest is not null && pending.PreparedCancellationResponse is not null))
+                        && pending.MessageId is not null
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var route) && route.Batch == batch)
+                    {
+                        // A cancel may arrive while an already serialized accept is being written.
+                        // URL completion follows the response that actually reached the peer.
+                        var response = responses[route.Index];
+                        var elicitation = response.Result is { } result
+                            ? FromElement<CreateElicitationResponse>(result) : null;
+                        CompleteElicitationResponse(pending, elicitation, sent: true);
+                    }
+                    if (pending.PreparedAskUserResponse is not null && pending.MessageId is not null
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var askRoute) && askRoute.Batch == batch)
+                    {
+                        CompleteAskUserResponse(pending, pending.PreparedAskUserResponse, sent: true);
+                    }
+                    if (pending.PreparedPermissionResponse is not null && pending.MessageId is not null
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var permissionRoute) && permissionRoute.Batch == batch)
+                    {
+                        CompletePermissionResponse(pending, isCancellation: false, sent: true);
+                    }
+                }
+            }
+        }
+
+        private void NotifyResponseBatchChanged(InboundResponseBatch batch)
+        {
+            lock (_lock)
+            {
+                foreach (var pending in _pendingInboundRequests.Values)
+                {
+                    if (pending.MessageId is not null && pending.PermissionEvent is not null
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var route) && route.Batch == batch)
+                    {
+                        pending.PermissionEvent.NotifyChanged();
+                    }
+                }
+            }
+        }
+
+        private void RetireUnretryableResponseBatch(InboundResponseBatch batch)
+        {
+            lock (_lock)
+            {
+                foreach (var pending in _pendingInboundRequests.Values)
+                {
+                    if (pending.MessageId is not null && IsInboundRequestCurrent(pending)
+                        && _responseRoutes.TryGetValue(pending.MessageId, out var route) && route.Batch == batch)
+                    {
+                        return;
+                    }
+                }
+
+                // Invalid items and already rejected calls have no responder that can retry them.
+                // Keeping their failed array until disconnect would grow without bound on a live
+                // connection. Interactive siblings retain the whole batch through their owner.
+                if (_responseBatches.Remove(batch))
+                {
+                    batch.Abandon();
+                    try
+                    {
+                        _logger.Log(AcpClientLogLevel.Warning, "BATCH_RESPONSE_ABANDONED",
+                            "The response batch could not be sent and has no pending request available to retry it.");
+                    }
+                    catch (Exception)
+                    {
+                        // A host logger cannot restore an abandoned batch or leave its detached
+                        // completion task faulted. There is no second reliable diagnostic sink.
+                    }
+                }
+            }
+        }
+
+        private void HandleResponse(JsonRpcResponse response)
+        {
+            if (!_pendingRequests.TryRemove(RequestKey(response.Id), out var pending))
+            {
+                return;
+            }
+            pending.ResponseObserver?.Invoke(response);
+            if (!pending.Completion.TrySetResult(response))
+            {
+                // Caller cancellation leaves correlation alive until the peer sends its terminal
+                // result. Batched responses take this same path and settle it exactly once.
+                _logger.Log(AcpClientLogLevel.Information, "CANCELLED_REQUEST_SETTLED",
+                    "The peer settled a cancelled request.", nameof(OnMessageReceived));
             }
         }
 
@@ -2032,27 +2326,31 @@ namespace SalmonEgg.Acp.Client
         private void HandleInboundCancellation(JsonRpcNotification notification, CancellationToken connectionToken)
         {
             if (notification.Params is not { ValueKind: JsonValueKind.Object } parameters
-                || !parameters.TryGetProperty("requestId", out var id)
-                || !AcpRequestId.TryFromEnvelopeId(id, out var requestId))
+                || !parameters.TryGetProperty("requestId", out var id) || !AcpRequestId.TryFromEnvelopeId(id, out var key))
             {
                 return;
             }
             lock (_lock)
             {
-                if (!IsCurrentConnection(connectionToken)
-                    || !TryGetPendingInboundRequest(id.ToString(), out var pending)
-                    || pending.Method != "session/request_permission" || !IsInboundRequestCurrent(pending)
-                    || !AcpRequestId.TryFromEnvelopeId(pending.MessageId, out var pendingId) || pendingId != requestId)
+                if (!IsCurrentConnection(connectionToken) || !TryGetPendingInboundRequest(key, out var pending)
+                    || !IsInboundRequestCurrent(pending)) return;
+                var response = new JsonRpcResponse(pending.MessageId,
+                    new JsonRpcError(JsonRpcErrorCode.Cancelled, "The peer cancelled this request."));
+                if (pending.Method == "session/request_permission" && !IsBatchedResponse(pending))
                 {
+                    // ACP v1 and v2 both permit peer cancellation. Latch it on the original
+                    // request before a concurrent user choice can claim another terminal response.
+                    pending.PreparedCancellationResponse = response;
+                    pending.IsPermissionCancellationRequested = true;
+                    pending.PermissionEvent?.NotifyChanged();
+                    _ = TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending);
                     return;
                 }
-                // Both ACP versions permit peer cancellation. The original owner keeps this error
-                // through failed writes; a numeric and a string id must never cancel one another.
-                pending.PreparedCancellationResponse = new JsonRpcResponse(pending.MessageId,
-                    new JsonRpcError(JsonRpcErrorCode.Cancelled, "The peer cancelled this request."));
-                pending.IsPermissionCancellationRequested = true;
-                pending.PermissionEvent?.NotifyChanged();
-                _ = TrySendPermissionOutcomeResponseAsync(pending.MessageId, "cancelled", null, pending);
+                if (ProtocolVersion != AcpProtocolVersion.V2) return;
+                RemovePendingUrlElicitation(pending);
+                if (TrySubmitBatchCancellation(pending, response)) return;
+                _pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(key, pending));
+                _ = SendResponseAsync(response, connectionToken);
             }
         }
 
@@ -2061,15 +2359,12 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandleRequest(JsonRpcRequest request)
         {
-            var requestIdStr = request.Id?.ToString() ?? string.Empty;
+            var requestIdStr = RequestKey(request.Id);
 
             switch (request.Method)
             {
                 case "session/request_permission":
-                    if (!string.IsNullOrWhiteSpace(requestIdStr))
-                    {
-                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                    }
+                    TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
                     HandlePermissionRequest(request);
                     break;
                 case "fs/read_text_file":
@@ -2080,10 +2375,7 @@ namespace SalmonEgg.Acp.Client
                         break;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requestIdStr))
-                    {
-                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                    }
+                    TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
                     HandleFileSystemRequest(request);
                     break;
                 case "terminal/create":
@@ -2097,10 +2389,7 @@ namespace SalmonEgg.Acp.Client
                         break;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requestIdStr))
-                    {
-                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                    }
+                    TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
                     _ = HandleTerminalRequestAsync(request);
                     break;
                 case ElicitationMethods.Create:
@@ -2119,15 +2408,12 @@ namespace SalmonEgg.Acp.Client
                         break;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(requestIdStr))
-                    {
-                        TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
-                    }
+                    TrackPendingInboundRequest(requestIdStr, request.Method, request.Id);
                     HandleAskUserRequest(request);
                     break;
                 default:
                     // Best-effort: respond with "method not found" so the agent doesn't hang waiting.
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(
                         request.Id,
                         JsonRpcError.CreateMethodNotFound(request.Method)));
@@ -2198,7 +2484,7 @@ namespace SalmonEgg.Acp.Client
 
         private void RejectUnsupportedClientRequest(JsonRpcRequest request)
         {
-            RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+            RemovePendingInboundTracking(RequestKey(request.Id));
             _ = SendResponseAsync(new JsonRpcResponse(
                 request.Id,
                 JsonRpcError.CreateMethodNotFound(request.Method)));
@@ -2265,7 +2551,7 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -2274,7 +2560,7 @@ namespace SalmonEgg.Acp.Client
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp)
                     || sessionIdProp.ValueKind != JsonValueKind.String)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
                 }
@@ -2282,21 +2568,18 @@ namespace SalmonEgg.Acp.Client
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
                 if (request.Id == null)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidRequest("Missing request id")));
                     return;
                 }
 
                 var messageId = request.Id!;
-                var requestId = messageId.ToString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    SetPendingInboundSessionId(requestId, sessionId);
-                }
+                var requestId = RequestKey(messageId);
+                SetPendingInboundSessionId(requestId, sessionId);
                 if (!rawParams.TryGetProperty("toolCall", out var toolCall)
                     || toolCall.ValueKind != JsonValueKind.Object)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing toolCall")));
                     return;
                 }
@@ -2305,7 +2588,7 @@ namespace SalmonEgg.Acp.Client
                     || toolCallId.ValueKind != JsonValueKind.String
                     || string.IsNullOrWhiteSpace(toolCallId.GetString()))
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing toolCallId")));
                     return;
                 }
@@ -2313,7 +2596,7 @@ namespace SalmonEgg.Acp.Client
                 if (!rawParams.TryGetProperty("options", out var optionsProp)
                     || optionsProp.ValueKind != JsonValueKind.Array)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing options")));
                     return;
                 }
@@ -2329,7 +2612,7 @@ namespace SalmonEgg.Acp.Client
                         || !option.TryGetProperty("kind", out var k)
                         || k.ValueKind != JsonValueKind.String)
                     {
-                        RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                        RemovePendingInboundTracking(RequestKey(request.Id));
                         _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Invalid permission option")));
                         return;
                     }
@@ -2356,7 +2639,7 @@ namespace SalmonEgg.Acp.Client
                     permissionResponseFunc,
                     () => CanRespondToPermissionRequest(pendingPermission),
                     () => IsPermissionResponsePrepared(pendingPermission),
-                    () => IsPermissionResponsePrepared(pendingPermission),
+                    () => IsPermissionResponseSending(pendingPermission),
                     () => IsPermissionCancellationRequested(pendingPermission), _logger);
                 pendingPermission.PermissionEvent = eventArgs;
 
@@ -2375,7 +2658,7 @@ namespace SalmonEgg.Acp.Client
 
         private void HandleDraftPermissionRequest(JsonRpcRequest request)
         {
-            var requestId = request.Id?.ToString() ?? string.Empty;
+            var requestId = RequestKey(request.Id);
             AcpPermissionRequestSnapshot snapshot;
             try
             {
@@ -2402,7 +2685,7 @@ namespace SalmonEgg.Acp.Client
                     (outcome, optionId) => TrySendPermissionOutcomeResponseAsync(pending.MessageId, outcome, optionId, pending),
                     () => CanRespondToPermissionRequest(pending),
                     () => IsPermissionResponsePrepared(pending),
-                    () => IsPermissionResponsePrepared(pending),
+                    () => IsPermissionResponseSending(pending),
                     () => IsPermissionCancellationRequested(pending), _logger)
                 {
                     DraftRequest = snapshot,
@@ -2452,7 +2735,7 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -2461,7 +2744,7 @@ namespace SalmonEgg.Acp.Client
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp) ||
                     !rawParams.TryGetProperty("path", out var pathProp))
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId or path")));
                     return;
                 }
@@ -2469,17 +2752,14 @@ namespace SalmonEgg.Acp.Client
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
                 if (request.Id == null)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidRequest("Missing request id")));
                     return;
                 }
 
                 var messageId = request.Id!;
-                var requestId = messageId.ToString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    SetPendingInboundSessionId(requestId, sessionId);
-                }
+                var requestId = RequestKey(messageId);
+                SetPendingInboundSessionId(requestId, sessionId);
                 var path = pathProp.GetString() ?? string.Empty;
                 var content = rawParams.TryGetProperty("content", out var cont) ? cont.GetString() : null;
 
@@ -2527,67 +2807,57 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void HandleAskUserRequest(JsonRpcRequest request)
         {
+            AskUserRequest? askUserRequest;
             try
             {
                 if (!request.Params.HasValue)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
 
-                var askUserRequest = FromElement<AskUserRequest>(request.Params.Value);
+                askUserRequest = FromElement<AskUserRequest>(request.Params.Value);
                 if (askUserRequest == null)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Failed to deserialize ask_user request.")));
                     return;
                 }
 
                 AskUserContract.ValidateRequest(askUserRequest);
-
-                if (request.Id == null)
-                {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
-                    _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidRequest("Missing request id")));
-                    return;
-                }
-
-                var messageId = request.Id!;
-                var requestId = messageId.ToString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    SetPendingInboundAskUserRequest(requestId, askUserRequest);
-                }
-
-                if (AskUserRequestReceived == null)
-                {
-                    RemovePendingInboundTracking(requestId);
-                    _ = SendResponseAsync(new JsonRpcResponse(
-                        messageId,
-                        new JsonRpcError(
-                            JsonRpcErrorCode.CapabilityNotSupported,
-                            "Ask-user requests are not supported.")));
-                    return;
-                }
-
-                var eventArgs = new AskUserRequestEventArgs(
-                    messageId,
-                    askUserRequest,
-                    answers => RespondToAskUserRequestAsync(messageId, answers));
-
-                AskUserRequestReceived.Invoke(this, eventArgs);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex) when (ex is InvalidOperationException or JsonException)
             {
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
-                _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message)));
+                FailPendingInboundRequest(request, JsonRpcError.CreateInvalidParams(ex.Message));
+                return;
+            }
+
+            var messageId = request.Id;
+            var requestId = RequestKey(messageId);
+            SetPendingInboundAskUserRequest(requestId, askUserRequest);
+            if (!TryGetPendingInboundRequest(requestId, out var pending))
+            {
+                return;
+            }
+            var handler = AskUserRequestReceived;
+            if (handler is null)
+            {
+                _ = TrySendAskUserFailureResponseAsync(pending, new JsonRpcError(
+                    JsonRpcErrorCode.CapabilityNotSupported, "Ask-user requests are not supported."));
+                return;
+            }
+
+            try
+            {
+                handler.Invoke(this, new AskUserRequestEventArgs(messageId, askUserRequest,
+                    answers => TrySendAskUserResponseAsync(messageId, answers, pending)));
             }
             catch (Exception ex)
             {
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
-                OnErrorOccurred($"Failed to process ask_user request: {ex.Message}");
-                _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInternalError(ex.Message)));
+                _ = TrySendAskUserFailureResponseAsync(pending,
+                    JsonRpcError.CreateInternalError("The client failed to display the question."));
+                OnErrorOccurred($"Failed to display ask_user request: {ex.Message}");
             }
         }
 
@@ -2727,7 +2997,7 @@ namespace SalmonEgg.Acp.Client
             {
                 if (!request.Params.HasValue)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing params")));
                     return;
                 }
@@ -2735,7 +3005,7 @@ namespace SalmonEgg.Acp.Client
                 var rawParams = request.Params.Value;
                 if (!rawParams.TryGetProperty("sessionId", out var sessionIdProp))
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
                 }
@@ -2743,24 +3013,21 @@ namespace SalmonEgg.Acp.Client
                 var sessionId = sessionIdProp.GetString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(sessionId))
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams("Missing sessionId")));
                     return;
                 }
 
                 if (request.Id == null)
                 {
-                    RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                    RemovePendingInboundTracking(RequestKey(request.Id));
                     _ = SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidRequest("Missing request id")));
                     return;
                 }
 
                 var messageId = request.Id;
-                var requestId = request.Id?.ToString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(requestId))
-                {
-                    SetPendingInboundSessionId(requestId, sessionId);
-                }
+                var requestId = RequestKey(request.Id);
+                SetPendingInboundSessionId(requestId, sessionId);
 
                 string? terminalId = null;
                 if (rawParams.TryGetProperty("terminalId", out var terminalIdProp))
@@ -2839,24 +3106,24 @@ namespace SalmonEgg.Acp.Client
                         break;
 
                     default:
-                        RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                        RemovePendingInboundTracking(RequestKey(request.Id));
                         await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateMethodNotFound(request.Method))).ConfigureAwait(false);
                         break;
                 }
             }
             catch (KeyNotFoundException ex)
             {
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                RemovePendingInboundTracking(RequestKey(request.Id));
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message))).ConfigureAwait(false);
             }
             catch (ArgumentException ex)
             {
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                RemovePendingInboundTracking(RequestKey(request.Id));
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInvalidParams(ex.Message))).ConfigureAwait(false);
             }
             catch (NotSupportedException ex)
             {
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                RemovePendingInboundTracking(RequestKey(request.Id));
                 await SendResponseAsync(new JsonRpcResponse(
                     request.Id,
                     new JsonRpcError(JsonRpcErrorCode.CapabilityNotSupported, ex.Message))).ConfigureAwait(false);
@@ -2864,7 +3131,7 @@ namespace SalmonEgg.Acp.Client
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to process terminal request: {ex.Message}");
-                RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+                RemovePendingInboundTracking(RequestKey(request.Id));
                 await SendResponseAsync(new JsonRpcResponse(request.Id, JsonRpcError.CreateInternalError(ex.Message))).ConfigureAwait(false);
             }
         }
@@ -2896,7 +3163,7 @@ namespace SalmonEgg.Acp.Client
 
         private async Task SendTerminalSuccessResponseAsync(object? messageId, JsonElement result)
         {
-            RemovePendingInboundTracking(messageId?.ToString() ?? string.Empty);
+            RemovePendingInboundTracking(RequestKey(messageId));
             await SendResponseAsync(new JsonRpcResponse(messageId, result)).ConfigureAwait(false);
         }
 
@@ -2935,7 +3202,7 @@ namespace SalmonEgg.Acp.Client
 
             // Each awaited send lets the peer finish and reuse other request ids. Cancellation
             // belongs to these request instances, never to a later request with the same id.
-            KeyValuePair<string, PendingInboundRequest>[] pendingRequests;
+            KeyValuePair<AcpRequestId, PendingInboundRequest>[] pendingRequests;
             lock (_lock)
             {
                 connectionToken.ThrowIfCancellationRequested();
@@ -2943,14 +3210,20 @@ namespace SalmonEgg.Acp.Client
                     .Where(pair => pair.Value.ConnectionToken == connectionToken
                         && string.Equals(pair.Value.SessionId, sessionId, StringComparison.Ordinal))
                     .ToArray();
+                PrepareSessionBatchCancellations(pendingRequests);
             }
 
             foreach (var (pendingId, pending) in pendingRequests)
             {
                 connectionToken.ThrowIfCancellationRequested();
+                if (IsBatchedResponse(pending))
+                {
+                    continue;
+                }
                 if (pending.ElicitationRequest is not null)
                 {
-                    await TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse(), cancelForSession: true).ConfigureAwait(false);
+                    await TrySendElicitationResponseAsync(pending, new ElicitationCancelResponse(), cancelForSession: true)
+                        .ConfigureAwait(false);
                     continue;
                 }
 
@@ -2961,12 +3234,21 @@ namespace SalmonEgg.Acp.Client
                     continue;
                 }
 
+                if (pending.AskUserRequest is not null)
+                {
+                    await TrySendAskUserFailureResponseAsync(pending,
+                        new JsonRpcError(JsonRpcErrorCode.MethodNotAllowed,
+                            "Session was cancelled before the client completed this request."), cancelForSession: true)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
                 Task<bool> responseTask;
                 lock (_lock)
                 {
                     connectionToken.ThrowIfCancellationRequested();
                     if (!IsInboundRequestCurrent(pending)
-                        || !_pendingInboundRequests.TryRemove(new KeyValuePair<string, PendingInboundRequest>(pendingId, pending)))
+                        || !_pendingInboundRequests.TryRemove(new KeyValuePair<AcpRequestId, PendingInboundRequest>(pendingId, pending)))
                     {
                         continue;
                     }
@@ -2988,12 +3270,67 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private void RemovePendingInboundTracking(string idStr)
+        private void PrepareSessionBatchCancellations(KeyValuePair<AcpRequestId, PendingInboundRequest>[] requests)
         {
-            if (string.IsNullOrWhiteSpace(idStr))
+            var batches = new HashSet<InboundResponseBatch>();
+            try
             {
-                return;
+                foreach (var (_, pending) in requests)
+                {
+                    if (pending.MessageId is not null && _responseRoutes.TryGetValue(pending.MessageId, out var route)
+                        && route.Batch is { } batch && batches.Add(batch))
+                    {
+                        batch.DeferSending();
+                    }
+                }
+
+                // A retryable batch already has every slot filled. Prepare every cancellation
+                // before the first slot can trigger another write containing its old siblings.
+                foreach (var (_, pending) in requests)
+                {
+                    if (!IsBatchedResponse(pending)) continue;
+                    var response = pending.PreparedCancellationResponse;
+                    if (response is null)
+                    {
+                        response = pending.Method == "session/request_permission"
+                            ? new JsonRpcResponse(pending.MessageId,
+                                ToElement<PermissionOutcomeResult>(CreatePermissionOutcome(pending, "cancelled", null)))
+                            : pending.ElicitationRequest is not null
+                                ? new JsonRpcResponse(pending.MessageId,
+                                    ToElement<CreateElicitationResponse>(new ElicitationCancelResponse()))
+                                : new JsonRpcResponse(pending.MessageId, new JsonRpcError(JsonRpcErrorCode.MethodNotAllowed,
+                                    "Session was cancelled before the client completed this request."));
+                    }
+                    TrySubmitBatchCancellation(pending, response);
+                }
             }
+            finally
+            {
+                // A batch may also contain another session's input. Its owner waits for that input
+                // without holding up session/cancel, and commits all siblings after the shared write.
+                foreach (var batch in batches) batch.ResumeSending();
+            }
+        }
+
+        private bool TrySubmitBatchCancellation(PendingInboundRequest pending, JsonRpcResponse response)
+        {
+            if (pending.MessageId is null || !_responseRoutes.TryGetValue(pending.MessageId, out var route)
+                || route.Batch is null || !IsInboundRequestCurrent(pending))
+            {
+                return false;
+            }
+            pending.PreparedCancellationResponse = response;
+            route.Batch.SubmitCancellation(route.Index, response);
+            pending.PermissionEvent?.NotifyChanged();
+            return true;
+        }
+
+        private bool IsBatchedResponse(PendingInboundRequest pending)
+            => pending.MessageId is not null && _responseRoutes.TryGetValue(pending.MessageId, out var route)
+                && route.Batch is not null;
+
+        private void RemovePendingInboundTracking(AcpRequestId idStr)
+        {
 
             lock (_lock)
             {
@@ -3007,7 +3344,14 @@ namespace SalmonEgg.Acp.Client
 
         private void FailPendingInboundRequest(JsonRpcRequest request, JsonRpcError error)
         {
-            RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+            if (request.Id is not null && _responseRoutes.TryGetValue(request.Id, out var route)
+                && route.Batch?.HasPreparedResponse(route.Index) == true)
+            {
+                // A handler may answer and then throw. That does not withdraw the prepared answer
+                // or its URL completion tracking while the batch is waiting for other calls.
+                return;
+            }
+            RemovePendingInboundTracking(RequestKey(request.Id));
             if (request.Id == null)
             {
                 return;
@@ -3016,12 +3360,8 @@ namespace SalmonEgg.Acp.Client
             _ = SendResponseAsync(new JsonRpcResponse(request.Id, error));
         }
 
-        private void TrackPendingInboundRequest(string idStr, string method, object? messageId)
+        private void TrackPendingInboundRequest(AcpRequestId idStr, string method, object? messageId)
         {
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return;
-            }
 
             lock (_lock)
             {
@@ -3032,34 +3372,22 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private bool TryGetPendingInboundRequest(string idStr, out PendingInboundRequest pending)
+        private bool TryGetPendingInboundRequest(AcpRequestId idStr, out PendingInboundRequest pending)
         {
             pending = default!;
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return false;
-            }
 
             return _pendingInboundRequests.TryGetValue(idStr, out pending!);
         }
 
-        private bool TryTakePendingInboundRequest(string idStr, out PendingInboundRequest pending)
+        private bool TryTakePendingInboundRequest(AcpRequestId idStr, out PendingInboundRequest pending)
         {
             pending = default!;
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return false;
-            }
 
             return _pendingInboundRequests.TryRemove(idStr, out pending!);
         }
 
-        private void SetPendingInboundSessionId(string idStr, string sessionId)
+        private void SetPendingInboundSessionId(AcpRequestId idStr, string sessionId)
         {
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return;
-            }
 
             while (_pendingInboundRequests.TryGetValue(idStr, out var existing))
             {
@@ -3094,20 +3422,13 @@ namespace SalmonEgg.Acp.Client
                     return null;
                 }
 
-                var requestId = messageId.ToString() ?? string.Empty;
-                _pendingInboundRequests.TryGetValue(requestId, out var previous);
-                _pendingInboundRequests[requestId] = pending;
-                previous?.PermissionEvent?.NotifyChanged();
+                _pendingInboundRequests[RequestKey(messageId)] = pending;
                 return pending;
             }
         }
 
-        private void SetPendingInboundAskUserRequest(string idStr, AskUserRequest request)
+        private void SetPendingInboundAskUserRequest(AcpRequestId idStr, AskUserRequest request)
         {
-            if (string.IsNullOrWhiteSpace(idStr))
-            {
-                return;
-            }
 
             _pendingInboundRequests.AddOrUpdate(
                 idStr,
@@ -3244,6 +3565,11 @@ namespace SalmonEgg.Acp.Client
                 _messageLoopCts?.Cancel();
                 _messageLoopCts?.Dispose();
                 _messageLoopCts = null;
+                foreach (var batch in _responseBatches)
+                {
+                    batch.Abandon();
+                }
+                _responseBatches.Clear();
                 var permissions = _pendingInboundRequests.Values.Select(static pending => pending.PermissionEvent).ToArray();
                 _pendingInboundRequests.Clear();
                 foreach (var permission in permissions) permission?.NotifyChanged();

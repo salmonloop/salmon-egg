@@ -1,8 +1,12 @@
 using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Serialization;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.JsonRpc
 {
@@ -57,33 +61,8 @@ namespace SalmonEgg.Acp.JsonRpc
 
             try
             {
-                // First parse as a plain document in order to detect the message type
                 using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                // Detect the message type
-                var hasId = root.TryGetProperty("id", out _);
-                var hasResult = root.TryGetProperty("result", out _);
-                var hasError = root.TryGetProperty("error", out _);
-
-                if (hasResult || hasError)
-                {
-                    // Response message
-                    return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcResponse>())
-                        ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse response");
-                }
-                else if (hasId)
-                {
-                    // Request message
-                    return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcRequest>())
-                        ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse request");
-                }
-                else
-                {
-                    // Notification message (no id)
-                    return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcNotification>())
-                        ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse notification");
-                }
+                return ParseMessage(doc.RootElement);
             }
             catch (JsonException ex)
             {
@@ -103,6 +82,155 @@ namespace SalmonEgg.Acp.JsonRpc
                     $"Error parsing message: {ex.Message}",
                     ex);
             }
+        }
+
+        internal ParsedMessageFrame ParseFrame(string json, int protocolVersion)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Array)
+                {
+                    return new ParsedMessageFrame(false, false, [new ParsedMessageItem(ParseMessage(root))]);
+                }
+
+                if (protocolVersion != AcpProtocolVersion.V2 || root.GetArrayLength() == 0)
+                {
+                    throw new AcpException(JsonRpcErrorCode.InvalidRequest,
+                        protocolVersion == AcpProtocolVersion.V2
+                            ? "A JSON-RPC batch must contain at least one item."
+                            : "JSON-RPC batches require a negotiated ACP v2 connection.");
+                }
+
+                return ParseBatch(root);
+            }
+            catch (JsonException exception)
+            {
+                throw new AcpException(JsonRpcErrorCode.ParseError, exception.Message, exception);
+            }
+        }
+
+        internal string SerializeResponses(IReadOnlyList<JsonRpcResponse> responses)
+        {
+            var buffer = new ArrayBufferWriter<byte>();
+            using var writer = new Utf8JsonWriter(buffer);
+            writer.WriteStartArray();
+            foreach (var response in responses)
+            {
+                JsonSerializer.Serialize(writer, response, GetTypeInfo<JsonRpcResponse>());
+            }
+            writer.WriteEndArray();
+            writer.Flush();
+            return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        }
+
+        private JsonRpcMessage ParseMessage(JsonElement root)
+        {
+            if (root.TryGetProperty("result", out _) || root.TryGetProperty("error", out _))
+            {
+                return root.Deserialize(GetTypeInfo<JsonRpcResponse>())
+                    ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse response");
+            }
+
+            if (root.TryGetProperty("id", out var id))
+            {
+                var request = root.Deserialize(GetTypeInfo<JsonRpcRequest>())
+                    ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse request");
+                // Keep an explicit null id distinct from an absent id. Event callbacks require an
+                // object identity, while JsonElement preserves all three schema-defined wire forms.
+                request.Id = id.Clone();
+                return request;
+            }
+
+            return root.Deserialize(GetTypeInfo<JsonRpcNotification>())
+                ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse notification");
+        }
+
+        private ParsedMessageFrame ParseBatch(JsonElement root)
+        {
+            var items = new List<ParsedMessageItem>(root.GetArrayLength());
+            var hasCalls = false;
+            var hasResponses = false;
+            foreach (var item in root.EnumerateArray())
+            {
+                var isResponse = item.ValueKind == JsonValueKind.Object
+                    && (item.TryGetProperty("result", out _) || item.TryGetProperty("error", out _));
+                hasResponses |= isResponse;
+                hasCalls |= item.ValueKind == JsonValueKind.Object && item.TryGetProperty("method", out _);
+                var error = ValidateBatchEnvelope(item);
+                try
+                {
+                    items.Add(error is null
+                        ? new ParsedMessageItem(ParseMessage(item), IsResponse: isResponse)
+                        : new ParsedMessageItem(null, error, isResponse));
+                }
+                catch (JsonException exception)
+                {
+                    items.Add(new ParsedMessageItem(null, exception.Message, isResponse));
+                }
+            }
+
+            // ACP's schema separates BatchCall from BatchResponse. A response smuggled into a call
+            // batch cannot settle a pending request, but it must not discard the legitimate calls.
+            if (hasCalls && hasResponses)
+            {
+                for (var index = 0; index < items.Count; index++)
+                {
+                    if (items[index].IsResponse)
+                    {
+                        items[index] = new ParsedMessageItem(null,
+                            "ACP call batches must not contain response items.", IsResponse: true);
+                    }
+                }
+            }
+
+            return new ParsedMessageFrame(true, hasResponses && !hasCalls, items);
+        }
+
+        private static string? ValidateBatchEnvelope(JsonElement item)
+        {
+            if (item.ValueKind != JsonValueKind.Object
+                || !item.TryGetProperty("jsonrpc", out var version)
+                || version.ValueKind != JsonValueKind.String || version.GetString() != "2.0")
+            {
+                return "A batch item must be a JSON-RPC 2.0 object.";
+            }
+
+            var hasId = item.TryGetProperty("id", out var id);
+            if (hasId && !AcpRequestId.TryFromEnvelopeId(id, out _))
+            {
+                return "A JSON-RPC id must be null, a number, or a string.";
+            }
+
+            var hasMethod = item.TryGetProperty("method", out var method);
+            var hasResult = item.TryGetProperty("result", out _);
+            var hasError = item.TryGetProperty("error", out var error);
+            if (hasMethod)
+            {
+                if (method.ValueKind != JsonValueKind.String || hasResult || hasError)
+                {
+                    return "A call must contain a string method and no result or error.";
+                }
+                if (item.TryGetProperty("params", out var parameters)
+                    && parameters.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+                {
+                    return "JSON-RPC params must be an object or an array when present.";
+                }
+                return null;
+            }
+
+            if (!hasId || hasResult == hasError)
+            {
+                return "A response must contain an id and exactly one of result or error.";
+            }
+            if (hasError && (error.ValueKind != JsonValueKind.Object
+                || !error.TryGetProperty("code", out var code) || code.ValueKind != JsonValueKind.Number || !code.TryGetInt32(out _)
+                || !error.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.String))
+            {
+                return "A JSON-RPC error must contain an integer code and a string message.";
+            }
+            return null;
         }
 
         /// <summary>

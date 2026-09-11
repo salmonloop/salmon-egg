@@ -16,6 +16,14 @@ public sealed class AcpFrameTests
     [InlineData(@"{""jsonrpc"":""2.0""}")]
     [InlineData(@"  {""jsonrpc"":""2.0""}")]
     [InlineData("﻿{\"jsonrpc\":\"2.0\"}")]
+    [InlineData(@"[{""jsonrpc"":""2.0""}]")]
+    [InlineData("[]")]
+    [InlineData("[1,2,3]")]
+    [InlineData("[false]")]
+    [InlineData("[null]")]
+    [InlineData("[\"invalid item\"]")]
+    [InlineData("[")]
+    [InlineData("[{\"jsonrpc\":")]
     public void LooksLikeFrame_JsonObject_ShouldBeTrue(string message)
     {
         Assert.True(AcpFrame.LooksLikeFrame(message));
@@ -43,7 +51,7 @@ public sealed class AcpFrameTests
     [InlineData("Running database migrations")]
     [InlineData("[1;32mINFO[0m ready")] // ANSI-coloured logging
     [InlineData("Invalid command line argument: -C")]
-    [InlineData(@"[{""jsonrpc"":""2.0""}]")]        // batch: ACP messages are individual
+    [InlineData("[INFO] starting")]
     public void LooksLikeFrame_NonFrame_ShouldBeFalse(string message)
     {
         Assert.False(AcpFrame.IsBlank(message));

@@ -13,6 +13,9 @@ public sealed class StdioTransportStdoutFrameTests
     [Theory]
     [InlineData("{\"jsonrpc\":\"2.0\",\"method\":\"session/update\"}")]
     [InlineData("  {\"jsonrpc\":\"2.0\"}")]
+    [InlineData("[{\"jsonrpc\":\"2.0\"}]")]
+    [InlineData("[]")]
+    [InlineData("[1,2,3]")]
     public void ClassifyStdoutLine_AcpFrame_ShouldDispatch(string line)
     {
         var kind = StdioTransport.ClassifyStdoutLine(line, out var frame);
@@ -59,7 +62,7 @@ public sealed class StdioTransportStdoutFrameTests
     [InlineData("Running database migrations")]         // agent startup logging
     [InlineData("[1;32mINFO[0m ready")]     // ANSI-coloured logging
     [InlineData("Invalid command line argument: -C")]
-    [InlineData("[{\"jsonrpc\":\"2.0\"}]")]             // batch: ACP messages are individual
+    [InlineData("[INFO] ready")]
     public void ClassifyStdoutLine_NonFrame_ShouldBeDiagnostic(string line)
     {
         var kind = StdioTransport.ClassifyStdoutLine(line, out var frame);

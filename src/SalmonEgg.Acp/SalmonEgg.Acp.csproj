@@ -94,6 +94,8 @@
   <!-- Internals remain available to first-party contract tests. External consumers use the public surface. -->
   <ItemGroup>
     <InternalsVisibleTo Include="SalmonEgg.Acp.Tests" />
+    <InternalsVisibleTo Include="SalmonEgg.Acp.Desktop.Tests" />
+    <InternalsVisibleTo Include="SalmonEgg.Presentation.Core.Tests" />
   </ItemGroup>
 
 </Project>

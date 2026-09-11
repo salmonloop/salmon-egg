@@ -105,6 +105,10 @@ public sealed class ChatConversationPanelStateCoordinator
         => _pendingElicitationRequestsByConversation.Clear();
 
     public PermissionRequestViewModel? GetPendingPermissionRequest(string? conversationId, string? toolCallId = null)
+        => GetPendingPermissionRequest(conversationId, toolCallId, currentRequest: null);
+
+    internal PermissionRequestViewModel? GetPendingPermissionRequest(
+        string? conversationId, string? toolCallId, PermissionRequestViewModel? currentRequest)
     {
         if (string.IsNullOrWhiteSpace(conversationId)
             || !_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests))
@@ -113,6 +117,13 @@ public sealed class ChatConversationPanelStateCoordinator
         }
 
         RemoveUnavailablePermissionRequests(requests);
+        if (currentRequest is { IsSendingResponse: true } && requests.Contains(currentRequest)
+            && (toolCallId is null || string.Equals(currentRequest.ToolCallId, toolCallId, StringComparison.Ordinal)))
+        {
+            // Every prepared sibling becomes sending together. Preserve the visible member of
+            // that batch until delivery instead of jumping back to its first answered question.
+            return currentRequest;
+        }
         var candidates = requests.Where(request => (request.IsAwaitingInput || request.IsSendingResponse) && (toolCallId is null
             || string.Equals(request.ToolCallId, toolCallId, StringComparison.Ordinal)));
         return candidates.FirstOrDefault(static request => request.IsSendingResponse)
@@ -144,9 +155,13 @@ public sealed class ChatConversationPanelStateCoordinator
         return true;
     }
 
-    internal PermissionRequestViewModel? GetUnboundPermissionCancellation()
+    internal PermissionRequestViewModel? GetUnboundPermissionCancellation(PermissionRequestViewModel? currentRequest = null)
     {
         RemoveUnavailablePermissionRequests(_unboundPermissionCancellations);
+        if (currentRequest is { IsSendingResponse: true } && _unboundPermissionCancellations.Contains(currentRequest))
+        {
+            return currentRequest;
+        }
         return _unboundPermissionCancellations.FirstOrDefault(static request => request.IsSendingResponse)
             ?? _unboundPermissionCancellations.FirstOrDefault(static request => request.IsAwaitingInput);
     }

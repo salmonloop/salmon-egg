@@ -2102,8 +2102,9 @@ public partial class ChatViewModel
 
     private void SyncPermissionRequestProjection()
     {
-        var conversationRequest = _panelStateCoordinator.GetPendingPermissionRequest(CurrentSessionId);
-        var unboundCancellation = _panelStateCoordinator.GetUnboundPermissionCancellation();
+        var conversationRequest = _panelStateCoordinator.GetPendingPermissionRequest(
+            CurrentSessionId, toolCallId: null, PendingPermissionRequest);
+        var unboundCancellation = _panelStateCoordinator.GetUnboundPermissionCancellation(PendingPermissionRequest);
         PendingPermissionRequest = unboundCancellation is { IsSendingResponse: true }
             ? unboundCancellation : conversationRequest ?? unboundCancellation;
         ShowPermissionDialog = PendingPermissionRequest is not null;

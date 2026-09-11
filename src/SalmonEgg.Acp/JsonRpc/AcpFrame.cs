@@ -8,8 +8,8 @@ namespace SalmonEgg.Acp.JsonRpc
     /// The single definition of what counts as an inbound ACP frame, shared by every transport.
     /// </summary>
     /// <remarks>
-    /// ACP carries individual JSON-RPC requests, notifications, or responses — never a batch — so a
-    /// frame must begin with '{'. Anything else was never an ACP message: over stdio the agent wrote
+    /// ACP carries JSON-RPC objects, and v2 also defines non-empty batch arrays. The connection owns
+    /// version validation; transports only recognize those shapes. Other text is not an ACP message: over stdio the agent wrote
     /// diagnostics to the stream reserved for the protocol (the spec directs those to stderr), and
     /// over a bridged transport the same line arrives verbatim as a text frame.
     ///
@@ -42,7 +42,7 @@ namespace SalmonEgg.Acp.JsonRpc
 
         /// <summary>
         /// True when <paramref name="message"/> looks like an ACP frame, i.e. its first
-        /// non-whitespace character (after any byte order mark) opens a JSON object.
+        /// non-whitespace character (after any byte order mark) opens a JSON object or batch array.
         /// </summary>
         /// <remarks>
         /// A shape test, not a validity test: a frame that looks like one but fails to parse is a
@@ -57,7 +57,31 @@ namespace SalmonEgg.Acp.JsonRpc
             }
 
             var payload = StripByteOrderMark(message!).AsSpan().TrimStart();
-            return payload.Length > 0 && payload[0] == '{';
+            return payload.Length > 0 && (payload[0] == '{'
+                || (payload[0] == '[' && LooksLikeArray(payload[1..].TrimStart())));
+        }
+
+        private static bool LooksLikeArray(ReadOnlySpan<char> contents)
+        {
+            if (contents.IsEmpty || contents[0] is '{' or '[' or ']' or '"')
+            {
+                return true;
+            }
+
+            // Bracketed logs such as [INFO] or [1;32mINFO are not batches. Recognize JSON value
+            // prefixes without parsing the frame here, so malformed batches still reach -32700.
+            if (contents.StartsWith("null") || contents.StartsWith("true") || contents.StartsWith("false"))
+            {
+                return true;
+            }
+            var index = 0;
+            while (index < contents.Length && (char.IsAsciiDigit(contents[index])
+                || contents[index] is '-' or '+' or '.' or 'e' or 'E'))
+            {
+                index++;
+            }
+            return index > 0 && (index == contents.Length || char.IsWhiteSpace(contents[index])
+                || contents[index] is ',' or ']');
         }
 
         /// <summary>

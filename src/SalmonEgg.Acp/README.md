@@ -43,7 +43,25 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | URL wire contracts and SDK completion tracking exist, but URL mode is not advertised by default. | A host must provide explicit navigation consent, a context the Agent cannot inspect, and a UI driven by the SDK's completion events. SalmonEgg's platform integration is tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, message/tool/terminal projections, and permission request handling are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Configuration workflows, batch processing, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, message/tool/terminal projections, permission request handling, and version-gated JSON-RPC batches are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Configuration workflows, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+
+Internal v2 batch validation follows the upstream schema at
+`5ebaf0aceb04a4ba6574cd63fa6355352dc6d931` and JSON-RPC 2.0 section 6.
+Call batches may mix requests and notifications; responses are collected into one array after all
+requests have answers. Notification-only batches produce no response. Empty batches return a
+single `-32600` response; malformed JSON returns a single `-32700`, both with explicit `id: null`.
+An invalid call item receives `-32600` without discarding valid siblings. Response batches correlate
+each valid response by its original id type and value. Malformed response items, including responses
+embedded in a call batch, are logged and ignored without sending replies to responses.
+
+The transport recognizes object and array frames independently of negotiation; a v1 connection
+explicitly rejects batches. Cancellation and disconnect retain each response's original connection
+and batch ownership. Failed response batches remain retryable through their original pending
+requests. A batch with no remaining retry owner is abandoned after its failed send and releases
+its retained responses, without starting an automatic retry loop.
+`tests/SalmonEgg.Acp.Desktop.Tests` and `scripts/gates/run-acp-batch-stdio-gate.sh` exercise real
+Linux pipes through the production transport and adapter. This gate does not establish
+interoperability with a public v2 Agent, and it does not enable public live v2 initialization.
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
 inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;
