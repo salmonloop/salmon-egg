@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   waitForControlEnabledState,
   waitForLaidOutControl,
+  waitForNativeControlFocus,
   waitForSemanticText
 } from "./ui-affordances.mjs";
 
@@ -36,8 +37,7 @@ export async function verifyStandalonePermissionQueue(page, server) {
     assert.equal(state.enabled, true);
     choiceIds.push(state.id);
     await page.locator(`#${state.id}`).focus();
-    assert.equal(await page.evaluate(() => document.activeElement?.id), state.id,
-      "The actual native permission Button must own focus before Enter.");
+    await waitForNativeControlFocus(page, button, "current permission choice");
     await page.keyboard.press("Enter");
     assert.deepEqual(await item.request.waitForResponse(), {
       jsonrpc: "2.0",
