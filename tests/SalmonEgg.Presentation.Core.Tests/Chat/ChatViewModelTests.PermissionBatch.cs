@@ -115,7 +115,24 @@ public partial class ChatViewModelTests
         Assert.False(first.IsResponseSending);
         Assert.Same(second, fixture.ViewModel.PendingPermissionRequest);
         Assert.Empty(peer.Responses);
-        await AwaitPermissionUiSignalAsync(dispatcher, second.RespondCommand.ExecuteAsync(second.Options[0]));
+        var release = NewPermissionSignal();
+        peer.ResponseSend = (_, token) => release.Task.WaitAsync(token);
+        var sending = WaitForPermissionStateAsync(first, () => first.IsResponseSending);
+        var retry = second.RespondCommand.ExecuteAsync(second.Options[0]);
+        try
+        {
+            await AwaitPermissionUiSignalAsync(dispatcher, sending);
+            await dispatcher.RunUntilIdleAsync();
+            Assert.Same(second, fixture.ViewModel.PendingPermissionRequest);
+            Assert.Same(second, fixture.ViewModel.StandalonePermissionRequest);
+            Assert.True(first.IsResponseSending);
+            Assert.Empty(peer.Responses);
+        }
+        finally
+        {
+            release.TrySetResult(true);
+            await AwaitPermissionUiSignalAsync(dispatcher, retry);
+        }
         await dispatcher.RunUntilIdleAsync();
         var response = Assert.Single(peer.Responses);
         Assert.Equal("cancelled", response[0].GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString());
