@@ -128,9 +128,11 @@ The [pinned v2 schema](https://github.com/agentclientprotocol/agent-client-proto
 explicitly allows default-on-error for optional patch fields and skip-invalid-items for message,
 tool-content, and location arrays. Those recoveries apply only to the v2 contracts that declare
 them. Required identities and chunks remain strict, unknown string discriminators survive, and
-content annotations and metadata recover their own optional fields before an enclosing list may
-discard an invalid content item. Valid text survives malformed hints; required text type errors
-remain invalid. V1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
+content annotations, metadata, optional image URIs, and optional resource-link/resource fields
+recover independently before an enclosing list may discard an invalid content item. Valid payloads
+survive malformed hints; required field type errors remain invalid. Embedded resources follow the
+schema's untagged union, selecting a valid text branch before a valid blob branch and rejecting a
+payload that satisfies neither. V1 optional-field type validation is unchanged. The actual nupkg consumer gate replays mixed
 history and asserts replacement, append, clear, terminal bytes, and snapshot isolation.
 
 `AcpPermissionDraftExtensions.ReadRequest(parameters)` parses recorded v2 permission params;
