@@ -4,6 +4,7 @@ import {
   typeIntoVisibleTextField,
   waitForControlEnabledState,
   waitForLaidOutControl,
+  waitForNativeControlFocus,
   waitForSemanticText
 } from "./ui-affordances.mjs";
 
@@ -80,8 +81,8 @@ async function verifyMultiSelectForm(page, server, suffix) {
   for (const [index, checked, enabled] of [
     [0, true, false], [1, true, true], [2, true, false], [1, false, true]
   ]) {
-    await activateNativeControl(page, checkboxes[index], "Space", options[index]);
-    await waitForCheckboxState(page, checkboxes[index], checked);
+    await activateNativeControl(page, { labels: [options[index]], role: "input" }, "Space", options[index]);
+    await waitForCheckboxState(page, options[index], checked);
     await waitForControlEnabledState(page, submitButton, enabled, "Multi-select bounds update Submit", formTimeoutMs);
     assert.equal(form.request.responses().length, 0, "Toggling a choice must not submit the form.");
   }
@@ -121,8 +122,8 @@ async function verifyTitledMultiSelectForm(page, server, suffix) {
   assert.equal(form.request.responses().length, 0);
 
   for (const [index, checked, enabled] of [[0, false, false], [1, true, true], [2, true, true]]) {
-    await activateNativeControl(page, checkboxes[index], "Space", labels[index]);
-    await waitForCheckboxState(page, checkboxes[index], checked);
+    await activateNativeControl(page, { labels: [labels[index]], role: "input" }, "Space", labels[index]);
+    await waitForCheckboxState(page, labels[index], checked);
     await waitForControlEnabledState(page, submitButton, enabled, "Titled choices update Submit", formTimeoutMs);
     assert.equal(form.request.responses().length, 0, "Choosing a display label must not submit the form.");
   }
@@ -212,14 +213,18 @@ async function findNamedCheckbox(page, name, expectedChecked) {
   }, { name, expectedChecked }, `enabled checkbox ${name} with its default state`);
 }
 
-async function waitForCheckboxState(page, id, expectedChecked) {
-  await waitForValue(page, ({ id, expectedChecked }) => {
-    const checkbox = document.getElementById(id);
-    if (!checkbox || checkbox.closest("[hidden]")) return false;
+async function waitForCheckboxState(page, name, expectedChecked) {
+  await waitForValue(page, ({ name, expectedChecked }) => {
+    const current = window.__salmoneggSmoke.semantic.describe({ labels: [name], role: "input" });
+    const checkbox = current?.id ? document.getElementById(current.id) : null;
+    const rect = checkbox?.getBoundingClientRect();
+    if (!checkbox || checkbox.type !== "checkbox" || checkbox.closest("[hidden]")
+      || checkbox.disabled || checkbox.getAttribute("aria-disabled") === "true"
+      || rect.width < 12 || rect.height < 12) return false;
     const aria = checkbox.getAttribute("aria-checked");
     const checked = aria === null ? checkbox.checked : aria === "true" ? true : aria === "false" ? false : null;
     return checked === expectedChecked;
-  }, { id, expectedChecked }, `same checkbox ${id} changing to ${expectedChecked}`);
+  }, { name, expectedChecked }, `checkbox ${name} changing to ${expectedChecked}`);
 }
 
 async function activateFormAction(page, form, label) {
@@ -227,7 +232,7 @@ async function activateFormAction(page, form, label) {
   await waitForControlEnabledState(page, options, true, `form ${label} enabled`, formTimeoutMs);
   const state = await waitForLaidOutControl(page, options, `form ${label} laid out`, formTimeoutMs);
   assert.equal(state.id, form.actions[label], "The action must still belong to the recorded form.");
-  await activateNativeControl(page, state.id, "Enter", `form ${label}`);
+  await activateNativeControl(page, options, "Enter", `form ${label}`);
 }
 
 async function waitForFormTabCompletion(page, form) {
@@ -251,17 +256,11 @@ async function waitForFormTabCompletion(page, form) {
   throw new Error("The form's Cancel button did not retain Tab focus across a frame.");
 }
 
-async function activateNativeControl(page, id, key, label) {
-  await page.locator(`#${id}`).focus();
-  const focused = await page.evaluate(async id => {
-    await new Promise(requestAnimationFrame);
-    const element = document.getElementById(id);
-    const rect = element?.getBoundingClientRect();
-    return document.activeElement?.id === id && element && !element.closest("[hidden]")
-      && !element.disabled && element.getAttribute("aria-disabled") !== "true"
-      && rect.width >= 12 && rect.height >= 12;
-  }, id);
-  assert.equal(focused, true, `${label} must retain native focus, layout and enabled state before ${key}.`);
+async function activateNativeControl(page, options, key, label) {
+  await waitForControlEnabledState(page, options, true, `${label} enabled`, formTimeoutMs);
+  const state = await waitForLaidOutControl(page, options, `${label} laid out`, formTimeoutMs);
+  await page.locator(`#${state.id}`).focus();
+  await waitForNativeControlFocus(page, options, label, formTimeoutMs);
   await page.keyboard.press(key);
 }
 
