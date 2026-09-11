@@ -99,7 +99,7 @@ namespace SalmonEgg.Acp.Content
         public override ResourceLinkContentBlock? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
-            return ContentBlockJsonConverter.ReadResourceLink(document.RootElement);
+            return ContentBlockJsonConverter.ReadResourceLink(document.RootElement, options);
         }
 
         public override void Write(Utf8JsonWriter writer, ResourceLinkContentBlock value, JsonSerializerOptions options)

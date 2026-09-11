@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Acp.Observability;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
@@ -684,6 +686,74 @@ public sealed class AcpSessionProjectionTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ResumeSessionAsync_UnknownWriteOutcome_RetainsReplayUntilPeerResponse(bool throwOnWrite)
+    {
+        // Arrange
+        using var peer = await ProjectionPeer.CreateAsync();
+        peer.HoldResume = true;
+        peer.ResumeWrite = () => throwOnWrite
+            ? Task.FromException<bool>(new IOException("The replay write outcome is unknown."))
+            : Task.FromResult(false);
+        var request = new SessionResumeParams("one", "/workspace", [], replayFrom: SessionReplayFrom.Start);
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => peer.Client.ResumeSessionAsync(request, TestToken));
+        peer.Update("one", Message("agent_message_chunk", "m", "first replay"));
+        var overlapping = await Record.ExceptionAsync(() => peer.Client.ResumeSessionAsync(request, TestToken));
+
+        // Assert
+        if (throwOnWrite) Assert.IsType<IOException>(failure);
+        else Assert.IsType<InvalidOperationException>(failure);
+        Assert.IsType<InvalidOperationException>(overlapping);
+        Assert.Single(peer.Sent, static frame => frame.Method == "session/resume");
+        Assert.Equal(["first replay"], Texts(Assert.Single(peer.Client.GetSessionSnapshot("one")!.Messages)));
+
+        peer.ReplyResume();
+        peer.ResumeWrite = null;
+        peer.HoldResume = false;
+        peer.OnResume = _ => peer.Update("one", Message("agent_message_chunk", "m", "next replay"));
+        await peer.Client.ResumeSessionAsync(request, TestToken);
+        Assert.Equal(2, peer.Sent.Count(static frame => frame.Method == "session/resume"));
+        Assert.Equal(["next replay"], Texts(Assert.Single(peer.Client.GetSessionSnapshot("one")!.Messages)));
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_PreparationFailure_DoesNotClearHistoryOrClaimReplay()
+    {
+        // Arrange
+        using var peer = await ProjectionPeer.CreateAsync();
+        peer.Update("one", Whole("agent_message", "m", "kept"));
+        using var trace = new Activity("replay-preparation-failure").Start();
+        var failure = new InvalidOperationException("The tracing subscriber rejected this request.");
+        var request = new SessionResumeParams("one", "/workspace", [], replayFrom: SessionReplayFrom.Start);
+
+        // Act
+        using (var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == AcpActivitySources.ClientName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> options) =>
+            {
+                if (options.Parent.TraceId == trace.TraceId && options.Name == "acp.request session/resume") throw failure;
+                return ActivitySamplingResult.None;
+            }
+        })
+        {
+            ActivitySource.AddActivityListener(listener);
+            Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                peer.Client.ResumeSessionAsync(request, TestToken)));
+        }
+
+        // Assert
+        Assert.DoesNotContain(peer.Sent, static frame => frame.Method == "session/resume");
+        Assert.Equal(["kept"], Texts(Assert.Single(peer.Client.GetSessionSnapshot("one")!.Messages)));
+        await peer.Client.ResumeSessionAsync(request, TestToken);
+        Assert.Single(peer.Sent, static frame => frame.Method == "session/resume");
+        Assert.Empty(peer.Client.GetSessionSnapshot("one")!.Messages);
+    }
+
+    [Theory]
     [InlineData("close")]
     [InlineData("delete")]
     public async Task SessionRemoval_LateUpdate_DoesNotResurrectProjection(string operation)
@@ -946,6 +1016,7 @@ public sealed class AcpSessionProjectionTests
         internal List<JsonRpcRequest> Sent { get; } = [];
         internal Action<JsonRpcRequest>? OnResume { get; set; }
         internal Func<Task>? BeforeResumeWrite { get; set; }
+        internal Func<Task<bool>>? ResumeWrite { get; set; }
         internal bool HoldResume { get; set; }
 
         public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
@@ -1012,6 +1083,7 @@ public sealed class AcpSessionProjectionTests
             {
                 _resume = request;
                 OnResume?.Invoke(request);
+                if (ResumeWrite is not null) return ResumeWrite();
                 if (!HoldResume) ReplyResume();
             }
             else
