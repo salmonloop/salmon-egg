@@ -30,7 +30,7 @@ public partial class ChatViewModelTests
         var commands = new AcpChatCoordinator(Mock.Of<IAcpChatServiceFactory>(),
             NullLogger<AcpChatCoordinator>.Instance, Mock.Of<ITransportSupportPolicy>(),
             Mock.Of<IAcpMcpServerProvider>(), Mock.Of<IAcpSessionCommandOrchestrator>());
-        await using var fixture = CreateViewModel(dispatcher, acpConnectionCommands: commands,
+        await using var fixture = CreateInteractionViewModel(dispatcher, acpConnectionCommands: commands,
             shellNavigationRuntimeState: shell, localizer: localizer,
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(store,
                 NullLogger<AcpConnectionCoordinator>.Instance, Mock.Of<IAcpMcpServerResolver>(),
@@ -67,7 +67,7 @@ public partial class ChatViewModelTests
         var commands = new AcpChatCoordinator(Mock.Of<IAcpChatServiceFactory>(),
             NullLogger<AcpChatCoordinator>.Instance, Mock.Of<ITransportSupportPolicy>(),
             Mock.Of<IAcpMcpServerProvider>(), Mock.Of<IAcpSessionCommandOrchestrator>());
-        await using var fixture = CreateViewModel(dispatcher, acpConnectionCommands: commands,
+        await using var fixture = CreateInteractionViewModel(dispatcher, acpConnectionCommands: commands,
             shellNavigationRuntimeState: shell,
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(store,
                 NullLogger<AcpConnectionCoordinator>.Instance, Mock.Of<IAcpMcpServerResolver>(),
@@ -116,7 +116,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("first", "remote-1", "first-tool");
@@ -176,7 +176,7 @@ public partial class ChatViewModelTests
         var localizer = new MutableTestCoreStringLocalizer();
         localizer.Set("zh-Hans", "Permission_RetryCancellation", "重试取消");
         localizer.Set("zh-Hans", "Permission_Cancelled", "此请求已取消，请重试取消。");
-        await using var fixture = CreateViewModel(dispatcher, localizer: localizer);
+        await using var fixture = CreateInteractionViewModel(dispatcher, localizer: localizer);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         var attempts = 0;
@@ -227,7 +227,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.ResponseSend = (_, _) => Task.FromResult(false);
@@ -259,7 +259,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         var attempts = 0;
@@ -292,7 +292,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var oldPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, oldPeer);
@@ -325,7 +325,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var oldPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, oldPeer);

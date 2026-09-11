@@ -17,7 +17,7 @@ public partial class ChatViewModelTests
         var dispatcher = new QueueingSynchronizationContext();
         var localizer = new MutableTestCoreStringLocalizer();
         localizer.Set("zh-Hans", "Permission_Cancelled", "此请求已取消，请重试取消。");
-        await using var fixture = CreateViewModel(dispatcher, localizer: localizer);
+        await using var fixture = CreateInteractionViewModel(dispatcher, localizer: localizer);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("permission", "remote-1", "tool");
@@ -72,7 +72,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("first", "remote-1", "tool-one");
@@ -126,7 +126,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("permission", "remote-1", "tool");
@@ -160,7 +160,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var oldPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, oldPeer);
@@ -221,7 +221,7 @@ public partial class ChatViewModelTests
     {
         // Arrange
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var peer = await PermissionUiPeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, peer);
         peer.Request("permission", "remote-1", "tool");

@@ -91,7 +91,6 @@ public partial class ChatViewModelTests
         IExternalUriLauncher? externalUriLauncher = null)
     {
         var stateOwner = new object();
-        connectionSessionRegistry ??= new InMemoryAcpConnectionSessionRegistry();
         var connectionStateOwner = new object();
         var attentionStateOwner = new object();
         var state = State.Value(stateOwner, () => ChatState.Empty);
@@ -7243,7 +7242,7 @@ public partial class ChatViewModelTests
         public IChatConnectionStore ConnectionStore => _connectionStore;
         public RecordingChatStore ChatStore => _chatStore;
         public Mock<ILogger<ChatViewModel>> ViewModelLogger { get; }
-        public IAcpConnectionSessionRegistry InteractionRegistry { get; }
+        public IAcpConnectionSessionRegistry? InteractionRegistry { get; }
 
         public ViewModelFixture(
             ChatViewModel viewModel,
@@ -7264,7 +7263,7 @@ public partial class ChatViewModelTests
             object stateOwner,
             object connectionStateOwner,
             object attentionStateOwner,
-            IAcpConnectionSessionRegistry interactionRegistry)
+            IAcpConnectionSessionRegistry? interactionRegistry)
         {
             ViewModel = viewModel;
             _state = state;
@@ -8713,7 +8712,7 @@ public partial class ChatViewModelTests
         commands.Setup(x => x.CancelPromptAsync(It.IsAny<IAcpChatCoordinatorSink>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
+        await using var fixture = CreateInteractionViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
         var permissionResponses = new List<string>();
@@ -8755,7 +8754,7 @@ public partial class ChatViewModelTests
     public async Task CancelSessionCommand_WhenMatchingPermissionRequestIsPending_RespondsCancelled()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        await using var fixture = CreateInteractionViewModel(syncContext);
         var chatService = CreateConnectedChatService();
         chatService.Setup(service => service.CancelSessionAsync(It.IsAny<SessionCancelParams>()))
             .Returns(Task.CompletedTask);
@@ -8814,7 +8813,7 @@ public partial class ChatViewModelTests
     public async Task PermissionRequestReceived_BeforeToolCallProjection_AttachesInlineActionsWhenToolCallAppears()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        await using var fixture = CreateInteractionViewModel(syncContext);
         var chatService = CreateConnectedChatService();
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(RegisterInteractionMock(fixture, chatService.Object, "profile-1"), TestContext.Current.CancellationToken));
 

@@ -40,7 +40,7 @@ public partial class ChatViewModelTests
         // Arrange: the first real service publishes before a profile switch; routing waits while
         // the production BindingCoordinator gives a second profile its identically named session.
         var dispatcher = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(dispatcher);
+        await using var fixture = CreateInteractionViewModel(dispatcher);
         using var previousPeer = await PermissionUiPeer.CreateAsync();
         using var currentPeer = await PermissionUiPeer.CreateAsync();
         await AwaitWithSynchronizationContextAsync(dispatcher,

@@ -12,7 +12,7 @@ public partial class ChatViewModelTests
     public async Task ElicitationRequestReceived_WhenOwnerChangesBeforeUiDispatch_DoesNotOccupyNewFormSlot()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        await using var fixture = CreateInteractionViewModel(syncContext);
         var viewModel = fixture.ViewModel;
         var previousService = CreateConnectedChatService();
         await syncContext.RunUntilCompletedAsync(viewModel.ReplaceChatServiceAsync(
@@ -69,7 +69,7 @@ public partial class ChatViewModelTests
     public async Task ElicitationRequestReceived_WhenDisposedBeforeUiDispatch_DoesNotRepopulateForm()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        await using var fixture = CreateInteractionViewModel(syncContext);
         var service = CreateConnectedChatService();
         await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(
             RegisterInteractionMock(fixture, service.Object, "profile-1"), TestContext.Current.CancellationToken));
@@ -100,7 +100,7 @@ public partial class ChatViewModelTests
     public async Task ElicitationRequestReceived_WhenPoolServiceChangesBeforeUiDispatch_PreservesForm()
     {
         var syncContext = new QueueingSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
+        await using var fixture = CreateInteractionViewModel(syncContext);
         var service = CreateConnectedChatService();
         await syncContext.RunUntilCompletedAsync(fixture.ViewModel.ReplaceChatServiceAsync(
             RegisterInteractionMock(fixture, service.Object, "profile-1"), TestContext.Current.CancellationToken));
@@ -135,7 +135,7 @@ public partial class ChatViewModelTests
     [InlineData(true)]
     public async Task ElicitationRequestReceived_WhenFormAlreadyHeld_CancelsNewRequest(bool firstResponseInFlight)
     {
-        await using var fixture = CreateViewModel();
+        await using var fixture = CreateInteractionViewModel();
         var viewModel = fixture.ViewModel;
         var chatService = CreateConnectedChatService();
         viewModel.ReplaceChatService(RegisterInteractionMock(fixture, chatService.Object, "profile-1"));
