@@ -110,7 +110,8 @@ final class ElicitationTests: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: 20), "The required native control is absent")
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, "The native control is not interactable")
-        element.tap()
+        // Keep the touch down long enough for UIKit's native scroll-view touch delivery.
+        element.press(forDuration: 0.2)
     }
 
     private func textBounds(_ text: String) throws -> CGRect? {
@@ -140,7 +141,7 @@ final class ElicitationTests: XCTestCase {
         evidence.name = "Before native tap: " + text
         evidence.lifetime = .keepAlways
         add(evidence)
-        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).tap()
+        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.2)
     }
 
     private func expectUrlCard() async throws {
