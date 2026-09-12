@@ -116,6 +116,22 @@ internal static class ReadReceiptProbeDriver
             await WaitForReadAsync(attention, conversationId, longVersion, longMessage, stop.Token);
             App.BootLog($"ReadReceiptProbe case=scroll-end version={longVersion} unread=False active={activation.IsActive} passed=True");
             completed++;
+
+            if (Environment.GetEnvironmentVariable("SALMONEGG_READ_RECEIPT_IMAGE_URL") is { Length: > 0 } imageUrl)
+            {
+                if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer", "Child"))
+                    throw new InvalidOperationException("This fallback gate requires a renderer without native inline images.");
+                var imageMessage = CreateMessage($"**Delayed image result**\n\n![Result image]({imageUrl})");
+                var imageVersion = await MarkAsync(attention, conversationId, connectionId, imageMessage);
+                await chat.Dispatch(new HydrateConversationAction(conversationId, ImmutableList.Create(imageMessage),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty, false));
+                await WaitUntilAsync(() => viewModel.MessageHistory.Any(message => ReferenceEquals(message.PresentedSnapshot, imageMessage)
+                    && message.ShouldRenderPlainText)
+                    && FindDescendant<TextBlock>(list, text => text.Text == imageMessage.TextContent) is { IsLoaded: true, ActualHeight: > 0 }, stop.Token);
+                await WaitForReadAsync(attention, conversationId, imageVersion, imageMessage, stop.Token);
+                App.BootLog($"ReadReceiptProbe case=markdown-image-fallback version={imageVersion} unread=False active={activation.IsActive} passed=True");
+                completed++;
+            }
             passed = true;
         }
         catch (Exception error)

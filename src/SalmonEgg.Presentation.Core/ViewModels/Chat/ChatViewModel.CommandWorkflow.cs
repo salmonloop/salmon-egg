@@ -449,7 +449,8 @@ public partial class ChatViewModel
             context.TurnId,
             promptDispatchResult.RemoteSessionId,
             promptDispatchResult.Response,
-            operation.Source).ConfigureAwait(false);
+            operation.Source,
+            token).ConfigureAwait(false);
     }
 
     private Task FailPromptSendAsync(PromptOperation operation, string reason)

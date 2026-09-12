@@ -672,7 +672,7 @@ public sealed class BindingCoordinatorTests
         return chatStore;
     }
 
-    
+
     [Fact]
     public async Task UpdateBinding_PersistsRemoteOwnershipBeforeRestart()
     {
@@ -716,11 +716,11 @@ public sealed class BindingCoordinatorTests
         Assert.Equal("profile-1", binding.BoundProfileId);
     }
 
-private static ChatConversationWorkspace CreateWorkspace(
-        IConversationStore store,
-        ISessionManager sessionManager,
-        AppPreferencesViewModel preferences,
-        SynchronizationContext syncContext)
+    private static ChatConversationWorkspace CreateWorkspace(
+            IConversationStore store,
+            ISessionManager sessionManager,
+            AppPreferencesViewModel preferences,
+            SynchronizationContext syncContext)
     {
         var originalContext = SynchronizationContext.Current;
         try

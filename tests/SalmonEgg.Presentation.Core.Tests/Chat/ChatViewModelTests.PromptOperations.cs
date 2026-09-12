@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using SalmonEgg.Acp.Client;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
@@ -196,6 +198,148 @@ public partial class ChatViewModelTests
         {
             firstResponse.TrySetCanceled(TestContext.Current.CancellationToken);
             secondResponse.TrySetCanceled(TestContext.Current.CancellationToken);
+            await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.DrainPromptOperationsAsync(TestContext.Current.CancellationToken));
+        }
+    }
+
+    [Theory(Timeout = 15000)]
+    [InlineData(1, false)]
+    [InlineData(32, true)]
+    public async Task SendPrompt_ResponseBeforeBufferedChunksReachViewModel_PreservesBackgroundUnread(
+        int chunkCount, bool anotherSessionIsHydrating)
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        var adapterDispatcher = new QueueingSynchronizationContext();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Inline continuations establish completion ingress before either dispatcher is pumped.
+        var response = new TaskCompletionSource<SessionPromptResponse>();
+        var first = CreateConnectedChatService();
+        var second = CreateConnectedChatService();
+        first.Setup(service => service.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
+            .Returns(() => { entered.TrySetResult(); return response.Task; });
+        using var firstAdapter = new AcpChatServiceAdapter(first.Object, new AcpEventAdapter(_ => { }, adapterDispatcher));
+        using var secondAdapter = new AcpChatServiceAdapter(second.Object, new AcpEventAdapter(_ => { }, dispatcher));
+        await using var fixture = CreateViewModel(dispatcher, acpConnectionCommands: CreatePromptOperationCommands().Object,
+            connectionSessionRegistry: registry);
+        registry.Upsert(new("profile-1", firstAdapter, new InitializeResponse(), default, "connection-1"));
+        registry.Upsert(new("profile-2", secondAdapter, new InitializeResponse(), default, "connection-2"));
+        await SelectPromptOperationConversationAsync(fixture, dispatcher, firstAdapter, "conv-1", "profile-1", "connection-1");
+        fixture.ViewModel.CurrentPrompt = "background prompt";
+        var send = fixture.ViewModel.SendPromptCommand.ExecuteAsync(null);
+        try
+        {
+            await WaitForPromptOperationConditionAsync(dispatcher, () => entered.Task.IsCompleted);
+            await SelectPromptOperationConversationAsync(fixture, dispatcher, secondAdapter, "conv-2", "profile-2", "connection-2");
+            fixture.ViewModel.CurrentPrompt = "foreground draft";
+            firstAdapter.ReleaseUnscopedBufferedUpdates();
+            if (anotherSessionIsHydrating) firstAdapter.BeginHydrationBufferingScope("another-remote");
+
+            // Act: ACP delivers every chunk before its response; only native UI dispatch is delayed.
+            for (var index = 0; index < chunkCount; index++)
+            {
+                first.Raise(service => service.SessionUpdateReceived += null,
+                    new SessionUpdateEventArgs("remote-shared", new AgentMessageUpdate(new TextContentBlock("reply"))));
+            }
+            response.SetResult(new SessionPromptResponse(StopReason.EndTurn) { HasStopReason = true });
+            await dispatcher.RunUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            adapterDispatcher.RunAll();
+            var completed = Task.WhenAll(send, WaitForPendingSessionUpdatesAsync(fixture.ViewModel));
+            await WaitForPromptOperationConditionAsync(dispatcher, () =>
+            {
+                adapterDispatcher.RunAll();
+                return completed.IsCompleted;
+            });
+            await completed;
+
+            // Assert
+            var state = await fixture.GetStateAsync();
+            var turn = state.ResolveTurn("conv-1");
+            Assert.Equal(ChatTurnPhase.Completed, turn?.Phase);
+            Assert.Equal(string.Concat(Enumerable.Repeat("reply", chunkCount)),
+                string.Concat(state.ResolveContentSlice("conv-1")!.Value.Transcript.Where(message => !message.IsOutgoing).Select(message => message.TextContent)));
+            var attention = (await fixture.GetAttentionStateAsync()).Conversations.GetValueOrDefault("conv-1");
+            Assert.NotNull(attention);
+            Assert.True(attention.HasUnread);
+            Assert.Same(state.ResolveContentSlice("conv-1")!.Value.Transcript.Last(), attention.Content);
+            Assert.Equal(ConversationStatusGroup.NeedsAttention, ConversationStatusPolicy.Resolve(turn, default, attention).Group);
+            Assert.Equal("conv-2", fixture.ViewModel.CurrentSessionId);
+            Assert.Equal("foreground draft", fixture.ViewModel.CurrentPrompt);
+        }
+        finally
+        {
+            firstAdapter.SuppressAllBufferedUpdates("TestCleanup");
+            adapterDispatcher.RunAll();
+            response.TrySetCanceled(TestContext.Current.CancellationToken);
+            await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.DrainPromptOperationsAsync(TestContext.Current.CancellationToken));
+        }
+    }
+
+    [Theory(Timeout = 15000)]
+    [InlineData(AcpConnectionRetirementReason.TransportLost, ChatTurnPhase.Failed)]
+    [InlineData(AcpConnectionRetirementReason.Replaced, ChatTurnPhase.Failed)]
+    [InlineData(AcpConnectionRetirementReason.Disconnected, ChatTurnPhase.Cancelled)]
+    [InlineData(AcpConnectionRetirementReason.Shutdown, ChatTurnPhase.Cancelled)]
+    public async Task SendPrompt_BackgroundConnectionRetires_CommitsTerminalReasonBeforeCancellingOperation(
+        AcpConnectionRetirementReason reason, ChatTurnPhase expectedPhase)
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var phaseAtCancellation = new TaskCompletionSource<ChatTurnPhase?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<SessionPromptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = CreateConnectedChatService();
+        var second = CreateConnectedChatService();
+        ViewModelFixture? fixtureReference = null;
+        first.Setup(service => service.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
+            .Returns<SessionPromptParams, CancellationToken>(async (_, token) =>
+            {
+                using var registration = token.Register(() =>
+                {
+                    phaseAtCancellation.TrySetResult(fixtureReference!.ChatStore.ReadCommittedState()?.ResolveTurn("conv-1")?.Phase);
+                    response.TrySetCanceled(token);
+                });
+                entered.TrySetResult();
+                return await response.Task.ConfigureAwait(false);
+            });
+        using var firstAdapter = new AcpChatServiceAdapter(first.Object, new AcpEventAdapter(_ => { }, dispatcher));
+        using var secondAdapter = new AcpChatServiceAdapter(second.Object, new AcpEventAdapter(_ => { }, dispatcher));
+        await using var fixture = CreateViewModel(dispatcher, acpConnectionCommands: CreatePromptOperationCommands().Object,
+            connectionSessionRegistry: registry);
+        fixtureReference = fixture;
+        registry.Upsert(new("profile-1", firstAdapter, new InitializeResponse(), default, "connection-1"));
+        registry.Upsert(new("profile-2", secondAdapter, new InitializeResponse(), default, "connection-2"));
+        await SelectPromptOperationConversationAsync(fixture, dispatcher, firstAdapter, "conv-1", "profile-1", "connection-1");
+        fixture.ViewModel.CurrentPrompt = "background prompt";
+        var send = fixture.ViewModel.SendPromptCommand.ExecuteAsync(null);
+        try
+        {
+            await WaitForPromptOperationConditionAsync(dispatcher, () => entered.Task.IsCompleted);
+            await SelectPromptOperationConversationAsync(fixture, dispatcher, secondAdapter, "conv-2", "profile-2", "connection-2");
+            fixture.ViewModel.CurrentPrompt = "foreground draft";
+
+            // Act
+            registry.RemoveByProfile("profile-1", reason);
+            await AwaitPromptOperationTaskAsync(dispatcher, send);
+            await AwaitPromptOperationTaskAsync(dispatcher, WaitForPendingSessionUpdatesAsync(fixture.ViewModel));
+
+            // Assert: the synchronous token callback makes the cancellation race deterministic.
+            Assert.Equal(expectedPhase, await phaseAtCancellation.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            var state = await fixture.GetStateAsync();
+            var turn = state.ResolveTurn("conv-1");
+            Assert.Equal(expectedPhase, turn?.Phase);
+            Assert.Equal(expectedPhase == ChatTurnPhase.Failed ? ConversationStatusGroup.NeedsAttention : ConversationStatusGroup.Other,
+                ConversationStatusPolicy.Resolve(turn, default, null).Group);
+            Assert.Equal("conv-2", fixture.ViewModel.CurrentSessionId);
+            Assert.Equal("foreground draft", fixture.ViewModel.CurrentPrompt);
+            Assert.Null(state.ActiveTurn);
+            Assert.Same(secondAdapter, fixture.ViewModel.CurrentChatService);
+        }
+        finally
+        {
+            response.TrySetCanceled(TestContext.Current.CancellationToken);
             await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.DrainPromptOperationsAsync(TestContext.Current.CancellationToken));
         }
     }

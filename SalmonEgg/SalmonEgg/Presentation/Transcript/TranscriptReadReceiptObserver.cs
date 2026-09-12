@@ -246,8 +246,11 @@ internal sealed class TranscriptReadReceiptObserver : IDisposable
 
         private static FrameworkElement? ResolveContentTemplateRoot(DependencyObject element)
         {
-            if (element is ContentPresenter { ContentTemplateRoot: FrameworkElement root }) return root;
             if (element is ContentControl { ContentTemplateRoot: FrameworkElement controlRoot }) return controlRoot;
+            // WinUI exposes ContentTemplateRoot on ContentControl, not ContentPresenter.
+            // Its native visual child is the data template root on both WinUI and Uno.
+            if (element is ContentPresenter && VisualTreeHelper.GetChildrenCount(element) > 0
+                && VisualTreeHelper.GetChild(element, 0) is FrameworkElement root) return root;
             for (var index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
             {
                 // Only the native container template is inspected. Third-party Markdown content
@@ -263,6 +266,8 @@ internal sealed class TranscriptReadReceiptObserver : IDisposable
                 || _content is not { IsLoaded: true, Visibility: Visibility.Visible } content
                 || content.ActualWidth <= 0 || content.ActualHeight <= 0
                 || _owner._effectiveViewport is not { IsEmpty: false, Width: > 0, Height: > 0 } viewport) return false;
+            if (content is MarkdownTextPresenter markdown
+                && (!markdown.IsContentFormatted || markdown.Text != _message.DisplayBodyText)) return false;
             // The stable list reports clipping from enclosing viewports. Native transforms
             // locate the content after scrolling even when its item container was recycled.
             var end = content.TransformToVisual(_owner._list).TransformPoint(new Point(0, content.ActualHeight));
