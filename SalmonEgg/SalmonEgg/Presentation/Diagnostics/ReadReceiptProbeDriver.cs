@@ -119,7 +119,7 @@ internal static class ReadReceiptProbeDriver
 
             if (Environment.GetEnvironmentVariable("SALMONEGG_READ_RECEIPT_IMAGE_URL") is { Length: > 0 } imageUrl)
             {
-                if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer", "Child"))
+                if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer, Uno.UI", "Child"))
                     throw new InvalidOperationException("This fallback gate requires a renderer without native inline images.");
                 var imageMessage = CreateMessage($"**Delayed image result**\n\n![Result image]({imageUrl})");
                 var imageVersion = await MarkAsync(attention, conversationId, connectionId, imageMessage);
