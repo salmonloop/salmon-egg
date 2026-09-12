@@ -554,7 +554,8 @@ public sealed class NavigationCoreTests
         Assert.Contains("MainNavigationAutomationIds.AddProject()", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.ProjectItem(ProjectId)", xaml, StringComparison.Ordinal);
         Assert.Contains("MainNavigationAutomationIds.SessionItem(SessionId)", xaml, StringComparison.Ordinal);
-        Assert.Contains("MainNavigationAutomationIds.MoreItem(ProjectId)", xaml, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationAutomationIds.MoreGroupItem(ProjectId, StatusGroup)", xaml, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationAutomationIds.StatusGroupItem(Group)", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

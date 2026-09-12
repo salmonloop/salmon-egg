@@ -51,12 +51,6 @@ public sealed partial class UiMotionController : ObservableObject
             : new SuppressNavigationTransitionInfo();
 
     /// <summary>
-    /// Entrance transitions for sidebar items.
-    /// </summary>
-    public TransitionCollection? NavItemTransitions =>
-        IsEffectiveAnimationEnabled ? CreateEntranceTransitions(8, 0) : null;
-
-    /// <summary>
     /// Transitions for small status icon changes.
     /// </summary>
     public TransitionCollection? StatusIconTransitions =>
@@ -65,20 +59,7 @@ public sealed partial class UiMotionController : ObservableObject
     private void NotifyMotionPolicyChanged()
     {
         OnPropertyChanged(nameof(IsEffectiveAnimationEnabled));
-        OnPropertyChanged(nameof(NavItemTransitions));
         OnPropertyChanged(nameof(StatusIconTransitions));
-    }
-
-    private static TransitionCollection CreateEntranceTransitions(double fromHorizontal, double fromVertical)
-    {
-        return new TransitionCollection
-        {
-            new EntranceThemeTransition
-            {
-                FromHorizontalOffset = fromHorizontal,
-                FromVerticalOffset = fromVertical
-            }
-        };
     }
 
     private static TransitionCollection CreateStatusIconTransitions()

@@ -42,6 +42,7 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
     private readonly IAcpConnectionSessionRegistry _sessionRegistry;
     private readonly IAcpConnectionSessionCleaner _sessionCleaner;
     private readonly ILogger<AcpConnectionPoolManager> _logger;
+    private readonly IAcpConnectionDependencySnapshotProvider? _dependencySnapshotProvider;
     private long _cleanupCount;
     private long _cacheHits;
     private long _cacheMisses;
@@ -50,11 +51,13 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
     public AcpConnectionPoolManager(
         IAcpConnectionSessionRegistry sessionRegistry,
         IAcpConnectionSessionCleaner sessionCleaner,
-        ILogger<AcpConnectionPoolManager> logger)
+        ILogger<AcpConnectionPoolManager> logger,
+        IAcpConnectionDependencySnapshotProvider? dependencySnapshotProvider = null)
     {
         _sessionRegistry = sessionRegistry ?? throw new ArgumentNullException(nameof(sessionRegistry));
         _sessionCleaner = sessionCleaner ?? throw new ArgumentNullException(nameof(sessionCleaner));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _dependencySnapshotProvider = dependencySnapshotProvider;
     }
 
     public async Task<AcpConnectionSessionCleanupResult> CleanupBeforeApplyAsync(
@@ -69,7 +72,8 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
                 activeService,
                 isPinned: session => IsSoftPinnedSession(session, dependencySnapshot),
                 isHardPinned: session => IsHardPinnedSession(session, dependencySnapshot),
-                cancellationToken: cancellationToken)
+                cancellationToken: cancellationToken,
+                retainBeforeEvictionAsync: _dependencySnapshotProvider is null ? null : RetainBeforeEvictionAsync)
             .ConfigureAwait(false);
 
         var cleanupCount = Interlocked.Increment(ref _cleanupCount);
@@ -83,6 +87,12 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
         }
 
         return result;
+    }
+
+    private async ValueTask<bool> RetainBeforeEvictionAsync(AcpConnectionSession session, CancellationToken cancellationToken)
+    {
+        var latest = await _dependencySnapshotProvider!.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        return IsHardPinnedSession(session, latest);
     }
 
     public bool TryGetReusableSession(
@@ -169,5 +179,7 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
         AcpConnectionSession session,
         AcpConnectionDependencySnapshot dependencySnapshot)
         => !string.IsNullOrWhiteSpace(dependencySnapshot.SelectedProfileId)
-           && string.Equals(session.ProfileId, dependencySnapshot.SelectedProfileId, StringComparison.Ordinal);
+           && string.Equals(session.ProfileId, dependencySnapshot.SelectedProfileId, StringComparison.Ordinal)
+           || session.ConnectionInstanceId is { } connectionInstanceId
+               && dependencySnapshot.BusyConnections.Contains((session.ProfileId, connectionInstanceId));
 }

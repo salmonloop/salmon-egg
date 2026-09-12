@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using Uno.Extensions.Reactive;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -16,6 +19,11 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IDisposable? _attentionSubscription;
     private readonly IState<ConversationAttentionState> _attentionStateFeed;
+    private readonly IDisposable? _chatSubscription;
+    private readonly IState<ConversationStatusState>? _chatStateFeed;
+    private readonly ChatConversationPanelStateCoordinator? _panels;
+    private IImmutableDictionary<string, ActiveTurnState>? _turns;
+    private IImmutableDictionary<string, ConversationOperationFailure>? _operationFailures;
     private ConversationAttentionState _attentionState;
     private IReadOnlyList<ConversationCatalogDisplayItem> _snapshot = Array.Empty<ConversationCatalogDisplayItem>();
     private bool _isConversationListLoading = true;
@@ -25,11 +33,15 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
     public ConversationCatalogDisplayPresenter(
         IConversationCatalogReadModel catalogPresenter,
         IConversationAttentionStore attentionStore,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        IChatStore? chatStore = null,
+        ChatConversationPanelStateCoordinator? panels = null)
     {
         _catalogPresenter = catalogPresenter ?? throw new ArgumentNullException(nameof(catalogPresenter));
         _attentionStore = attentionStore ?? throw new ArgumentNullException(nameof(attentionStore));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
+        _panels = panels;
+        if (_panels is not null) _panels.Changed += OnInteractionChanged;
 
         _attentionState = ConversationAttentionState.Empty;
         _attentionStateFeed = State.FromFeed(this, _attentionStore.State);
@@ -47,6 +59,28 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
             PublishAttentionState(state);
             return ValueTask.CompletedTask;
         }, out _attentionSubscription);
+
+        if (chatStore is not null)
+        {
+            _chatStateFeed = State.FromFeed(this, chatStore.State.Select(state =>
+                new ConversationStatusState(state?.Turns, state?.OperationFailures)));
+            _chatStateFeed.ForEach((state, token) =>
+            {
+                if (state is not null && !token.IsCancellationRequested)
+                {
+                    RunOnUi(() =>
+                    {
+                        if (ReferenceEquals(_turns, state.Turns)
+                            && ReferenceEquals(_operationFailures, state.OperationFailures)) return;
+                        _turns = state.Turns;
+                        _operationFailures = state.OperationFailures;
+                        RefreshProjection();
+                    });
+                }
+
+                return ValueTask.CompletedTask;
+            }, out _chatSubscription);
+        }
     }
 
     public bool IsConversationListLoading
@@ -77,7 +111,11 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
         _disposed = true;
         _catalogPresenter.PropertyChanged -= OnCatalogPresenterPropertyChanged;
         _attentionSubscription?.Dispose();
+        _chatSubscription?.Dispose();
+        if (_panels is not null) _panels.Changed -= OnInteractionChanged;
     }
+
+    private void OnInteractionChanged(string conversationId) => RunOnUi(RefreshProjection);
 
     private void OnCatalogPresenterPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -118,6 +156,11 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
         {
             var hasUnreadAttention = _attentionState.TryGetConversation(item.ConversationId, out var attention)
                 && attention is { HasUnread: true };
+            var status = ConversationStatusPolicy.Resolve(
+                _turns?.GetValueOrDefault(item.ConversationId),
+                _panels?.GetSummary(item.ConversationId) ?? default,
+                attention,
+                _operationFailures?.GetValueOrDefault(item.ConversationId));
 
             projectedSnapshot.Add(new ConversationCatalogDisplayItem(
                 item.ConversationId,
@@ -129,12 +172,15 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
                 hasUnreadAttention,
                 item.RemoteSessionId,
                 item.BoundProfileId,
-                item.ProjectAffinityOverrideProjectId));
+                item.ProjectAffinityOverrideProjectId,
+                status.Group,
+                status.Icon,
+                status.ActivityAt));
         }
 
         IsConversationListLoading = _catalogPresenter.IsConversationListLoading;
         ConversationListVersion = _catalogPresenter.ConversationListVersion;
-        Snapshot = projectedSnapshot;
+        if (!_snapshot.SequenceEqual(projectedSnapshot)) Snapshot = projectedSnapshot;
     }
 
     private void RunOnUi(Action action)
@@ -152,4 +198,8 @@ public sealed class ConversationCatalogDisplayPresenter : ObservableObject, ICon
 
         _uiDispatcher.Enqueue(action);
     }
+
+    private sealed record ConversationStatusState(
+        IImmutableDictionary<string, ActiveTurnState>? Turns,
+        IImmutableDictionary<string, ConversationOperationFailure>? OperationFailures);
 }

@@ -1793,6 +1793,9 @@ public sealed class AcpConnectionSettingsViewModelTests
         public Task DisconnectAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
+        public Task ReevaluatePoolAsync(SalmonEgg.Application.Services.Chat.IChatService? activeService, System.Threading.CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task<AcpTransportApplyResult> ConnectProfileInPoolAsync(ServerConfiguration profile, IAcpTransportConfiguration transportConfiguration, System.Threading.CancellationToken cancellationToken = default)
         {
             PoolConnectedProfiles.Add(profile);

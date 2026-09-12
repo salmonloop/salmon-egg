@@ -85,6 +85,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         ArgumentNullException.ThrowIfNull(markHydrated);
 
         var chatService = RequireReadyChatService(sink);
+        var connectionInstanceId = sink.ConnectionInstanceId;
         if (!sink.IsSessionActive || string.IsNullOrWhiteSpace(sink.CurrentSessionId))
         {
             throw new InvalidOperationException(
@@ -99,6 +100,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             .ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(currentBinding?.RemoteSessionId))
         {
+            ThrowIfConversationChanged(sink, conversationId, selectedProfileId, cancellationToken);
+            ThrowIfConnectionChanged(sink, chatService, connectionInstanceId, cancellationToken);
             return new AcpRemoteSessionResult(
                 currentBinding.RemoteSessionId!,
                 new SessionNewResponse(currentBinding.RemoteSessionId!),
@@ -115,6 +118,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         SessionNewResponse response;
         try
         {
+            ThrowIfConversationChanged(sink, conversationId, selectedProfileId, cancellationToken);
+            ThrowIfConnectionChanged(sink, chatService, connectionInstanceId, cancellationToken);
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
         catch (Exception ex) when (AcpErrorClassifier.IsAuthenticationRequired(ex))
@@ -129,6 +134,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
             ThrowIfConversationChanged(sink, conversationId, selectedProfileId, cancellationToken);
             chatService = RequireReadyChatService(sink);
+            connectionInstanceId = sink.ConnectionInstanceId;
             sessionParams = new SessionNewParams(
                 activeSessionCwd,
                 McpServerSnapshots.CloneServers(
@@ -137,6 +143,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
 
+        ThrowIfConnectionChanged(sink, chatService, connectionInstanceId, cancellationToken);
         await UpdateBindingForConversationAsync(sink, conversationId, response.SessionId, selectedProfileId)
             .ConfigureAwait(false);
         markHydrated();
@@ -261,6 +268,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var conversationId = sink.CurrentSessionId;
         var profileId = sink.SelectedProfileId;
         var chatService = RequireReadyChatService(sink);
+        var connectionInstanceId = sink.ConnectionInstanceId;
         var promptParams = new SessionPromptParams(
             remoteSessionId,
             new List<ContentBlock> { new TextContentBlock { Text = promptText } });
@@ -269,6 +277,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         {
             cancellationToken.ThrowIfCancellationRequested();
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
+            ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
+            ThrowIfConnectionChanged(sink, chatService, connectionInstanceId, cancellationToken);
             var response = await chatService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: false);
         }
@@ -285,6 +295,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
             var retryService = RequireReadyChatService(sink);
+            connectionInstanceId = sink.ConnectionInstanceId;
             var reconnected = !ReferenceEquals(chatService, retryService);
             if (reconnected)
             {
@@ -304,6 +315,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             }
 
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
+            ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
+            ThrowIfConnectionChanged(sink, retryService, connectionInstanceId, cancellationToken);
             var response = await retryService.SendPromptAsync(promptParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(promptParams.SessionId, response, RetriedAfterSessionRecovery: reconnected);
         }
@@ -321,16 +334,24 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
                     ex);
             }
 
-            await sink.ConversationBindingCommands
+            var clearResult = await sink.ConversationBindingCommands
                 .ClearBindingAsync(conversationId!)
                 .ConfigureAwait(false);
+            if (clearResult.Status != BindingUpdateStatus.Success)
+            {
+                throw new InvalidOperationException(ResolveBindingErrorDetail(clearResult.ErrorMessage));
+            }
             var recovered = await ensureRemoteSessionAsync(
                     sink, authenticateAsync, static () => { }, cancellationToken)
                 .ConfigureAwait(false);
             var recoveredParams = new SessionPromptParams(recovered.RemoteSessionId, promptParams.Prompt);
             cancellationToken.ThrowIfCancellationRequested();
+            var recoveredService = RequireReadyChatService(sink);
+            var recoveredConnectionInstanceId = sink.ConnectionInstanceId;
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
-            var recoveredResponse = await RequireReadyChatService(sink).SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
+            ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
+            ThrowIfConnectionChanged(sink, recoveredService, recoveredConnectionInstanceId, cancellationToken);
+            var recoveredResponse = await recoveredService.SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(recovered.RemoteSessionId, recoveredResponse, RetriedAfterSessionRecovery: true);
         }
     }
@@ -346,6 +367,20 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         }
     }
 
+    private static void ThrowIfConnectionChanged(
+        IAcpChatCoordinatorSink sink,
+        IChatService service,
+        string? connectionInstanceId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(service, sink.CurrentChatService)
+            || !string.Equals(connectionInstanceId, sink.ConnectionInstanceId, StringComparison.Ordinal))
+        {
+            throw new OperationCanceledException("The prompt connection changed before dispatch.", cancellationToken);
+        }
+    }
+
     public async Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
         CancellationToken cancellationToken = default)
@@ -353,6 +388,9 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         ArgumentNullException.ThrowIfNull(sink);
 
         var chatService = sink.CurrentChatService;
+        var conversationId = sink.CurrentSessionId;
+        var profileId = sink.SelectedProfileId;
+        var connectionInstanceId = sink.ConnectionInstanceId;
         var currentBinding = await sink.GetCurrentRemoteBindingAsync(cancellationToken).ConfigureAwait(false);
         if (chatService == null || string.IsNullOrWhiteSpace(currentBinding?.RemoteSessionId))
         {
@@ -360,6 +398,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfConversationChanged(sink, conversationId, profileId, cancellationToken);
+        ThrowIfConnectionChanged(sink, chatService, connectionInstanceId, cancellationToken);
         await chatService.CancelSessionAsync(
             new SessionCancelParams(currentBinding.RemoteSessionId!)).ConfigureAwait(false);
     }

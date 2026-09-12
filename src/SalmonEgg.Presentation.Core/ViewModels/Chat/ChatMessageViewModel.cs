@@ -481,7 +481,19 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 RefreshMarkdownPresentation();
                 RefreshToolCallDetails();
                 UpdateToolCallState();
+                UpdatePresentedSnapshot(snapshot);
             }
+        }
+
+        // The immutable projection replaces a snapshot even when the message ID and layout size
+        // stay unchanged. A read receipt must identify that exact content, never a later version.
+        public ConversationMessageSnapshot? PresentedSnapshot { get; private set; }
+
+        internal void UpdatePresentedSnapshot(ConversationMessageSnapshot snapshot)
+        {
+            if (ReferenceEquals(PresentedSnapshot, snapshot)) return;
+            PresentedSnapshot = snapshot;
+            OnPropertyChanged(nameof(PresentedSnapshot));
         }
 
         private void NotifyDisplayBodyChanged()

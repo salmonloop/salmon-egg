@@ -1525,4 +1525,40 @@
   <data name="SessionConfig_Failed" xml:space="preserve">
     <value>设置未能应用，编辑已保留，请重试。</value>
   </data>
+  <data name="Nav_StatusNeedsAttention" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
+  <data name="Nav_StatusWorkingGroup" xml:space="preserve">
+    <value>Working</value>
+  </data>
+  <data name="Nav_StatusOther" xml:space="preserve">
+    <value>Other sessions</value>
+  </data>
+  <data name="Nav_StatusUnread" xml:space="preserve">
+    <value>New reply, unread</value>
+  </data>
+  <data name="Nav_StatusPermission" xml:space="preserve">
+    <value>Waiting for approval</value>
+  </data>
+  <data name="Nav_StatusInput" xml:space="preserve">
+    <value>Waiting for your response</value>
+  </data>
+  <data name="Nav_StatusError" xml:space="preserve">
+    <value>Needs your attention</value>
+  </data>
+  <data name="Nav_StatusWorking" xml:space="preserve">
+    <value>Working</value>
+  </data>
+  <data name="Nav_StatusConversation" xml:space="preserve">
+    <value>Conversation</value>
+  </data>
+  <data name="ChatOperation_BackgroundResyncFailed" xml:space="preserve">
+    <value>Could not recover this conversation. Reconnect to continue.</value>
+  </data>
+  <data name="ChatOperation_ConnectionInterrupted" xml:space="preserve">
+    <value>The connection was interrupted. Reconnect to continue.</value>
+  </data>
+  <data name="ChatOperation_MissingStopReason" xml:space="preserve">
+    <value>The agent ended the response without an ACP stop reason.</value>
+  </data>
 </root>

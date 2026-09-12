@@ -67,7 +67,7 @@ public sealed partial class WasmPlatformShellService : IPlatformShellService
         }
     }
 
-    private static async Task EnsureShellModuleImportedAsync(CancellationToken cancellationToken)
+    internal static async Task EnsureShellModuleImportedAsync(CancellationToken cancellationToken)
     {
         if (_shellModule != null)
         {
