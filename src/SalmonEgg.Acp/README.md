@@ -47,7 +47,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. Interactive Windows WinUI stdio connections advertise terminal authentication and use a separate ConPTY after user consent. | Other hosts need their own interactive login and trustworthy process-exit acceptance before opting in; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
-| URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM, Linux/macOS desktop and Windows WinUI through the platform capability service. Native hosts use the system browser after explicit consent. | Product gates exercise real cards, protocol peers, native pointer input and isolated external browsers; Windows uses the current installed MSIX. Other native platforms and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
+| URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM, Linux/macOS desktop, Windows WinUI and Android through platform services. Native hosts use the system browser after explicit consent. | Product gates exercise real cards, protocol peers, native input and isolated external browsers; Windows uses the installed MSIX and Android uses the installed APK. iOS and independent real-Agent acceptance are tracked in [#154](https://github.com/salmonloop/salmon-egg/issues/154); [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks complete elicitation delivery. |
 | ACP v2 | Explicit opt-in enables the staged lifecycle while ordinary initialization continues to reject V2. The existing application event stream carries complete entity views without a draft-type dependency. | V2 remains an upstream draft. The official Rust echo Agent is interoperable; LLM Agent/platform acceptance must be reported separately in [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 Internal v2 batch validation follows the upstream schema at
@@ -262,11 +262,12 @@ cancellation callbacks run asynchronously and cannot delay disconnect. Callback 
 observed without logging their potentially private data.
 
 SalmonEgg currently presents session-scoped requests. Request-scoped requests are explicitly
-cancelled when no conversation surface can present them. WASM, Linux desktop, macOS desktop and
-Windows WinUI advertise URL elicitation after their own product consent-to-browser gates. Native
-gates use real cards, native pointer input and the system opener; Windows runs the current signed
-MSIX. These deterministic protocol fixtures do not substitute for third-party Agent acceptance.
-Other native targets require their own installed application acceptance before enabling the capability.
+cancelled when no conversation surface can present them. WASM, Linux/macOS desktop, Windows
+WinUI and Android register URL capability with their product acceptance gates. Windows exercises
+the installed MSIX; Android installs the current APK on an isolated emulator; desktop gates use
+the current Skia app and system browser. These deterministic fixtures do not substitute for
+independent Agent interoperability or physical-device release validation. Other native targets
+require their own installed-application acceptance before enabling the capability.
 
 ## ACP v2 draft surface (SEACP002)
 
