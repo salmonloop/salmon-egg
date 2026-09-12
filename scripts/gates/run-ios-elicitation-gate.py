@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import signal
 import socket
 import subprocess
@@ -58,6 +59,8 @@ def main(args):
     assert binary.is_file(), "The current build has no app binary"
     simulator = None
     peer = None
+    product_process = None
+    root = None
     installed = False
     try:
         listing = json.loads(output(["xcrun", "simctl", "list", "--json"]))
@@ -93,6 +96,11 @@ def main(args):
             time.sleep(0.05)
         endpoints = json.loads(ready.read_text())
         root = seed(container, endpoints["endpoint"])
+        # Capture the normal launch's output, including failures before a native window exists.
+        with (artifacts / "product-console.log").open("w") as log:
+            product_process = subprocess.Popen(["xcrun", "simctl", "launch", "--console", simulator, bundle_id],
+                env=dict(os.environ, SIMCTL_CHILD_SALMONEGG_GUI="1"),
+                stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         provenance = {"head": output(["git", "-C", str(repo), "rev-parse", "HEAD"]),
                       "app": str(app), "bundleId": bundle_id, "version": info["CFBundleVersion"],
                       "binarySha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -129,6 +137,15 @@ def main(args):
             "formAnswer": True, "noExternalDataPersistence": True}, indent=2) + "\n")
         print("iOS installed product: consent, form, Safari isolation and completion passed")
     finally:
+        if root is not None:
+            logs = artifacts / "product-logs"
+            logs.mkdir(exist_ok=True)
+            for path in root.rglob("*.log"):
+                target = logs / path.relative_to(root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, target)
+            (artifacts / "product-files.json").write_text(json.dumps(
+                [str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()], indent=2) + "\n")
         if simulator:
             commands = [["xcrun", "simctl", "terminate", simulator, bundle_id]] if installed else []
             commands += [["xcrun", "simctl", "shutdown", simulator], ["xcrun", "simctl", "delete", simulator]]
@@ -138,6 +155,14 @@ def main(args):
                     print("[ios-gate] cleanup", command[2], result.returncode, flush=True)
                 except subprocess.TimeoutExpired:
                     print("[ios-gate] cleanup timed out:", command[2], flush=True)
+        if product_process is not None:
+            if product_process.poll() is None:
+                os.killpg(product_process.pid, signal.SIGTERM)
+            try:
+                product_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(product_process.pid, signal.SIGKILL)
+                product_process.wait(timeout=5)
         if peer is not None:
             if peer.poll() is None:
                 os.killpg(peer.pid, signal.SIGTERM)
