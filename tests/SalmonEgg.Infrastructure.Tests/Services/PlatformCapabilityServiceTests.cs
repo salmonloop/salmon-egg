@@ -13,11 +13,11 @@ namespace SalmonEgg.Infrastructure.Tests.Services;
 public sealed class PlatformCapabilityServiceTests
 {
     [Theory]
-    [InlineData(true, true, true, false)]
+    [InlineData(true, true, true, true)]
     [InlineData(true, true, false, false)]
     [InlineData(true, false, true, false)]
     [InlineData(false, true, true, false)]
-    public void SupportsTerminalAuthentication_ProductHost_RemainsDisabledUntilApplicationGatePasses(
+    public void SupportsTerminalAuthentication_RequiresAcceptedWindowsDesktopAndInteractiveSurface(
         bool windows, bool desktop, bool terminalSurface, bool expected)
     {
         // Arrange
@@ -29,7 +29,7 @@ public sealed class PlatformCapabilityServiceTests
     }
 
     [Fact]
-    public async Task InitializeAsync_ProductionTerminalFactory_DoesNotAdvertiseUnverifiedAuthentication()
+    public async Task InitializeAsync_ProductionTerminalFactory_AdvertisesOnlyInteractiveWindowsSignIn()
     {
         // Arrange
         var platform = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(true, true, true),
@@ -51,8 +51,8 @@ public sealed class PlatformCapabilityServiceTests
 
         // Assert
         Assert.NotNull(sent);
-        Assert.False(factory.IsSupported);
-        Assert.False(sent.ClientCapabilities.Auth?.Terminal == true);
+        Assert.True(factory.IsSupported);
+        Assert.True(sent.ClientCapabilities.Auth?.Terminal == true);
     }
 
     [Fact]
