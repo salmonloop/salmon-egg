@@ -59,11 +59,15 @@ public sealed class UrlElicitationSmokeTests
             fixture.Instruct("disconnect");
             Assert.True(app.WaitUntil(() =>
             {
-                var snapshot = app.MainWindow.FindAllDescendants();
-                var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
-                var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
-                return (link is null || link.Properties.IsOffscreen.ValueOrDefault || string.IsNullOrEmpty(link.Properties.Name.ValueOrDefault))
-                    && (open is null || !open.Properties.IsEnabled.ValueOrDefault);
+                try
+                {
+                    var snapshot = app.MainWindow.FindAllDescendants();
+                    var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
+                    var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
+                    return (link is null || link.Properties.IsOffscreen.ValueOrDefault || string.IsNullOrEmpty(link.Properties.Name.ValueOrDefault))
+                        && (open is null || !open.Properties.IsEnabled.ValueOrDefault);
+                }
+                catch (System.Runtime.InteropServices.COMException) { return false; }
             }, TimeSpan.FromSeconds(15)), "The disconnected request retained its original URL or an active open action.");
             Assert.Empty(fixture.Responses("expire"));
             Assert.Equal(2, fixture.Visits.Count);
@@ -84,11 +88,18 @@ public sealed class UrlElicitationSmokeTests
             var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
             if (!string.IsNullOrWhiteSpace(artifacts))
             {
-                app.CaptureMainWindowToFile(Path.Combine(artifacts, "url-product.png"));
-                var rows = app.MainWindow.FindAllDescendants().Select(element =>
-                    element.Properties.ControlType.ValueOrDefault + " | " + element.Properties.AutomationId.ValueOrDefault
-                    + " | offscreen=" + element.Properties.IsOffscreen.ValueOrDefault + " | " + element.Properties.Name.ValueOrDefault);
-                File.WriteAllLines(Path.Combine(artifacts, "url-native-controls.txt"), rows);
+                try
+                {
+                    app.CaptureMainWindowToFile(Path.Combine(artifacts, "url-product.png"));
+                    var rows = app.MainWindow.FindAllDescendants().Select(element =>
+                        element.Properties.ControlType.ValueOrDefault + " | " + element.Properties.AutomationId.ValueOrDefault
+                        + " | offscreen=" + element.Properties.IsOffscreen.ValueOrDefault + " | " + element.Properties.Name.ValueOrDefault);
+                    File.WriteAllLines(Path.Combine(artifacts, "url-native-controls.txt"), rows);
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    GuiAcceptanceDiagnostics.Record("URL: native diagnostic provider detached after the test");
+                }
             }
         }
     }
@@ -109,9 +120,16 @@ public sealed class UrlElicitationSmokeTests
         {
             // Enumerate native providers first: WinUI lazily materializes the ContentTemplate's
             // peers, while a filtered FindFirst can return no match before those peers exist.
-            found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
-                !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
-            return found is not null;
+            try
+            {
+                found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
+                    !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
+                return found is not null;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                return false; // Requery a replaced native provider within the same bounded wait.
+            }
         }, TimeSpan.FromSeconds(20)), "The current native URL control did not appear.");
         return found!;
     }

@@ -100,9 +100,18 @@ public sealed class TerminalAuthenticationSmokeTests
         AutomationElement? found = null;
         Assert.True(app.WaitUntil(() =>
         {
-            found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
-                !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
-            return found is not null;
+            try
+            {
+                found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
+                    !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
+                return found is not null;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // Native providers can detach while WebView2/ContentDialog materializes its tree.
+                // A stale snapshot is not a match; the bounded next poll must find the real control.
+                return false;
+            }
         }, TimeSpan.FromSeconds(20)), "The requested native terminal element did not appear.");
         return found!;
     }
