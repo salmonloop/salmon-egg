@@ -6,6 +6,7 @@ import XCTest
 final class ElicitationTests: XCTestCase {
     private let product = XCUIApplication(bundleIdentifier: "com.companyname.salmonegg")
     private var control: URL!
+    private var recognizedLines: [String] = []
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -23,17 +24,21 @@ final class ElicitationTests: XCTestCase {
         screenshot.name = "Installed product screen"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        let recognized = XCTAttachment(string: recognizedLines.joined(separator: "\n"))
+        recognized.name = "Last recognized visible labels"
+        recognized.lifetime = .keepAlways
+        add(recognized)
         product.terminate()
     }
 
     func testInstalledProductRequiresConsentAndKeepsBrowserPrivate() async throws {
         // UIKit's current Uno container peers hide nested elements from XCTest. Read the actual
         // screen with Apple's Vision, then deliver a native tap; no product state or test-ID mode.
-        if try textBounds("Native acceptance session") == nil {
+        if try textBounds("Add project") == nil {
             let sidebar = product.buttons["Toggle sidebar"]
             if sidebar.waitForExistence(timeout: 10) && sidebar.isHittable { sidebar.tap() }
         }
-        try await tapVisibleText("Native acceptance session")
+        try await tapVisibleText("Consent session")
         try await eventually("The authoritative session was not loaded") { try await self.state()["loaded"] as? Bool == true }
         let initialState = try await state()
         let capabilities = try XCTUnwrap(initialState["capabilities"] as? [String: Any])
@@ -115,9 +120,12 @@ final class ElicitationTests: XCTestCase {
         request.recognitionLanguages = ["en-US"]
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(data: screenshot.pngRepresentation).perform([request])
+        recognizedLines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         let matches = (request.results ?? []).compactMap { observation -> CGRect? in
-            guard observation.topCandidates(1).first?.string == text else { return nil }
-            return observation.boundingBox
+            guard let candidate = observation.topCandidates(1).first,
+                  let range = candidate.string.range(of: text),
+                  let bounds = try? candidate.boundingBox(for: range) else { return nil }
+            return bounds.boundingBox
         }
         guard matches.count == 1, let rectangle = matches.first else { return nil }
         return CGRect(x: rectangle.minX, y: 1 - rectangle.maxY, width: rectangle.width, height: rectangle.height)
