@@ -78,6 +78,10 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
 
     public bool IsConnected => _inner.IsConnected;
 
+    public bool PublishesConfigurationResponses => _inner.PublishesConfigurationResponses;
+
+    public int NegotiatedProtocolVersion => _inner.NegotiatedProtocolVersion;
+
     public SalmonEgg.Domain.Models.StdioInvocationSnapshot? StdioInvocation
         => (_inner as IStdioInvocationSource)?.StdioInvocation;
 
@@ -171,8 +175,15 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
     public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params)
         => _inner.SetSessionModeAsync(@params);
 
-    public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
-        => _inner.SetSessionConfigOptionAsync(@params);
+    public async Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
+    {
+        var response = await _inner.SetSessionConfigOptionAsync(@params).ConfigureAwait(false);
+        if (PublishesConfigurationResponses)
+        {
+            await _eventAdapter.WaitForAvailableUpdatesAsync().ConfigureAwait(false);
+        }
+        return response;
+    }
 
     public Task CancelSessionAsync(SessionCancelParams @params)
         => _inner.CancelSessionAsync(@params);

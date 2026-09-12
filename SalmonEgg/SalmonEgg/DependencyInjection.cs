@@ -533,6 +533,10 @@ public static class DependencyInjection
                 : new UnsupportedTerminalSessionManager());
 #endif
         services.AddSingleton<ITransportErrorMessageFormatter, TransportErrorMessageFormatter>();
+        // Explicit process opt-in, never inferred from the SDK's modeled-version ceiling.
+        // Every connection factory and initialize path consumes this same immutable policy.
+        services.AddSingleton(new SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy(
+            string.Equals(Environment.GetEnvironmentVariable("SALMONEGG_EXPERIMENTAL_ACP_V2"), "1", StringComparison.Ordinal)));
         services.AddSingleton<IAcpClientFactory, AcpClientFactory>();
 
         // ACP setup wizard. The catalog is pure data and safe everywhere; every probing, installing and
@@ -648,7 +652,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>(),
                 platformCapabilities: sp.GetRequiredService<IPlatformCapabilityService>(),
-                localizer: sp.GetRequiredService<IStringLocalizer<CoreStrings>>());
+                localizer: sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                protocolExperiment: sp.GetRequiredService<SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy>());
         });
         services.AddSingleton(sp =>
         {

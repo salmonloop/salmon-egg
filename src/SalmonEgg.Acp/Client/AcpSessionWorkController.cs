@@ -166,10 +166,12 @@ internal sealed class AcpSessionWorkController
         string sessionId,
         SessionUpdate update,
         CancellationToken connectionToken,
-        JsonElement? draftPayload = null)
+        JsonElement? draftPayload,
+        out AcpSessionUpdateView? view)
     {
         lock (_gate)
         {
+            view = null;
             if (!IsCurrent(connectionToken) || _closedSessions.Contains(sessionId))
             {
                 return false;
@@ -180,6 +182,7 @@ internal sealed class AcpSessionWorkController
             {
                 session.Projection ??= new AcpSessionProjection();
                 session.Projection.Apply(update, payload);
+                view = session.Projection.CreateView(update);
             }
 
             if (update is not StateSessionUpdate workUpdate)
@@ -204,6 +207,9 @@ internal sealed class AcpSessionWorkController
             return true;
         }
     }
+
+    internal bool ReceiveUpdate(string sessionId, SessionUpdate update, CancellationToken connectionToken, JsonElement? draftPayload = null)
+        => ReceiveUpdate(sessionId, update, connectionToken, draftPayload, out _);
 
     internal Task<SessionPromptCompletion>? RequestCancellation(string sessionId, CancellationToken connectionToken)
     {

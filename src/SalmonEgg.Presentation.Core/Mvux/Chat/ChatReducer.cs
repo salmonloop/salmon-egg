@@ -134,6 +134,15 @@ public static class ChatReducer
                             ResolveTranscript(current, upsertMessage.ConversationId),
                             upsertMessage.Message)))
             }),
+            ReplaceProtocolMessageAction replaceMessage => Mutate(current, current with
+            {
+                ConversationContents = UpdateConversationContents(
+                    current.ConversationContents,
+                    replaceMessage.ConversationId,
+                    BuildUpdatedContentSlice(
+                        current.ResolveContentSlice(replaceMessage.ConversationId),
+                        transcript: ReplaceProtocolMessage(ResolveTranscript(current, replaceMessage.ConversationId), replaceMessage)))
+            }),
             SetConversationSessionStateAction setSessionState => Mutate(current, current with
             {
                 ConversationSessionStates = UpdateConversationSessionStates(
@@ -572,6 +581,28 @@ public static class ChatReducer
         }
 
         return current.Add(message);
+    }
+
+    private static IImmutableList<ConversationMessageSnapshot> ReplaceProtocolMessage(
+        IImmutableList<ConversationMessageSnapshot>? transcript, ReplaceProtocolMessageAction replacement)
+    {
+        var current = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var firstIndex = -1;
+        var result = ImmutableList.CreateBuilder<ConversationMessageSnapshot>();
+        foreach (var message in current)
+        {
+            if (message.IsOutgoing == replacement.IsOutgoing
+                && (string.Equals(message.ProtocolMessageId, replacement.ProtocolMessageId, StringComparison.Ordinal)
+                    || (replacement.ReplacedLocalMessageId is not null
+                        && string.Equals(message.Id, replacement.ReplacedLocalMessageId, StringComparison.Ordinal))))
+            {
+                if (firstIndex < 0) firstIndex = result.Count;
+                continue;
+            }
+            result.Add(message);
+        }
+        result.InsertRange(firstIndex < 0 ? result.Count : firstIndex, replacement.Messages);
+        return result.ToImmutable();
     }
 
     private static IImmutableList<ConversationMessageSnapshot> AppendTranscriptDelta(

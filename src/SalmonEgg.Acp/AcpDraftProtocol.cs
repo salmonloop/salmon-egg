@@ -46,9 +46,9 @@ namespace SalmonEgg.Acp
         /// today, because the client will not negotiate v2 at all.
         /// </summary>
         internal const string Message =
-            "This is ACP v2 draft surface: the wire contract is modeled, but v2 is still an upstream "
-            + "draft and no live SalmonEgg.Acp client negotiates it, so nothing built on this type can "
-            + "talk to a real Agent yet. Shapes may change or be removed as upstream v2 settles. See "
+            "This is ACP v2 draft surface: the wire contract remains experimental and requires "
+            + "explicit client opt-in before V2 negotiation. The default stays on stable V1. "
+            + "Shapes may change or be removed as upstream v2 settles. See "
             + "https://github.com/salmonloop/salmon-egg/blob/main/src/SalmonEgg.Acp/README.md#acp-v2-draft-surface-seacp002";
 
         /// <summary>

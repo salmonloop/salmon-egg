@@ -41,6 +41,7 @@ namespace SalmonEgg.Application.Services.Chat
         private const string OperationCanceledTypeName = "System.OperationCanceledException";
 
         private readonly object _stateGate = new();
+        private readonly object _sessionUpdateGate = new();
         private readonly HashSet<string> _configAuthoritativeSessionIds = new(StringComparer.Ordinal);
         private string? _currentSessionId;
         private Plan? _currentPlan;
@@ -101,6 +102,10 @@ namespace SalmonEgg.Application.Services.Chat
         public event EventHandler<ElicitationCompletedEventArgs>? ElicitationCompleted;
         public event EventHandler<string>? ErrorOccurred;
 
+        public bool PublishesConfigurationResponses => _acpClient.PublishesConfigurationResponses;
+
+        public int NegotiatedProtocolVersion => _acpClient.NegotiatedProtocolVersion;
+
         public ChatService(
             IAcpClient acpClient,
             IErrorLogger errorLogger,
@@ -144,10 +149,11 @@ namespace SalmonEgg.Application.Services.Chat
 
         private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
         {
-            // 事件由传输读线程按到达序同步触发;若直接用 async void,session 首建等待点之后的
-            // 续体可能与后续事件交错,打乱 history 追加与事件转发次序。链式管道保证严格串行,
-            // 且链头读改写只发生在同一触发线程上,无需加锁。
-            _sessionUpdatePump = ProcessSessionUpdateSequentiallyAsync(_sessionUpdatePump, e);
+            // Notifications and projected RPC results share one ordered application stream.
+            lock (_sessionUpdateGate)
+            {
+                _sessionUpdatePump = ProcessSessionUpdateSequentiallyAsync(_sessionUpdatePump, e);
+            }
         }
 
         private async Task ProcessSessionUpdateSequentiallyAsync(Task previous, SessionUpdateEventArgs e)
@@ -172,7 +178,12 @@ namespace SalmonEgg.Application.Services.Chat
                     // not a state a session can legitimately be in. Record and skip local tracking.
                     // Forwarding below is deliberately left intact so subscribers still observe it.
                     var session = _sessionManager.GetSession(e.SessionId);
-                    if (session is null)
+                    if (e.IsResponseProjection)
+                    {
+                        // This is an RPC result projected in transport receive order, not another
+                        // peer history entry. It still reaches the same ordered product stream.
+                    }
+                    else if (session is null)
                     {
                         _errorLogger.LogError(new ErrorLogEntry(
                             "Session update received for an untracked session",
@@ -183,7 +194,9 @@ namespace SalmonEgg.Application.Services.Chat
                     }
                     else
                     {
-                        session.AppendHistory(CreateSessionUpdateEntry(e.Update, e.SessionId));
+                        session.AppendHistory(e.View is { } view
+                            ? CreateSessionViewEntry(view, e.Update, e.SessionId)
+                            : CreateSessionUpdateEntry(e.Update, e.SessionId));
                     }
 
                     // CRITICAL PATH: Syncing Agent's internal state (Plan, Mode) with our local variables.
@@ -191,6 +204,11 @@ namespace SalmonEgg.Application.Services.Chat
                     // 共享态的判定与写入必须在 _stateGate 内:pump 与请求路径续体真并发触碰同一字段。
                     lock (_stateGate)
                     {
+                        if (e.View is { HasPlanEntries: true } view
+                            && string.Equals(_currentSessionId, e.SessionId, StringComparison.Ordinal))
+                        {
+                            _currentPlan = new Plan { Entries = view.PlanEntries.ToList() };
+                        }
                         switch (e.Update)
                         {
                             case PlanUpdate planUpdate:
@@ -367,6 +385,36 @@ namespace SalmonEgg.Application.Services.Chat
                 UsageUpdate => "usage_update",
                 _ => "unknown"
             };
+
+        private static SessionUpdateEntry CreateSessionViewEntry(AcpSessionUpdateView view, SessionUpdate update, string sessionId)
+        {
+            var entry = CreateSessionUpdateEntry(update, sessionId);
+            if (view.Message is { } message)
+            {
+                entry.SessionUpdateType = message.Role + "_message";
+                entry.ContentType = "text";
+                entry.TextContent = string.Concat(message.Content.OfType<TextContentBlock>().Select(static content => content.Text));
+            }
+            else if (view.ToolCall is { } tool)
+            {
+                entry.SessionUpdateType = "tool_call_update";
+                entry.ToolCallId = tool.ToolCallId;
+                entry.Title = tool.Title;
+                entry.ToolCallKind = tool.Kind?.ToString();
+                entry.ToolCallStatus = tool.Status?.ToString();
+            }
+            else if (view.WorkState is not null)
+            {
+                entry.SessionUpdateType = "state_update";
+            }
+            else if (view.HasPlanEntries)
+            {
+                entry.SessionUpdateType = "plan_update";
+                entry.PlanEntries = view.PlanEntries.Select(static item => new SessionPlanHistoryEntry(
+                    item.Content, item.Status.ToString(), item.Priority.ToString())).ToArray();
+            }
+            return entry;
+        }
 
         // 以下 Apply*/Capture*/Restore* 系列约定:调用方必须已持 _stateGate。
         // 它们读改写 _currentMode/_currentSessionId/_configAuthoritativeSessionIds 并可能
@@ -1060,6 +1108,11 @@ namespace SalmonEgg.Application.Services.Chat
             try
             {
                 var response = await _acpClient.SetSessionConfigOptionAsync(@params);
+                // The SDK publishes the full response in receive order. Let that already queued
+                // event reach the product before the editing command considers its apply settled.
+                Task updates;
+                lock (_sessionUpdateGate) updates = _sessionUpdatePump;
+                await updates.ConfigureAwait(false);
                 return response;
             }
             catch (Exception ex)

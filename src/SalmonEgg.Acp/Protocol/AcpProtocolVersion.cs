@@ -13,21 +13,21 @@ namespace SalmonEgg.Acp.Protocol
         public const int V1 = 1;
 
         /// <summary>
-        /// Draft ACP v2 wire model. Live client support remains disabled until the complete
-        /// prompt, update, permission, configuration, and batch lifecycles are implemented.
+        /// Draft ACP v2 wire model. Requires explicit experimental client options and a V2 offer;
+        /// stable default initialization continues to use V1.
         /// </summary>
         public const int V2 = 2;
 
         /// <summary>
         /// Stable protocol used by default for production clients and versionless serialization.
-        /// This is the only version a live <see cref="Client.AcpClient"/> will negotiate.
+        /// Experimental negotiation requires an explicit policy separate from this default.
         /// </summary>
         public const int Default = V1;
 
         /// <summary>
         /// Highest protocol version whose wire contracts are modeled by this SDK. Modeled means the
         /// DTOs and serializers exist for development, not that the live client lifecycle is
-        /// complete: initializing a client with this version throws while it is still a draft.
+        /// complete: initialization requires an explicit experimental policy for draft versions.
         /// Use <see cref="Default"/> to pick the version a live connection should negotiate.
         /// </summary>
         public const int HighestModeled = V2;
@@ -58,7 +58,7 @@ namespace SalmonEgg.Acp.Protocol
             + "for live connections.";
 
         /// <summary>
-        /// The single protocol version a live client actually serves. ACP negotiates one version per
+        /// The single protocol version a client serves without experimental opt-in. ACP negotiates one version per
         /// connection and both sides then "act according to its specification", so a client is
         /// compliant while supporting exactly one version: this constant is that version, and it is
         /// the authority both the initialize gate and the post-negotiation check answer to.

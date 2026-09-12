@@ -12,17 +12,20 @@ public sealed class AcpClientFactory : IAcpClientFactory
     private readonly ISessionManager _sessionManager;
     private readonly ITerminalSessionManager _terminalSessionManager;
     private readonly ITransportErrorMessageFormatter? _transportErrorMessageFormatter;
+    private readonly AcpProtocolExperimentPolicy _protocolExperiment;
 
     public AcpClientFactory(
         IErrorLogger errorLogger,
         ISessionManager sessionManager,
         ITerminalSessionManager terminalSessionManager,
-        ITransportErrorMessageFormatter? transportErrorMessageFormatter = null)
+        ITransportErrorMessageFormatter? transportErrorMessageFormatter = null,
+        AcpProtocolExperimentPolicy? protocolExperiment = null)
     {
         _errorLogger = errorLogger ?? throw new ArgumentNullException(nameof(errorLogger));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _terminalSessionManager = terminalSessionManager ?? throw new ArgumentNullException(nameof(terminalSessionManager));
         _transportErrorMessageFormatter = transportErrorMessageFormatter;
+        _protocolExperiment = protocolExperiment ?? new AcpProtocolExperimentPolicy();
     }
 
     public IAcpClient CreateClient(ITransport transport)
@@ -32,5 +35,9 @@ public sealed class AcpClientFactory : IAcpClientFactory
                 _transportErrorMessageFormatter),
             new DomainAcpClientLogger(_errorLogger),
             new DomainAcpClientSessionStore(_sessionManager),
-            _terminalSessionManager);
+            _terminalSessionManager,
+            new AcpClientOptions
+            {
+                ExperimentalProtocolVersions = _protocolExperiment.EnableDraftV2 ? [SalmonEgg.Acp.Protocol.AcpProtocolVersion.V2] : []
+            });
 }
