@@ -110,10 +110,11 @@ internal static class NativeElicitationProbeDriver
         var bounds = button.TransformToVisual(null).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
         var scale = button.XamlRoot!.RasterizationScale;
         logger.LogInformation(
-            "NativeElicitationProbe button seq={Sequence} action={Action} enabled={Enabled} x={X} y={Y} width={Width} height={Height}",
+            "NativeElicitationProbe button seq={Sequence} action={Action} enabled={Enabled} x={X} y={Y} width={Width} height={Height} rootHeight={RootHeight} scale={Scale}",
             sequence, action, button.IsEnabled,
             (int)Math.Round(bounds.X * scale), (int)Math.Round(bounds.Y * scale),
-            (int)Math.Round(bounds.Width * scale), (int)Math.Round(bounds.Height * scale));
+            (int)Math.Round(bounds.Width * scale), (int)Math.Round(bounds.Height * scale),
+            (int)Math.Round(button.XamlRoot.Size.Height * scale), scale);
     }
 
     private static bool IsVisible(FrameworkElement element)

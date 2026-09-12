@@ -34,6 +34,14 @@ func describeTree(_ element: AXUIElement, _ depth: Int = 0) -> [[String: Any]] {
                        "title": attribute(element, kAXTitleAttribute as CFString) as? String ?? "",
                        "description": attribute(element, kAXDescriptionAttribute as CFString) as? String ?? "",
                        "enabled": attribute(element, kAXEnabledAttribute as CFString) as? Bool ?? false])
+        if let raw = attribute(element, kAXPositionAttribute as CFString), CFGetTypeID(raw) == AXValueGetTypeID() {
+            var point = CGPoint.zero
+            if AXValueGetValue(raw as! AXValue, .cgPoint, &point) { result[result.count - 1]["position"] = [point.x, point.y] }
+        }
+        if let raw = attribute(element, kAXSizeAttribute as CFString), CFGetTypeID(raw) == AXValueGetTypeID() {
+            var size = CGSize.zero
+            if AXValueGetValue(raw as! AXValue, .cgSize, &size) { result[result.count - 1]["size"] = [size.width, size.height] }
+        }
     }
     for child in children(element) { result.append(contentsOf: describeTree(child, depth + 1)) }
     return result
@@ -54,6 +62,26 @@ if arguments[1] == "describe", let pid = Int32(arguments[2]) {
     AXUIElementSetMessagingTimeout(target, 2)
     let result: [String: Any] = ["trusted": AXIsProcessTrusted(), "pid": Int(pid), "tree": describeTree(target)]
     print(String(data: try JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
+    exit(0)
+}
+if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]),
+   let localX = Double(arguments[3]), let localY = Double(arguments[4]), let height = Double(arguments[5]) {
+    let target = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(target, 2)
+    guard let windows = attribute(target, kAXWindowsAttribute as CFString) as? [AXUIElement], windows.count == 1,
+          let rawPosition = attribute(windows[0], kAXPositionAttribute as CFString),
+          let rawSize = attribute(windows[0], kAXSizeAttribute as CFString) else { exit(5) }
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(rawPosition as! AXValue, .cgPoint, &position),
+          AXValueGetValue(rawSize as! AXValue, .cgSize, &size), size.height >= height else { exit(6) }
+    // Uno's native content frame begins below the OS window chrome. The current XamlRoot height
+    // and the system AX frame determine that inset; no fixed titlebar pixel value is assumed.
+    let point = CGPoint(x: position.x + localX, y: position.y + size.height - height + localY)
+    NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    print("Native system window bounds and read-only product sample used for CGEvent pointer")
     exit(0)
 }
 if arguments[1] == "click", arguments.count == 4, let pid = Int32(arguments[2]) {
