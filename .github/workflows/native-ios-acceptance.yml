@@ -1,0 +1,90 @@
+name: iOS Installed ACP Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-ios-acceptance.yml'
+      - 'scripts/gates/run-ios-elicitation-gate.py'
+      - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
+      - 'tests/SalmonEgg.iOS.UiTests/**'
+      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
+      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
+      - 'SalmonEgg/SalmonEgg/Platforms/iOS/**'
+      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-acp-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-ios:
+    name: iOS Installed ACP UI
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      DOTNET_PROCESSOR_COUNT: 2
+      DOTNET_CLI_USE_MSBUILD_SERVER: 0
+      MSBUILDDISABLENODEREUSE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Select matching Apple toolchain
+        run: |
+          xcode_developer_dir="$(python3 -c 'import os; print(os.path.realpath("/Applications/Xcode_26.0.app/Contents/Developer"))')"
+          test -d "$xcode_developer_dir"
+          sudo xcode-select --switch "$xcode_developer_dir"
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk macosx --find actool
+          dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
+
+      - name: Build current Simulator application
+        run: |
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --runtime iossimulator-arm64 -p:SalmonEggTargetFrameworks=net10.0-ios \
+            -p:SalmonEggSupportsDesktopProcessHost=false -p:UseInterpreter=true -p:TrimMode=copy
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj --configuration Release \
+            --framework net10.0-ios --runtime iossimulator-arm64 --no-restore \
+            -p:SalmonEggTargetFrameworks=net10.0-ios -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:UseInterpreter=true -p:TrimMode=copy -p:UseSharedCompilation=false -m:1
+
+      - name: Install isolated test tooling
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ios-acp-tools"
+          "$RUNNER_TEMP/ios-acp-tools/bin/python" -m pip install aiohttp==3.12.15
+          curl --location --fail --silent --show-error \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip \
+            --output "$RUNNER_TEMP/xcodegen.zip"
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen-tools"
+
+      - name: Install product and exercise native consent
+        run: |
+          "$RUNNER_TEMP/ios-acp-tools/bin/python" scripts/gates/run-ios-elicitation-gate.py \
+            --app SalmonEgg/SalmonEgg/bin/Release/net10.0-ios/iossimulator-arm64/SalmonEgg.app \
+            --xcodegen "$RUNNER_TEMP/xcodegen-tools/xcodegen/bin/xcodegen" \
+            --artifacts artifacts/ios-acp-acceptance
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-installed-acp-acceptance
+          path: |
+            artifacts/ios-acp-acceptance/*.json
+            artifacts/ios-acp-acceptance/*.log
+            artifacts/ios-acp-acceptance/results.xcresult
+          retention-days: 7

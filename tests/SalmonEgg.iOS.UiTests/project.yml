@@ -1,0 +1,29 @@
+name: SalmonEggNativeAcceptance
+options:
+  bundleIdPrefix: org.salmonloop.acceptance
+targets:
+  SalmonEggNativeAcceptance:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - ElicitationTests.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "5.0"
+        USES_XCTRUNNER: YES
+        ENABLE_TESTING_SEARCH_PATHS: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  SalmonEggNativeAcceptance:
+    build:
+      targets:
+        SalmonEggNativeAcceptance: test
+    test:
+      gatherCoverageData: false
+      targets:
+        - SalmonEggNativeAcceptance
+      environmentVariables:
+        SALMONEGG_IOS_CONTROL_URL: "$(SALMONEGG_IOS_CONTROL_URL)"
