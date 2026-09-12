@@ -89,6 +89,8 @@ Linux/macOS 暂不广告终端登录：当前 Porta.Pty 对 Unix 信号退出不
 `SALMONEGG_EXPERIMENTAL_ACP_V2=1`；客户端创建和 initialize 使用同一开关，Agent 可以降级为 V1。
 该开关不会修改持久化配置或默认协议版本。官方 Rust `simple_agent_v2` 可以验证真实协议互通，
 但它是 echo 示例，不代表第三方 LLM Agent 或全部原生平台的产品验收。
+WASM 没有宿主进程环境；构建时显式加 `-p:SalmonEggExperimentalAcpV2=true`，通过 Uno 原生
+`WasmShellMonoEnvironment` 将同一变量传入运行时。普通构建不包含该变量。
 
 ### Windows 用户
 ```bash
