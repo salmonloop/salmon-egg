@@ -319,6 +319,16 @@ macOS 的 `macOS Native Acceptance` workflow 使用本次 Debug Skia 产物、�
 
 该 workflow 还临时加入未经用户同意的真实浏览器启动，要求门禁明确失败；随后按字节恢复源码、重新构建，再跑完整流程。证据包含提交、产物散列、进程来源、系统输入、浏览器隔离和恢复散列。Windows、iOS、Android 各自使用独立原生产品门禁；Unix 终端认证仍因当前 Porta.Pty 未公开信号退出状态而关闭。
 
+Android URL elicitation 使用 Uno 的原生 `Windows.System.Launcher.LaunchUriAsync`。`Android Installed ACP UI` CI job 在独占、带 KVM 的 Android 36 x86_64 模拟器安装本次 Debug APK，嵌入全部程序集，并核对安装前后 APK SHA256。验收只从生产配置和会话文件启动，再通过 UiAutomator 读取真实原生控件、等待 enabled 后输入；不注入 ViewModel 操作或替换浏览器。Google APIs 系统镜像必须提供 Chrome；系统浏览器设置仅作用于本次临时模拟器。
+
+```bash
+python3 scripts/gates/run-android-elicitation-gate.py \
+  --apk /path/to/current-build-Signed.apk --serial emulator-5554 \
+  --artifacts /tmp/android-acp-acceptance
+```
+
+门禁验证拒绝和取消零导航、显式打开和重开两次浏览器访问但只有一个 ACP accept、未知及重复 complete、表单 accept/decline/cancel 和断线后清空 URL；外部页面的 opener、referrer 与私密字段由浏览器回报，私密字段和完整 URL 不得进入 ACP 回复或应用持久化。产物、设备指纹、UI XML、截图与日志写入 artifacts。它证明当前安装物的原生 Android 流程，不代替物理设备、Release 裁剪/签名或独立第三方 Agent 验收。
+
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；

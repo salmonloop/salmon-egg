@@ -603,14 +603,18 @@
                                                                        TextWrapping="WrapWholeWords"
                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                             <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     AutomationProperties.Name="{x:Bind Title}"
                                                                      Visibility="{x:Bind IsStringField, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     AutomationProperties.Name="{x:Bind Title}"
                                                                      InputScope="Number"
                                                                      Visibility="{x:Bind IsIntegerField, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <TextBox Text="{x:Bind FieldInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     AutomationProperties.Name="{x:Bind Title}"
                                                                      InputScope="Number"
                                                                      Visibility="{x:Bind IsNumberField, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <CheckBox IsChecked="{x:Bind BooleanValue, Mode=TwoWay}"
+                                                                      AutomationProperties.Name="{x:Bind Title}"
                                                                       Visibility="{x:Bind IsBooleanField, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                             <ItemsControl ItemsSource="{x:Bind MultiSelectOptions, Mode=OneWay}"
                                                                           Visibility="{x:Bind IsMultiSelectField, Converter={StaticResource BoolToVisibilityConverter}}">
