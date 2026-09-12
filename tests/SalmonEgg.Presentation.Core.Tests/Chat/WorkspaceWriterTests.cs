@@ -23,6 +23,49 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 [Collection("NonParallel")]
 public sealed class WorkspaceWriterTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FlushAsync_OnlyConfigValueChanges_PersistsTheSecondState(bool boolean)
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, new FakeSessionManager(), preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        var first = new ConversationConfigOptionSnapshot
+        {
+            Id = "value", ValueType = boolean ? "boolean" : "_budget",
+            BooleanValue = boolean ? false : null,
+            RawProtocolJson = boolean ? null : "{\"value\":1}"
+        };
+        var second = new ConversationConfigOptionSnapshot
+        {
+            Id = first.Id, ValueType = first.ValueType,
+            BooleanValue = boolean ? true : null,
+            RawProtocolJson = boolean ? null : "{\"value\":2}"
+        };
+        var initial = new ChatState(HydratedConversationId: "config", ConfigOptions: ImmutableList.Create(first),
+            ShowConfigOptionsPanel: true, Generation: 1);
+        writer.Enqueue(initial, scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
+        var firstPersisted = workspace.GetConversationSnapshot("config")!;
+        var originalUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        workspace.UpsertConversationSnapshot(firstPersisted with { LastUpdatedAt = originalUpdatedAt },
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        writer.Enqueue(initial with { ConfigOptions = ImmutableList.Create(second), Generation = 2 }, scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+        var option = Assert.Single(Assert.Single(store.LastSaved!.Conversations).ConfigOptions);
+        Assert.Equal(second.BooleanValue, option.BooleanValue);
+        Assert.Equal(second.RawProtocolJson, option.RawProtocolJson);
+        Assert.NotEqual(originalUpdatedAt, Assert.Single(store.LastSaved.Conversations).LastUpdatedAt);
+    }
+
     [Fact]
     public async Task FlushAsync_ConfigurationRoundTrip_PreservesBooleanAndUnknownRawValues()
     {
@@ -1141,11 +1184,16 @@ public sealed class WorkspaceWriterTests
 
     private sealed class CapturingConversationStore : IConversationStore
     {
+        public ConversationDocument? LastSaved { get; private set; }
+
         public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(new ConversationDocument());
 
         public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            LastSaved = document;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeSessionManager : ISessionManager
