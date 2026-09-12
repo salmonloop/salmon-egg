@@ -9,6 +9,7 @@ on:
       - 'scripts/gates/macos-desktop-input-probe.swift'
       - 'scripts/gates/run-macos-desktop-input-probe.py'
       - 'scripts/gates/macos-elicitation-consent-smoke.py'
+      - 'scripts/gates/macos-elicitation-reverse-verification.py'
       - 'scripts/gates/macos-native-ui.swift'
       - 'src/SalmonEgg.Infrastructure.Desktop/Services/DesktopElicitationUriLauncher.cs'
 
@@ -50,6 +51,9 @@ jobs:
       - name: Verify native consent and system browser isolation
         timeout-minutes: 5
         run: python3 scripts/gates/macos-elicitation-consent-smoke.py
+      - name: Verify rejection without consent and the rebuilt original
+        timeout-minutes: 12
+        run: python3 scripts/gates/macos-elicitation-reverse-verification.py
       - name: Upload native desktop evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -62,4 +66,8 @@ jobs:
             artifacts/macos-elicitation-consent/*.jsonl
             artifacts/macos-elicitation-consent/*.log
             artifacts/macos-elicitation-consent/*.png
+            artifacts/macos-elicitation-reverse/**/*.json
+            artifacts/macos-elicitation-reverse/**/*.jsonl
+            artifacts/macos-elicitation-reverse/**/*.log
+            artifacts/macos-elicitation-reverse/**/*.png
           if-no-files-found: error
