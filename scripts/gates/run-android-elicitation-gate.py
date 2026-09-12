@@ -156,8 +156,11 @@ def seed_product(device, endpoint):
 def prepare_browser(device):
     assert device.text("shell", "pm", "path", CHROME).startswith("package:"), "The system image has no Chrome"
     device.text("shell", "cmd", "role", "add-role-holder", "android.app.role.BROWSER", CHROME)
-    device.text("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "about:blank",
-                "-n", CHROME + "/com.google.android.apps.chrome.Main")
+    browser_activity = device.text("shell", "cmd", "package", "resolve-activity", "--components",
+                                   "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", CHROME)
+    assert browser_activity.startswith(CHROME + "/"), "The system Chrome package has no launcher activity"
+    device.text("shell", "am", "start", "-W", "-a", "android.intent.action.MAIN",
+                "-c", "android.intent.category.LAUNCHER", "-n", browser_activity)
     allowed = ("Use without an account", "Continue without an account", "Accept & continue", "No thanks",
                "Not now", "Got it", "com.android.chrome:id/signin_fre_dismiss_button",
                "com.android.chrome:id/terms_accept", "com.android.chrome:id/negative_button")
