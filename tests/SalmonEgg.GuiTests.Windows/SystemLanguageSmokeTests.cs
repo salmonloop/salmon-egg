@@ -32,7 +32,7 @@ public sealed class SystemLanguageSmokeTests
             TimeSpan.FromSeconds(15)), "Switching back to System did not restore the system-language page.");
         Assert.True(app.WaitUntilEnabled("GeneralSettings.Language", TimeSpan.FromSeconds(10)));
         var selector = app.FindByAutomationId("GeneralSettings.Language", TimeSpan.FromSeconds(10));
-        Assert.Contains(originalChinese ? "跟随系统" : "System", app.GetVisibleTexts(selector));
+        Assert.Equal(originalChinese ? "跟随系统" : "System", selector.AsComboBox().SelectedItem?.Name);
     }
 
     private static void SelectLanguage(WindowsGuiAppSession app, string name)
