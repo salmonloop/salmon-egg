@@ -325,6 +325,23 @@ public partial class ChatViewModel
                 plan.PlanEntries!.ToImmutableList(), true), isCurrent).ConfigureAwait(true);
             return true;
         }
+        if (view.HasConfigOptions)
+        {
+            var config = _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(string.Empty,
+                new ConfigOptionUpdate { ConfigOptions = view.ConfigOptions.ToList() }));
+            await PostToUiAsync(async () =>
+            {
+                if (!isCurrent()) return;
+                SetConversationConfigAuthority(conversationId, true);
+                await _chatStore.Dispatch(new MergeConversationSessionStateAction(conversationId,
+                    AvailableModes: config.AvailableModes?.Select(ToConversationModeOptionSnapshot).ToImmutableList(),
+                    SelectedModeId: config.SelectedModeId,
+                    HasSelectedModeId: true,
+                    ConfigOptions: config.ConfigOptions?.Select(ToConversationConfigOptionSnapshot).ToImmutableList(),
+                    ShowConfigOptionsPanel: config.ShowConfigOptionsPanel)).ConfigureAwait(true);
+            }).ConfigureAwait(false);
+            return true;
+        }
         return false;
     }
 
