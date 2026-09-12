@@ -58,6 +58,7 @@ def main(args):
     assert binary.is_file(), "The current build has no app binary"
     simulator = None
     peer = None
+    installed = False
     try:
         listing = json.loads(output(["xcrun", "simctl", "list", "--json"]))
         sdk_version = output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"])
@@ -68,12 +69,13 @@ def main(args):
         simulator = output(["xcrun", "simctl", "create", "SalmonEgg ACP acceptance", device_type, runtime])
         (artifacts / "simulator.json").write_text(json.dumps({"id": simulator, "runtime": runtime,
                                                             "deviceType": device_type}, indent=2) + "\n")
-        run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", simulator])
-        run(["xcrun", "simctl", "boot", simulator])
+        # bootstatus owns startup; opening Simulator first can already boot this device.
         with (artifacts / "simulator-boot.log").open("w") as boot_log:
             run(["xcrun", "simctl", "bootstatus", simulator, "-b"], timeout=300,
                 stdout=boot_log, stderr=subprocess.STDOUT)
+        run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", simulator])
         run(["xcrun", "simctl", "install", simulator, str(app)])
+        installed = True
         container = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "data"]))
         with socket.socket() as reservation:
             reservation.bind(("127.0.0.1", 0))
@@ -128,8 +130,9 @@ def main(args):
         print("iOS installed product: consent, form, Safari isolation and completion passed")
     finally:
         if simulator:
-            for command in (["xcrun", "simctl", "terminate", simulator, bundle_id],
-                            ["xcrun", "simctl", "shutdown", simulator], ["xcrun", "simctl", "delete", simulator]):
+            commands = [["xcrun", "simctl", "terminate", simulator, bundle_id]] if installed else []
+            commands += [["xcrun", "simctl", "shutdown", simulator], ["xcrun", "simctl", "delete", simulator]]
+            for command in commands:
                 try:
                     result = subprocess.run(command, capture_output=True, text=True, timeout=45)
                     print("[ios-gate] cleanup", command[2], result.returncode, flush=True)
