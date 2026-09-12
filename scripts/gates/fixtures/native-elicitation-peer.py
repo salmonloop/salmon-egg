@@ -3,8 +3,9 @@
 
 import json
 from pathlib import Path
-import select
+import queue
 import sys
+import threading
 
 
 def main():
@@ -13,6 +14,14 @@ def main():
     control = Path(scenario["control"])
     handled_phase = 0
     session_id = "native-elicitation-session"
+    incoming = queue.Queue()
+
+    def read_input():
+        for line in sys.stdin:
+            incoming.put(line)
+        incoming.put(None)
+
+    threading.Thread(target=read_input, daemon=True).start()
 
     def send(message):
         print(json.dumps(dict(jsonrpc="2.0", **message)), flush=True)
@@ -22,9 +31,13 @@ def main():
             target.write(json.dumps(message) + "\n")
 
     while True:
-        ready, _, _ = select.select([sys.stdin], [], [], 0.025)
-        if ready:
-            line = sys.stdin.readline()
+        try:
+            line = incoming.get(timeout=0.025)
+        except queue.Empty:
+            line = ""
+        if line is None:
+            return
+        if line:
             if not line:
                 return
             message = json.loads(line)

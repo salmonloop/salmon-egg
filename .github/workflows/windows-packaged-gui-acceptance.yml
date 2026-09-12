@@ -54,7 +54,7 @@ jobs:
           dotnet build tests/SalmonEgg.GuiTests.Windows/SalmonEgg.GuiTests.Windows.csproj `
             --configuration Debug -p:UseSharedCompilation=false -m:1 --disable-build-servers
       - name: Exercise the current installed WinUI application
-        timeout-minutes: 7
+        timeout-minutes: 9
         shell: pwsh
         run: ./scripts/gates/run-windows-packaged-gui-acceptance.ps1
       - name: Upload installed-product and desktop evidence

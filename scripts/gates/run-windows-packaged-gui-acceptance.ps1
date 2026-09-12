@@ -13,6 +13,7 @@ $env:MSBUILDDISABLENODEREUSE = '1'
 $env:UseSharedCompilation = 'false'
 $env:SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS = (Resolve-Path $ArtifactsDirectory).Path
 $env:SALMONEGG_APPDATA_ROOT = Join-Path $env:SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS 'appdata'
+$env:SALMONEGG_GUI_PYTHON = (& python -c 'import sys; print(sys.executable)').Trim()
 
 $log = Join-Path $ArtifactsDirectory 'packaged-gui-tests.log'
 $arguments = @(
@@ -21,7 +22,8 @@ $arguments = @(
     '--filter-class', 'SalmonEgg.GuiTests.Windows.AcpSettingsSmokeTests',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.TerminalAuthenticationSmokeTests',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.SystemLanguageSmokeTests',
-    '--minimum-expected-tests', '6', '--timeout', '6m', '--no-ansi', '--output', 'Detailed'
+    '--filter-class', 'SalmonEgg.GuiTests.Windows.UrlElicitationSmokeTests',
+    '--minimum-expected-tests', '7', '--timeout', '8m', '--no-ansi', '--output', 'Detailed'
 )
 $info = [Diagnostics.ProcessStartInfo]::new()
 $info.FileName = (Get-Command dotnet).Source
@@ -33,8 +35,8 @@ $test = [Diagnostics.Process]::Start($info)
 $standardOutput = $test.StandardOutput.ReadToEndAsync()
 $standardError = $test.StandardError.ReadToEndAsync()
 try {
-    if (-not $test.WaitForExit(390000)) {
-        throw 'Installed GUI test process exceeded the 390-second runtime bound. See gui-stage.jsonl.'
+    if (-not $test.WaitForExit(510000)) {
+        throw 'Installed GUI test process exceeded the 510-second runtime bound. See gui-stage.jsonl.'
     }
     $testExit = $test.ExitCode
 }
@@ -53,7 +55,7 @@ $contents = Get-Content -LiteralPath $log -Raw
 Write-Host $contents
 $passed = [regex]::Match($contents, '(?m)^\s+succeeded:\s+(\d+)\s*$')
 $skipped = [regex]::Match($contents, '(?m)^\s+skipped:\s+(\d+)\s*$')
-if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 6 `
+if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 7 `
     -or -not $skipped.Success -or [int]$skipped.Groups[1].Value -ne 0) {
     throw "Installed WinUI GUI acceptance failed or skipped: exit=$testExit."
 }
@@ -64,7 +66,7 @@ $provenance = [ordered]@{
     currentInstall = $marker
     acceptedTests = [int]$passed.Groups[1].Value
     skippedTests = [int]$skipped.Groups[1].Value
-    scope = 'Current installed MSIX ACP settings and complete terminal consent/input/exit/reconnect/retry/cancellation.'
+    scope = 'Current installed MSIX ACP settings, System language, terminal sign-in, and native URL consent/system-browser/completion/expiry.'
 }
 $provenance | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'result.json')
 Write-Host '[gate] Current installed MSIX accepted native settings and terminal sign-in with no skipped tests.'
