@@ -1,0 +1,62 @@
+name: Windows Packaged GUI Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows-packaged-gui-acceptance.yml'
+      - 'scripts/gates/test-windows-interactive-desktop.ps1'
+      - 'scripts/gates/run-windows-packaged-gui-acceptance.ps1'
+      - 'tests/SalmonEgg.GuiTests.Windows/**'
+      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/TerminalAuthenticationDialog*'
+      - 'SalmonEgg/SalmonEgg/Presentation/Services/TerminalAuthenticationInteraction.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-packaged-gui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaged-gui:
+    name: Windows Installed WinUI GUI
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_PROCESSOR_COUNT: '2'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+      MSBUILDDISABLENODEREUSE: '1'
+      UseSharedCompilation: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Verify the hosted interactive desktop with real input
+        timeout-minutes: 2
+        shell: pwsh
+        run: ./scripts/gates/test-windows-interactive-desktop.ps1
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+      - name: Build, sign and install this commit's MSIX
+        timeout-minutes: 35
+        shell: pwsh
+        run: ./.tools/run-winui3-msix.ps1 -Configuration Debug
+      - name: Exercise the current installed WinUI application
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/gates/run-windows-packaged-gui-acceptance.ps1
+      - name: Upload installed-product and desktop evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: windows-packaged-gui-acceptance
+          path: |
+            artifacts/windows-packaged-gui
+            artifacts/msix/current-install.json
+            artifacts/logs/msix/*.log
+          if-no-files-found: error
