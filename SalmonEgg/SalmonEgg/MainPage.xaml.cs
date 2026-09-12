@@ -781,6 +781,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         // The opt-in setup probe owns navigation and sampling; the shell only supplies its live root.
         AcpSetupRuntimePathProbeDriver.TryStart(App.ServiceProvider, this);
+
+        NativeElicitationProbeDriver.TryStart(App.ServiceProvider, this);
     }
 
     private void OnMainPageGettingFocus(object? sender, GettingFocusEventArgs e)

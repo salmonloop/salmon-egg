@@ -1478,7 +1478,7 @@
     <value>智能体已确认外部操作完成。</value>
   </data>
   <data name="Elicitation_UrlWaiting" xml:space="preserve">
-    <value>已请求打开网页。如果没有出现，请允许弹出窗口后选择“再次打开”。正在等待智能体确认完成。</value>
+    <value>已请求打开网页。如果没有出现，请检查浏览器后选择“再次打开”。正在等待智能体确认完成。</value>
   </data>
   <data name="Elicitation_UnsafeUrl" xml:space="preserve">
     <value>无法安全打开这个地址。请拒绝或取消本次请求。</value>

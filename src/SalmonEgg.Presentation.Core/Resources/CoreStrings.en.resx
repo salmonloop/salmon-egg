@@ -1472,7 +1472,7 @@ Create the corresponding Markdown file in:
     <value>The agent reports that the external step is complete.</value>
   </data>
   <data name="Elicitation_UrlWaiting" xml:space="preserve">
-    <value>Opening was requested. If no page appeared, allow popups and choose Open again. Waiting for the agent to confirm completion.</value>
+    <value>Opening was requested. If no page appeared, check your browser and choose Open again. Waiting for the agent to confirm completion.</value>
   </data>
   <data name="Elicitation_UnsafeUrl" xml:space="preserve">
     <value>This address cannot be opened safely. Decline or cancel this request.</value>

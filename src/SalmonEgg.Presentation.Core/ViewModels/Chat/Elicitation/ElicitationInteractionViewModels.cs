@@ -145,7 +145,7 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
 
     public string UrlStatus => IsCompleted
         ? Localize("Elicitation_UrlCompleted", "The agent reports that the external step is complete.")
-        : Localize("Elicitation_UrlWaiting", "Opening was requested. If no page appeared, allow popups and choose Open again. Waiting for the agent to confirm completion.");
+        : Localize("Elicitation_UrlWaiting", "Opening was requested. If no page appeared, check your browser and choose Open again. Waiting for the agent to confirm completion.");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSubmit))]
