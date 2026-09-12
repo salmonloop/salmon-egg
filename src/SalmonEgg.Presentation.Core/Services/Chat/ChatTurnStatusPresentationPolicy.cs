@@ -51,6 +51,12 @@ internal static class ChatTurnStatusPresentationPolicy
                 "Waiting for agent...",
                 isRunning: true),
 
+            ChatTurnPhase.WaitingForUser => Visible(
+                ChatTurnStatusSource.AcpSessionUpdate,
+                "ChatTurnStatus_WaitingForUser",
+                "Waiting for your action...",
+                isRunning: true),
+
             ChatTurnPhase.Thinking => Visible(
                 ChatTurnStatusSource.AcpSessionUpdate,
                 "ChatTurnStatus_Thinking",

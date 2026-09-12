@@ -54,7 +54,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
+    private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e, InteractionRequestSource? source = null)
     {
         if (_disposed || _disposeCts.IsCancellationRequested)
         {
@@ -66,10 +66,10 @@ public partial class ChatViewModel
         TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(() =>
             generation != Volatile.Read(ref _foregroundChatServiceGeneration) || !ReferenceEquals(service, _chatService) || !e.IsCurrent
                 ? Task.CompletedTask
-                : ProcessSessionUpdateAsync(e, _disposeCts.Token)));
+                : ProcessSessionUpdateAsync(e, _disposeCts.Token, source)));
     }
 
-    private async Task ProcessSessionUpdateAsync(SessionUpdateEventArgs e, CancellationToken cancellationToken)
+    private async Task ProcessSessionUpdateAsync(SessionUpdateEventArgs e, CancellationToken cancellationToken, InteractionRequestSource? source = null)
     {
         try
         {
@@ -78,12 +78,14 @@ public partial class ChatViewModel
             var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (!e.IsCurrent) return;
+            if (source is not null && !IsInteractionConnectionCurrent(source)) return;
             var activeConversationId = !string.IsNullOrWhiteSpace(storeState.HydratedConversationId)
                 ? storeState.HydratedConversationId
                 : storeState.ActiveTurn?.ConversationId;
             var activeBinding = storeState.ResolveBinding(activeConversationId);
-            var boundConversationId =
-                !string.IsNullOrWhiteSpace(activeConversationId)
+            var boundConversationId = source is not null
+                ? ResolveInteractionConversation(storeState, e.SessionId, source)
+                : !string.IsNullOrWhiteSpace(activeConversationId)
                 && string.Equals(activeBinding?.RemoteSessionId, e.SessionId, StringComparison.Ordinal)
                     ? activeConversationId
                     : _authoritativeRemoteSessionRouter.ResolveConversationId(storeState, e.SessionId);
@@ -103,9 +105,13 @@ public partial class ChatViewModel
             var activeTurn = isActiveTarget
                 ? ResolveSessionUpdateTurn(storeState, activeConversationId, e.SessionId)
                 : null;
+            var targetBinding = storeState.ResolveBinding(targetConversationId);
+            bool IsProjectionCurrent() => e.IsCurrent && !_disposed
+                && (source is null || (IsInteractionConnectionCurrent(source)
+                    && _chatStore.ReadCommittedState()?.ResolveBinding(targetConversationId) == targetBinding));
 
             if (e.View is { } applicationView && await ApplySessionUpdateViewAsync(
-                targetConversationId, applicationView, activeTurn, isActiveTarget).ConfigureAwait(true))
+                targetConversationId, applicationView, activeTurn, isActiveTarget, IsProjectionCurrent).ConfigureAwait(true))
             {
                 RecordTranscriptProjectionObservation(e.SessionId);
             }
@@ -209,16 +215,19 @@ public partial class ChatViewModel
     }
 
     private async Task<bool> ApplySessionUpdateViewAsync(
-        string conversationId, AcpSessionUpdateView view, ActiveTurnState? activeTurn, bool isActiveTarget)
+        string conversationId, AcpSessionUpdateView view, ActiveTurnState? activeTurn, bool isActiveTarget,
+        Func<bool> isCurrent)
     {
+        if (!isCurrent()) return true;
         if (view.Message is { Role: "thought" })
         {
-            await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Thinking).ConfigureAwait(true);
+            await AdvanceSessionViewPhaseAsync(activeTurn, ChatTurnPhase.Thinking, isCurrent).ConfigureAwait(true);
             return true;
         }
         if (view.Message is { } message)
         {
             var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
+            if (!isCurrent()) return true;
             var transcript = state.ResolveContentSlice(conversationId)?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             var isOutgoing = string.Equals(message.Role, "user", StringComparison.Ordinal);
             var content = message.Content;
@@ -237,11 +246,12 @@ public partial class ChatViewModel
                 items.Add(CreateContentSnapshot(content[index], isOutgoing, id,
                     timestamp: existing?.Timestamp, protocolMessageId: message.MessageId));
             }
-            await _chatStore.Dispatch(new ReplaceProtocolMessageAction(conversationId, message.MessageId,
-                isOutgoing, items.ToImmutable(), existing?.Id)).ConfigureAwait(true);
+            await CommitSessionViewAsync(new ReplaceProtocolMessageAction(conversationId, message.MessageId,
+                isOutgoing, items.ToImmutable(), existing?.Id), isCurrent).ConfigureAwait(true);
+            if (!isCurrent()) return true;
             if (!isOutgoing)
             {
-                await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Responding).ConfigureAwait(true);
+                await AdvanceSessionViewPhaseAsync(activeTurn, ChatTurnPhase.Responding, isCurrent).ConfigureAwait(true);
                 if (!isActiveTarget) await MarkConversationUnreadAttentionAsync(conversationId, ConversationAttentionSource.AgentMessage).ConfigureAwait(false);
             }
             return true;
@@ -249,6 +259,7 @@ public partial class ChatViewModel
         if (view.ToolCall is { } tool)
         {
             var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
+            if (!isCurrent()) return true;
             var existing = state.ResolveContentSlice(conversationId)?.Transcript
                 .LastOrDefault(item => item.ToolCallId == tool.ToolCallId && item.ContentType == "tool_call");
             var replacement = CreateToolCallSnapshot(tool);
@@ -257,16 +268,18 @@ public partial class ChatViewModel
                 replacement.Id = existing.Id;
                 replacement.Timestamp = existing.Timestamp;
             }
-            await _chatStore.Dispatch(new UpsertTranscriptMessageAction(conversationId, replacement)).ConfigureAwait(true);
-            await AdvanceActiveTurnPhaseAsync(activeTurn,
+            await CommitSessionViewAsync(new UpsertTranscriptMessageAction(conversationId, replacement), isCurrent).ConfigureAwait(true);
+            if (!isCurrent()) return true;
+            await AdvanceSessionViewPhaseAsync(activeTurn,
                 tool.Status == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress ? ChatTurnPhase.ToolRunning : ChatTurnPhase.WaitingForAgent,
-                tool.ToolCallId, tool.Title).ConfigureAwait(true);
+                isCurrent, tool.ToolCallId, tool.Title).ConfigureAwait(true);
             return true;
         }
         if (view.Terminal is { } terminal)
         {
             await PostToUiAsync(() =>
             {
+                if (!isCurrent()) return;
                 var row = _panelStateCoordinator.GetOrCreateTerminalSession(conversationId, terminal.TerminalId);
                 row.DisplayName = terminal.Command ?? terminal.TerminalId;
                 row.Output = terminal.OutputText;
@@ -283,32 +296,49 @@ public partial class ChatViewModel
                 && (activeTurn is null || activeTurn.Phase is ChatTurnPhase.Completed or ChatTurnPhase.Cancelled or ChatTurnPhase.Failed))
             {
                 var turnId = Guid.NewGuid().ToString();
-                await _chatStore.Dispatch(new BeginTurnAction(conversationId, turnId, ChatTurnPhase.WaitingForAgent)).ConfigureAwait(true);
+                await CommitSessionViewAsync(new BeginTurnAction(conversationId, turnId, ChatTurnPhase.WaitingForAgent), isCurrent).ConfigureAwait(true);
+                if (!isCurrent()) return true;
                 activeTurn = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(true)).ActiveTurn;
+                if (!isCurrent()) return true;
             }
             if (activeTurn is not null && workState == "idle")
             {
                 if (view.StopReason == StopReason.Cancelled)
-                    await _chatStore.Dispatch(new CancelTurnAction(conversationId, activeTurn.TurnId)).ConfigureAwait(true);
+                    await CommitSessionViewAsync(new CancelTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
                 else if (view.StopReason == StopReason.Refusal)
-                    await _chatStore.Dispatch(new FailTurnAction(conversationId, activeTurn.TurnId)).ConfigureAwait(true);
+                    await CommitSessionViewAsync(new FailTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
                 else
-                    await _chatStore.Dispatch(new CompleteTurnAction(conversationId, activeTurn.TurnId)).ConfigureAwait(true);
+                    await CommitSessionViewAsync(new CompleteTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
             }
             else if (workState is "running" or "requires_action")
             {
-                await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.WaitingForAgent).ConfigureAwait(true);
+                await AdvanceSessionViewPhaseAsync(activeTurn,
+                    workState == "requires_action" ? ChatTurnPhase.WaitingForUser : ChatTurnPhase.WaitingForAgent,
+                    isCurrent).ConfigureAwait(true);
             }
             return true;
         }
         if (view.HasPlanEntries)
         {
-            await ApplySessionUpdateDeltaAsync(conversationId, _acpSessionUpdateProjector.Project(
-                new SessionUpdateEventArgs(string.Empty, new PlanUpdate(view.PlanEntries.ToList())))).ConfigureAwait(true);
+            var plan = _acpSessionUpdateProjector.Project(new SessionUpdateEventArgs(string.Empty, new PlanUpdate(view.PlanEntries.ToList())));
+            await CommitSessionViewAsync(new ReplacePlanEntriesAction(conversationId,
+                plan.PlanEntries!.ToImmutableList(), true), isCurrent).ConfigureAwait(true);
             return true;
         }
         return false;
     }
+
+    private Task CommitSessionViewAsync(ChatAction action, Func<bool> isCurrent)
+        => PostToUiAsync(async () =>
+        {
+            if (!isCurrent()) return;
+            await _chatStore.Dispatch(action).ConfigureAwait(true);
+        });
+
+    private Task AdvanceSessionViewPhaseAsync(ActiveTurnState? turn, ChatTurnPhase phase,
+        Func<bool> isCurrent, string? toolCallId = null, string? title = null)
+        => turn is null ? Task.CompletedTask : CommitSessionViewAsync(
+            new AdvanceTurnPhaseAction(turn.ConversationId, turn.TurnId, phase, toolCallId, title), isCurrent);
 
     private void RaiseOverlayStateChanged()
     {

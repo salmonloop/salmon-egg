@@ -1495,4 +1495,7 @@
   <data name="Elicitation_CancellationFailedDisconnected" xml:space="preserve">
     <value>无法取消未能显示的请求，已断开此连接。请重新连接 Agent。</value>
   </data>
+  <data name="ChatTurnStatus_WaitingForUser" xml:space="preserve">
+    <value>等待你操作…</value>
+  </data>
 </root>

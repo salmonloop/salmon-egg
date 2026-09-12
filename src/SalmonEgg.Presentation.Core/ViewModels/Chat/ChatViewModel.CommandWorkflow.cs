@@ -1308,6 +1308,7 @@ public partial class ChatViewModel
 
     private static bool IsDispatchedPromptTurn(ActiveTurnState? activeTurn)
         => activeTurn?.Phase is ChatTurnPhase.WaitingForAgent
+            or ChatTurnPhase.WaitingForUser
             or ChatTurnPhase.Thinking
             or ChatTurnPhase.ToolPending
             or ChatTurnPhase.ToolRunning

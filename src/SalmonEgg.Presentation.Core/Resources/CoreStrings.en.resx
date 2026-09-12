@@ -1489,4 +1489,7 @@ Create the corresponding Markdown file in:
   <data name="Elicitation_CancellationFailedDisconnected" xml:space="preserve">
     <value>Could not cancel a request that cannot be displayed. The connection was closed. Reconnect to the agent.</value>
   </data>
+  <data name="ChatTurnStatus_WaitingForUser" xml:space="preserve">
+    <value>Waiting for your action...</value>
+  </data>
 </root>
