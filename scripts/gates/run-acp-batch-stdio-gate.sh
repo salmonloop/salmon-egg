@@ -18,6 +18,7 @@ timeout --signal=TERM --kill-after=10s 180s "$dotnet_bin" test \
   --project tests/SalmonEgg.Acp.Desktop.Tests/SalmonEgg.Acp.Desktop.Tests.csproj \
   --configuration "$configuration" \
   -p:UseSharedCompilation=false \
+  --filter-class SalmonEgg.Acp.Desktop.Tests.StdioBatchTests \
   --timeout 1m --no-ansi --minimum-expected-tests 2 --output Detailed > "$log_file" 2>&1 || {
     cat "$log_file"
     exit 1
