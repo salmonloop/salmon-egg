@@ -51,6 +51,8 @@ SalmonEgg/
 
 环境和构建细节请优先参考 [BUILD_GUIDE.md](BUILD_GUIDE.md)。
 
+iOS 原生 UIKit 在当前 Uno 6.7.103 下使用平台内的官方导航模板后备箭头，避开该版本 `AnimatedIcon` 的未实现动画路径；展开、选择与焦点仍由 `NavigationViewItem` 管理。依赖补齐 UIKit 动画支持后须删除此资源，并通过安装后的 iOS 导航与表单/URL 门禁复验。应用工厂同时保留具体 `App` 返回类型，直到上游 hosting 修复进入依赖。两处兼容处理均限 `Platforms/iOS`，未替换其它平台模板。
+
 ### 环境要求
 
 - .NET SDK **10.0.302** 或兼容的 **10.0.3xx** patch（见 `global.json`）
