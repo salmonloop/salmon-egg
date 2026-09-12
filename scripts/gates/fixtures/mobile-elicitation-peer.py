@@ -53,7 +53,7 @@ class ElicitationPeer:
                     result = {"sessionId": "native-elicitation-session"}
                 elif method == "session/list":
                     result = {"sessions": [{"sessionId": "native-elicitation-session", "cwd": "/acceptance",
-                                            "title": "Native acceptance"}]}
+                                            "title": "Native acceptance session"}]}
                 elif method == "session/prompt":
                     result = {"stopReason": "end_turn"}
                 elif not method:
