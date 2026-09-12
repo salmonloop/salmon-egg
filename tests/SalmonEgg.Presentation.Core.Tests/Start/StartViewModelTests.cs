@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -199,9 +200,24 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(syncContext);
         try
         {
-            var dispatcher = new QueueingUiDispatcher();
+            // Arrange: native UI dispatch serializes projections with local input changes.
+            var uiDispatcher = new SerialUiDispatcher();
+            var replayStaleDraft = 0;
+            var projector = new ChatStateProjector();
+            var stateProjector = new Mock<IChatStateProjector>();
+            stateProjector.Setup(p => p.Apply(
+                    It.IsAny<ChatState>(), It.IsAny<ChatConnectionState>(),
+                    It.IsAny<string?>(), It.IsAny<ConversationRemoteBindingState?>()))
+                .Returns((ChatState state, ChatConnectionState connection, string? conversationId,
+                    ConversationRemoteBindingState? binding) => projector.Apply(
+                        Volatile.Read(ref replayStaleDraft) == 0
+                            ? state
+                            : state with { DraftText = "chat draft", DraftRevision = 0 },
+                        connection, conversationId, binding));
             var preferences = CreatePreferences();
-            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), uiDispatcher: dispatcher);
+            await using var chat = CreateChatViewModel(
+                syncContext, preferences, Mock.Of<ISessionManager>(),
+                uiDispatcher: uiDispatcher, chatStateProjector: stateProjector.Object);
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -209,17 +225,25 @@ public sealed class StartViewModelTests
 
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
-            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == "chat draft");
-            await WaitForConditionAsync(() => dispatcher.PendingCount > 0);
 
+            // Act.
             var suggestion = startViewModel.Suggestions[1];
-            await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
-            // The real UI serializes setters with store projections. Keep the old draft callback
-            // queued until after this newer intent, then verify it cannot overwrite the suggestion.
-            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == suggestion.Prompt);
-            dispatcher.RunAll();
+            var execution = startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
 
+            // Assert: shared draft updates synchronously, before queued projections run.
             Assert.False(suggestion.IsInformational);
+            Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
+            Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
+            await execution;
+
+            Volatile.Write(ref replayStaleDraft, 1);
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await WaitForConditionAsync(() =>
+            {
+                uiDispatcher.RunAll();
+                // The connection change proves a late projection actually reached the UI.
+                return chat.ViewModel.IsConnected;
+            });
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
             workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -2930,12 +2954,7 @@ public sealed class StartViewModelTests
 
             await WaitForConditionAsync(() => uiDispatcher.PendingCount > 0 || cleanupTask.IsCompleted);
             Assert.False(cleanupTask.IsCompleted);
-            // Store clearing may enqueue its UI projection after earlier callbacks have drained.
-            await WaitForConditionAsync(() =>
-            {
-                uiDispatcher.RunAll();
-                return cleanupTask.IsCompleted;
-            });
+            uiDispatcher.RunAll();
             await cleanupTask;
             Assert.Null((await chat.GetConnectionStateAsync()).NewSessionDraft);
             uiDispatcher.RunAll();
@@ -3422,7 +3441,8 @@ public sealed class StartViewModelTests
         IVoiceInputService? voiceInputService = null,
         IUiDispatcher? uiDispatcher = null,
         IAcpConnectionSessionRegistry? connectionSessionRegistry = null,
-        IAcpConnectionCommands? acpConnectionCommands = null)
+        IAcpConnectionCommands? acpConnectionCommands = null,
+        IChatStateProjector? chatStateProjector = null)
     {
         var state = State.Value(new object(), () => ChatState.Empty);
         var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
@@ -3468,7 +3488,7 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(syncContext);
         try
         {
-            var chatStateProjector = new ChatStateProjector();
+            chatStateProjector ??= new ChatStateProjector();
             var viewModel = new ChatViewModel(
                 chatStore,
                 configService.Object,
@@ -3492,7 +3512,7 @@ public sealed class StartViewModelTests
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(
                 viewModel,
-                chatStore,
+                state,
                 connectionState,
                 connectionStore,
                 conversationCatalogPresenter,
@@ -3771,6 +3791,47 @@ public sealed class StartViewModelTests
         public override void Post(SendOrPostCallback d, object? state) => d(state);
     }
 
+    private sealed class SerialUiDispatcher : IUiDispatcher
+    {
+        private readonly ConcurrentQueue<Action> _callbacks = new();
+
+        public bool HasThreadAccess => false;
+
+        public void Enqueue(Action action) => _callbacks.Enqueue(action);
+
+        public Task EnqueueAsync(Action action) => EnqueueAsync(() =>
+        {
+            action();
+            return Task.CompletedTask;
+        });
+
+        public Task EnqueueAsync(Func<Task> function)
+        {
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Enqueue(async () =>
+            {
+                try
+                {
+                    await function().ConfigureAwait(false);
+                    completion.SetResult();
+                }
+                catch (Exception error)
+                {
+                    completion.SetException(error);
+                }
+            });
+            return completion.Task;
+        }
+
+        public void RunAll()
+        {
+            while (_callbacks.TryDequeue(out var action))
+            {
+                action();
+            }
+        }
+    }
+
     private sealed class FakeConversationCatalogReadModel : IConversationCatalogReadModel
     {
         public FakeConversationCatalogReadModel(IReadOnlyList<ConversationCatalogItem> snapshot)
@@ -3892,7 +3953,7 @@ public sealed class StartViewModelTests
 
     private sealed class ChatViewModelHarness : IAsyncDisposable
     {
-        private readonly IChatStore _chatStore;
+        private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
         private readonly IChatConnectionStore _connectionStore;
         private readonly IUiDispatcher _uiDispatcher;
@@ -3903,7 +3964,7 @@ public sealed class StartViewModelTests
 
         public ChatViewModelHarness(
             ChatViewModel viewModel,
-            IChatStore chatStore,
+            IState<ChatState> state,
             IState<ChatConnectionState> connectionState,
             IChatConnectionStore connectionStore,
             ConversationCatalogPresenter presenter,
@@ -3911,7 +3972,7 @@ public sealed class StartViewModelTests
             IUiDispatcher uiDispatcher)
         {
             ViewModel = viewModel;
-            _chatStore = chatStore;
+            _state = state;
             _connectionState = connectionState;
             _connectionStore = connectionStore;
             _uiDispatcher = uiDispatcher;
@@ -3932,14 +3993,11 @@ public sealed class StartViewModelTests
         public ValueTask<ChatConnectionState> GetConnectionStateAsync()
             => _connectionStore.GetCurrentStateAsync();
 
-        public async Task<string> GetDraftTextAsync()
-            => (await _chatStore.GetCurrentStateAsync()).DraftText;
-
         public async ValueTask DisposeAsync()
         {
             ViewModel.Dispose();
             await _connectionState.DisposeAsync();
-            await _chatStore.State.DisposeAsync();
+            await _state.DisposeAsync();
         }
     }
 }
