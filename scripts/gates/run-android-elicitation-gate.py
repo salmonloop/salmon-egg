@@ -320,7 +320,7 @@ def main(args):
         device.text("shell", "am", "force-stop", PACKAGE)
         device.text("shell", "pm", "clear", PACKAGE)
         device.text("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
-        device.activity = device.text("shell", "cmd", "package", "resolve-activity", "--brief",
+        device.activity = device.text("shell", "cmd", "package", "resolve-activity", "--components",
                                       "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", PACKAGE)
         assert device.activity.startswith(PACKAGE + "/"), "The installed APK has no launcher activity"
         installed = device.text("shell", "pm", "path", PACKAGE).removeprefix("package:")
