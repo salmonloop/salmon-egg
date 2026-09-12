@@ -32,8 +32,10 @@ public sealed class SystemLanguageSmokeTests
         SelectLanguage(app, originalChinese ? "System" : "跟随系统");
 
         // Assert: System restores the observed native language, without assuming the runner is English.
-        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(originalLabel, StringComparer.Ordinal),
-            TimeSpan.FromSeconds(15)), "Switching back to System did not restore the system-language page. Visible: "
+        var systemRestored = app.WaitUntil(() => app.GetVisibleTexts().Contains(originalLabel, StringComparer.Ordinal),
+            TimeSpan.FromSeconds(15));
+        if (!systemRestored) app.CaptureAcceptanceFailure("system-language-not-restored");
+        Assert.True(systemRestored, "Switching back to System did not restore the system-language page. Visible: "
                 + string.Join(" | ", app.GetVisibleTexts()) + Environment.NewLine + appData.ReadBootLogTail()
                 + Environment.NewLine + appData.ReadLatestAppLogTail());
         Assert.True(app.WaitUntilEnabled("GeneralSettings.Language", TimeSpan.FromSeconds(10)));

@@ -98,7 +98,7 @@ public sealed class TerminalAuthenticationSmokeTests
     private static AutomationElement FindNativeElement(WindowsGuiAppSession app, Func<AutomationElement, bool> matches)
     {
         AutomationElement? found = null;
-        Assert.True(app.WaitUntil(() =>
+        var ready = app.WaitUntil(() =>
         {
             try
             {
@@ -112,7 +112,9 @@ public sealed class TerminalAuthenticationSmokeTests
                 // A stale snapshot is not a match; the bounded next poll must find the real control.
                 return false;
             }
-        }, TimeSpan.FromSeconds(20)), "The requested native terminal element did not appear.");
+        }, TimeSpan.FromSeconds(20));
+        if (!ready) app.CaptureAcceptanceFailure("terminal-control-missing");
+        Assert.True(ready, "The requested native terminal element did not appear.");
         return found!;
     }
 
