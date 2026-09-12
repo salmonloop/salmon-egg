@@ -5,8 +5,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.Views.Navigation;
+using SalmonEgg.Presentation.Views.Chat;
 using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg.Presentation.Services;
@@ -16,6 +18,7 @@ public sealed class UiInteractionService : IUiInteractionService
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IFolderPickerService _folderPicker;
     private readonly AppActivationSignalSource _activationSignalSource;
+    private Task? _sessionSettingsDialogTask;
 
     public UiInteractionService(
         IFolderPickerService folderPicker,
@@ -184,6 +187,29 @@ public sealed class UiInteractionService : IUiInteractionService
         var result = await dialog.ShowAsync();
         dialog.ApplyResult(result);
         return dialog.Result;
+    }
+
+    public Task ShowSessionSettingsAsync(ChatViewModel viewModel)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+        if (_sessionSettingsDialogTask is { IsCompleted: false })
+        {
+            return _sessionSettingsDialogTask;
+        }
+        var xamlRoot = GetXamlRoot();
+        if (xamlRoot is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _sessionSettingsDialogTask = ShowSessionSettingsCoreAsync(viewModel, xamlRoot);
+    }
+
+    private static async Task ShowSessionSettingsCoreAsync(ChatViewModel viewModel, XamlRoot xamlRoot)
+    {
+        var dialog = new SessionSettingsDialog(viewModel);
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
+        await dialog.ShowAsync();
     }
 
     private XamlRoot? GetXamlRoot()
