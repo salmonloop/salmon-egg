@@ -54,8 +54,8 @@ namespace SalmonEgg.Acp.Protocol
         internal const string LatestRenamedMessage =
             "Renamed to AcpProtocolVersion.HighestModeled. 'Latest' reads as 'the version to use', "
             + "but the value is only the highest version whose wire contracts are modeled, and it is "
-            + "still a draft that a live client refuses to negotiate. Use AcpProtocolVersion.Default "
-            + "for live connections.";
+            + "still a draft requiring explicit experimental client options before negotiation. Use AcpProtocolVersion.Default "
+            + "for stable connections.";
 
         /// <summary>
         /// The single protocol version a client serves without experimental opt-in. ACP negotiates one version per

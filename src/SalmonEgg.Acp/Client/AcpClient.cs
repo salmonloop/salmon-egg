@@ -26,7 +26,7 @@ namespace SalmonEgg.Acp.Client
     public sealed class AcpClient : IAcpClient, IDisposable
     {
         private const string StableV1RuntimeOnlyMessage =
-            "ACP defaults to stable protocolVersion 1. Draft protocolVersion 2 requires an explicit experimental client policy.";
+            "ACP live client support is limited to stable protocolVersion 1 by default. Draft protocolVersion 2 requires an explicit experimental client policy.";
         private const string DisconnectIncompleteMessage =
             "ACP client disconnect has not completed successfully. Wait for it or retry DisconnectAsync before initializing.";
 
