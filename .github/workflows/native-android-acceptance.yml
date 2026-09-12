@@ -12,6 +12,7 @@ on:
       - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
       - 'SalmonEgg/SalmonEgg/Platforms/Android/**'
       - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/MainPage.xaml'
       - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'src/SalmonEgg.Acp/Client/**'
       - 'src/SalmonEgg.Application/Services/Chat/**'

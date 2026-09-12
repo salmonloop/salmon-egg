@@ -430,6 +430,12 @@ def main(args):
                 device.adb(*arguments, capture_output=True, check=False, timeout=20)
             except (OSError, subprocess.TimeoutExpired) as error:
                 print("Device cleanup failed:", error, file=sys.stderr)
+        try:
+            with (artifacts / "product-files.tar").open("wb") as archive:
+                device.adb("exec-out", "run-as", PACKAGE, "tar", "-cf", "-", "files/SalmonEgg",
+                           stdout=archive, stderr=subprocess.DEVNULL, check=False, timeout=20)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print("Product file collection failed:", error, file=sys.stderr)
 
 
 if __name__ == "__main__":
