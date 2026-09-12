@@ -13,17 +13,30 @@ func children(_ element: AXUIElement) -> [AXUIElement] {
 
 func activate(_ pid: pid_t, _ titlebarPoint: CGPoint) -> Bool {
     if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+    let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+    if ["com.apple.Safari", "com.google.Chrome", "org.mozilla.firefox", "com.microsoft.edgemac"].contains(frontmost) {
+        // Opening the system browser makes it frontmost. Return to the preceding product with
+        // the native application switcher, rather than clicking a now-covered product window.
+        let down = CGEvent(keyboardEventSource: nil, virtualKey: 48, keyDown: true)
+        let up = CGEvent(keyboardEventSource: nil, virtualKey: 48, keyDown: false)
+        down?.flags = .maskCommand
+        up?.flags = .maskCommand
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+        CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: false)?.post(tap: .cghidEventTap)
+    } else {
     // An external helper cannot force cooperative app activation on recent macOS. A real
     // titlebar click is the user's native way to bring an inactive product window forward.
     CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
+    }
     let deadline = Date().addingTimeInterval(5)
     while Date() < deadline {
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     }
-    fputs("Native application did not become foreground after its titlebar was clicked.\n", stderr)
+    fputs("Native application did not become foreground after native application activation.\n", stderr)
     return false
 }
 
