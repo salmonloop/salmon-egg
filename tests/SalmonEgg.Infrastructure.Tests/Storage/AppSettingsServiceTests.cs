@@ -58,6 +58,94 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.False(loaded.KeyboardShortcutsEnabled);
     }
 
+    public static IEnumerable<object[]> SidebarPreferences()
+    {
+        // Exhaust the finite domain: each grouping and all three expansion choices.
+        foreach (var grouping in AppSettingValueCatalog.SidebarConversationGroupingValues)
+        {
+            for (var choices = 0; choices < 8; choices++)
+            {
+                yield return [grouping, (choices & 1) != 0, (choices & 2) != 0, (choices & 4) != 0];
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(SidebarPreferences))]
+    public async Task SaveThenLoad_AllSidebarPreferences_RoundTrips(
+        string grouping,
+        bool attentionExpanded,
+        bool workingExpanded,
+        bool otherExpanded)
+    {
+        // Arrange
+        var service = CreateService();
+        var settings = new AppSettings
+        {
+            SidebarConversationGrouping = grouping,
+            SidebarAttentionGroupExpanded = attentionExpanded,
+            SidebarWorkingGroupExpanded = workingExpanded,
+            SidebarOtherGroupExpanded = otherExpanded
+        };
+
+        // Act
+        await service.SaveAsync(settings);
+        var loaded = await service.LoadAsync();
+
+        // Assert
+        Assert.Equal(grouping, loaded.SidebarConversationGrouping);
+        Assert.Equal(attentionExpanded, loaded.SidebarAttentionGroupExpanded);
+        Assert.Equal(workingExpanded, loaded.SidebarWorkingGroupExpanded);
+        Assert.Equal(otherExpanded, loaded.SidebarOtherGroupExpanded);
+    }
+
+    [Theory]
+    [InlineData(null, AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData("unknown", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(" status ", AppSettingValueCatalog.StatusConversationGrouping)]
+    public async Task LoadAsync_LegacyOrNonCanonicalSidebarGrouping_UsesCompatiblePreferences(
+        string? persistedGrouping,
+        string expectedGrouping)
+    {
+        // Arrange
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+        var yaml = "schema_version: 1\n";
+        if (persistedGrouping is not null)
+        {
+            yaml += $"sidebar_conversation_grouping: '{persistedGrouping}'\n";
+        }
+
+        await File.WriteAllTextAsync(appYamlPath, yaml, TestContext.Current.CancellationToken);
+        var service = CreateService();
+
+        // Act
+        var loaded = await service.LoadAsync();
+
+        // Assert
+        Assert.Equal(expectedGrouping, loaded.SidebarConversationGrouping);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded, loaded.SidebarAttentionGroupExpanded);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded, loaded.SidebarWorkingGroupExpanded);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded, loaded.SidebarOtherGroupExpanded);
+    }
+
+    [Theory]
+    [InlineData("unknown", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(" status ", AppSettingValueCatalog.StatusConversationGrouping)]
+    public async Task SaveAsync_NonCanonicalSidebarGrouping_PersistsCanonicalValue(string value, string expected)
+    {
+        // Arrange
+        var service = CreateService();
+
+        // Act
+        await service.SaveAsync(new AppSettings { SidebarConversationGrouping = value });
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains($"sidebar_conversation_grouping: {expected}", yaml, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task SaveThenLoad_RoundTripsCloudConfigSyncSettings()
     {

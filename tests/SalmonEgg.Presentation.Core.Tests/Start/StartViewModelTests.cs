@@ -2425,6 +2425,7 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             var commands = new Mock<IAcpConnectionCommands>();
+            var requiredProfileConnectionFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await using var chat = CreateChatViewModel(
                 syncContext,
                 preferences,
@@ -2460,6 +2461,7 @@ public sealed class StartViewModelTests
                     It.IsAny<IAcpTransportConfiguration>(),
                     It.IsAny<IAcpChatCoordinatorSink>(),
                     It.IsAny<CancellationToken>()))
+                .Callback(() => requiredProfileConnectionFailed.TrySetResult())
                 .ThrowsAsync(new InvalidOperationException("profile switch failed"));
 
             var workflow = new Mock<IChatLaunchWorkflow>();
@@ -2478,9 +2480,12 @@ public sealed class StartViewModelTests
 
             await WaitForConditionAsync(() =>
                 string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-2", StringComparison.Ordinal));
+            await requiredProfileConnectionFailed.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             await WaitForConditionAsync(() =>
-                startViewModel.HasStartSessionDraftError
+                string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-2", StringComparison.Ordinal)
+                && string.Equals(startViewModel.StartSessionDraftErrorMessage, "profile switch failed", StringComparison.Ordinal)
+                && startViewModel.HasStartSessionDraftError
                 && startViewModel.StartModeSelectorProjection.PlaceholderKind == SelectorPlaceholderKind.Error);
 
             Assert.Equal("profile switch failed", startViewModel.StartSessionDraftErrorMessage);

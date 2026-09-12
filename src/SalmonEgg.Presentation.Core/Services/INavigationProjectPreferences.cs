@@ -1,12 +1,14 @@
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Core.Services;
 
-public interface INavigationProjectPreferences
+public interface INavigationProjectPreferences : INotifyPropertyChanged
 {
     ReadOnlyObservableCollection<ProjectDefinition> Projects { get; }
 
@@ -18,6 +20,12 @@ public interface INavigationProjectPreferences
     ReadOnlyObservableCollection<string> NavigationRemoteDirectoryIds { get; }
 
     string? LastSelectedProjectId { get; set; }
+
+    string SidebarConversationGrouping { get; }
+
+    bool GetStatusGroupExpanded(ConversationStatusGroup group);
+
+    void SetStatusGroupExpanded(ConversationStatusGroup group, bool expanded);
 
     void AddProject(ProjectDefinition project);
 
@@ -47,6 +55,14 @@ public sealed class NavigationProjectPreferencesAdapter : INavigationProjectPref
 
     public ReadOnlyObservableCollection<string> NavigationRemoteDirectoryIds => _navigationRemoteDirectoryIds;
 
+    public string SidebarConversationGrouping => _preferences.SidebarConversationGrouping;
+
+    public event PropertyChangedEventHandler? PropertyChanged
+    {
+        add => _preferences.PropertyChanged += value;
+        remove => _preferences.PropertyChanged -= value;
+    }
+
     public string? LastSelectedProjectId
     {
         get => _preferences.LastSelectedProjectId;
@@ -57,6 +73,29 @@ public sealed class NavigationProjectPreferencesAdapter : INavigationProjectPref
     {
         ArgumentNullException.ThrowIfNull(project);
         _preferences.Projects.Add(project);
+    }
+
+    public bool GetStatusGroupExpanded(ConversationStatusGroup group) => group switch
+    {
+        ConversationStatusGroup.NeedsAttention => _preferences.SidebarAttentionGroupExpanded,
+        ConversationStatusGroup.Working => _preferences.SidebarWorkingGroupExpanded,
+        _ => _preferences.SidebarOtherGroupExpanded
+    };
+
+    public void SetStatusGroupExpanded(ConversationStatusGroup group, bool expanded)
+    {
+        switch (group)
+        {
+            case ConversationStatusGroup.NeedsAttention:
+                _preferences.SidebarAttentionGroupExpanded = expanded;
+                break;
+            case ConversationStatusGroup.Working:
+                _preferences.SidebarWorkingGroupExpanded = expanded;
+                break;
+            case ConversationStatusGroup.Other:
+                _preferences.SidebarOtherGroupExpanded = expanded;
+                break;
+        }
     }
 
     public void AddRemoteDirectoryToNavigation(string directoryId)

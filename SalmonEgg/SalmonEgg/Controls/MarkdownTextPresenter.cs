@@ -26,6 +26,9 @@ public sealed partial class MarkdownTextPresenter : Grid
     private readonly MarkdownTextBlockControl _markdown;
 #endif
     private bool _requestedIsTextSelectionEnabled;
+    private string? _formattedText;
+    public event EventHandler? ContentFormatted;
+    public bool IsContentFormatted => string.Equals(_formattedText, Text, StringComparison.Ordinal);
 
     public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
         nameof(Text),
@@ -150,6 +153,11 @@ public sealed partial class MarkdownTextPresenter : Grid
         _activeMarkdown = _nonSelectableMarkdown;
 #else
         _markdown = CreateMarkdownBlock();
+        _markdown.MarkdownRendered += (_, args) =>
+        {
+            _formattedText = args.Exception is null ? _markdown.Text : null;
+            ContentFormatted?.Invoke(this, EventArgs.Empty);
+        };
         Children.Add(_markdown);
 #endif
     }
@@ -328,6 +336,7 @@ public sealed partial class MarkdownTextPresenter : Grid
 
     private void ApplyMarkdownText(string? value)
     {
+        _formattedText = null;
         if (!ShouldRenderMarkdown)
         {
             ClearMarkdownText();
@@ -342,6 +351,13 @@ public sealed partial class MarkdownTextPresenter : Grid
             var target = ResolveMarkdownTarget(text);
             target.Text = text;
             ClearInactiveMarkdownText(target);
+            // The Windows toolkit applies its document synchronously in Text's property callback.
+            // Layout/viewport confirmation is still required before this becomes a read receipt.
+            if (target.IsLoaded)
+            {
+                _formattedText = text;
+                ContentFormatted?.Invoke(this, EventArgs.Empty);
+            }
 #else
             _markdown.Text = text;
 #endif
@@ -387,6 +403,14 @@ public sealed partial class MarkdownTextPresenter : Grid
             IsTextSelectionEnabled = isTextSelectionEnabled
         };
         markdown.OnLinkClicked += OnWindowsLinkClicked;
+        markdown.Loaded += (_, _) =>
+        {
+            if (ReferenceEquals(_activeMarkdown, markdown))
+            {
+                _formattedText = markdown.Text;
+                ContentFormatted?.Invoke(this, EventArgs.Empty);
+            }
+        };
         ApplyMarkdownTypography(markdown);
         return markdown;
     }

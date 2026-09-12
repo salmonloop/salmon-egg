@@ -22,6 +22,8 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
 {
     private readonly IChatService _inner;
     private readonly AcpEventAdapter _eventAdapter;
+    private readonly object _resyncSync = new();
+    private readonly HashSet<Task> _resyncTasks = new();
     private ResolvedCredentialBinding? _connectionCredentials;
     private bool _disposed;
 
@@ -40,6 +42,7 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
         _connectionCredentials = connectionCredentials;
 
         _inner.SessionUpdateReceived += OnInnerSessionUpdateReceived;
+        _eventAdapter.UpdateDispatched += OnBufferedUpdateDispatched;
     }
 
     // Secret imports can change credentials without changing the profile revision. Compare the
@@ -97,6 +100,8 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
 
     public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
 
+    internal event Action<BufferedSessionUpdate>? BufferedSessionUpdateReceived;
+
     public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived
     {
         add => _inner.PermissionRequestReceived += value;
@@ -143,6 +148,69 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
     {
         add => _inner.ErrorOccurred += value;
         remove => _inner.ErrorOccurred -= value;
+    }
+
+    internal event Func<string?, Task>? ResyncRequired;
+
+    internal Task<bool> RequestResyncAsync(string? remoteSessionId)
+    {
+        Func<string?, Task>? handlers;
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_resyncSync)
+        {
+            handlers = ResyncRequired;
+            if (_disposed || handlers is null)
+            {
+                return Task.FromResult(false);
+            }
+
+            _resyncTasks.Add(completion.Task);
+        }
+
+        // Handlers can enter the ViewModel subscription owner. Invoke them outside the task-table
+        // lock so a concurrent retirement can cancel its source and observe this completion.
+        _ = CompleteResyncAsync(handlers, remoteSessionId, completion);
+        return completion.Task;
+    }
+
+    internal Task DrainResyncAsync()
+    {
+        lock (_resyncSync)
+        {
+            return Task.WhenAll(_resyncTasks);
+        }
+    }
+
+    private static async Task<bool> InvokeResyncHandlersAsync(Func<string?, Task> handlers, string? remoteSessionId)
+    {
+        foreach (Func<string?, Task> handler in handlers.GetInvocationList())
+        {
+            await handler(remoteSessionId).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    private async Task CompleteResyncAsync(
+        Func<string?, Task> handlers, string? remoteSessionId, TaskCompletionSource<bool> completion)
+    {
+        try
+        {
+            completion.TrySetResult(await InvokeResyncHandlersAsync(handlers, remoteSessionId).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException error)
+        {
+            completion.TrySetCanceled(error.CancellationToken);
+        }
+        catch (Exception error)
+        {
+            completion.TrySetException(error);
+        }
+        finally
+        {
+            _ = completion.Task.Exception;
+            lock (_resyncSync) _resyncTasks.Remove(completion.Task);
+        }
     }
 
     public Task<InitializeResponse> InitializeAsync(InitializeParams @params)
@@ -249,9 +317,15 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
             return;
         }
 
-        _disposed = true;
+        lock (_resyncSync)
+        {
+            _disposed = true;
+            ResyncRequired = null;
+        }
         _connectionCredentials = null;
         _inner.SessionUpdateReceived -= OnInnerSessionUpdateReceived;
+        _eventAdapter.UpdateDispatched -= OnBufferedUpdateDispatched;
+        BufferedSessionUpdateReceived = null;
 
         // 本适配器是链最外层装饰器，独占其内层 IChatService（进而独占 ACP 客户端/传输）。
         // 释放沿所有权链下传；优雅断连由调用方在 Dispose 前先行 await 的 DisconnectAsync 负责。
@@ -266,5 +340,10 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
         }
 
         _eventAdapter.OnSessionUpdate(args);
+    }
+
+    private void OnBufferedUpdateDispatched(BufferedSessionUpdate update)
+    {
+        if (!_disposed) BufferedSessionUpdateReceived?.Invoke(update);
     }
 }

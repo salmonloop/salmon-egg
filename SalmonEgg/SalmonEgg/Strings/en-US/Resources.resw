@@ -12,6 +12,21 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="Appearance_SidebarGroupingLabel.Text" xml:space="preserve">
+    <value>Sidebar conversation grouping</value>
+  </data>
+  <data name="Appearance_SidebarGroupingDescription.Text" xml:space="preserve">
+    <value>Organize conversations by project or follow their progress by status.</value>
+  </data>
+  <data name="Appearance_SidebarGrouping.AutomationProperties.Name" xml:space="preserve">
+    <value>Sidebar conversation grouping</value>
+  </data>
+  <data name="Appearance_SidebarGroupingProject.Content" xml:space="preserve">
+    <value>By project</value>
+  </data>
+  <data name="Appearance_SidebarGroupingStatus.Content" xml:space="preserve">
+    <value>By status</value>
+  </data>
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>Appearance</value>
   </data>

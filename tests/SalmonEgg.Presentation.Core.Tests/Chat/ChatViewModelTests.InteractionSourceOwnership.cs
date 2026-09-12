@@ -70,7 +70,8 @@ public partial class ChatViewModelTests
             TestContext.Current.TestOutputHelper!.WriteLine($"SecondBindingStatus={second.Status}; Error={second.ErrorMessage}");
             Assert.Equal(BindingUpdateStatus.Success, second.Status);
             var newState = await fixture.ChatStore.GetCurrentStateAsync();
-            Assert.Null(newState.ResolveBinding("conv-1"));
+            Assert.Equal("profile-a", newState.ResolveBinding("conv-1")?.ProfileId);
+            Assert.Equal("shared-remote", newState.ResolveBinding("conv-1")?.RemoteSessionId);
             Assert.Equal("profile-b", newState.ResolveBinding("conv-2")?.ProfileId);
             await AwaitWithSynchronizationContextAsync(dispatcher,
                 fixture.ViewModel.ReplaceChatServiceWithIntentAsync(currentPeer.Service,
@@ -101,6 +102,18 @@ public partial class ChatViewModelTests
             Assert.DoesNotContain(previousPeer.Responses, response => response.TryGetProperty("result", out var result)
                 && result.TryGetProperty("outcome", out var outcome)
                 && outcome.GetProperty("outcome").GetString() == "selected");
+            Assert.Empty(currentPeer.Responses);
+            Assert.Null(projectedOnOtherProfile);
+
+            await SelectPermissionConversationAsync(fixture, "conv-1");
+            var originalProfileRequest = Assert.IsType<SalmonEgg.Presentation.ViewModels.Chat.PermissionRequestViewModel>(
+                fixture.ViewModel.PendingPermissionRequest);
+            Assert.Equal("profile-a-permission", originalProfileRequest.MessageId.ToString());
+            Assert.Equal("profile-a", originalProfileRequest.Binding?.ProfileId);
+            await AwaitWithSynchronizationContextAsync(dispatcher,
+                originalProfileRequest.RespondCommand.ExecuteAsync(originalProfileRequest.Options[0]));
+            Assert.Equal("allow", Assert.Single(previousPeer.Responses).GetProperty("result")
+                .GetProperty("outcome").GetProperty("optionId").GetString());
             Assert.Empty(currentPeer.Responses);
         }
         finally
