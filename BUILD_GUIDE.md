@@ -69,7 +69,7 @@ Windows 原生路径必须用 MSIX 脚本；Linux/macOS 桌面版走 Skia；WASM
 
 ### Windows 终端登录门禁
 
-ACP `auth.terminal` 的 Windows PTY host 已实现，但产品能力暂不广告。须用本次安装包通过同意、终端交互、退出、重连、原操作重试和取消回收的 GUI 门禁后，才能启用。独立 ConPTY 门禁通过显式测试 host 验证进程能力：根据当前 Agent 启动快照创建独立 ConPTY，正常退出码 `0` 才允许重连，关闭或取消会回收登录进程及其子孙进程。
+ACP `auth.terminal` 在具有本地进程和交互终端能力的 Windows WinUI 3 产品上启用。`Windows Packaged GUI Acceptance` 用本次签名安装的 MSIX 验证同意、真实 xterm 键盘输入、ConPTY 退出、重连、原操作重试和取消回收；正常退出码 `0` 才允许重连，失败、关闭或取消会回收登录进程及其子孙进程。
 
 Windows 主机运行：
 
@@ -77,7 +77,9 @@ Windows 主机运行：
 ./scripts/gates/run-terminal-auth-windows-gate.ps1
 ```
 
-该门禁使用 `tests/SalmonEgg.TerminalAuth.Windows.Tests`，实际启动 Agent 与 ConPTY，至少执行四项测试，禁止跳过；验证输入输出、参数边界、环境覆盖、退出码和进程树回收。GHA 的 `Windows Terminal Authentication` job 在 hosted Windows 上执行相同命令，日志与提交来源保存在 `artifacts/terminal-auth-windows`。Linux 交叉编译不能替代这项运行验证；原生登录对话框仍需 Windows UI 验收。
+该门禁使用 `tests/SalmonEgg.TerminalAuth.Windows.Tests`，实际启动协议 fixture 与 ConPTY，至少执行四项测试，禁止跳过；验证输入输出、参数边界、环境覆盖、退出码和进程树回收。GHA 的 `Windows Terminal Authentication` job 在 hosted Windows 上执行相同命令，日志与提交来源保存在 `artifacts/terminal-auth-windows`。独立 `Windows Installed WinUI GUI` job 另以原生 FlaUI/UIA 键盘和鼠标验证安装包，至少七项测试且禁止跳过，包含原生登录、System 语言往返及 URL 同意流程。Linux 交叉编译不能替代真实 Windows 运行；此确定性 fixture 不冒充第三方账号的真人登录。
+
+Windows URL elicitation 通过 `Windows.System.Launcher` 打开系统浏览器。安装包门禁验证完整 URL/域名、拒绝和取消零外访、打开与重开两次访问但只有一次 ACP accept、完成通知和断线失效；页面 `opener`/`referrer` 与应用桥保持隔离，私密地址及页面值不得进入产品配置、历史或日志。workflow_dispatch 的 `reverse-verification=true` 额外构建安装一个暂时去掉同意保护的包，要求同一 GUI 用例按目标原因失败；随后恢复源码、重建安装并跑完整七项。常规 PR 始终运行正常安装包门禁。
 
 Linux/macOS 暂不广告终端登录：当前 Porta.Pty 对 Unix 信号退出不能提供可靠的正常退出结果。普通会话终端不受此能力限制影响。SDK 默认能力与远程 WebSocket/HTTP 连接也不会广告 `auth.terminal`。
 
