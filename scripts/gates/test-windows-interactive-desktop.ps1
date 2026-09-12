@@ -9,7 +9,12 @@ if (-not $IsWindows) { throw 'This gate requires an actual Windows desktop.' }
 New-Item -ItemType Directory -Force -Path $ArtifactsDirectory | Out-Null
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -ReferencedAssemblies @('System.Windows.Forms', 'System.Drawing.Common', 'System.Drawing.Primitives', 'System.ComponentModel.Primitives', 'System.ComponentModel', 'System.Runtime.InteropServices', 'System.Console', 'System.Threading') -TypeDefinition @'
+# PowerShell's runtime Forms assembly exposes generated COM interfaces through Primitives;
+# referencing Forms alone compiles against the SDK ref pack but fails against the actual PS host.
+$references = @('System.Windows.Forms', 'System.Windows.Forms.Primitives', 'System.Drawing.Common',
+    'System.Drawing.Primitives', 'System.ComponentModel.Primitives', 'System.ComponentModel',
+    'System.Runtime.InteropServices', 'System.Console', 'System.Threading')
+Add-Type -ReferencedAssemblies $references -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
