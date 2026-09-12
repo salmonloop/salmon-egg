@@ -683,6 +683,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(left.Category, right.Category, StringComparison.Ordinal)
             && string.Equals(left.ValueType, right.ValueType, StringComparison.Ordinal)
             && string.Equals(left.SelectedValue, right.SelectedValue, StringComparison.Ordinal)
+            && left.BooleanValue == right.BooleanValue
+            && string.Equals(left.RawProtocolJson, right.RawProtocolJson, StringComparison.Ordinal)
             && ConfigOptionChoiceSequencesEqual(left.Options ?? [], right.Options ?? []);
     }
 
