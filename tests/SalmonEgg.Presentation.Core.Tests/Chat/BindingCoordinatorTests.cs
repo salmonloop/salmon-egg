@@ -25,6 +25,35 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 [Collection("NonParallel")]
 public sealed class BindingCoordinatorTests
 {
+    [Theory]
+    [InlineData("profile-old", "remote-old", true)]
+    [InlineData("profile-new", "remote-new", false)]
+    public async Task UpdateBinding_ReconcilesUnreadOnlyWhenItsLogicalSessionChanged(
+        string attentionProfile, string attentionRemote, bool shouldRemove)
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        using var workspace = CreateWorkspace(new CapturingConversationStore(), new FakeSessionManager(), CreatePreferences(syncContext), syncContext);
+        await using var state = State.Value(new object(), () => ChatState.Empty);
+        await using var attentionState = State.Value(new object(), () => ConversationAttentionState.Empty);
+        var attention = new ConversationAttentionStore(attentionState);
+        var chatStore = new ChatStore(state);
+        var content = new ConversationMessageSnapshot { Id = "reply", ContentType = "text", TextContent = "reply" };
+        await attention.Dispatch(new MarkConversationUnreadAction("conversation", ConversationAttentionSource.AgentMessage,
+            DateTime.UtcNow, attentionProfile, attentionRemote, content, "connection"));
+        var coordinator = new BindingCoordinator(workspace, chatStore, attention);
+
+        var result = await coordinator.UpdateBindingAsync("conversation", "remote-new", "profile-new");
+
+        Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        var current = await attention.GetCurrentStateAsync();
+        Assert.Equal(!shouldRemove, current.TryGetConversation("conversation", out var remaining));
+        if (!shouldRemove)
+        {
+            Assert.True(remaining!.HasUnread);
+            Assert.Same(content, remaining.Content);
+        }
+    }
+
     [Fact]
     public async Task UpdateBinding_UpdatesStoreSlice_AndPersistsWorkspaceBinding()
     {
@@ -64,7 +93,7 @@ public sealed class BindingCoordinatorTests
     }
 
     [Fact]
-    public async Task UpdateBinding_WhenRemoteSessionIdIsRebound_ClearsPreviousOwner()
+    public async Task UpdateBinding_WhenRemoteSessionIdIsReboundWithinProfile_ClearsPreviousOwner()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var preferences = CreatePreferences(syncContext);
@@ -120,14 +149,14 @@ public sealed class BindingCoordinatorTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)));
-        workspace.UpdateRemoteBinding("session-1", "remote-shared", "profile-1");
+        workspace.UpdateRemoteBinding("session-1", "remote-shared", "profile-2");
         workspace.UpdateRemoteBinding("session-2", "remote-old", "profile-2");
 
         var initialState = ChatState.Empty with
         {
             HydratedConversationId = "session-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("session-1", new ConversationBindingSlice("session-1", "remote-shared", "profile-1"))
+                .Add("session-1", new ConversationBindingSlice("session-1", "remote-shared", "profile-2"))
                 .Add("session-2", new ConversationBindingSlice("session-2", "remote-old", "profile-2")),
             ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
                 "session-1",
@@ -162,7 +191,7 @@ public sealed class BindingCoordinatorTests
                     ConversationRuntimePhase.Warm,
                     "conn-1",
                     "remote-shared",
-                    "profile-1",
+                    "profile-2",
                     "SessionLoadCompleted",
                     DateTime.UtcNow)),
             Transcript = ImmutableList.Create(new ConversationMessageSnapshot
@@ -234,6 +263,75 @@ public sealed class BindingCoordinatorTests
         Assert.NotNull(workspaceBinding2);
         Assert.Equal("remote-shared", workspaceBinding2!.RemoteSessionId);
         Assert.Equal("profile-2", workspaceBinding2.BoundProfileId);
+    }
+
+    [Fact]
+    public async Task UpdateBinding_WhenDifferentProfilesReuseRemoteId_PreservesOtherProfileBindingAndContent()
+    {
+        // Arrange
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("a", @"C:\repo\a");
+        await sessionManager.CreateSessionAsync("b", @"C:\repo\b");
+        using var workspace = CreateWorkspace(new CapturingConversationStore(), sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        workspace.UpdateRemoteBinding("a", "shared", "profile-a");
+        var content = new ConversationContentSlice(
+            ImmutableList.Create(new ConversationMessageSnapshot { Id = "message", TextContent = "Keep A" }),
+            ImmutableList<ConversationPlanEntrySnapshot>.Empty, false);
+        var initial = ChatState.Empty with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add("a", new("a", "shared", "profile-a")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add("a", content)
+        };
+        var state = State.Value(this, () => initial);
+        var store = CreateChatStore(state, initial);
+        var coordinator = new BindingCoordinator(workspace, store.Object);
+
+        // Act
+        var result = await coordinator.UpdateBindingAsync("b", "shared", "profile-b");
+
+        // Assert
+        Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        var current = await store.Object.GetCurrentStateAsync();
+        Assert.Equal("profile-a", current.ResolveBinding("a")?.ProfileId);
+        Assert.Equal("profile-b", current.ResolveBinding("b")?.ProfileId);
+        Assert.Equal(content, current.ResolveContentSlice("a"));
+        Assert.Equal("shared", workspace.GetRemoteBinding("a")?.RemoteSessionId);
+    }
+
+    [Fact]
+    public async Task UpdateBinding_WhenSameConversationMovesProfileWithSameRemoteId_ScrubsOldAuthority()
+    {
+        // Arrange
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("conversation", @"C:\repo");
+        using var workspace = CreateWorkspace(new CapturingConversationStore(), sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        workspace.UpdateRemoteBinding("conversation", "same-remote", "old-profile");
+        var initial = ChatState.Empty with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add("conversation", new("conversation", "same-remote", "old-profile")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add("conversation", new(
+                ImmutableList.Create(new ConversationMessageSnapshot { Id = "old", TextContent = "Old agent content" }),
+                ImmutableList<ConversationPlanEntrySnapshot>.Empty, false)),
+            OperationFailures = ImmutableDictionary<string, ConversationOperationFailure>.Empty.Add("conversation", new("conversation", "Old agent fault"))
+        };
+        var store = CreateChatStore(State.Value(this, () => initial), initial);
+        var coordinator = new BindingCoordinator(workspace, store.Object);
+
+        // Act
+        var result = await coordinator.UpdateBindingAsync("conversation", "same-remote", "new-profile");
+
+        // Assert
+        Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        var current = await store.Object.GetCurrentStateAsync();
+        Assert.Equal("new-profile", current.ResolveBinding("conversation")?.ProfileId);
+        Assert.Empty(current.ResolveContentSlice("conversation")!.Value.Transcript);
+        Assert.Null(current.ResolveOperationFailure("conversation"));
     }
 
     [Fact]

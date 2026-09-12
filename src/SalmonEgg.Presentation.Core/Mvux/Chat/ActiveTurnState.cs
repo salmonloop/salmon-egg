@@ -13,4 +13,9 @@ public sealed record ActiveTurnState(
     string? FailureMessage = null,
     string? PendingUserMessageLocalId = null,
     string? PendingUserProtocolMessageId = null,
-    string? PendingUserMessageText = null);
+    string? PendingUserMessageText = null,
+    string? ProfileId = null,
+    string? RemoteSessionId = null,
+    string? ConnectionInstanceId = null,
+    string? StopReason = null,
+    bool HasStopReason = false);

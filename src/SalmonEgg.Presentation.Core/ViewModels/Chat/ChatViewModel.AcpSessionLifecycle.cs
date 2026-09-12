@@ -54,41 +54,27 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e, InteractionRequestSource? source = null)
+    private void OnSessionUpdateReceived(AcpSessionEventSource source, SessionUpdateEventArgs e, bool isReplay = false)
     {
-        if (_disposed || _disposeCts.IsCancellationRequested)
+        if (_disposed || _disposeCts.IsCancellationRequested || !IsCurrentEventSource(source) || !e.IsCurrent)
         {
             return;
         }
 
-        var generation = Volatile.Read(ref _foregroundChatServiceGeneration);
-        var service = _chatService;
-        TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(() =>
-            generation != Volatile.Read(ref _foregroundChatServiceGeneration) || !ReferenceEquals(service, _chatService) || !e.IsCurrent
-                ? Task.CompletedTask
-                : ProcessSessionUpdateAsync(e, _disposeCts.Token, source)));
+        TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(() => ProcessSessionUpdateAsync(source, e, _disposeCts.Token, isReplay)));
     }
 
-    private async Task ProcessSessionUpdateAsync(SessionUpdateEventArgs e, CancellationToken cancellationToken, InteractionRequestSource? source = null)
+    private async Task ProcessSessionUpdateAsync(AcpSessionEventSource source, SessionUpdateEventArgs e, CancellationToken cancellationToken, bool isReplay = false)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            RecordSessionUpdateObservation(e.SessionId);
+            if (!IsCurrentEventSource(source) || !e.IsCurrent) return;
             var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (!e.IsCurrent) return;
-            if (source is not null && !IsInteractionConnectionCurrent(source)) return;
-            var activeConversationId = !string.IsNullOrWhiteSpace(storeState.HydratedConversationId)
-                ? storeState.HydratedConversationId
-                : storeState.ActiveTurn?.ConversationId;
-            var activeBinding = storeState.ResolveBinding(activeConversationId);
-            var boundConversationId = source is not null
-                ? ResolveInteractionConversation(storeState, e.SessionId, source)
-                : !string.IsNullOrWhiteSpace(activeConversationId)
-                && string.Equals(activeBinding?.RemoteSessionId, e.SessionId, StringComparison.Ordinal)
-                    ? activeConversationId
-                    : _authoritativeRemoteSessionRouter.ResolveConversationId(storeState, e.SessionId);
+            if (!IsCurrentEventSource(source) || !e.IsCurrent) return;
+            var activeConversationId = storeState.HydratedConversationId;
+            var boundConversationId = _authoritativeRemoteSessionRouter.ResolveConversationId(storeState, e.SessionId, source);
 
             if (string.IsNullOrWhiteSpace(boundConversationId))
             {
@@ -97,33 +83,24 @@ public partial class ChatViewModel
 
             cancellationToken.ThrowIfCancellationRequested();
             var targetConversationId = boundConversationId!;
-            var isActiveTarget =
-                !string.IsNullOrWhiteSpace(activeConversationId)
-                && string.Equals(activeConversationId, targetConversationId, StringComparison.Ordinal)
-                && !string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId)
-                && string.Equals(e.SessionId, activeBinding.RemoteSessionId, StringComparison.Ordinal);
-            var activeTurn = isActiveTarget
-                ? ResolveSessionUpdateTurn(storeState, activeConversationId, e.SessionId)
-                : null;
+            RecordSessionUpdateObservation(source, e.SessionId, targetConversationId);
+            var activeTurn = ResolveSessionUpdateTurn(storeState, targetConversationId, e.SessionId, source.ConnectionInstanceId);
             var targetBinding = storeState.ResolveBinding(targetConversationId);
-            bool IsProjectionCurrent() => e.IsCurrent && !_disposed
-                && (source is null || (IsInteractionConnectionCurrent(source)
-                    && _chatStore.ReadCommittedState()?.ResolveBinding(targetConversationId) == targetBinding));
+            var isActiveTarget = string.Equals(activeConversationId, targetConversationId, StringComparison.Ordinal);
+            bool IsProjectionCurrent() => e.IsCurrent && !_disposed && IsCurrentEventSource(source)
+                && _chatStore.ReadCommittedState()?.ResolveBinding(targetConversationId) == targetBinding;
 
             if (e.View is { } applicationView && await ApplySessionUpdateViewAsync(
-                targetConversationId, applicationView, activeTurn, isActiveTarget, IsProjectionCurrent).ConfigureAwait(true))
+                targetConversationId, applicationView, activeTurn, isActiveTarget, IsProjectionCurrent, source, isReplay).ConfigureAwait(true))
             {
-                RecordTranscriptProjectionObservation(e.SessionId);
+                RecordTranscriptProjectionObservation(source, e.SessionId, targetConversationId);
             }
             else if (e.Update is AgentMessageUpdate messageUpdate && messageUpdate.Content != null)
             {
                 await AdvanceActiveTurnPhaseAsync(activeTurn, ChatTurnPhase.Responding).ConfigureAwait(true);
                 await HandleAgentContentChunkAsync(targetConversationId, messageUpdate).ConfigureAwait(true);
-                RecordTranscriptProjectionObservation(e.SessionId);
-                if (!isActiveTarget)
-                {
-                    await MarkConversationUnreadAttentionAsync(targetConversationId, ConversationAttentionSource.AgentMessage).ConfigureAwait(false);
-                }
+                RecordTranscriptProjectionObservation(source, e.SessionId, targetConversationId);
+                await RecordLiveReplyAsync(targetConversationId, source, isReplay).ConfigureAwait(false);
             }
             else if (e.Update is AgentThoughtUpdate)
             {
@@ -133,7 +110,7 @@ public partial class ChatViewModel
             else if (e.Update is UserMessageUpdate userMessageUpdate && userMessageUpdate.Content != null)
             {
                 await UpsertUserMessageChunkAsync(targetConversationId, userMessageUpdate, activeTurn).ConfigureAwait(true);
-                RecordTranscriptProjectionObservation(e.SessionId);
+                RecordTranscriptProjectionObservation(source, e.SessionId, targetConversationId);
             }
             else if (e.Update is ToolCallUpdate toolCallUpdate)
             {
@@ -144,7 +121,7 @@ public partial class ChatViewModel
                     toolCallUpdate.Title).ConfigureAwait(true);
 
                 await UpsertTranscriptSnapshotAsync(targetConversationId, CreateToolCallSnapshot(toolCallUpdate)).ConfigureAwait(true);
-                RecordTranscriptProjectionObservation(e.SessionId);
+                RecordTranscriptProjectionObservation(source, e.SessionId, targetConversationId);
             }
             else if (e.Update is ToolCallStatusUpdate toolCallStatusUpdate)
             {
@@ -166,7 +143,7 @@ public partial class ChatViewModel
                 }
                 await AdvanceActiveTurnPhaseAsync(activeTurn, phase, toolCallStatusUpdate.ToolCallId).ConfigureAwait(true);
                 await UpdateToolCallStatusAsync(targetConversationId, toolCallStatusUpdate).ConfigureAwait(true);
-                RecordTranscriptProjectionObservation(e.SessionId);
+                RecordTranscriptProjectionObservation(source, e.SessionId, targetConversationId);
             }
             else if (e.Update != null)
             {
@@ -216,7 +193,7 @@ public partial class ChatViewModel
 
     private async Task<bool> ApplySessionUpdateViewAsync(
         string conversationId, AcpSessionUpdateView view, ActiveTurnState? activeTurn, bool isActiveTarget,
-        Func<bool> isCurrent)
+        Func<bool> isCurrent, AcpSessionEventSource source, bool isReplay)
     {
         if (!isCurrent()) return true;
         if (view.Message is { Role: "thought" })
@@ -252,7 +229,7 @@ public partial class ChatViewModel
             if (!isOutgoing)
             {
                 await AdvanceSessionViewPhaseAsync(activeTurn, ChatTurnPhase.Responding, isCurrent).ConfigureAwait(true);
-                if (!isActiveTarget) await MarkConversationUnreadAttentionAsync(conversationId, ConversationAttentionSource.AgentMessage).ConfigureAwait(false);
+                await RecordLiveReplyAsync(conversationId, source, isReplay).ConfigureAwait(false);
             }
             return true;
         }
@@ -292,13 +269,16 @@ public partial class ChatViewModel
         }
         if (view.WorkState is { } workState)
         {
-            if (isActiveTarget && workState is "running" or "requires_action"
+            if (workState is "running" or "requires_action"
                 && (activeTurn is null || activeTurn.Phase is ChatTurnPhase.Completed or ChatTurnPhase.Cancelled or ChatTurnPhase.Failed))
             {
                 var turnId = Guid.NewGuid().ToString();
-                await CommitSessionViewAsync(new BeginTurnAction(conversationId, turnId, ChatTurnPhase.WaitingForAgent), isCurrent).ConfigureAwait(true);
+                var binding = _chatStore.ReadCommittedState()?.ResolveBinding(conversationId);
+                await CommitSessionViewAsync(new BeginTurnAction(conversationId, turnId, ChatTurnPhase.WaitingForAgent,
+                    ProfileId: source.ProfileId, RemoteSessionId: binding?.RemoteSessionId,
+                    ConnectionInstanceId: source.ConnectionInstanceId), isCurrent).ConfigureAwait(true);
                 if (!isCurrent()) return true;
-                activeTurn = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(true)).ActiveTurn;
+                activeTurn = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(true)).ResolveTurn(conversationId);
                 if (!isCurrent()) return true;
             }
             if (activeTurn is not null && workState == "idle")
@@ -450,9 +430,9 @@ public partial class ChatViewModel
         }
     }
 
-    private Task WaitForAdapterReplayDrainAsync(long hydrationAttemptId, CancellationToken cancellationToken)
+    private static Task WaitForAdapterReplayDrainAsync(AcpSessionEventSource source, long hydrationAttemptId, CancellationToken cancellationToken)
     {
-        if (_chatService is not IAcpSessionUpdateBufferController adapter)
+        if (source.Service is not IAcpSessionUpdateBufferController adapter)
         {
             return Task.CompletedTask;
         }
@@ -461,13 +441,14 @@ public partial class ChatViewModel
     }
 
     private async Task AwaitBufferedSessionReplayProjectionAsync(
+        AcpSessionEventSource source,
         CancellationToken cancellationToken,
         long? hydrationAttemptId = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         await AwaitUiProjectionTurnAsync().ConfigureAwait(false);
-        if (_chatService is IAcpSessionUpdateBufferController adapter
+        if (source.Service is IAcpSessionUpdateBufferController adapter
             && hydrationAttemptId.HasValue)
         {
             await adapter
@@ -486,20 +467,37 @@ public partial class ChatViewModel
         await AwaitUiProjectionTurnAsync().ConfigureAwait(false);
     }
 
-    private void RecordSessionUpdateObservation(string? sessionId)
+    private readonly record struct SessionObservationKey(AcpSessionEventSource Source, string RemoteSessionId);
+
+    private ConversationHydrationContext CreateHydrationContext(AcpSessionEventSource source)
+        => new()
+        {
+            SetHydrationPhaseAsync = SetConversationHydrationPhaseAsync,
+            GetSessionUpdateObservationCount = remoteSessionId => GetSessionUpdateObservationCount(source, remoteSessionId),
+            GetTranscriptProjectionObservationCount = remoteSessionId => GetTranscriptProjectionObservationCount(source, remoteSessionId),
+            GetSessionUpdateLastObservedAtUtc = remoteSessionId => GetSessionUpdateLastObservedAtUtc(source, remoteSessionId),
+            AwaitBufferedReplayProjectionAsync = (token, attempt) => AwaitBufferedSessionReplayProjectionAsync(source, token, attempt),
+            GetProjectedTranscriptCountAsync = GetProjectedTranscriptCountAsync,
+            YieldToUiAsync = AwaitUiProjectionTurnAsync,
+            WaitForAdapterDrainAsync = (attempt, token) => WaitForAdapterReplayDrainAsync(source, attempt, token),
+            WaitForPendingSessionUpdatesAsync = WaitForPendingSessionUpdatesAsync
+        };
+
+    private void RecordSessionUpdateObservation(AcpSessionEventSource source, string? sessionId, string conversationId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             return;
         }
 
+        var key = new SessionObservationKey(source, sessionId);
         lock (_sessionUpdateObservationSync)
         {
-            _sessionUpdateObservationCounts[sessionId] =
-                _sessionUpdateObservationCounts.TryGetValue(sessionId, out var current)
+            _sessionUpdateObservationCounts[key] =
+                _sessionUpdateObservationCounts.TryGetValue(key, out var current)
                     ? checked(current + 1)
                     : 1;
-            _sessionUpdateLastObservedAtUtc[sessionId] = DateTime.UtcNow;
+            _sessionUpdateLastObservedAtUtc[key] = DateTime.UtcNow;
         }
 
         if (OverlayLoadingStage != LoadingOverlayStage.HydratingHistory)
@@ -507,24 +505,27 @@ public partial class ChatViewModel
             return;
         }
 
-        if (TryResolveCurrentHydrationConversationForRemoteSession(sessionId, out var conversationId))
+        if (string.Equals(_historyOverlayConversationId, conversationId, StringComparison.Ordinal)
+            && _remoteHydrationObservationSources.TryGetValue(conversationId, out var expected)
+            && expected.Matches(source))
         {
             SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.ReplayingSessionUpdates);
             RaiseOverlayStatusTextChanged();
         }
     }
 
-    private void RecordTranscriptProjectionObservation(string? sessionId)
+    private void RecordTranscriptProjectionObservation(AcpSessionEventSource source, string? sessionId, string conversationId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             return;
         }
 
+        var key = new SessionObservationKey(source, sessionId);
         lock (_sessionUpdateObservationSync)
         {
-            _sessionTranscriptProjectionObservationCounts[sessionId] =
-                _sessionTranscriptProjectionObservationCounts.TryGetValue(sessionId, out var current)
+            _sessionTranscriptProjectionObservationCounts[key] =
+                _sessionTranscriptProjectionObservationCounts.TryGetValue(key, out var current)
                     ? checked(current + 1)
                     : 1;
         }
@@ -534,7 +535,9 @@ public partial class ChatViewModel
             return;
         }
 
-        if (TryResolveCurrentHydrationConversationForRemoteSession(sessionId, out var conversationId))
+        if (string.Equals(_historyOverlayConversationId, conversationId, StringComparison.Ordinal)
+            && _remoteHydrationObservationSources.TryGetValue(conversationId, out var expected)
+            && expected.Matches(source))
         {
             SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.ProjectingTranscript);
             RaiseOverlayStatusTextChanged();
@@ -552,7 +555,7 @@ public partial class ChatViewModel
         _ = PostToUiAsync(() => OnPropertyChanged(nameof(OverlayStatusText)));
     }
 
-    private long GetSessionUpdateObservationCount(string? sessionId)
+    private long GetSessionUpdateObservationCount(AcpSessionEventSource source, string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -561,13 +564,13 @@ public partial class ChatViewModel
 
         lock (_sessionUpdateObservationSync)
         {
-            return _sessionUpdateObservationCounts.TryGetValue(sessionId, out var count)
+            return _sessionUpdateObservationCounts.TryGetValue(new(source, sessionId), out var count)
                 ? count
                 : 0;
         }
     }
 
-    private long GetTranscriptProjectionObservationCount(string? sessionId)
+    private long GetTranscriptProjectionObservationCount(AcpSessionEventSource source, string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -576,13 +579,13 @@ public partial class ChatViewModel
 
         lock (_sessionUpdateObservationSync)
         {
-            return _sessionTranscriptProjectionObservationCounts.TryGetValue(sessionId, out var count)
+            return _sessionTranscriptProjectionObservationCounts.TryGetValue(new(source, sessionId), out var count)
                 ? count
                 : 0;
         }
     }
 
-    private DateTime? GetSessionUpdateLastObservedAtUtc(string? sessionId)
+    private DateTime? GetSessionUpdateLastObservedAtUtc(AcpSessionEventSource source, string? sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -591,23 +594,25 @@ public partial class ChatViewModel
 
         lock (_sessionUpdateObservationSync)
         {
-            return _sessionUpdateLastObservedAtUtc.TryGetValue(sessionId, out var observedAtUtc)
+            return _sessionUpdateLastObservedAtUtc.TryGetValue(new(source, sessionId), out var observedAtUtc)
                 ? observedAtUtc
                 : null;
         }
     }
 
     private Task AwaitRemoteReplaySettleQuietPeriodAsync(
+        ConversationHydrationContext context,
         string remoteSessionId,
         long replayBaseline,
         CancellationToken cancellationToken)
         => _hydrationCoordinator.AwaitRemoteReplaySettleQuietPeriodAsync(
-            _hydrationContext,
+            context,
             remoteSessionId,
             replayBaseline,
             cancellationToken);
 
     private async Task AwaitRemoteReplayProjectionAsync(
+        AcpSessionEventSource source,
         string conversationId,
         long? activationVersion,
         string remoteSessionId,
@@ -625,14 +630,14 @@ public partial class ChatViewModel
 
         var replayStartTimeoutAt = DateTime.UtcNow + RemoteReplayStartTimeout;
 
-        while (GetSessionUpdateObservationCount(remoteSessionId) <= replayBaseline
+        while (GetSessionUpdateObservationCount(source, remoteSessionId) <= replayBaseline
             && DateTime.UtcNow < replayStartTimeoutAt)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(RemoteReplayPollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
         }
 
-        if (GetSessionUpdateObservationCount(remoteSessionId) > replayBaseline)
+        if (GetSessionUpdateObservationCount(source, remoteSessionId) > replayBaseline)
         {
             await SetHydrationOverlayPhaseAsync(
                     conversationId,
@@ -642,14 +647,14 @@ public partial class ChatViewModel
         }
 
         var transcriptTimeoutAt = DateTime.UtcNow + RemoteReplayStartTimeout;
-        while (GetTranscriptProjectionObservationCount(remoteSessionId) <= transcriptProjectionBaseline
+        while (GetTranscriptProjectionObservationCount(source, remoteSessionId) <= transcriptProjectionBaseline
             && DateTime.UtcNow < transcriptTimeoutAt)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(RemoteReplayPollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
         }
 
-        if (GetTranscriptProjectionObservationCount(remoteSessionId) > transcriptProjectionBaseline)
+        if (GetTranscriptProjectionObservationCount(source, remoteSessionId) > transcriptProjectionBaseline)
         {
             await SetHydrationOverlayPhaseAsync(
                     conversationId,
@@ -661,7 +666,7 @@ public partial class ChatViewModel
                     activationVersion,
                     HydrationOverlayPhase.SettlingReplay)
                 .ConfigureAwait(false);
-            await AwaitRemoteReplaySettleQuietPeriodAsync(remoteSessionId, replayBaseline, cancellationToken).ConfigureAwait(false);
+            await AwaitRemoteReplaySettleQuietPeriodAsync(CreateHydrationContext(source), remoteSessionId, replayBaseline, cancellationToken).ConfigureAwait(false);
         }
 
         await SetHydrationOverlayPhaseAsync(
@@ -675,20 +680,19 @@ public partial class ChatViewModel
             "Remote replay wait finished. remoteSessionId={RemoteSessionId} replayBaseline={ReplayBaseline} observedCount={ObservedCount} transcriptBaseline={TranscriptProjectionBaseline} transcriptObservedCount={TranscriptObservedCount} startTimedOut={StartTimedOut} transcriptTimedOut={TranscriptTimedOut}",
             remoteSessionId,
             replayBaseline,
-            GetSessionUpdateObservationCount(remoteSessionId),
+            GetSessionUpdateObservationCount(source, remoteSessionId),
             transcriptProjectionBaseline,
-            GetTranscriptProjectionObservationCount(remoteSessionId),
+            GetTranscriptProjectionObservationCount(source, remoteSessionId),
             DateTime.UtcNow >= replayStartTimeoutAt,
             DateTime.UtcNow >= transcriptTimeoutAt);
 #endif
-        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+        await AwaitBufferedSessionReplayProjectionAsync(source, cancellationToken, hydrationAttemptId).ConfigureAwait(false);
     }
 
-    private static ActiveTurnState? ResolveSessionUpdateTurn(ChatState storeState, string? activeConversationId, string remoteSessionId)
+    private static ActiveTurnState? ResolveSessionUpdateTurn(ChatState storeState, string? conversationId, string remoteSessionId, string? connectionInstanceId)
     {
-        if (storeState.ActiveTurn is not { } activeTurn
-            || string.IsNullOrWhiteSpace(activeConversationId)
-            || !string.Equals(activeTurn.ConversationId, activeConversationId, StringComparison.Ordinal))
+        if (storeState.ResolveTurn(conversationId) is not { } activeTurn
+            || !string.Equals(activeTurn.ConnectionInstanceId, connectionInstanceId, StringComparison.Ordinal))
         {
             return null;
         }
@@ -716,15 +720,28 @@ public partial class ChatViewModel
                 activeTurn.TurnId,
                 phase,
                 ToolCallId: toolCallId,
-                ToolTitle: toolTitle)).ConfigureAwait(true);
+                ToolTitle: toolTitle,
+                ConnectionInstanceId: activeTurn.ConnectionInstanceId)).ConfigureAwait(true);
     }
 
     private async Task ApplyPromptDispatchResultAsync(
         string conversationId,
         string turnId,
         string? remoteSessionId,
-        SessionPromptResponse response)
+        SessionPromptResponse response,
+        AcpSessionEventSource source)
     {
+        await _sessionUpdateWorkQueue.Enqueue(async () =>
+        {
+            if (!IsCurrentEventSource(source)) return;
+            await ApplyPromptTerminalResultAsync(conversationId, turnId, remoteSessionId, response, source).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    private async Task ApplyPromptTerminalResultAsync(
+        string conversationId, string turnId, string? remoteSessionId, SessionPromptResponse response, AcpSessionEventSource source)
+    {
+        await RequestVisibleReplyObservationAsync().ConfigureAwait(false);
         var pendingSessionUpdateCount = GetPendingSessionUpdateCount();
         Logger.LogInformation(
             "Chat prompt response received. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} StopReason={StopReason} PendingSessionUpdateCount={PendingSessionUpdateCount}",
@@ -734,36 +751,41 @@ public partial class ChatViewModel
             response.StopReason,
             pendingSessionUpdateCount);
 
-        ChatTurnPhase? terminalPhase = null;
+        ChatTurnPhase terminalPhase;
         var stopReason = response.StopReason;
-        if (stopReason == StopReason.Cancelled)
+        if (!response.HasStopReason)
         {
-            await PreemptivelyCancelTurnAsync(conversationId, turnId).ConfigureAwait(true);
-            terminalPhase = ChatTurnPhase.Cancelled;
-        }
-        else if (stopReason == StopReason.Refusal)
-        {
-            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, StopReason.Refusal.ToString())).ConfigureAwait(true);
+            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId,
+                Localize("ChatOperation_MissingStopReason", "The agent ended the response without an ACP stop reason."),
+                HasStopReason: false, ConnectionInstanceId: source.ConnectionInstanceId)).ConfigureAwait(false);
             terminalPhase = ChatTurnPhase.Failed;
         }
-        else if (stopReason == StopReason.EndTurn
-            || stopReason == StopReason.MaxTokens
-            || stopReason == StopReason.MaxTurnRequests)
+        else if (stopReason == StopReason.Cancelled)
         {
-            await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId)).ConfigureAwait(true);
+            await PreemptivelyCancelTurnAsync(conversationId, turnId, source.ConnectionInstanceId).ConfigureAwait(true);
+            terminalPhase = ChatTurnPhase.Cancelled;
+        }
+        else if (stopReason == StopReason.Refusal || stopReason == StopReason.MaxTokens || stopReason == StopReason.MaxTurnRequests)
+        {
+            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, stopReason.ToString(),
+                stopReason.Value, response.HasStopReason, source.ConnectionInstanceId)).ConfigureAwait(true);
+            terminalPhase = ChatTurnPhase.Failed;
+        }
+        else
+        {
+            await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId,
+                stopReason.Value, response.HasStopReason, source.ConnectionInstanceId)).ConfigureAwait(true);
             terminalPhase = ChatTurnPhase.Completed;
         }
 
-        if (terminalPhase.HasValue)
-        {
-            Logger.LogInformation(
-                "Chat prompt terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} StopReason={StopReason} TerminalPhase={TerminalPhase}",
+        Logger.LogInformation(
+                "Chat prompt terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} ConnectionInstanceId={ConnectionInstanceId} StopReason={StopReason} TerminalPhase={TerminalPhase}",
                 conversationId,
                 turnId,
                 remoteSessionId,
+                source.ConnectionInstanceId,
                 response.StopReason,
-                terminalPhase.Value);
-        }
+                terminalPhase);
     }
 
     private async Task HandleAgentContentChunkAsync(string? conversationId, AgentMessageUpdate update)
@@ -783,30 +805,6 @@ public partial class ChatViewModel
         }
 
         await AddMessageToHistoryAsync(conversationId, content, isOutgoing: false).ConfigureAwait(true);
-    }
-
-    private async Task MarkConversationUnreadAttentionAsync(string conversationId, ConversationAttentionSource source)
-    {
-        var attentionStore = _conversationAttentionStore;
-        if (attentionStore is null || string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        await attentionStore.Dispatch(
-                new MarkConversationUnreadAction(conversationId, source, DateTime.UtcNow))
-            .ConfigureAwait(false);
-    }
-
-    private async Task ClearConversationUnreadAttentionAsync(string conversationId)
-    {
-        var attentionStore = _conversationAttentionStore;
-        if (attentionStore is null || string.IsNullOrWhiteSpace(conversationId))
-        {
-            return;
-        }
-
-        await attentionStore.Dispatch(new ClearConversationUnreadAction(conversationId)).ConfigureAwait(false);
     }
 
     private async Task RemoveConversationAttentionAsync(string conversationId)
@@ -907,7 +905,6 @@ public partial class ChatViewModel
             var localActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
             if (localActivationStillCurrent)
             {
-                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
                 await PublishConversationActivationPhaseAsync(
                         failureContext,
                         SessionActivationPhase.Hydrated,
@@ -935,7 +932,6 @@ public partial class ChatViewModel
             var warmActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
             if (warmActivationStillCurrent)
             {
-                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
                 await PublishConversationActivationPhaseAsync(
                         failureContext,
                         SessionActivationPhase.Hydrated,
@@ -996,7 +992,6 @@ public partial class ChatViewModel
             var reconnectActivationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
             if (reconnectActivationStillCurrent)
             {
-                await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             }
 
             return reconnectActivationStillCurrent;
@@ -1047,7 +1042,6 @@ public partial class ChatViewModel
         var activationStillCurrent = _conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion);
         if (hydrated && activationStillCurrent)
         {
-            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             await PublishConversationActivationPhaseAsync(
                     failureContext,
                     SessionActivationPhase.Hydrated,
@@ -1704,7 +1698,6 @@ public partial class ChatViewModel
                     context.CancellationToken,
                     connectionInstanceId: warmReuseConnection.ConnectionInstanceId)
                 .ConfigureAwait(false);
-            await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
             return ConversationActivationOrchestratorResult.Success(usedWarmReuse: true);
         }
 
@@ -1853,6 +1846,13 @@ public partial class ChatViewModel
     {
         if (result.Succeeded && !result.WasSuperseded)
         {
+            if (result.UsedWarmReuse)
+            {
+                var publication = CaptureFailurePublicationContext(
+                    request.ConversationId, context.ActivationVersion, request.ConversationId);
+                await PublishConversationActivationPhaseAsync(
+                    publication, SessionActivationPhase.Hydrated, ConversationRuntimeReasons.WarmReuse).ConfigureAwait(false);
+            }
             await EnsureCurrentSessionIdAlignedAsync(
                     request.ConversationId,
                     context.ActivationVersion)
@@ -1924,15 +1924,15 @@ public partial class ChatViewModel
         });
     }
 
-    private void ProcessElicitationRequest(IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request)
+    private void ProcessElicitationRequest(AcpSessionEventSource source, ElicitationRequestEventArgs request)
     {
-        var requestingAgent = service.AgentInfo;
-        _ = ProcessElicitationRequestAsync(CaptureInteractionSource(service, foregroundGeneration), request,
+        var requestingAgent = source.Service.AgentInfo;
+        _ = ProcessElicitationRequestAsync(source, request,
             requestingAgent?.Title ?? requestingAgent?.Name ?? CurrentAgentDisplayText);
     }
 
     private async Task ProcessElicitationRequestAsync(
-        InteractionRequestSource source, ElicitationRequestEventArgs request, string agentName)
+        AcpSessionEventSource source, ElicitationRequestEventArgs request, string agentName)
     {
         try
         {
@@ -1941,11 +1941,11 @@ public partial class ChatViewModel
                 request,
                 (conversationId, request) => PostToUiAsync(() => RemovePendingElicitationRequestState(conversationId, request)),
                 Logger, PostToUiAsync, agentName,
-                unshown => CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, unshown),
+                unshown => CancelUndisplayedElicitationAsync(source, unshown), source,
                 async remoteSessionId =>
                 {
                     var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-                    var conversationId = ResolveInteractionConversation(state, remoteSessionId, source);
+                    var conversationId = _authoritativeRemoteSessionRouter.ResolveConversationId(state, remoteSessionId, source);
                     binding = state.ResolveBinding(conversationId);
                     return conversationId;
                 }).ConfigureAwait(false);
@@ -1973,28 +1973,27 @@ public partial class ChatViewModel
                 projection.Value.ViewModel.Dispose();
                 // This surface holds one form per conversation. Keep the visible request and cancel
                 // the unshown one instead of replacing an interaction the user still needs to answer.
-                await CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, request).ConfigureAwait(false);
+                await CancelUndisplayedElicitationAsync(source, request).ConfigureAwait(false);
             }
         }
         catch (Exception)
         {
-            await CancelUndisplayedElicitationAsync(source.Service, source.ForegroundGeneration, request).ConfigureAwait(false);
+            await CancelUndisplayedElicitationAsync(source, request).ConfigureAwait(false);
         }
     }
 
     private async Task CancelUndisplayedElicitationAsync(
-        IChatService service, int foregroundGeneration, ElicitationRequestEventArgs request)
+        AcpSessionEventSource source, ElicitationRequestEventArgs request)
     {
         if (await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(request, Logger).ConfigureAwait(false)) return;
 
         await PostToUiAsync(async () =>
         {
-            if (_disposed || foregroundGeneration != Volatile.Read(ref _foregroundChatServiceGeneration)
-                || !service.IsConnected || !request.State.CanCancel) return;
+            if (_disposed || !IsCurrentEventSource(source) || !request.State.CanCancel) return;
 
             // This surface has no request-scoped retry. Release only the service captured when
             // subscribing; forwarded senders and the current service may identify a different owner.
-            await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(service, this,
+            await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(source.Service, this,
                 ResolveLocalizerText("Elicitation_CancellationFailedDisconnected",
                     "Could not cancel a request that cannot be displayed. The connection was closed. Reconnect to the agent."))
                 .ConfigureAwait(true);
@@ -2014,19 +2013,20 @@ public partial class ChatViewModel
         }
     }
 
-    private void OnAskUserRequestReceived(object? sender, AskUserRequestEventArgs e)
+    private void OnAskUserRequestReceived(AcpSessionEventSource source, AskUserRequestEventArgs e)
     {
-        _ = ProcessAskUserRequestAsync(e);
+        if (IsCurrentEventSource(source)) _ = ProcessAskUserRequestAsync(source, e);
     }
 
-    private async Task ProcessAskUserRequestAsync(AskUserRequestEventArgs e)
+    private async Task ProcessAskUserRequestAsync(AcpSessionEventSource source, AskUserRequestEventArgs e)
     {
         try
         {
+            AskUserRequestViewModel? ownedRequest = null;
             var projection = await _interactionEventBridge.BuildAskUserRequestAsync(
                 e,
-                conversationId => PostToUiAsync(() => RemovePendingAskUserRequestState(conversationId)),
-                Logger).ConfigureAwait(false);
+                conversationId => PostToUiAsync(() => RemovePendingAskUserRequestState(conversationId, ownedRequest)),
+                Logger, source).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -2034,6 +2034,8 @@ public partial class ChatViewModel
 
             await PostToUiAsync(() =>
             {
+                if (!IsCurrentEventSource(source)) return;
+                ownedRequest = projection.Value.ViewModel;
                 _panelStateCoordinator.StoreAskUserRequest(projection.Value.ConversationId, projection.Value.ViewModel);
                 PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
             }).ConfigureAwait(true);
@@ -2044,47 +2046,47 @@ public partial class ChatViewModel
         }
     }
 
-    private void RemovePendingAskUserRequestState(string conversationId)
+    private void RemovePendingAskUserRequestState(string conversationId, AskUserRequestViewModel? expectedRequest = null)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             return;
         }
 
-        _panelStateCoordinator.RemoveAskUserRequest(conversationId);
+        _panelStateCoordinator.RemoveAskUserRequest(conversationId, expectedRequest);
         if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(conversationId);
         }
     }
 
-    private void ProcessPermissionRequest(IChatService service, int foregroundGeneration, PermissionRequestEventArgs request)
+    private void ProcessPermissionRequest(AcpSessionEventSource source, PermissionRequestEventArgs request)
     {
-        _ = ProcessPermissionRequestAsync(CaptureInteractionSource(service, foregroundGeneration), request);
+        _ = ProcessPermissionRequestAsync(source, request);
     }
 
-    private async Task ProcessPermissionRequestAsync(InteractionRequestSource source, PermissionRequestEventArgs request)
+    private async Task ProcessPermissionRequestAsync(AcpSessionEventSource source, PermissionRequestEventArgs request)
     {
         try
         {
             var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-            var conversationId = ResolveInteractionConversation(state, request.SessionId, source);
+            var conversationId = _authoritativeRemoteSessionRouter.ResolveConversationId(state, request.SessionId, source);
             var binding = state.ResolveBinding(conversationId);
             await PostToUiAsync(async () =>
             {
-                if (!IsInteractionSourceActive(source) || !request.CanRespond)
+                if (!IsCurrentEventSource(source) || !request.CanRespond)
                 {
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(conversationId) || binding is null || !IsInteractionConnectionCurrent(source))
+                if (string.IsNullOrWhiteSpace(conversationId) || binding is null)
                 {
                     await CancelUndisplayedPermissionAsync(source, request).ConfigureAwait(true);
                     return;
                 }
 
                 var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
-                if (!IsInteractionSourceActive(source) || !request.CanRespond)
+                if (!IsCurrentEventSource(source) || !request.CanRespond)
                 {
                     return;
                 }
@@ -2093,6 +2095,7 @@ public partial class ChatViewModel
                 _panelStateCoordinator.StorePermissionRequest(conversationId, viewModel);
                 SubscribePermissionRequestChanges(source, request, conversationId, viewModel);
                 RefreshPermissionRequestProjection(source, request, conversationId, viewModel);
+                if (conversationId is not null) _panelStateCoordinator.NotifyPermissionRequestChanged(conversationId, viewModel);
                 ReconcilePermissionBindings(currentState.Bindings);
                 SyncPermissionRequestProjection();
             }).ConfigureAwait(false);
@@ -2100,7 +2103,7 @@ public partial class ChatViewModel
         catch (Exception error)
         {
             Logger.LogError("Error processing permission request. ExceptionType={ExceptionType}", error.GetType().FullName);
-            if (IsInteractionSourceActive(source))
+            if (IsCurrentEventSource(source))
             {
                 await CancelUndisplayedPermissionAsync(source, request).ConfigureAwait(false);
             }
@@ -2108,7 +2111,7 @@ public partial class ChatViewModel
     }
 
     private PermissionRequestViewModel CreateOwnedPermissionRequest(
-        InteractionRequestSource source, PermissionRequestEventArgs request,
+        AcpSessionEventSource source, PermissionRequestEventArgs request,
         string? conversationId, ConversationBindingSlice? binding)
     {
         PermissionRequestViewModel? viewModel = null;
@@ -2118,7 +2121,7 @@ public partial class ChatViewModel
             {
                 var bindingCurrent = conversationId is not null && binding is not null
                     && IsInteractionBindingCurrent(source, binding);
-                if (!IsInteractionSourceActive(source) || !request.CanRespond)
+                if (!IsCurrentEventSource(source) || !request.CanRespond)
                 {
                     return Task.FromResult(false);
                 }
@@ -2134,8 +2137,9 @@ public partial class ChatViewModel
         viewModel.Title = string.IsNullOrWhiteSpace(viewModel.RequestTitle)
             ? ResolveLocalizerText("Permission_DefaultTitle", "Permission required") : viewModel.RequestTitle;
         viewModel.Binding = binding;
+        viewModel.Source = source;
         viewModel.Description = request.Description ?? string.Empty;
-        viewModel.IsRequestAvailable = () => IsInteractionSourceActive(source) && request.CanRespond;
+        viewModel.IsRequestAvailable = () => IsCurrentEventSource(source) && request.CanRespond;
         viewModel.IsBindingCurrent = () => binding is not null && IsInteractionBindingCurrent(source, binding);
         viewModel.IsResponsePrepared = () => request.IsResponsePrepared;
         viewModel.IsResponseSending = () => request.IsResponseSending;
@@ -2144,7 +2148,7 @@ public partial class ChatViewModel
     }
 
     private void SubscribePermissionRequestChanges(
-        InteractionRequestSource source, PermissionRequestEventArgs request,
+        AcpSessionEventSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
         EventHandler changed = (_, _) => _ = ProcessPermissionRequestChangedAsync(
@@ -2154,7 +2158,7 @@ public partial class ChatViewModel
     }
 
     private async Task ProcessPermissionRequestChangedAsync(
-        InteractionRequestSource source, PermissionRequestEventArgs request,
+        AcpSessionEventSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
         try
@@ -2169,6 +2173,7 @@ public partial class ChatViewModel
                 RefreshPermissionRequestProjection(source, request, conversationId, viewModel);
                 ReconcilePermissionBindings(state.Bindings);
                 SyncPermissionRequestProjection();
+                if (conversationId is not null) _panelStateCoordinator.NotifyPermissionRequestChanged(conversationId, viewModel);
             }).ConfigureAwait(false);
         }
         catch (Exception error)
@@ -2178,10 +2183,10 @@ public partial class ChatViewModel
     }
 
     private void RefreshPermissionRequestProjection(
-        InteractionRequestSource source, PermissionRequestEventArgs request,
+        AcpSessionEventSource source, PermissionRequestEventArgs request,
         string? conversationId, PermissionRequestViewModel viewModel)
     {
-        if (!IsInteractionSourceActive(source) || !request.CanRespond)
+        if (!IsCurrentEventSource(source) || !request.CanRespond)
         {
             RemovePermissionRequestProjection(conversationId, viewModel);
         }
@@ -2235,7 +2240,7 @@ public partial class ChatViewModel
     }
 
     private async Task CancelUndisplayedPermissionAsync(
-        InteractionRequestSource source, PermissionRequestEventArgs request)
+        AcpSessionEventSource source, PermissionRequestEventArgs request)
     {
         try
         {
@@ -2248,7 +2253,7 @@ public partial class ChatViewModel
 
         await PostToUiAsync(async () =>
         {
-            if (!IsInteractionSourceActive(source) || !request.CanRespond) return;
+            if (!IsCurrentEventSource(source) || !request.CanRespond) return;
             if (string.IsNullOrWhiteSpace(CurrentSessionId) || !IsChatShellVisibleForRemoteUi)
             {
                 await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(source.Service, this,
@@ -2353,7 +2358,7 @@ public partial class ChatViewModel
             : null;
     }
 
-    private void OnFileSystemRequestReceived(object? sender, FileSystemRequestEventArgs e)
+    private void OnFileSystemRequestReceived(AcpSessionEventSource source, FileSystemRequestEventArgs e)
     {
         _uiDispatcher.Enqueue(() =>
         {
@@ -2363,9 +2368,9 @@ public partial class ChatViewModel
                     e,
                     async (messageId, success, content, message) =>
                     {
-                        if (_chatService != null)
+                        if (IsCurrentEventSource(source))
                         {
-                            await _chatService.RespondToFileSystemRequestAsync(messageId, success, content, message).ConfigureAwait(true);
+                            await source.Service.RespondToFileSystemRequestAsync(messageId, success, content, message).ConfigureAwait(true);
                         }
                     },
                     () =>
@@ -2382,14 +2387,14 @@ public partial class ChatViewModel
         });
     }
 
-    private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
+    private void OnTerminalRequestReceived(AcpSessionEventSource source, TerminalRequestEventArgs e)
     {
         _uiDispatcher.Enqueue(() =>
         {
             try
             {
                 Logger.LogInformation("Terminal request received: Method={Method}, TerminalId={TerminalId}", e.Method, e.TerminalId);
-                _ = ProcessTerminalRequestAsync(e);
+                if (IsCurrentEventSource(source)) _ = ProcessTerminalRequestAsync(source, e);
             }
             catch (Exception ex)
             {
@@ -2398,13 +2403,13 @@ public partial class ChatViewModel
         });
     }
 
-    private void OnTerminalStateChangedReceived(object? sender, TerminalStateChangedEventArgs e)
+    private void OnTerminalStateChangedReceived(AcpSessionEventSource source, TerminalStateChangedEventArgs e)
     {
         _uiDispatcher.Enqueue(() =>
         {
             try
             {
-                _ = ProcessTerminalStateChangedAsync(e);
+                if (IsCurrentEventSource(source)) _ = ProcessTerminalStateChangedAsync(source, e);
             }
             catch (Exception ex)
             {
@@ -2413,7 +2418,7 @@ public partial class ChatViewModel
         });
     }
 
-    private async Task ProcessTerminalRequestAsync(TerminalRequestEventArgs request)
+    private async Task ProcessTerminalRequestAsync(AcpSessionEventSource source, TerminalRequestEventArgs request)
     {
         try
         {
@@ -2421,7 +2426,7 @@ public partial class ChatViewModel
                 request,
                 _panelStateCoordinator,
                 CurrentSessionId,
-                Logger).ConfigureAwait(false);
+                Logger, source).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -2435,7 +2440,7 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task ProcessTerminalStateChangedAsync(TerminalStateChangedEventArgs update)
+    private async Task ProcessTerminalStateChangedAsync(AcpSessionEventSource source, TerminalStateChangedEventArgs update)
     {
         try
         {
@@ -2443,7 +2448,7 @@ public partial class ChatViewModel
                 update,
                 _panelStateCoordinator,
                 CurrentSessionId,
-                Logger).ConfigureAwait(false);
+                Logger, source).ConfigureAwait(false);
             if (projection is null)
             {
                 return;
@@ -2466,16 +2471,55 @@ public partial class ChatViewModel
         }
     }
 
-    private void OnErrorOccurred(object? sender, string error)
+    private void OnErrorOccurred(AcpSessionEventSource source, string error)
     {
-        var conversationOwner = CurrentSessionId;
+        if (_disposed) return;
+        var conversationOwner = ReferenceEquals(source.Service, _chatService) ? CurrentSessionId : null;
+        if (!source.Service.IsConnected)
+        {
+            if (_connectionSessionRegistry?.RemoveByService(source.Service, out _, AcpConnectionRetirementReason.TransportLost) != true)
+            {
+                TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(
+                    () => RetireConnectionStateAsync(source, AcpConnectionRetirementReason.TransportLost)));
+            }
+        }
+        else if (!IsCurrentEventSource(source)) return;
+
         _uiDispatcher.Enqueue(() =>
         {
-            PublishConversationOperationFailure(conversationOwner, error);
-            Logger.LogError(error);
+            Logger.LogError("ACP connection reported an error. ProfileId={ProfileId} Error={Error}", source.ProfileId, error);
+            if (ReferenceEquals(source.Service, _chatService))
+            {
+                PublishConversationOperationFailure(conversationOwner, error);
+                if (string.Equals(CurrentSessionId, conversationOwner, StringComparison.Ordinal)) QueueActiveRemoteConnectionRecovery(error);
+            }
         });
-        _ = ReconcileConnectionProjectionOnTransportLossAsync(error);
-        QueueActiveRemoteConnectionRecovery(error);
+        if (ReferenceEquals(source.Service, _chatService)) _ = ReconcileConnectionProjectionOnTransportLossAsync(error);
+    }
+
+    private async Task ProcessRetiredConnectionAsync(AcpSessionEventSource source, AcpConnectionRetirementReason reason)
+    {
+        CancelPromptOperationsForSource(source, reason);
+        if (_conversationAttentionStore is not null)
+        {
+            await _conversationAttentionStore.Dispatch(new DetachConversationAttentionContentAction(
+                source.ProfileId, source.ConnectionInstanceId)).ConfigureAwait(false);
+        }
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        foreach (var turn in state.Turns?.Values ?? Enumerable.Empty<ActiveTurnState>())
+        {
+            if (!string.Equals(turn.ProfileId, source.ProfileId, StringComparison.Ordinal)
+                || !string.Equals(turn.ConnectionInstanceId, source.ConnectionInstanceId, StringComparison.Ordinal)
+                || turn.Phase is ChatTurnPhase.Completed or ChatTurnPhase.Cancelled or ChatTurnPhase.Failed
+                || reason == AcpConnectionRetirementReason.Replaced && IsOperationReplacingConnection(source, turn.ConversationId)) continue;
+
+            ChatAction action = reason is AcpConnectionRetirementReason.Disconnected or AcpConnectionRetirementReason.Shutdown
+                ? new CancelTurnAction(turn.ConversationId, turn.TurnId, ConnectionInstanceId: turn.ConnectionInstanceId)
+                : new FailTurnAction(turn.ConversationId, turn.TurnId,
+                    Localize("ChatOperation_ConnectionInterrupted", "The connection was interrupted. Reconnect to continue."),
+                    ConnectionInstanceId: turn.ConnectionInstanceId);
+            await _chatStore.Dispatch(action).ConfigureAwait(false);
+        }
     }
 
     // When the underlying transport genuinely dies, the connection projection can otherwise keep
@@ -2500,7 +2544,7 @@ public partial class ChatViewModel
         }
     }
 
-    private Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)
+    private Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken, Func<bool>? isCurrent = null)
         => _authenticationCoordinator.TryAuthenticateAsync(
             _chatService,
             IsInitialized,
@@ -2531,7 +2575,8 @@ public partial class ChatViewModel
             terminalAuthenticateAsync: _terminalAuthenticationCoordinator?.CanAuthenticate(_chatService) == true
                 ? (method, token) => _terminalAuthenticationCoordinator.TryAuthenticateAsync(
                     method, this, ReconnectAfterTerminalAuthenticationAsync, token)
-                : null);
+                : null,
+            isCurrent: isCurrent);
 
     private async Task<bool> ReconnectAfterTerminalAuthenticationAsync(
         AcpConnectionContext connectionContext, CancellationToken cancellationToken)
@@ -2850,10 +2895,11 @@ public partial class ChatViewModel
         return parts.Count == 0 ? string.Empty : string.Join(Environment.NewLine, parts);
     }
 
-    private async Task PreemptivelyCancelTurnAsync(string? expectedConversationId = null, string? expectedTurnId = null)
+    private async Task PreemptivelyCancelTurnAsync(string? expectedConversationId = null, string? expectedTurnId = null,
+        string? expectedConnectionInstanceId = null)
     {
         var state = await _chatStore.GetCurrentStateAsync();
-        var activeTurn = state.ActiveTurn;
+        var activeTurn = state.ResolveTurn(expectedConversationId ?? state.HydratedConversationId);
         if (activeTurn is null)
         {
             return;
@@ -2871,8 +2917,11 @@ public partial class ChatViewModel
             return;
         }
 
+        if (expectedTurnId is not null && !string.Equals(activeTurn.ConnectionInstanceId, expectedConnectionInstanceId, StringComparison.Ordinal)) return;
+
         await PreemptivelyCancelOutstandingToolCallsAsync(state, activeTurn).ConfigureAwait(true);
-        await _chatStore.Dispatch(new CancelTurnAction(activeTurn.ConversationId, activeTurn.TurnId)).ConfigureAwait(true);
+        await _chatStore.Dispatch(new CancelTurnAction(activeTurn.ConversationId, activeTurn.TurnId,
+            StopReason.Cancelled.Value, HasStopReason: true, activeTurn.ConnectionInstanceId)).ConfigureAwait(true);
     }
 
     private async Task PreemptivelyCancelOutstandingToolCallsAsync()

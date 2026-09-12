@@ -1,7 +1,11 @@
 using System.Collections.Immutable;
 using System.Threading.Tasks;
+using Moq;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using Uno.Extensions.Reactive;
 using Xunit;
 
@@ -51,5 +55,36 @@ public sealed class AcpConnectionDependencySnapshotProviderTests
 
         Assert.Null(snapshot.SelectedProfileId);
         Assert.Empty(snapshot.ProfilesRequiredByRemoteBindings);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_WhenBackgroundTurnAndPendingRequestAreBusy_ProtectsTheirExactConnectionsAndReleasesOnCompletion()
+    {
+        // Arrange
+        var turn = new ActiveTurnState("working", "turn", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow,
+            ProfileId: "profile-a", RemoteSessionId: "remote-a", ConnectionInstanceId: "connection-a");
+        var chatState = State.Value(new object(), () => ChatState.Empty with
+        {
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("working", turn)
+        });
+        var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
+        var panels = new ChatConversationPanelStateCoordinator();
+        panels.StoreAskUserRequest("pending", new("question", "remote-b", "Question", [])
+        {
+            Source = new AcpSessionEventSource("profile-b", "connection-b", Mock.Of<IChatService>())
+        });
+        var store = new ChatStore(chatState);
+        var provider = new AcpConnectionDependencySnapshotProvider(store, new ChatConnectionStore(connectionState), panels);
+
+        // Act
+        var busy = await provider.GetSnapshotAsync(TestContext.Current.CancellationToken);
+        await store.Dispatch(new CompleteTurnAction("working", "turn", ConnectionInstanceId: turn.ConnectionInstanceId));
+        panels.RemoveAskUserRequest("pending");
+        var idle = await provider.GetSnapshotAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(("profile-a", "connection-a"), busy.BusyConnections);
+        Assert.Contains(("profile-b", "connection-b"), busy.BusyConnections);
+        Assert.Empty(idle.BusyConnections);
     }
 }

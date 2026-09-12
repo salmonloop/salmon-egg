@@ -55,6 +55,36 @@
                              IsClosable="False"
                              Severity="Informational" />
 
+                    <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                        <controls:ResponsiveFormRow>
+                            <controls:ResponsiveFormRow.Label>
+                                <StackPanel>
+                                    <TextBlock x:Uid="Appearance_SidebarGroupingLabel"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock x:Uid="Appearance_SidebarGroupingDescription"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}" />
+                                </StackPanel>
+                            </controls:ResponsiveFormRow.Label>
+                            <controls:ResponsiveFormRow.Value>
+                                <ComboBox x:Name="AppearanceSidebarGroupingComboBox"
+                                          x:Uid="Appearance_SidebarGrouping"
+                                          AutomationProperties.AutomationId="Appearance.SidebarConversationGrouping"
+                                          ItemsSource="{x:Bind Preferences.SidebarConversationGroupingOptions, Mode=OneWay}"
+                                          SelectedItem="{x:Bind Preferences.SelectedSidebarConversationGroupingOption, Mode=TwoWay}"
+                                          MinWidth="{StaticResource SettingsRowControlMinWidth}"
+                                          HorizontalAlignment="Stretch"
+                                          IsFocusEngagementEnabled="True"
+                                          VerticalAlignment="Center">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:SettingsOptionViewModel">
+                                            <TextBlock Text="{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </controls:ResponsiveFormRow.Value>
+                        </controls:ResponsiveFormRow>
+                    </Border>
+
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Appearance_ThemeTitle"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>

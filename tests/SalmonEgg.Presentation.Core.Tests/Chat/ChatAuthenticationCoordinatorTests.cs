@@ -483,6 +483,35 @@ public sealed class ChatAuthenticationCoordinatorTests
         coordinator.Verify(x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryAuthenticateAsync_CompletedForOldConversation_DoesNotChangeCurrentAuthenticationState(bool fails)
+    {
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(CreateInitializeResponse(new AuthMethodDefinition { Id = "login", Name = "Login" }));
+        var coordinator = CreateConnectionCoordinator();
+        var service = new Mock<IChatService>();
+        var response = new TaskCompletionSource<AuthenticateResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Setup(chat => chat.AuthenticateAsync(It.IsAny<AuthenticateParams>(), It.IsAny<CancellationToken>()))
+            .Returns(response.Task);
+        var notifications = new List<string>();
+        var current = true;
+        var authentication = sut.TryAuthenticateAsync(service.Object, true, coordinator.Object,
+            NullLogger.Instance, notifications.Add, TestContext.Current.CancellationToken, isCurrent: () => current);
+
+        current = false;
+        if (fails) response.SetException(new InvalidOperationException("old authentication failed"));
+        else response.SetResult(new AuthenticateResponse());
+        var authenticated = await authentication;
+
+        Assert.False(authenticated);
+        Assert.Single(notifications);
+        coordinator.Verify(value => value.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()), Times.Never);
+        coordinator.Verify(value => value.SetAuthenticationRequiredAsync(It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<object[]?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static readonly AuthenticationHintPresentation UnsupportedMethodTypeHint = new(
         "无法使用的登录方式",
         ResourceKey: "ChatAuth_UnsupportedMethodType",

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -21,11 +22,13 @@ public partial class PermissionRequestViewModel : ObservableObject
     private string _description = string.Empty;
 
     public object MessageId { get; set; } = string.Empty;
+    internal DateTime ActivityAtUtc { get; private set; } = DateTime.UtcNow;
     public string SessionId { get; set; } = string.Empty;
     public string ToolCallJson { get; set; } = string.Empty;
     internal string? ToolCallId { get; set; }
     internal string? RequestTitle { get; set; }
     internal ConversationBindingSlice? Binding { get; set; }
+    internal AcpSessionEventSource? Source { get; set; }
     internal Task? BindingCancellationTask { get; set; }
     internal bool BindingCancellationAttempted { get; set; }
     internal Func<bool>? IsRequestAvailable { get; set; }
@@ -43,6 +46,7 @@ public partial class PermissionRequestViewModel : ObservableObject
 
     internal void ShowCancellationRetry(string title, string description, bool bindingChanged)
     {
+        if (!_showsCancellationRetry) ActivityAtUtc = DateTime.UtcNow;
         if (bindingChanged) BindingCancellationAttempted = true;
         ToolCallId = null;
         Title = title;

@@ -18,7 +18,8 @@ public interface IAcpConnectionSessionCleaner
         IChatService? activeService,
         Func<AcpConnectionSession, bool>? isPinned = null,
         Func<AcpConnectionSession, bool>? isHardPinned = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<AcpConnectionSession, CancellationToken, ValueTask<bool>>? retainBeforeEvictionAsync = null);
 
     /// <summary>
     /// 进程退出路径专用：摘除并释放<b>全部</b>缓存会话，含当前活跃的那一个。
@@ -78,13 +79,14 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
         IChatService? activeService,
         Func<AcpConnectionSession, bool>? isPinned = null,
         Func<AcpConnectionSession, bool>? isHardPinned = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<AcpConnectionSession, CancellationToken, ValueTask<bool>>? retainBeforeEvictionAsync = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var removed = _sessionRegistry.RemoveWhere(static session =>
             !session.Service.IsConnected
-            || !session.Service.IsInitialized);
+            || !session.Service.IsInitialized, AcpConnectionRetirementReason.TransportLost);
 
         // RemoveWhere 已把这些会话从注册表批量摘除,再无任何持有者;此后必须无条件全部释放。
         // 若在此阶段响应取消,剩余的已摘除会话就成了无主的泄漏连接(进程/套接字/HttpClient)。
@@ -151,7 +153,15 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
             foreach (var session in sessionsToEvict)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!_sessionRegistry.RemoveByProfile(session.ProfileId))
+                if (retainBeforeEvictionAsync is not null
+                    && await retainBeforeEvictionAsync(session, cancellationToken).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                if (!_sessionRegistry.TryGetByProfile(session.ProfileId, out var current)
+                    || !session.EventSource.Matches(current)) continue;
+                if (!_sessionRegistry.TryEvict(session))
                 {
                     continue;
                 }
@@ -185,7 +195,7 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
     {
         // 一次 RemoveWhere 全部摘净：逐个 RemoveByProfile 会在两次调用之间留出窗口，
         // 让并发的 connect apply 又塞回一个会话，从而漏掉它。
-        var removed = _sessionRegistry.RemoveWhere(static _ => true);
+        var removed = _sessionRegistry.RemoveWhere(static _ => true, AcpConnectionRetirementReason.Shutdown);
         if (removed.Count == 0)
         {
             return new AcpConnectionSessionCleanupResult(0, 0);
@@ -275,6 +285,10 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
                         "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
                         session.ProfileId);
                 }
+            }
+            finally
+            {
+                await session.Service.DrainResyncAsync().ConfigureAwait(false);
             }
         }
     }

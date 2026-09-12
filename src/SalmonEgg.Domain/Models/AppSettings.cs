@@ -28,6 +28,15 @@ public sealed class AppSettings
     /// </summary>
     public string Backdrop { get; set; } = "System";
 
+    public string SidebarConversationGrouping { get; set; } = AppSettingValueCatalog.DefaultSidebarConversationGrouping;
+
+    // Persist explicit user expansion choices, not native compact/flyout collapse transitions.
+    public bool SidebarAttentionGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded;
+
+    public bool SidebarWorkingGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded;
+
+    public bool SidebarOtherGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded;
+
     // Data & Storage / Privacy
     public bool SaveLocalHistory { get; set; } = true;
 
