@@ -55,6 +55,15 @@ jobs:
           xcrun --sdk macosx --find actool
           dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
 
+      - name: Install matching Simulator runtime
+        timeout-minutes: 12
+        run: |
+          # Hosted images retain older Xcode SDKs after removing their runtimes (runner-images #13570).
+          # Download through Xcode so actool and the installed UI test use the same supported runtime.
+          simulator_sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          xcodebuild -downloadPlatform iOS -buildVersion "$simulator_sdk_version"
+          xcrun simctl list runtimes
+
       - name: Build current Simulator application
         run: |
           dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
