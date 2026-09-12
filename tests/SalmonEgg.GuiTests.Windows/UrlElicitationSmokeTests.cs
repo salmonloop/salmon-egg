@@ -1,0 +1,344 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
+
+namespace SalmonEgg.GuiTests.Windows;
+
+public sealed class UrlElicitationSmokeTests
+{
+    [Fact]
+    public void UrlConsent_UsesSystemBrowserAndKeepsCompletionWithTheOriginatingAgent()
+    {
+        // Arrange: the installed product starts a real stdio peer and an ordinary system browser.
+        using var fixture = new Fixture();
+        using var app = WindowsGuiAppSession.LaunchFresh();
+        try
+        {
+            if (app.MainWindow.Patterns.Window.IsSupported)
+                app.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Maximized);
+            app.ClickElement(app.FindByAutomationId("MainNav.Session.native-elicitation-conversation", TimeSpan.FromSeconds(30)));
+            Assert.True(app.WaitUntil(() => fixture.Rows().Any(row => row.TryGetProperty("method", out var method)
+                && method.GetString() == "session/load"), TimeSpan.FromSeconds(30)));
+            var initialize = Assert.Single(fixture.Rows(), row => row.TryGetProperty("method", out var method)
+                && method.GetString() == "initialize");
+            Assert.Equal(JsonValueKind.Object, initialize.GetProperty("capabilities").GetProperty("elicitation").GetProperty("url").ValueKind);
+
+            // Act and assert: each native choice is tied to its own wire response.
+            foreach (var action in new[] { "decline", "cancel" })
+            {
+                fixture.Instruct(action);
+                fixture.WaitForCard(app, action);
+                Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
+                ClickButton(app, action == "decline" ? "Decline" : "Cancel");
+                fixture.AssertResponse(app, action, action);
+                Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
+            }
+
+            fixture.Instruct("open");
+            fixture.WaitForCard(app, "open");
+            Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
+            ClickButton(app, "Open in browser");
+            fixture.AssertResponse(app, "open", "accept");
+            Assert.True(app.WaitUntil(() => fixture.Reports.Count == 1, TimeSpan.FromSeconds(30)),
+                "The real system browser did not load the consented page.");
+            app.BringMainWindowToFront();
+            ClickButton(app, "Open again");
+            Assert.True(app.WaitUntil(() => fixture.Reports.Count == 2, TimeSpan.FromSeconds(30)));
+            Assert.Single(fixture.Responses("open"));
+            app.BringMainWindowToFront();
+            fixture.Instruct("complete");
+            FindVisible(app, element => element.Properties.Name.ValueOrDefault == "The agent reports that the external step is complete.");
+            ClickButton(app, "Close notice");
+            fixture.Instruct("expire");
+            fixture.WaitForCard(app, "expire");
+            fixture.Instruct("disconnect");
+            Assert.True(app.WaitUntil(() =>
+            {
+                try
+                {
+                    var snapshot = app.MainWindow.FindAllDescendants();
+                    var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
+                    var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
+                    return (link is null || link.Properties.IsOffscreen.ValueOrDefault || string.IsNullOrEmpty(link.Properties.Name.ValueOrDefault))
+                        && (open is null || !open.Properties.IsEnabled.ValueOrDefault);
+                }
+                catch (System.Runtime.InteropServices.COMException) { return false; }
+            }, TimeSpan.FromSeconds(15)), "The disconnected request retained its original URL or an active open action.");
+            Assert.Empty(fixture.Responses("expire"));
+            Assert.Equal(2, fixture.Visits.Count);
+            Assert.All(fixture.Visits, referer => Assert.Equal(string.Empty, referer));
+            Assert.Equal(2, fixture.Reports.Count);
+            Assert.All(fixture.Reports, report =>
+            {
+                Assert.True(report.GetProperty("openerAbsent").GetBoolean());
+                Assert.Equal(string.Empty, report.GetProperty("referrer").GetString());
+                Assert.True(report.GetProperty("bridgeAbsent").GetBoolean());
+                Assert.Equal(Fixture.PrivateValue, report.GetProperty("privateValue").GetString());
+            });
+            Assert.DoesNotContain(Fixture.PrivateValue, File.ReadAllText(fixture.PeerLog), StringComparison.Ordinal);
+            GuiAcceptanceDiagnostics.Record("URL: five native consent actions, two isolated system-browser visits and single accept passed");
+        }
+        finally
+        {
+            var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+            if (!string.IsNullOrWhiteSpace(artifacts))
+            {
+                try
+                {
+                    app.CaptureMainWindowToFile(Path.Combine(artifacts, "url-product.png"));
+                    var rows = app.MainWindow.FindAllDescendants().Select(element =>
+                        element.Properties.ControlType.ValueOrDefault + " | " + element.Properties.AutomationId.ValueOrDefault
+                        + " | offscreen=" + element.Properties.IsOffscreen.ValueOrDefault + " | " + element.Properties.Name.ValueOrDefault);
+                    File.WriteAllLines(Path.Combine(artifacts, "url-native-controls.txt"), rows);
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    GuiAcceptanceDiagnostics.Record("URL: native diagnostic provider detached after the test");
+                }
+            }
+        }
+    }
+
+    private static void ClickButton(WindowsGuiAppSession app, string label)
+    {
+        var button = FindVisible(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
+            && element.Properties.Name.ValueOrDefault == label);
+        Assert.True(app.WaitUntil(() => button.IsEnabled, TimeSpan.FromSeconds(10)));
+        app.ClickElement(button);
+        GuiAcceptanceDiagnostics.Record("URL: native button " + label);
+    }
+
+    private static AutomationElement FindVisible(WindowsGuiAppSession app, Func<AutomationElement, bool> matches)
+    {
+        AutomationElement? found = null;
+        Assert.True(app.WaitUntil(() =>
+        {
+            // Enumerate native providers first: WinUI lazily materializes the ContentTemplate's
+            // peers, while a filtered FindFirst can return no match before those peers exist.
+            try
+            {
+                found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
+                    !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
+                return found is not null;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                return false; // Requery a replaced native provider within the same bounded wait.
+            }
+        }, TimeSpan.FromSeconds(20)), "The current native URL control did not appear.");
+        return found!;
+    }
+
+    private sealed class Fixture : IDisposable
+    {
+        public const string PrivateValue = "windows-page-private-canary";
+        private readonly string? _previousRoot;
+        private readonly HttpListener _server = new();
+        private readonly Task _serverTask;
+        private readonly HashSet<int> _originalBrowsers = BrowserPids();
+        private readonly string _urlToken = Guid.NewGuid().ToString("N");
+        private int _phase;
+
+        public Fixture()
+        {
+            GuiTestGate.RequireEnabled();
+            var python = Environment.GetEnvironmentVariable("SALMONEGG_GUI_PYTHON")
+                ?? throw new InvalidOperationException("The gate must supply its actual Python executable.");
+            Assert.True(File.Exists(python), "The selected Python executable is missing.");
+            var peer = FindPeer();
+            Root = Path.Combine(Path.GetTempPath(), "SalmonEgg.UrlGui", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(Root, "config", "servers"));
+            Directory.CreateDirectory(Path.Combine(Root, "conversations"));
+            var project = Path.Combine(Root, "project");
+            Directory.CreateDirectory(project);
+            using var portProbe = new TcpListener(IPAddress.Loopback, 0);
+            portProbe.Start();
+            var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
+            portProbe.Stop();
+            _server.Prefixes.Add($"http://127.0.0.1:{port}/");
+            Url = $"http://127.0.0.1:{port}/authorize?token={_urlToken}";
+            var scenario = Path.Combine(Root, "scenario.json");
+            File.WriteAllText(scenario, "{\"url\":" + Json(Url) + ",\"log\":" + Json(PeerLog)
+                + ",\"control\":" + Json(ControlPath) + ",\"cwd\":" + Json(project) + "}");
+            File.WriteAllText(Path.Combine(Root, "config", "servers", "native-elicitation-profile.yaml"),
+                "schema_version: 5\nid: native-elicitation-profile\nname: Native Elicitation Fixture\ntransport: stdio\n"
+                + "stdio_command: " + Quote(python) + "\nstdio_arguments:\n  - " + Quote(peer) + "\n  - " + Quote(scenario)
+                + "\nconnection_timeout_seconds: 30\nauthentication:\n  mode: none\n");
+            File.WriteAllText(Path.Combine(Root, "config", "app.yaml"), "schema_version: 1\nlanguage: en\n"
+                + "last_selected_server_id: native-elicitation-profile\nlast_selected_project_id: native-elicitation-project\n"
+                + "projects:\n  - project_id: native-elicitation-project\n    name: Native URL\n    root_path: " + Quote(project) + "\n");
+            File.WriteAllText(Path.Combine(Root, "conversations", "conversations.v1.json"),
+                "{\"version\":1,\"lastActiveConversationId\":null,\"conversations\":[{\"conversationId\":\"native-elicitation-conversation\","
+                + "\"displayName\":\"Native URL\",\"createdAt\":\"2026-09-12T00:00:00Z\",\"lastUpdatedAt\":\"2026-09-12T00:00:00Z\","
+                + "\"cwd\":" + Json(project) + ",\"boundProfileId\":\"native-elicitation-profile\","
+                + "\"remoteSessionId\":\"native-elicitation-session\",\"messages\":[]}]}");
+            _previousRoot = Environment.GetEnvironmentVariable("SALMONEGG_APPDATA_ROOT");
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Root);
+            _server.Start();
+            _serverTask = ServeAsync();
+        }
+
+        public string Root { get; }
+        public string Url { get; }
+        public string PeerLog => Path.Combine(Root, "peer.jsonl");
+        private string ControlPath => Path.Combine(Root, "control.json");
+        public ConcurrentQueue<string> Visits { get; } = new();
+        public ConcurrentQueue<JsonElement> Reports { get; } = new();
+
+        public void Instruct(string action)
+        {
+            var temporary = ControlPath + ".tmp";
+            File.WriteAllText(temporary, "{\"phase\":" + (++_phase) + ",\"action\":" + Json(action) + "}");
+            File.Move(temporary, ControlPath, overwrite: true);
+        }
+
+        public void WaitForCard(WindowsGuiAppSession app, string action)
+        {
+            var link = FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
+            Assert.True(app.WaitUntil(() => !link.Properties.IsOffscreen.ValueOrDefault && link.Properties.Name.ValueOrDefault == Url, TimeSpan.FromSeconds(10)));
+            Assert.Equal("127.0.0.1", FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.UrlHost").Properties.Name.ValueOrDefault);
+            FindVisible(app, element => element.Properties.Name.ValueOrDefault == "native-url-" + action);
+        }
+
+        public JsonElement[] Rows()
+        {
+            if (!File.Exists(PeerLog)) return [];
+            using var stream = File.Open(PeerLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd().Split('\n').SkipLast(1).Where(line => line.Length > 0).Select(line =>
+            {
+                using var document = JsonDocument.Parse(line);
+                return document.RootElement.Clone();
+            }).ToArray();
+        }
+
+        public JsonElement[] Responses(string action) => Rows().Where(row => row.TryGetProperty("id", out var id)
+            && id.GetString() == "native-url-" + action).ToArray();
+
+        public void AssertResponse(WindowsGuiAppSession app, string id, string action)
+        {
+            Assert.True(app.WaitUntil(() => Responses(id).Length > 0, TimeSpan.FromSeconds(15)));
+            var response = Assert.Single(Responses(id));
+            Assert.Equal(action, response.GetProperty("result").GetProperty("action").GetString());
+            Assert.Single(response.GetProperty("result").EnumerateObject());
+        }
+
+        private async Task ServeAsync()
+        {
+            while (_server.IsListening)
+            {
+                HttpListenerContext request;
+                try { request = await _server.GetContextAsync(); }
+                catch (Exception exception) when (exception is HttpListenerException or ObjectDisposedException) { break; }
+                if (request.Request.HttpMethod == "POST" && request.Request.RawUrl == "/report")
+                {
+                    using var document = await JsonDocument.ParseAsync(request.Request.InputStream);
+                    Reports.Enqueue(document.RootElement.Clone());
+                    request.Response.StatusCode = 204;
+                }
+                else if (request.Request.Url?.AbsoluteUri == Url)
+                {
+                    Visits.Enqueue(request.Request.Headers["Referer"] ?? string.Empty);
+                    var html = "<!doctype html><input id=private value=" + PrivateValue + ">"
+                        + "<script>fetch('/report',{method:'POST',body:JSON.stringify({openerAbsent:window.opener===null,"
+                        + "referrer:document.referrer,bridgeAbsent:!window.chrome?.webview&&!window.unoWebView,"
+                        + "privateValue:document.querySelector('#private').value})});</script>";
+                    var bytes = Encoding.UTF8.GetBytes(html);
+                    request.Response.ContentType = "text/html";
+                    request.Response.ContentLength64 = bytes.Length;
+                    await request.Response.OutputStream.WriteAsync(bytes);
+                }
+                else request.Response.StatusCode = 404;
+                request.Response.Close();
+            }
+        }
+
+        public void Dispose()
+        {
+            var cleanupFailures = new List<Exception>();
+            void Cleanup(Action action)
+            {
+                try { action(); }
+                catch (Exception error) { cleanupFailures.Add(error); }
+            }
+
+            Cleanup(WindowsGuiAppSession.StopAllRunningInstances);
+            Cleanup(() =>
+            {
+                _server.Close();
+                Assert.True(_serverTask.Wait(TimeSpan.FromSeconds(5)), "The loopback browser fixture did not stop.");
+            });
+            Cleanup(() =>
+            {
+                foreach (var pid in BrowserPids().Except(_originalBrowsers))
+                {
+                    try
+                    {
+                        using var process = Process.GetProcessById(pid);
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(5000);
+                    }
+                    catch (ArgumentException) { }
+                    catch (InvalidOperationException) { }
+                }
+            });
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", _previousRoot);
+            Cleanup(() =>
+            {
+                var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+                if (string.IsNullOrWhiteSpace(artifacts)) return;
+                if (File.Exists(PeerLog)) File.Copy(PeerLog, Path.Combine(artifacts, "url-peer.jsonl"), overwrite: true);
+                using var stream = File.Create(Path.Combine(artifacts, "url-browser-observation.json"));
+                using var writer = new Utf8JsonWriter(stream);
+                writer.WriteStartObject();
+                writer.WriteNumber("browserVisits", Visits.Count);
+                writer.WriteStartArray("reports");
+                foreach (var report in Reports) report.WriteTo(writer);
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+            });
+            Cleanup(() =>
+            {
+                var ownedInputs = new[] { "scenario.json", "control.json", "control.json.tmp", "peer.jsonl" };
+                foreach (var path in Directory.EnumerateFiles(Root, "*", SearchOption.AllDirectories))
+                {
+                    if (ownedInputs.Contains(Path.GetRelativePath(Root, path), StringComparer.Ordinal)) continue;
+                    var content = File.ReadAllText(path);
+                    Assert.False(content.Contains(PrivateValue, StringComparison.Ordinal) || content.Contains(_urlToken, StringComparison.Ordinal),
+                        "Private URL or page data entered product configuration, history, logs or diagnostics.");
+                }
+            });
+            Cleanup(() => Directory.Delete(Root, recursive: true));
+            if (cleanupFailures.Count != 0) throw new AggregateException("Native URL fixture cleanup failed.", cleanupFailures);
+        }
+
+        private static HashSet<int> BrowserPids()
+        {
+            var result = new HashSet<int>();
+            foreach (var name in new[] { "msedge", "chrome", "firefox" })
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                using (process) result.Add(process.Id);
+            }
+            return result;
+        }
+
+        private static string FindPeer()
+        {
+            for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            {
+                var candidate = Path.Combine(directory.FullName, "scripts", "gates", "fixtures", "native-elicitation-peer.py");
+                if (File.Exists(candidate)) return candidate;
+            }
+            throw new FileNotFoundException("The native stdio fixture is missing.");
+        }
+
+        private static string Json(string value) => "\"" + JsonEncodedText.Encode(value).ToString() + "\"";
+        private static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    }
+}

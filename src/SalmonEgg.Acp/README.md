@@ -256,10 +256,11 @@ cancellation callbacks run asynchronously and cannot delay disconnect. Callback 
 observed without logging their potentially private data.
 
 SalmonEgg currently presents session-scoped requests. Request-scoped requests are explicitly
-cancelled when no conversation surface can present them. WASM and Linux desktop advertise URL
-elicitation after their product consent-to-browser gates. The Linux gate uses its real card, native
-pointer input and system opener. Other native targets remain disabled until their own installed
-application acceptance passes; Linux success does not establish five-platform validation.
+cancelled when no conversation surface can present them. WASM, Linux desktop, macOS desktop and
+Windows WinUI advertise URL elicitation after their own product consent-to-browser gates. Native
+gates use real cards, native pointer input and the system opener; Windows runs the current signed
+MSIX. These deterministic protocol fixtures do not substitute for third-party Agent acceptance.
+Other native targets require their own installed application acceptance before enabling the capability.
 
 ## ACP v2 draft surface (SEACP002)
 

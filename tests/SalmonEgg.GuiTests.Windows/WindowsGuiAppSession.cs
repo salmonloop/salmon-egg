@@ -61,6 +61,27 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public Window MainWindow => ResolveMainWindow();
 
+    internal void CaptureAcceptanceFailure(string name)
+    {
+        var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+        if (string.IsNullOrWhiteSpace(artifacts)) return;
+        try
+        {
+            CaptureMainWindowToFile(Path.Combine(artifacts, name + ".png"));
+            var rows = new List<string>();
+            foreach (var window in _application.GetAllTopLevelWindows(_automation))
+            {
+                rows.Add("WINDOW " + DescribeElement(window));
+                foreach (var element in window.FindAllDescendants()) rows.Add(DescribeElement(element));
+            }
+            File.WriteAllLines(Path.Combine(artifacts, name + ".txt"), rows);
+        }
+        catch (Exception exception) when (exception is COMException or IOException or InvalidOperationException)
+        {
+            GuiAcceptanceDiagnostics.Record("Native failure capture unavailable: " + exception.GetType().Name);
+        }
+    }
+
     public static WindowsGuiAppSession LaunchOrAttach()
     {
         GuiTestGate.RequireEnabled();
@@ -78,10 +99,14 @@ internal sealed class WindowsGuiAppSession : IDisposable
             existing = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
         }
 
-        var automation = new UIA3Automation();
+        var automation = new UIA3Automation
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(5),
+            TransactionTimeout = TimeSpan.FromSeconds(5)
+        };
         var application = Application.Attach(existing);
         var mainWindow = RetryUntil(
-            () => application.GetMainWindow(automation),
+            () => application.GetMainWindow(automation, TimeSpan.FromMilliseconds(200)),
             window => window != null && !TryGetIsOffscreen(window),
             TimeSpan.FromSeconds(20),
             "Timed out waiting for SalmonEgg main window.");
@@ -91,17 +116,22 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public static WindowsGuiAppSession LaunchFresh()
     {
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: validate package");
         GuiTestGate.RequireEnabled();
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: stop prior package instance");
         StopAllRunningInstances();
 
         var currentInstall = GuiTestGate.GetRequiredCurrentInstall();
         var executablePath = currentInstall.InstalledExecutablePath
             ?? throw new InvalidOperationException(currentInstall.FailureMessage);
         using var activationEnvironment = ActivationEnvironmentScope.ApplySalmonEggVariables();
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: activation environment ready");
         var launchedAtUtc = DateTime.UtcNow;
         var activatedProcessId = LaunchInstalledMsix(executablePath);
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: activation returned");
 
         var process = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: current package process found");
 
         return AttachToProcess(process, ownsProcess: true);
     }
@@ -1389,6 +1419,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
         out string executablePath,
         out string failureMessage)
     {
+        GuiAcceptanceDiagnostics.Record("Package discovery: Get-AppxPackage");
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
         {
@@ -1404,6 +1435,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
         var output = process.StandardOutput.ReadToEnd().Trim();
         var error = process.StandardError.ReadToEnd().Trim();
         process.WaitForExit();
+        GuiAcceptanceDiagnostics.Record("Package discovery: Get-AppxPackage completed");
 
         if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
         {
@@ -1443,19 +1475,19 @@ internal sealed class WindowsGuiAppSession : IDisposable
         int? activatedProcessId)
     {
         return RetryUntil(
-            () => FindActivatedProcess(activatedProcessId)
+            () => FindActivatedProcess(activatedProcessId, executablePath)
                 ?? Process.GetProcessesByName(ProcessName)
                     .OrderByDescending(process => process.StartTime)
                     .FirstOrDefault(process =>
-                        (TryGetProcessExecutablePath(process, out var candidatePath)
-                            && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase))
-                        || WasProcessStartedAfter(process, launchedAtUtc)),
+                        TryGetProcessExecutablePath(process, out var candidatePath)
+                        && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase)
+                        && WasProcessStartedAfter(process, launchedAtUtc)),
             process => process != null,
             timeout,
             $"Timed out waiting for SalmonEgg process from installed executable '{executablePath}'.")!;
     }
 
-    private static Process? FindActivatedProcess(int? processId)
+    private static Process? FindActivatedProcess(int? processId, string executablePath)
     {
         if (processId is null or <= 0)
         {
@@ -1465,7 +1497,9 @@ internal sealed class WindowsGuiAppSession : IDisposable
         try
         {
             var process = Process.GetProcessById(processId.Value);
-            if (!process.HasExited)
+            if (!process.HasExited
+                && TryGetProcessExecutablePath(process, out var actualPath)
+                && string.Equals(actualPath, executablePath, StringComparison.OrdinalIgnoreCase))
             {
                 return process;
             }
@@ -1609,15 +1643,23 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     private static WindowsGuiAppSession AttachToProcess(Process process, bool ownsProcess)
     {
-        var automation = new UIA3Automation();
+        GuiAcceptanceDiagnostics.Record("AttachToProcess: create UIA3");
+        var automation = new UIA3Automation
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(5),
+            TransactionTimeout = TimeSpan.FromSeconds(5)
+        };
         try
         {
             var application = Application.Attach(process);
+            GuiAcceptanceDiagnostics.Record("AttachToProcess: read main window");
             var mainWindow = RetryUntil(
-                () => application.GetMainWindow(automation),
+                // FlaUI otherwise waits forever for MainWindowHandle inside the outer retry.
+                () => application.GetMainWindow(automation, TimeSpan.FromMilliseconds(200)),
                 window => window != null && !TryGetIsOffscreen(window),
                 TimeSpan.FromSeconds(20),
                 "Timed out waiting for SalmonEgg main window.");
+            GuiAcceptanceDiagnostics.Record("AttachToProcess: main window acquired");
 
             return new WindowsGuiAppSession(application, automation, mainWindow!, ownsProcess);
         }

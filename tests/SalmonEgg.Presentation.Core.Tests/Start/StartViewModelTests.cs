@@ -199,8 +199,9 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(syncContext);
         try
         {
+            var dispatcher = new QueueingUiDispatcher();
             var preferences = CreatePreferences();
-            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), uiDispatcher: dispatcher);
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -208,9 +209,15 @@ public sealed class StartViewModelTests
 
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
+            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == "chat draft");
+            await WaitForConditionAsync(() => dispatcher.PendingCount > 0);
 
             var suggestion = startViewModel.Suggestions[1];
             await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
+            // The real UI serializes setters with store projections. Keep the old draft callback
+            // queued until after this newer intent, then verify it cannot overwrite the suggestion.
+            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == suggestion.Prompt);
+            dispatcher.RunAll();
 
             Assert.False(suggestion.IsInformational);
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
@@ -3914,6 +3921,9 @@ public sealed class StartViewModelTests
 
         public ValueTask<ChatConnectionState> GetConnectionStateAsync()
             => _connectionStore.GetCurrentStateAsync();
+
+        public async Task<string> GetDraftTextAsync()
+            => (await _state ?? ChatState.Empty).DraftText;
 
         public async ValueTask DisposeAsync()
         {
