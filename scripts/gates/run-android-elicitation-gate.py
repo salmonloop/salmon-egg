@@ -246,13 +246,16 @@ class ConsentFlow:
             assert "content" not in replies[0]["result"], "Consent reply included unrelated form content"
         return replies[0]["result"]
 
-    def url_card(self, request):
-        self.device.wait(request)
-        self.device.wait(self.state()["url"])
-        self.device.wait("127.0.0.1")
+    def url_card(self, request, expected_visits=0):
+        def visible(label):
+            assert len(self.state()["visits"]) == expected_visits, "The product opened a URL without consent."
+            return self.device.find(label, enabled=True)
+
+        for label in (request, self.state()["url"], "127.0.0.1"):
+            eventually("The native consent detail is absent: " + label, lambda: visible(label))
 
     def no_navigation(self):
-        assert self.state()["visits"] == [], "The app opened a URL before explicit consent"
+        assert self.state()["visits"] == [], "The product opened a URL without consent."
 
     def activate_conversation(self):
         self.device.activate_product()
@@ -321,7 +324,7 @@ class ConsentFlow:
             self.response("native-" + action, reply)
 
         self.instruct("url-expire")
-        self.url_card("native-url-expire")
+        self.url_card("native-url-expire", expected_visits=2)
         self.instruct("disconnect")
         eventually("Disconnect retained the private URL", lambda: self.device.find(self.state()["url"]) is None)
         self.device.capture("connection-expired")
