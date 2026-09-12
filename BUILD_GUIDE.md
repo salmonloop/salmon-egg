@@ -81,6 +81,18 @@ Windows 主机运行：
 
 Linux/macOS 暂不广告终端登录：当前 Porta.Pty 对 Unix 信号退出不能提供可靠的正常退出结果。普通会话终端不受此能力限制影响。SDK 默认能力与远程 WebSocket/HTTP 连接也不会广告 `auth.terminal`。
 
+### 真实 Agent 凭据验收
+
+Linux 已安装 `pi`、`pi-acp`、`gnome-keyring-daemon`、`secret-tool` 和 D-Bus 时，可以运行独立验收。通过受保护的环境注入 `SALMONEGG_REAL_AGENT_SECRET`，不要把密钥写入命令行或配置：
+
+```bash
+python3 scripts/gates/run-acp-isolated-credential-gate.py \
+  --endpoint https://your-provider.example/v1 --model your-model \
+  --artifacts artifacts/isolated-credential-acceptance
+```
+
+门禁创建隔离 Pi 配置、D-Bus 和真实 Linux Secret Service：未注入时必须返回需要认证；经 `ConfigurationManager` 保存并用新实例从系统密钥环读回后，真实 Agent 必须回答本轮消息；清除后重新加载的连接必须拒绝缺失凭据。页面和进程使用测试临时目录，结果记录在 artifacts。此测试需要可用的模型服务，不在没有凭据的普通 CI 中假装执行。
+
 ## 快速开始
 
 ### ACP V2 实验连接
