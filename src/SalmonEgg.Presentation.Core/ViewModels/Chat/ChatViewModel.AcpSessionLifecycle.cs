@@ -2921,6 +2921,8 @@ public partial class ChatViewModel
             Category = option.Category,
             ValueType = option.ValueType,
             SelectedValue = option.SelectedValue,
+            BooleanValue = option.BooleanValue,
+            RawProtocolJson = option.RawProtocolJson,
             Options = option.Options
                 .Select(static item => new ConversationConfigOptionChoiceSnapshot
                 {

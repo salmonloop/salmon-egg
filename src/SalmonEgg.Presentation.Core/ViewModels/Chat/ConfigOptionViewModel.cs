@@ -207,8 +207,9 @@ public partial class ConfigOptionViewModel : ObservableObject
             Category = option.Category,
             ValueType = option.Type,
             IsRequired = true,
-            Value = option.CurrentValue,
-            TextValue = option.CurrentValue ?? string.Empty
+            Value = option.Type == "boolean" ? option.CurrentBooleanValue : option.CurrentValue,
+            TextValue = option.CurrentValue ?? string.Empty,
+            BoolValue = option.CurrentBooleanValue ?? false
         };
 
         if (option.Options is { Count: > 0 })

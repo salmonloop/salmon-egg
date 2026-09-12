@@ -35,6 +35,7 @@ public sealed class AcpSessionSnapshot
     public const int MaxUnprojectedUtf8Bytes = 256 * 1024;
 
     private readonly JsonElement? _workState;
+    private readonly ImmutableArray<JsonElement>? _configOptions;
 
     internal AcpSessionSnapshot(
         string sessionId,
@@ -43,7 +44,8 @@ public sealed class AcpSessionSnapshot
         ImmutableArray<AcpTerminalSnapshot> terminals,
         ImmutableArray<JsonElement> unprojectedUpdates,
         long omittedUnprojectedUpdateCount,
-        JsonElement? workState)
+        JsonElement? workState,
+        ImmutableArray<JsonElement>? configOptions)
     {
         SessionId = sessionId;
         Messages = messages;
@@ -52,6 +54,7 @@ public sealed class AcpSessionSnapshot
         UnprojectedUpdates = unprojectedUpdates;
         OmittedUnprojectedUpdateCount = omittedUnprojectedUpdateCount;
         _workState = workState;
+        _configOptions = configOptions;
     }
 
     /// <summary>The session whose history was projected.</summary>
@@ -78,6 +81,17 @@ public sealed class AcpSessionSnapshot
 
     /// <summary>The latest reported work state, detached from the client's work controller.</summary>
     public SessionWorkState? WorkState => AcpSessionProjectionJson.Read<SessionWorkState>(_workState);
+
+    /// <summary>Whether the Agent has supplied an authoritative configuration list, including an empty list.</summary>
+    public bool HasConfigOptions => _configOptions.HasValue;
+
+    /// <summary>
+    /// The latest full configuration list in Agent priority order. Known and unknown option types
+    /// are retained. Each access returns detached wire DTOs; hosts edit only types they understand.
+    /// </summary>
+    public ImmutableArray<ConfigOption> ConfigOptions => _configOptions is { } options
+        ? AcpSessionProjectionJson.ReadArray<ConfigOption>(options)
+        : [];
 }
 
 /// <summary>The current content of one Agent-identified message.</summary>

@@ -545,6 +545,8 @@ namespace SalmonEgg.Acp.Protocol
         [JsonIgnore]
         public bool? BooleanValue { get; init; }
 
+        internal JsonElement? RawPayload { get; init; }
+
         /// <summary>
         /// Creates a new SessionSetConfigOptionParams instance.
         /// </summary>
@@ -587,16 +589,19 @@ namespace SalmonEgg.Acp.Protocol
 
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
-            if (!root.TryGetProperty("value", out var value))
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("value", out var value))
             {
                 throw new JsonException("ACP session/set_config_option requires value.");
             }
 
+            var isV2 = AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2;
+            var valueType = isV2 ? ReadRequiredString(root, "type")
+                : root.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String
+                    ? type.GetString()
+                    : null;
             string? stringValue = null;
             bool? booleanValue = null;
-            if (root.TryGetProperty("type", out var type)
-                && type.ValueKind == JsonValueKind.String
-                && string.Equals(type.GetString(), "boolean", System.StringComparison.Ordinal))
+            if (string.Equals(valueType, "boolean", System.StringComparison.Ordinal))
             {
                 if (value.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
                 {
@@ -605,13 +610,13 @@ namespace SalmonEgg.Acp.Protocol
 
                 booleanValue = value.GetBoolean();
             }
-            else if (value.ValueKind == JsonValueKind.String)
+            else if (!isV2 || valueType == "id")
             {
-                stringValue = value.GetString() ?? string.Empty;
-            }
-            else
-            {
-                throw new JsonException("ACP session config value must be a string value ID or declared boolean.");
+                if (value.ValueKind != JsonValueKind.String)
+                {
+                    throw new JsonException("ACP session config value ID must be a string.");
+                }
+                stringValue = value.GetString();
             }
 
             return new SessionSetConfigOptionParams
@@ -620,7 +625,8 @@ namespace SalmonEgg.Acp.Protocol
                 ConfigId = ReadRequiredString(root, "configId"),
                 Value = stringValue,
                 BooleanValue = booleanValue,
-                Meta = AcpMetaJson.Read(root)
+                Meta = isV2 ? AcpMetaJson.ReadOrDefault(root) : AcpMetaJson.Read(root),
+                RawPayload = isV2 ? root.Clone() : null
             };
         }
 
@@ -629,10 +635,21 @@ namespace SalmonEgg.Acp.Protocol
             SessionSetConfigOptionParams value,
             JsonSerializerOptions options)
         {
+            var isV2 = AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2;
             writer.WriteStartObject();
             writer.WriteString("sessionId", value.SessionId);
             writer.WriteString("configId", value.ConfigId);
-            if (value.BooleanValue.HasValue)
+            if (value.RawPayload is { } raw && raw.GetProperty("type").GetString() is not "id" and not "boolean")
+            {
+                if (!isV2)
+                {
+                    throw new JsonException("Custom config value payloads require ACP v2.");
+                }
+                writer.WriteString("type", raw.GetProperty("type").GetString());
+                writer.WritePropertyName("value");
+                raw.GetProperty("value").WriteTo(writer);
+            }
+            else if (value.BooleanValue.HasValue)
             {
                 if (value.Value != null)
                 {
@@ -644,6 +661,7 @@ namespace SalmonEgg.Acp.Protocol
             }
             else if (value.Value != null)
             {
+                if (isV2) writer.WriteString("type", "id");
                 writer.WriteString("value", value.Value);
             }
             else
@@ -652,6 +670,8 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             AcpMetaJson.Write(writer, value.Meta);
+            ConfigOptionJsonConverter.WriteUnknownFields(writer, value.RawPayload,
+                "sessionId", "configId", "type", "value", "_meta");
             writer.WriteEndObject();
         }
 

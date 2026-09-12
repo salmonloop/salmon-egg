@@ -869,6 +869,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             Category = snapshot.Category,
             ValueType = snapshot.ValueType,
             SelectedValue = snapshot.SelectedValue,
+            BooleanValue = snapshot.BooleanValue,
+            RawProtocolJson = snapshot.RawProtocolJson,
             Options = (snapshot.Options ?? [])
                 .Select(CloneConfigOptionChoiceSnapshot)
                 .ToList()

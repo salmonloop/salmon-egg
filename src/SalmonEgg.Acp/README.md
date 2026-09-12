@@ -43,7 +43,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM and Linux desktop through its platform capability service. Linux uses the existing system opener after explicit consent. | The Linux product gate exercises its real card, stdio peer, native pointer input and isolated external browser. Other native platforms and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, message/tool/terminal projections, permission request handling, and version-gated JSON-RPC batches are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Configuration workflows, application UI integration, and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, configuration lifecycle, message/tool/terminal projections, permission request handling, and version-gated JSON-RPC batches are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Application UI integration and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 Internal v2 batch validation follows the upstream schema at
 `5ebaf0aceb04a4ba6574cd63fa6355352dc6d931` and JSON-RPC 2.0 section 6.
@@ -114,6 +114,20 @@ a fresh projection, while resume without replay retains prior history. Overlappi
 are rejected because session updates carry no request id that could separate them; cancelling the
 local wait or receiving an unknown write outcome retains this claim until the peer responds or the
 connection ends. Only a request that never started transport I/O releases the claim immediately.
+
+Configuration follows the same session and connection owner. `session/new`, `session/resume`,
+`session/set_config_option` responses and `config_option_update` replace the complete list in wire
+receive order, including replies received after the caller abandons its wait. A later notification
+cannot be overwritten by an earlier response's delayed continuation. `HasConfigOptions` distinguishes
+an unreported list from an authoritative empty list; `ConfigOptions` returns detached DTOs in Agent
+priority order. Offline replay uses the same rules. The configuration contract is checked against
+[schema revision f1293d8e](https://github.com/agentclientprotocol/agent-client-protocol/blob/f1293d8e43d09a6745ff8fe717f9acd8299591b7/schema/v2/schema.json).
+Known option types are `select` and `boolean`; unknown types preserve their complete payload through
+`ConfigOption.RawPayload` and round-trip serialization. Unknown value types also round-trip raw
+`session/set_config_option` data. V2 value IDs carry `type: "id"`; V1 retains its default string
+variant with no discriminator. Configuration metadata recovers only at schema-authorized V2 fields.
+The application configuration projection retains boolean values and unknown payloads through its
+existing workspace path; only supported option types produce editable rows.
 
 A snapshot is a current view, not a lossless event archive. `UnprojectedUpdates` retains recent
 unhandled updates verbatim within `MaxUnprojectedUpdates` (64 entries) and

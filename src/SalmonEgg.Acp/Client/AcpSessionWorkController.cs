@@ -245,6 +245,25 @@ internal sealed class AcpSessionWorkController
         }
     }
 
+    internal void ReceiveConfigOptions(
+        string sessionId,
+        IReadOnlyList<ConfigOption> configOptions,
+        CancellationToken connectionToken,
+        bool registerSession)
+    {
+        lock (_gate)
+        {
+            if (!IsCurrent(connectionToken) || (!registerSession && _closedSessions.Contains(sessionId)))
+            {
+                return;
+            }
+            if (registerSession) _closedSessions.Remove(sessionId);
+            var session = GetOrCreateSession(sessionId);
+            session.Projection ??= new AcpSessionProjection();
+            session.Projection.SetConfigOptions(configOptions);
+        }
+    }
+
     internal AcpSessionProjection BeginReplay(string sessionId, CancellationToken connectionToken)
     {
         lock (_gate)
