@@ -20,7 +20,8 @@ $arguments = @(
     '--configuration', 'Debug', '--no-build', '-p:UseSharedCompilation=false',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.AcpSettingsSmokeTests',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.TerminalAuthenticationSmokeTests',
-    '--minimum-expected-tests', '5', '--timeout', '5m', '--no-ansi', '--output', 'Detailed'
+    '--filter-class', 'SalmonEgg.GuiTests.Windows.SystemLanguageSmokeTests',
+    '--minimum-expected-tests', '6', '--timeout', '6m', '--no-ansi', '--output', 'Detailed'
 )
 $info = [Diagnostics.ProcessStartInfo]::new()
 $info.FileName = (Get-Command dotnet).Source
@@ -32,8 +33,8 @@ $test = [Diagnostics.Process]::Start($info)
 $standardOutput = $test.StandardOutput.ReadToEndAsync()
 $standardError = $test.StandardError.ReadToEndAsync()
 try {
-    if (-not $test.WaitForExit(330000)) {
-        throw 'Installed GUI test process exceeded the 330-second runtime bound. See gui-stage.jsonl.'
+    if (-not $test.WaitForExit(390000)) {
+        throw 'Installed GUI test process exceeded the 390-second runtime bound. See gui-stage.jsonl.'
     }
     $testExit = $test.ExitCode
 }
@@ -52,7 +53,7 @@ $contents = Get-Content -LiteralPath $log -Raw
 Write-Host $contents
 $passed = [regex]::Match($contents, '(?m)^\s+succeeded:\s+(\d+)\s*$')
 $skipped = [regex]::Match($contents, '(?m)^\s+skipped:\s+(\d+)\s*$')
-if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 5 `
+if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 6 `
     -or -not $skipped.Success -or [int]$skipped.Groups[1].Value -ne 0) {
     throw "Installed WinUI GUI acceptance failed or skipped: exit=$testExit."
 }

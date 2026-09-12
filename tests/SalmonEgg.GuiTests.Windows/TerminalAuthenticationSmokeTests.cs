@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 
@@ -175,12 +177,33 @@ public sealed class TerminalAuthenticationSmokeTests
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(15)));
             var terminal = app.FindByAutomationIdAnywhere("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(15));
             Assert.True(app.WaitUntil(() => terminal.Name.Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal), TimeSpan.FromSeconds(20)));
-            GuiAcceptanceDiagnostics.Record("Terminal: ready text rendered");
-            app.ClickElement(terminal);
-            Keyboard.Type("user confirmed");
-            Keyboard.Press(VirtualKeyShort.RETURN);
-            Keyboard.Release(VirtualKeyShort.RETURN);
-            GuiAcceptanceDiagnostics.Record("Terminal: native keyboard delivered");
+            GuiAcceptanceDiagnostics.Record("Terminal: PTY ready output observed");
+            try
+            {
+                // RenderedText is the PTY output projection, not proof that WebView2 has loaded.
+                // The actual xterm textarea must exist and own native keyboard focus first.
+                AutomationElement? input = null;
+                Assert.True(app.WaitUntil(() =>
+                {
+                    input = terminal.FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit));
+                    return input is not null && input.IsEnabled;
+                }, TimeSpan.FromSeconds(20)), "The terminal's native accessible input did not load.");
+                input!.Focus();
+                Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.Value, TimeSpan.FromSeconds(10)),
+                    "The real terminal input did not acquire native keyboard focus.");
+                GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
+                Keyboard.Type("user confirmed");
+                Keyboard.Press(VirtualKeyShort.RETURN);
+                Keyboard.Release(VirtualKeyShort.RETURN);
+                GuiAcceptanceDiagnostics.Record("Terminal: native keyboard delivered");
+            }
+            finally
+            {
+                GuiAcceptanceDiagnostics.Record("Terminal: input focus " + app.DescribeFocusedElementDetailed());
+                var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+                if (!string.IsNullOrWhiteSpace(artifacts))
+                    app.CaptureMainWindowToFile(Path.Combine(artifacts, "terminal-" + _scenario + "-input.png"));
+            }
         }
 
         public void AssertLoginExited(WindowsGuiAppSession app)
