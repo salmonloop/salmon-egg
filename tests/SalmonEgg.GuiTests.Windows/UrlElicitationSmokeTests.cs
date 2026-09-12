@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 
 namespace SalmonEgg.GuiTests.Windows;
@@ -51,15 +52,16 @@ public sealed class UrlElicitationSmokeTests
             Assert.Single(fixture.Responses("open"));
             app.BringMainWindowToFront();
             fixture.Instruct("complete");
-            Assert.NotNull(app.FindVisibleTextAnywhere("The agent reports that the external step is complete.", TimeSpan.FromSeconds(15)));
+            FindVisible(app, element => element.Name == "The agent reports that the external step is complete.");
             ClickButton(app, "Close notice");
             fixture.Instruct("expire");
             fixture.WaitForCard(app, "expire");
             fixture.Instruct("disconnect");
             Assert.True(app.WaitUntil(() =>
             {
-                var link = app.TryFindByAutomationIdAnywhere("Elicitation.FullUrl", TimeSpan.FromMilliseconds(200));
-                var open = app.TryFindVisibleElementByNameAnywhere("Open in browser", TimeSpan.FromMilliseconds(200));
+                var snapshot = app.MainWindow.FindAllDescendants();
+                var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
+                var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
                 return (link is null || link.IsOffscreen || string.IsNullOrEmpty(link.Name)) && (open is null || !open.IsEnabled);
             }, TimeSpan.FromSeconds(15)), "The disconnected request retained its original URL or an active open action.");
             Assert.Empty(fixture.Responses("expire"));
@@ -92,11 +94,25 @@ public sealed class UrlElicitationSmokeTests
 
     private static void ClickButton(WindowsGuiAppSession app, string label)
     {
-        var button = app.FindVisibleElementByNameAnywhere(label, TimeSpan.FromSeconds(15));
-        Assert.NotNull(button);
+        var button = FindVisible(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
+            && element.Name == label);
         Assert.True(app.WaitUntil(() => button.IsEnabled, TimeSpan.FromSeconds(10)));
         app.ClickElement(button);
         GuiAcceptanceDiagnostics.Record("URL: native button " + label);
+    }
+
+    private static AutomationElement FindVisible(WindowsGuiAppSession app, Func<AutomationElement, bool> matches)
+    {
+        AutomationElement? found = null;
+        Assert.True(app.WaitUntil(() =>
+        {
+            // Enumerate native providers first: WinUI lazily materializes the ContentTemplate's
+            // peers, while a filtered FindFirst can return no match before those peers exist.
+            found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
+                !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
+            return found is not null;
+        }, TimeSpan.FromSeconds(20)), "The current native URL control did not appear.");
+        return found!;
     }
 
     private sealed class Fixture : IDisposable
@@ -163,12 +179,10 @@ public sealed class UrlElicitationSmokeTests
 
         public void WaitForCard(WindowsGuiAppSession app, string action)
         {
-            var link = app.FindByAutomationId("Elicitation.FullUrl", TimeSpan.FromSeconds(20));
+            var link = FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
             Assert.True(app.WaitUntil(() => !link.IsOffscreen && link.Name == Url, TimeSpan.FromSeconds(10)));
-            Assert.Equal("127.0.0.1", app.FindByAutomationId("Elicitation.UrlHost", TimeSpan.FromSeconds(10)).Name);
-            Assert.True(app.WaitUntil(() => app.MainWindow.FindAllDescendants().Any(element =>
-                (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains("native-url-" + action, StringComparison.Ordinal)),
-                TimeSpan.FromSeconds(10)), "The current native request label did not enter the accessibility tree.");
+            Assert.Equal("127.0.0.1", FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.UrlHost").Name);
+            FindVisible(app, element => element.Properties.Name.ValueOrDefault == "native-url-" + action);
         }
 
         public JsonElement[] Rows()
