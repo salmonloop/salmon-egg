@@ -17,6 +17,8 @@ public sealed class TerminalAuthenticationSmokeTests
         using var fixture = new Fixture("success");
         using var app = WindowsGuiAppSession.LaunchFresh();
         fixture.SendPrompt(app);
+        var negotiation = Assert.Single(fixture.Requests(), row => row.TerminalAdvertised.HasValue);
+        Assert.True(negotiation.TerminalAdvertised, "The actual initialize request did not advertise the accepted native terminal capability.");
 
         // Act
         fixture.WaitForConsent(app);
@@ -144,7 +146,8 @@ public sealed class TerminalAuthenticationSmokeTests
                 using var document = JsonDocument.Parse(line);
                 var root = document.RootElement;
                 return new RequestRow(root.TryGetProperty("method", out var method) ? method.GetString() : null,
-                    root.GetProperty("processId").GetInt32(), root.TryGetProperty("authenticated", out var authenticated) && authenticated.GetBoolean());
+                    root.GetProperty("processId").GetInt32(), root.TryGetProperty("authenticated", out var authenticated) && authenticated.GetBoolean(),
+                    root.TryGetProperty("terminalAdvertised", out var advertised) ? advertised.GetBoolean() : null);
             }).ToArray();
         }
 
@@ -257,7 +260,7 @@ public sealed class TerminalAuthenticationSmokeTests
         }
     }
 
-    private sealed record RequestRow(string? Method, int ProcessId, bool Authenticated);
+    private sealed record RequestRow(string? Method, int ProcessId, bool Authenticated, bool? TerminalAdvertised);
 }
 
 internal sealed record TerminalGuiConversations(int Version, string? LastActiveConversationId, TerminalGuiConversation[] Conversations);
