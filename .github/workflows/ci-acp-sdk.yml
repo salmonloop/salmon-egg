@@ -11,6 +11,7 @@ on:
       - "src/SalmonEgg.Infrastructure.Desktop/Transport/**"
       - "src/SalmonEgg.Infrastructure/Client/DomainAcpClientAdapters.cs"
       - "scripts/gates/run-acp-batch-stdio-gate.sh"
+      - "scripts/gates/run-acp-official-v2-agent-gate.sh"
       - "scripts/gates/run-acp-sdk-gates.*"
       - "scripts/gates/run-acp-consumer-package-smoke.sh"
       - "scripts/gates/acp-v2-*-consumer.cs"
@@ -30,6 +31,7 @@ on:
       - "src/SalmonEgg.Infrastructure.Desktop/Transport/**"
       - "src/SalmonEgg.Infrastructure/Client/DomainAcpClientAdapters.cs"
       - "scripts/gates/run-acp-batch-stdio-gate.sh"
+      - "scripts/gates/run-acp-official-v2-agent-gate.sh"
       - "scripts/gates/run-acp-sdk-gates.*"
       - "scripts/gates/run-acp-consumer-package-smoke.sh"
       - "scripts/gates/acp-v2-*-consumer.cs"
@@ -56,6 +58,32 @@ env:
   PACKAGE_OUTPUT: "artifacts/acp-sdk-pack"
 
 jobs:
+  upstream-v2-agent:
+    name: Official ACP V2 Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+      - name: Run the pinned upstream Agent against this SDK
+        run: bash scripts/gates/run-acp-official-v2-agent-gate.sh
+      - name: Upload upstream interoperability evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: acp-official-v2-agent
+          path: |
+            artifacts/acp-official-v2-agent/agent-build.log
+            artifacts/acp-official-v2-agent/client.log
+            artifacts/acp-official-v2-agent/*.txt
+            artifacts/acp-official-v2-agent/*.sha256
+
   batch-stdio:
     name: ACP Batch Stdio (Linux)
     runs-on: ubuntu-latest
