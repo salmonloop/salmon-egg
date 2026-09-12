@@ -58,6 +58,10 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <!-- Uno's native runtime environment projection is the explicit WASM experiment switch.
+         Default builds omit it; this never changes the SDK stable protocol default. -->
+    <WasmShellMonoEnvironment Include="SALMONEGG_EXPERIMENTAL_ACP_V2" Value="1"
+                              Condition="'$(SalmonEggExperimentalAcpV2)' == 'true'" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-notifications.js" />
