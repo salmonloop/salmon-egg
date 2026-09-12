@@ -79,7 +79,14 @@ public sealed class UrlElicitationSmokeTests
         finally
         {
             var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
-            if (!string.IsNullOrWhiteSpace(artifacts)) app.CaptureMainWindowToFile(Path.Combine(artifacts, "url-product.png"));
+            if (!string.IsNullOrWhiteSpace(artifacts))
+            {
+                app.CaptureMainWindowToFile(Path.Combine(artifacts, "url-product.png"));
+                var rows = app.MainWindow.FindAllDescendants().Select(element =>
+                    element.Properties.ControlType.ValueOrDefault + " | " + element.Properties.AutomationId.ValueOrDefault
+                    + " | offscreen=" + element.Properties.IsOffscreen.ValueOrDefault + " | " + element.Properties.Name.ValueOrDefault);
+                File.WriteAllLines(Path.Combine(artifacts, "url-native-controls.txt"), rows);
+            }
         }
     }
 
@@ -156,9 +163,12 @@ public sealed class UrlElicitationSmokeTests
 
         public void WaitForCard(WindowsGuiAppSession app, string action)
         {
-            Assert.NotNull(app.FindVisibleElementByNameAnywhere("native-url-" + action, TimeSpan.FromSeconds(20)));
-            Assert.Equal(Url, app.FindByAutomationIdAnywhere("Elicitation.FullUrl", TimeSpan.FromSeconds(10)).Name);
-            Assert.Equal("127.0.0.1", app.FindByAutomationIdAnywhere("Elicitation.UrlHost", TimeSpan.FromSeconds(10)).Name);
+            var link = app.FindByAutomationId("Elicitation.FullUrl", TimeSpan.FromSeconds(20));
+            Assert.True(app.WaitUntil(() => !link.IsOffscreen && link.Name == Url, TimeSpan.FromSeconds(10)));
+            Assert.Equal("127.0.0.1", app.FindByAutomationId("Elicitation.UrlHost", TimeSpan.FromSeconds(10)).Name);
+            Assert.True(app.WaitUntil(() => app.MainWindow.FindAllDescendants().Any(element =>
+                (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains("native-url-" + action, StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(10)), "The current native request label did not enter the accessibility tree.");
         }
 
         public JsonElement[] Rows()
