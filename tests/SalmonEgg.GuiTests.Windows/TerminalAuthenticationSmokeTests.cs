@@ -179,10 +179,21 @@ public sealed class TerminalAuthenticationSmokeTests
                 app.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Maximized);
             var session = app.FindByAutomationId("MainNav.Session.terminal-conversation", TimeSpan.FromSeconds(30));
             app.ClickElement(session);
-            Assert.True(app.WaitUntilOnscreen("InputBox", TimeSpan.FromSeconds(30)));
-            app.EnterText("InputBox", "packaged terminal authentication");
-            Assert.True(app.WaitUntilEnabled("ChatInputArea.Send", TimeSpan.FromSeconds(15)));
-            app.InvokeButton("ChatInputArea.Send");
+            var input = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "InputBox"
+                && element.Properties.IsEnabled.ValueOrDefault);
+            app.ClickElement(input);
+            Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.ValueOrDefault, TimeSpan.FromSeconds(10)),
+                "The restored conversation input did not acquire native keyboard focus.");
+            Keyboard.Press(VirtualKeyShort.CONTROL);
+            Keyboard.Press(VirtualKeyShort.KEY_A);
+            Keyboard.Release(VirtualKeyShort.KEY_A);
+            Keyboard.Release(VirtualKeyShort.CONTROL);
+            Keyboard.Type("packaged terminal authentication");
+            Assert.True(app.WaitUntil(() => app.TryGetValue(input) == "packaged terminal authentication", TimeSpan.FromSeconds(10)),
+                "The actual conversation composer did not retain the typed prompt.");
+            var send = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "ChatInputArea.Send"
+                && element.Properties.IsEnabled.ValueOrDefault);
+            app.ClickElement(send);
             GuiAcceptanceDiagnostics.Record("Terminal: prompt invoked");
         }
 
