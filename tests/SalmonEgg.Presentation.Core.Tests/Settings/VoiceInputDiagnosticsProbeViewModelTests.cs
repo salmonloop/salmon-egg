@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,8 +14,10 @@ using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
-public sealed class VoiceInputDiagnosticsProbeViewModelTests
+public sealed class VoiceInputDiagnosticsProbeViewModelTests : IAsyncDisposable
 {
+    private readonly List<VoiceInputDiagnosticsProbeViewModel> _viewModels = [];
+
     [Fact]
     public async Task StartProbeAsync_WhenFinalResultReceived_CapturesRecognizedText()
     {
@@ -103,6 +106,8 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
             if (string.Equals(viewModel.ProbeStatusText, localizer["VoiceDiagnostics_ProbeStopping"], StringComparison.Ordinal))
             {
+                // Signal-monitor callbacks may run while the stop notification is still active.
+                dispatcher.Enqueue(() => Assert.True(dispatcher.IsExecutingCallback));
                 stoppingStatusRaisedOnUi = dispatcher.IsExecutingCallback;
             }
         };
@@ -249,13 +254,14 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         Assert.False(viewModel.IsRunning);
         Assert.NotNull(service.LastOptions);
 
+        var ready = ObserveProbeListeningAsync(viewModel);
         service.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
-        await WaitForConditionAsync(() => Task.FromResult(
-            service.StartCount == 2
-            && viewModel.IsRunning));
+        await ready;
 
+        Assert.Equal(2, service.StartCount);
+        Assert.True(viewModel.IsRunning);
         Assert.Equal(1, service.AuthorizationHelpRequestCount);
     }
 
@@ -276,14 +282,15 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             activationSource.RaiseActivated();
         };
         var viewModel = CreateViewModel(service, activationSource: activationSource);
+        var ready = ObserveProbeListeningAsync(viewModel);
 
         var startTask = viewModel.StartProbeCommand.ExecuteAsync(null);
         await startTask;
 
-        await WaitForConditionAsync(() => Task.FromResult(
-            service.StartCount == 2
-            && viewModel.IsRunning));
+        await ready;
 
+        Assert.Equal(2, service.StartCount);
+        Assert.True(viewModel.IsRunning);
         Assert.Equal(1, service.AuthorizationHelpRequestCount);
     }
 
@@ -306,21 +313,28 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             }
         };
         var viewModel = CreateViewModel(service, activationSource: activationSource);
+        var ready = ObserveProbeListeningAsync(viewModel);
 
         var initialStart = viewModel.StartProbeCommand.ExecuteAsync(null);
-        await authorizationHelpEntered.Task;
+        try
+        {
+            await authorizationHelpEntered.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, service.AuthorizationHelpRequestCount);
+            Assert.Equal(1, service.AuthorizationHelpRequestCount);
+            Assert.True(viewModel.IsRunning);
+
+            service.PermissionResult = VoiceInputPermissionResult.Granted();
+            activationSource.RaiseActivated();
+        }
+        finally
+        {
+            completeAuthorizationHelp.TrySetResult(true);
+            await initialStart;
+        }
+
+        await ready;
+        Assert.Equal(2, service.StartCount);
         Assert.True(viewModel.IsRunning);
-
-        service.PermissionResult = VoiceInputPermissionResult.Granted();
-        activationSource.RaiseActivated();
-        completeAuthorizationHelp.TrySetResult(true);
-        await initialStart;
-
-        await WaitForConditionAsync(() => Task.FromResult(
-            service.StartCount == 2
-            && viewModel.IsRunning));
     }
 
     [Fact]
@@ -347,20 +361,68 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         Assert.False(viewModel.IsRunning);
     }
 
-    private static VoiceInputDiagnosticsProbeViewModel CreateViewModel(
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var viewModel in _viewModels)
+        {
+            try
+            {
+                await viewModel.HandlePageUnloadedAsync();
+            }
+            finally
+            {
+                viewModel.Dispose();
+            }
+        }
+    }
+
+    private VoiceInputDiagnosticsProbeViewModel CreateViewModel(
         FakeVoiceInputService service,
         IUiDispatcher? dispatcher = null,
         FakeAudioInputSignalDiagnosticsService? signalService = null,
         IApplicationActivationSignalSource? activationSource = null,
         Mock<ILogger<VoiceInputDiagnosticsProbeViewModel>>? logger = null,
         TestCoreStringLocalizer? localizer = null)
-        => new(
+    {
+        var viewModel = new VoiceInputDiagnosticsProbeViewModel(
             service,
             signalService ?? new FakeAudioInputSignalDiagnosticsService(),
             dispatcher ?? new TrackingUiDispatcher(),
             localizer ?? new TestCoreStringLocalizer(),
             logger?.Object ?? Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>(),
             activationSource);
+        _viewModels.Add(viewModel);
+        return viewModel;
+    }
+
+    private static Task ObserveProbeListeningAsync(VoiceInputDiagnosticsProbeViewModel viewModel)
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listeningText = new TestCoreStringLocalizer()["VoiceDiagnostics_ProbeListening"].Value;
+        viewModel.PropertyChanged += OnChanged;
+        return WaitAsync();
+
+        void OnChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(VoiceInputDiagnosticsProbeViewModel.ProbeStatusText)
+                && viewModel.ProbeStatusText == listeningText)
+            {
+                ready.TrySetResult();
+            }
+        }
+
+        async Task WaitAsync()
+        {
+            try
+            {
+                await ready.Task.WaitAsync(TestContext.Current.CancellationToken);
+            }
+            finally
+            {
+                viewModel.PropertyChanged -= OnChanged;
+            }
+        }
+    }
 
     private static async Task WaitForConditionAsync(Func<Task<bool>> predicate, int timeoutMilliseconds = 2000, int pollDelayMilliseconds = 20)
     {
