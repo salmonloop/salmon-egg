@@ -33,15 +33,15 @@ public sealed class UrlElicitationSmokeTests
             {
                 fixture.Instruct(action);
                 fixture.WaitForCard(app, action);
-                Assert.Empty(fixture.Visits);
+                Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
                 ClickButton(app, action == "decline" ? "Decline" : "Cancel");
                 fixture.AssertResponse(app, action, action);
-                Assert.Empty(fixture.Visits);
+                Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
             }
 
             fixture.Instruct("open");
             fixture.WaitForCard(app, "open");
-            Assert.Empty(fixture.Visits);
+            Assert.True(fixture.Visits.IsEmpty, "The product opened a URL without consent.");
             ClickButton(app, "Open in browser");
             fixture.AssertResponse(app, "open", "accept");
             Assert.True(app.WaitUntil(() => fixture.Reports.Count == 1, TimeSpan.FromSeconds(30)),
@@ -52,7 +52,7 @@ public sealed class UrlElicitationSmokeTests
             Assert.Single(fixture.Responses("open"));
             app.BringMainWindowToFront();
             fixture.Instruct("complete");
-            FindVisible(app, element => element.Name == "The agent reports that the external step is complete.");
+            FindVisible(app, element => element.Properties.Name.ValueOrDefault == "The agent reports that the external step is complete.");
             ClickButton(app, "Close notice");
             fixture.Instruct("expire");
             fixture.WaitForCard(app, "expire");
@@ -62,7 +62,8 @@ public sealed class UrlElicitationSmokeTests
                 var snapshot = app.MainWindow.FindAllDescendants();
                 var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
                 var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
-                return (link is null || link.IsOffscreen || string.IsNullOrEmpty(link.Name)) && (open is null || !open.IsEnabled);
+                return (link is null || link.Properties.IsOffscreen.ValueOrDefault || string.IsNullOrEmpty(link.Properties.Name.ValueOrDefault))
+                    && (open is null || !open.Properties.IsEnabled.ValueOrDefault);
             }, TimeSpan.FromSeconds(15)), "The disconnected request retained its original URL or an active open action.");
             Assert.Empty(fixture.Responses("expire"));
             Assert.Equal(2, fixture.Visits.Count);
@@ -95,7 +96,7 @@ public sealed class UrlElicitationSmokeTests
     private static void ClickButton(WindowsGuiAppSession app, string label)
     {
         var button = FindVisible(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
-            && element.Name == label);
+            && element.Properties.Name.ValueOrDefault == label);
         Assert.True(app.WaitUntil(() => button.IsEnabled, TimeSpan.FromSeconds(10)));
         app.ClickElement(button);
         GuiAcceptanceDiagnostics.Record("URL: native button " + label);
@@ -181,8 +182,8 @@ public sealed class UrlElicitationSmokeTests
         public void WaitForCard(WindowsGuiAppSession app, string action)
         {
             var link = FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
-            Assert.True(app.WaitUntil(() => !link.IsOffscreen && link.Name == Url, TimeSpan.FromSeconds(10)));
-            Assert.Equal("127.0.0.1", FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.UrlHost").Name);
+            Assert.True(app.WaitUntil(() => !link.Properties.IsOffscreen.ValueOrDefault && link.Properties.Name.ValueOrDefault == Url, TimeSpan.FromSeconds(10)));
+            Assert.Equal("127.0.0.1", FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.UrlHost").Properties.Name.ValueOrDefault);
             FindVisible(app, element => element.Properties.Name.ValueOrDefault == "native-url-" + action);
         }
 
