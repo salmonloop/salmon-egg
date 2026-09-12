@@ -24,6 +24,11 @@
         <x:Double x:Key="ChatElicitationHeadingSpacing">4</x:Double>
         <x:Double x:Key="ChatElicitationFieldSpacing">6</x:Double>
         <x:Double x:Key="ChatElicitationActionSpacing">8</x:Double>
+        <x:Double x:Key="SessionSettingsMaxWidth">360</x:Double>
+        <x:Double x:Key="SessionSettingsMaxHeight">440</x:Double>
+        <x:Double x:Key="SessionSettingsRowSpacing">16</x:Double>
+        <x:Double x:Key="SessionSettingsFieldSpacing">6</x:Double>
+        <Thickness x:Key="SessionSettingsRowMargin">0,0,0,16</Thickness>
     </Page.Resources>
 
     <Grid>
@@ -170,7 +175,11 @@
                             </VisualState>
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
-                    <Grid x:Name="SessionHeaderMetaGrid" ColumnSpacing="12" RowSpacing="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid x:Name="SessionHeaderMetaGrid" Grid.Column="0" ColumnSpacing="12" RowSpacing="0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition x:Name="SessionHeaderAgentRow" Height="0" />
@@ -224,6 +233,71 @@
                                    MaxLines="1"
                                    MaxWidth="180" />
                     </Grid>
+                    <Button Grid.Column="1"
+                            AutomationProperties.AutomationId="ChatView.SessionSettings"
+                            Content="{x:Bind ViewModel.SessionSettingsText, Mode=OneWay}"
+                            VerticalAlignment="Center"
+                            Visibility="{x:Bind ViewModel.ShowConfigOptionsPanel, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button.Flyout>
+                            <Flyout>
+                                <ScrollViewer MaxWidth="{StaticResource SessionSettingsMaxWidth}"
+                                              MaxHeight="{StaticResource SessionSettingsMaxHeight}"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              HorizontalScrollMode="Disabled">
+                                    <StackPanel Spacing="{StaticResource SessionSettingsRowSpacing}">
+                                        <TextBlock Text="{x:Bind ViewModel.SessionSettingsHint, Mode=OneWay}"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.ConfigOptions, Mode=OneWay}"
+                                                      HorizontalContentAlignment="Stretch">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="chatVm:ConfigOptionViewModel">
+                                                    <StackPanel Spacing="{StaticResource SessionSettingsFieldSpacing}"
+                                                                Margin="{StaticResource SessionSettingsRowMargin}">
+                                                        <ComboBox Header="{x:Bind Name, Mode=OneWay}"
+                                                                  AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                                                  AutomationProperties.AutomationId="{x:Bind Id, Mode=OneWay}"
+                                                                  ItemsSource="{x:Bind Options, Mode=OneWay}"
+                                                                  DisplayMemberPath="Name"
+                                                                  SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}"
+                                                                  IsEnabled="{x:Bind EditorEnabled, Mode=OneWay}"
+                                                                  HorizontalAlignment="Stretch"
+                                                                  Visibility="{x:Bind IsSelectType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                        <ToggleSwitch Header="{x:Bind Name, Mode=OneWay}"
+                                                                      AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                                                      AutomationProperties.AutomationId="{x:Bind Id, Mode=OneWay}"
+                                                                      OnContent="{x:Bind OnText, Mode=OneWay}"
+                                                                      OffContent="{x:Bind OffText, Mode=OneWay}"
+                                                                      IsOn="{x:Bind BoolValue, Mode=TwoWay}"
+                                                                      IsEnabled="{x:Bind EditorEnabled, Mode=OneWay}"
+                                                                      Visibility="{x:Bind IsBoolType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                        <TextBlock Text="{x:Bind Description, Mode=OneWay}"
+                                                                   TextWrapping="Wrap"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   Visibility="{x:Bind HasDescription, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                        <TextBlock Text="{x:Bind ChangedText, Mode=OneWay}"
+                                                                   AutomationProperties.Name="{x:Bind ChangedText, Mode=OneWay}"
+                                                                   TextWrapping="Wrap"
+                                                                   Visibility="{x:Bind ChangedWhileEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                        <InfoBar IsOpen="{x:Bind HasError, Mode=OneWay}"
+                                                                 IsClosable="False"
+                                                                 Severity="Error"
+                                                                 Message="{x:Bind ErrorMessage, Mode=OneWay}" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource SessionSettingsFieldSpacing}">
+                                                            <Button Content="{x:Bind ApplyText, Mode=OneWay}"
+                                                                    Command="{x:Bind ApplyCommand}" />
+                                                            <Button Content="{x:Bind ResetText, Mode=OneWay}"
+                                                                    Command="{x:Bind ResetCommand}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
             </Border>
 

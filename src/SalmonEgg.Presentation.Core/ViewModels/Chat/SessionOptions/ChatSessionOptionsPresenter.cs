@@ -199,7 +199,7 @@ public sealed class ChatSessionOptionsPresenter
             Name = option.Name,
             Description = option.Description,
             Category = option.Category,
-            ValueType = option.ValueType ?? "string",
+            ValueType = option.ValueType ?? "select",
             IsRequired = true,
             Value = option.ValueType == "boolean" ? option.BooleanValue : option.SelectedValue ?? string.Empty,
             TextValue = option.SelectedValue ?? string.Empty,

@@ -12,6 +12,7 @@ import {
 import { startAcpWebSocketServer } from "./wasm-smoke-lib/acp-test-server.mjs";
 import { verifyStandalonePermissionQueue } from "./wasm-smoke-lib/permission-flow.mjs";
 import { verifyRemainingFormInputs } from "./wasm-smoke-lib/elicitation-form-flow.mjs";
+import { verifySessionConfiguration } from "./wasm-smoke-lib/session-configuration-flow.mjs";
 import {
   navigateToSettingsSection
 } from "./wasm-smoke-lib/settings-shell.mjs";
@@ -110,6 +111,7 @@ try {
         }
       });
 
+    await verifySessionConfiguration(page, acpServer, initialize);
     elicitationRequests.push(await verifyKnownFormSubmission(page, acpServer));
     elicitationRequests.push(...await verifyRemainingFormInputs(page, acpServer));
     elicitationRequests.push(await verifyUnknownRequiredFieldCancellation(page, acpServer));

@@ -1497,5 +1497,31 @@
   </data>
   <data name="ChatTurnStatus_WaitingForUser" xml:space="preserve">
     <value>Waiting for your action...</value>
+  <data name="SessionConfig_Title" xml:space="preserve">
+    <value>会话设置</value>
+  </data>
+  <data name="SessionConfig_Hint" xml:space="preserve">
+    <value>Agent 提供的设置只应用于当前会话。</value>
+  </data>
+  <data name="SessionConfig_Apply" xml:space="preserve">
+    <value>应用</value>
+  </data>
+  <data name="SessionConfig_Reset" xml:space="preserve">
+    <value>重置</value>
+  </data>
+  <data name="SessionConfig_On" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="SessionConfig_Off" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="SessionConfig_Changed" xml:space="preserve">
+    <value>Agent 已更新此项。你的编辑已保留，可以应用或重置为 Agent 的值。</value>
+  </data>
+  <data name="SessionConfig_Stale" xml:space="preserve">
+    <value>会话或连接已改变，请重新打开会话设置。</value>
+  </data>
+  <data name="SessionConfig_Failed" xml:space="preserve">
+    <value>设置未能应用，编辑已保留，请重试。</value>
   </data>
 </root>

@@ -1491,5 +1491,31 @@ Create the corresponding Markdown file in:
   </data>
   <data name="ChatTurnStatus_WaitingForUser" xml:space="preserve">
     <value>Waiting for your action...</value>
+  <data name="SessionConfig_Title" xml:space="preserve">
+    <value>Session settings</value>
+  </data>
+  <data name="SessionConfig_Hint" xml:space="preserve">
+    <value>Settings supplied by the agent apply to this conversation.</value>
+  </data>
+  <data name="SessionConfig_Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="SessionConfig_Reset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="SessionConfig_On" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="SessionConfig_Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="SessionConfig_Changed" xml:space="preserve">
+    <value>The agent updated this setting. Your edit is kept; apply it or reset to the agent's value.</value>
+  </data>
+  <data name="SessionConfig_Stale" xml:space="preserve">
+    <value>The conversation or connection changed. Reopen session settings.</value>
+  </data>
+  <data name="SessionConfig_Failed" xml:space="preserve">
+    <value>Could not apply this setting. Your edit is kept; try again.</value>
   </data>
 </root>

@@ -466,14 +466,7 @@ public partial class ChatViewModel
             }
         }
 
-        if (!_sessionOptionsPresenter.ConfigOptionCollectionMatches(ConfigOptions, projection.ConfigOptions))
-        {
-            ConfigOptions.Clear();
-            foreach (var option in projection.ConfigOptions)
-            {
-                ConfigOptions.Add(option);
-            }
-        }
+        ReconcileSessionConfiguration(projection.ConfigOptions);
 
         ShowConfigOptionsPanel = projection.ShowConfigOptionsPanel;
         _modeConfigId = projection.ModeConfigId;
