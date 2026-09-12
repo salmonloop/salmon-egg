@@ -29,14 +29,14 @@ timeout --signal=TERM --kill-after=10s 180s "${DOTNET_BIN:-dotnet}" test \
   --project tests/SalmonEgg.Acp.Desktop.Tests/SalmonEgg.Acp.Desktop.Tests.csproj \
   --configuration Release --no-ansi -p:UseSharedCompilation=false \
   --filter-class SalmonEgg.Acp.Desktop.Tests.OfficialV2AgentAcceptanceTests \
-  --minimum-expected-tests 1 --output Detailed > "$output/client.log" 2>&1
+  --minimum-expected-tests 2 --output Detailed > "$output/client.log" 2>&1
 cat "$output/client.log"
 python3 - "$output/client.log" <<'PY'
 from pathlib import Path
 import re
 import sys
 text = Path(sys.argv[1]).read_text()
-if not re.search(r'^\s+succeeded:\s+1\s*$', text, re.M) or not re.search(r'^\s+skipped:\s+0\s*$', text, re.M):
+if not re.search(r'^\s+succeeded:\s+2\s*$', text, re.M) or not re.search(r'^\s+skipped:\s+0\s*$', text, re.M):
     raise SystemExit('The upstream v2 Agent must run through the production client without skips.')
 PY
 sha256sum "$SALMONEGG_OFFICIAL_V2_AGENT" > "$output/agent.sha256"
