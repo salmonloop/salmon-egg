@@ -133,6 +133,10 @@ def main():
                 return values if count >= 3 else None
 
             x, y, width, height, root_height, scale = map(float, wait(locate, 'No stable enabled native button'))
+            permission = subprocess.run([str(ax_tool), 'allow-local-network', 'python-fixture'], capture_output=True, text=True, timeout=10)
+            with (output / 'system-permission.log').open('a') as log:
+                log.write(permission.stdout + permission.stderr)
+            assert permission.returncode == 0, 'Could not handle the matching temporary fixture permission prompt'
             subprocess.run(['screencapture', '-x', str(output / ('before-' + action + '.png'))], check=True, timeout=5)
             attempt = subprocess.run([str(ax_tool), 'pointer', str(app.pid), str((x + width / 2) / scale),
                                       str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=5)
