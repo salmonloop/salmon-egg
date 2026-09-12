@@ -185,44 +185,59 @@ def main():
         assert reports == [{'opener': True, 'referrer': '', 'privateValue': private_value}] * 2
         assert visits == [None, None]
         assert private_value not in stdout.read_text() + peer_log.read_text() and url not in stdout.read_text()
+        persisted = list(appdata.rglob('*'))
+        for path in persisted:
+            if path.is_file():
+                content = path.read_bytes()
+                assert private_value.encode() not in content and nonce.encode() not in content, \
+                    'Private URL or page data persisted in application data: ' + str(path.relative_to(appdata))
         report = {'passed': True, 'nativePointerActions': 5, 'browserVisits': 2,
                   'singleAccept': True, 'agentCompletion': True, 'disconnectExpiry': True, 'privatePageNotReturned': True}
         (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report))
     finally:
-        (output / 'browser-observation.json').write_text(json.dumps({'visits': len(visits), 'reports': reports}, indent=2))
-        subprocess.run(['screencapture', '-x', str(output / 'final-screen.png')], timeout=5)
+        try:
+            (output / 'browser-observation.json').write_text(json.dumps({'visits': len(visits), 'reports': reports}, indent=2))
+            subprocess.run(['screencapture', '-x', str(output / 'final-screen.png')], timeout=5)
+            if app is not None:
+                with (output / 'native-controls.json').open('w') as tree:
+                    subprocess.run([str(ax_tool), 'describe', str(app.pid)], stdout=tree, timeout=10)
+        except (OSError, subprocess.SubprocessError) as error:
+            print('Best-effort native diagnostic failed: ' + type(error).__name__, file=sys.stderr)
+        cleanup_errors = []
         if app is not None:
-            with (output / 'native-controls.json').open('w') as tree:
-                subprocess.run([str(ax_tool), 'describe', str(app.pid)], stdout=tree, timeout=10)
             try:
-                os.killpg(app.pid, signal.SIGTERM)
-                app.wait(timeout=5)
-            except ProcessLookupError:
-                pass
-            except subprocess.TimeoutExpired:
-                os.killpg(app.pid, signal.SIGKILL)
-                app.wait(timeout=3)
-            try: os.killpg(app.pid, signal.SIGKILL)
-            except ProcessLookupError: pass
-        # Only terminate newly opened browser processes, never unrelated or pre-existing applications.
-        new_pids = set(json.loads(subprocess.check_output([str(ax_tool), 'pids', 'all'], text=True))) - original_pids
-        for pid in new_pids:
-            try: os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError: pass
-        until = time.monotonic() + 5
-        while time.monotonic() < until:
-            remaining = set(json.loads(subprocess.check_output([str(ax_tool), 'pids', 'all'], text=True))) & new_pids
-            if not remaining:
-                break
-            time.sleep(0.1)
-        else:
-            for pid in remaining:
-                try: os.kill(pid, signal.SIGKILL)
+                try: os.killpg(app.pid, signal.SIGTERM)
                 except ProcessLookupError: pass
-        server.shutdown()
-        server.server_close()
-        scenario.unlink(missing_ok=True)
+                try: app.wait(timeout=5)
+                except subprocess.TimeoutExpired: pass
+            finally:
+                try: os.killpg(app.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                try: app.wait(timeout=3)
+                except subprocess.TimeoutExpired: cleanup_errors.append('Product process did not exit')
+        # Only terminate newly opened browser processes, never unrelated or pre-existing applications.
+        try:
+            new_pids = set(json.loads(subprocess.check_output([str(ax_tool), 'pids', 'all'], text=True, timeout=5))) - original_pids
+            for pid in new_pids:
+                try: os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError: pass
+            until = time.monotonic() + 5
+            while time.monotonic() < until:
+                remaining = set(json.loads(subprocess.check_output([str(ax_tool), 'pids', 'all'], text=True, timeout=5))) & new_pids
+                if not remaining:
+                    break
+                time.sleep(0.1)
+            else:
+                for pid in remaining:
+                    try: os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError: pass
+        finally:
+            try: server.shutdown()
+            finally:
+                server.server_close()
+                scenario.unlink(missing_ok=True)
+        assert not cleanup_errors, '; '.join(cleanup_errors)
 
 
 if __name__ == '__main__':

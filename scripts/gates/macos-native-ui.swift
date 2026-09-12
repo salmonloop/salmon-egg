@@ -18,7 +18,23 @@ func isFrontmost(_ pid: pid_t) -> Bool {
     // NSWorkspace changes before the app-switcher animation finishes. Native z-order must
     // also expose the actual application window before mouse input can reach its content.
     let front = windows.first { ($0[kCGWindowLayer as String] as? Int) == 0 }
-    return (front?[kCGWindowOwnerPID as String] as? Int) == Int(pid)
+    guard (front?[kCGWindowOwnerPID as String] as? Int) == Int(pid) else { return false }
+    let application = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(application, 1)
+    guard let focused = attribute(application, kAXFocusedWindowAttribute as CFString),
+          let windows = attribute(application, kAXWindowsAttribute as CFString) as? [AXUIElement], windows.count == 1
+        else { return false }
+    return CFEqual(focused, windows[0])
+}
+
+func click(_ point: CGPoint) {
+    let source = CGEventSource(stateID: .hidSystemState)
+    for type in [CGEventType.mouseMoved, .leftMouseDown, .leftMouseUp] {
+        let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
+        event?.flags = []
+        event?.setIntegerValueField(.mouseEventClickState, value: 1)
+        event?.post(tap: .cghidEventTap)
+    }
 }
 
 func activate(_ pid: pid_t, _ titlebarPoint: CGPoint) -> Bool {
@@ -35,11 +51,9 @@ func activate(_ pid: pid_t, _ titlebarPoint: CGPoint) -> Bool {
         up?.post(tap: .cghidEventTap)
         CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: false)?.post(tap: .cghidEventTap)
     } else {
-    // An external helper cannot force cooperative app activation on recent macOS. A real
-    // titlebar click is the user's native way to bring an inactive product window forward.
-    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: titlebarPoint, mouseButton: .left)?.post(tap: .cghidEventTap)
+        // An external helper cannot force cooperative app activation on recent macOS. A real
+        // titlebar click is the user's native way to bring an inactive product window forward.
+        click(titlebarPoint)
     }
     let deadline = Date().addingTimeInterval(5)
     while Date() < deadline {
@@ -132,9 +146,7 @@ if arguments[1] == "allow-local-network" {
           AXValueGetValue(rawSize as! AXValue, .cgSize, &size) else { exit(8) }
     point.x += size.width / 2
     point.y += size.height / 2
-    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    click(point)
     print("Allowed the temporary Python fixture local-network prompt through native UI")
     exit(0)
 }
@@ -155,9 +167,7 @@ if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]
     let titlebarPoint = CGPoint(x: position.x + size.width / 2, y: position.y + (size.height - height) / 2)
     guard activate(pid, titlebarPoint) else { exit(9) }
     print("CGEvent target pid=\(pid) x=\(point.x) y=\(point.y) nativeWindow=\(position) size=\(size) contentHeight=\(height)")
-    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    click(point)
     print("Native system window bounds and read-only product sample used for CGEvent pointer")
     exit(0)
 }
