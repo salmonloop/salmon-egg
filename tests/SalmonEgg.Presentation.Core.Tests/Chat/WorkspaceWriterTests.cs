@@ -36,13 +36,15 @@ public sealed class WorkspaceWriterTests
         await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         var first = new ConversationConfigOptionSnapshot
         {
-            Id = "value", ValueType = boolean ? "boolean" : "_budget",
+            Id = "value",
+            ValueType = boolean ? "boolean" : "_budget",
             BooleanValue = boolean ? false : null,
             RawProtocolJson = boolean ? null : "{\"value\":1}"
         };
         var second = new ConversationConfigOptionSnapshot
         {
-            Id = first.Id, ValueType = first.ValueType,
+            Id = first.Id,
+            ValueType = first.ValueType,
             BooleanValue = boolean ? true : null,
             RawProtocolJson = boolean ? null : "{\"value\":2}"
         };
