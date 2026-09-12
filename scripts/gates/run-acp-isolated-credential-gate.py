@@ -25,6 +25,36 @@ def stop(process):
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=5)
+    # The process leader may exit before descendants that inherited its process group.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run_owned(command, timeout, **kwargs):
+    process = subprocess.Popen(command, start_new_session=True, **kwargs)
+    try:
+        code = process.wait(timeout=timeout)
+        if code:
+            raise subprocess.CalledProcessError(code, command)
+    finally:
+        stop(process)
+
+
+def reap_owned_children():
+    # Linux makes grandchildren ours when a leader dies. This process has no unrelated children.
+    children = Path(f"/proc/{os.getpid()}/task/{os.getpid()}/children")
+    for value in children.read_text().split():
+        try:
+            os.kill(int(value), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    while True:
+        try:
+            os.waitpid(-1, 0)
+        except ChildProcessError:
+            break
 
 
 def run_inside_bus(args):
@@ -75,9 +105,9 @@ def main(args):
     args.artifacts = args.artifacts.resolve()
     args.artifacts.mkdir(parents=True, exist_ok=True)
     with (args.artifacts / "build.log").open("w") as log:
-        subprocess.run([args.dotnet, "build", "tests/SalmonEgg.Acp.Desktop.Tests/SalmonEgg.Acp.Desktop.Tests.csproj",
+        run_owned([args.dotnet, "build", "tests/SalmonEgg.Acp.Desktop.Tests/SalmonEgg.Acp.Desktop.Tests.csproj",
                         "--configuration", "Release", "-m:1", "--disable-build-servers", "-p:UseSharedCompilation=false"],
-                       cwd=args.repo, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
+                       cwd=args.repo, stdout=log, stderr=subprocess.STDOUT, timeout=180)
     # Control sockets must fit sun_path. These are ephemeral files, not the durable evidence.
     with tempfile.TemporaryDirectory(prefix="se-credential-") as temporary:
         root = Path(temporary)
@@ -99,16 +129,9 @@ def main(args):
             SALMONEGG_CREDENTIAL_SANDBOX=str(root), SALMONEGG_ISOLATED_PI_DIR=str(agent), PI_CODING_AGENT_DIR=str(agent),
             XDG_DATA_HOME=str(root / "data"), XDG_RUNTIME_DIR=str(root / "runtime"), XDG_CONFIG_HOME=str(root / "config"),
             DOTNET_PROCESSOR_COUNT="2", DOTNET_CLI_USE_MSBUILD_SERVER="0", MSBUILDDISABLENODEREUSE="1")
-        subprocess.run(["dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()), "--inside-bus",
+        run_owned(["dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()), "--inside-bus",
             "--repo", str(args.repo), "--artifacts", str(args.artifacts), "--dotnet", args.dotnet,
-            "--endpoint", args.endpoint, "--model", args.model, "--api", args.api], env=env, check=True, timeout=190)
-    while True:
-        try:
-            pid, _ = os.waitpid(-1, os.WNOHANG)
-            if not pid:
-                break
-        except ChildProcessError:
-            break
+            "--endpoint", args.endpoint, "--model", args.model, "--api", args.api], env=env, timeout=190)
     (args.artifacts / "acceptance.json").write_text(json.dumps({
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=args.repo, text=True).strip(),
         "workingTree": subprocess.check_output(["git", "status", "--short"], cwd=args.repo, text=True),
@@ -122,6 +145,10 @@ def main(args):
 
 
 if __name__ == "__main__":
+    def interrupt(_signal, _frame):
+        raise KeyboardInterrupt("Isolated credential gate interrupted")
+
+    signal.signal(signal.SIGTERM, interrupt)
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--artifacts", type=Path, required=True)
@@ -130,4 +157,9 @@ if __name__ == "__main__":
     parser.add_argument("--model", required=True)
     parser.add_argument("--api", choices=["openai-completions", "openai-responses", "anthropic-messages"], default="openai-completions")
     parser.add_argument("--inside-bus", action="store_true", help=argparse.SUPPRESS)
-    main(parser.parse_args())
+    arguments = parser.parse_args()
+    try:
+        main(arguments)
+    finally:
+        if sys.platform == "linux" and not arguments.inside_bus:
+            reap_owned_children()
