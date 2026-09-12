@@ -172,6 +172,8 @@ def main():
         print(json.dumps(report))
     finally:
         if app is not None:
+            with (output / 'native-controls.json').open('w') as tree:
+                subprocess.run([str(ax_tool), 'describe', str(app.pid)], stdout=tree, timeout=10)
             try:
                 os.killpg(app.pid, signal.SIGTERM)
                 app.wait(timeout=5)
