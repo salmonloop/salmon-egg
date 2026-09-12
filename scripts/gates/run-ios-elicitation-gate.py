@@ -42,7 +42,8 @@ def seed(container, endpoint):
     conversation = {"conversationId": "native-elicitation-conversation", "displayName": "Native acceptance session",
         "createdAt": "2026-09-12T00:00:00Z", "lastUpdatedAt": "2026-09-12T00:00:00Z",
         "cwd": "/acceptance", "projectId": "remote-directory:native-elicitation-directory",
-        "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session", "messages": []}
+        "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session",
+        "sessionInfo": {"title": "Native acceptance session", "hasTitle": True, "cwd": "/acceptance"}, "messages": []}
     (root / "conversations/conversations.v1.json").write_text(json.dumps(
         {"version": 1, "lastActiveConversationId": None, "conversations": [conversation]}))
     return root
