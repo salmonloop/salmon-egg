@@ -38,7 +38,7 @@ def seed(container, endpoint):
         "id: native-elicitation-profile\nname: Native Elicitation Fixture\ntransport: websocket\n"
         f"server_url: {endpoint}\nconnection_timeout_seconds: 30\n"
         "authentication:\n  mode: none\nproxy:\n  mode: none\n")
-    conversation = {"conversationId": "native-elicitation-conversation", "displayName": "Native acceptance",
+    conversation = {"conversationId": "native-elicitation-conversation", "displayName": "Native acceptance session",
         "createdAt": "2026-09-12T00:00:00Z", "lastUpdatedAt": "2026-09-12T00:00:00Z",
         "cwd": "/acceptance", "projectId": "remote-directory:native-elicitation-directory",
         "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session", "messages": []}
