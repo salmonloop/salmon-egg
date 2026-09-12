@@ -61,6 +61,27 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public Window MainWindow => ResolveMainWindow();
 
+    internal void CaptureAcceptanceFailure(string name)
+    {
+        var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+        if (string.IsNullOrWhiteSpace(artifacts)) return;
+        try
+        {
+            CaptureMainWindowToFile(Path.Combine(artifacts, name + ".png"));
+            var rows = new List<string>();
+            foreach (var window in _application.GetAllTopLevelWindows(_automation))
+            {
+                rows.Add("WINDOW " + DescribeElement(window));
+                foreach (var element in window.FindAllDescendants()) rows.Add(DescribeElement(element));
+            }
+            File.WriteAllLines(Path.Combine(artifacts, name + ".txt"), rows);
+        }
+        catch (Exception exception) when (exception is COMException or IOException or InvalidOperationException)
+        {
+            GuiAcceptanceDiagnostics.Record("Native failure capture unavailable: " + exception.GetType().Name);
+        }
+    }
+
     public static WindowsGuiAppSession LaunchOrAttach()
     {
         GuiTestGate.RequireEnabled();
