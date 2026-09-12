@@ -9,8 +9,8 @@ final class ElicitationTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         control = try XCTUnwrap(URL(string: ProcessInfo.processInfo.environment["SALMONEGG_IOS_CONTROL_URL"] ?? ""))
-        product.launchEnvironment["SALMONEGG_GUI"] = "1"
-        product.launch()
+        // The harness launches the installed product with console capture before attaching XCTest.
+        product.activate()
     }
 
     override func tearDownWithError() throws {
