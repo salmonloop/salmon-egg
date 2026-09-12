@@ -73,7 +73,15 @@ class AndroidDevice:
 
     def tree(self):
         self.text("shell", "rm", "-f", "/sdcard/salmonegg-acceptance.xml")
-        self.text("shell", "uiautomator", "dump", "/sdcard/salmonegg-acceptance.xml")
+        status = self.text("shell", "uiautomator", "dump", "/sdcard/salmonegg-acceptance.xml")
+        exists = self.adb("shell", "test", "-s", "/sdcard/salmonegg-acceptance.xml",
+                          text=True, capture_output=True, check=False)
+        if exists.returncode:
+            # Android can report no root during a splash/transition. Never reuse a previous tree;
+            # the caller's bounded wait will require the actual control once it is exposed.
+            with (self.artifacts / "ui-sampling.log").open("a") as log:
+                log.write(status + "\n")
+            return ET.Element("hierarchy")
         xml = self.text("shell", "cat", "/sdcard/salmonegg-acceptance.xml")
         (self.artifacts / "last-ui.xml").write_text(xml)
         return ET.fromstring(xml)
@@ -104,8 +112,8 @@ class AndroidDevice:
         self.tap_node(self.wait(label, package))
 
     def capture(self, name):
-        self.tree()
-        (self.artifacts / (name + ".xml")).write_bytes((self.artifacts / "last-ui.xml").read_bytes())
+        snapshot = self.tree()
+        (self.artifacts / (name + ".xml")).write_bytes(ET.tostring(snapshot))
         with (self.artifacts / (name + ".png")).open("wb") as image:
             self.adb("exec-out", "screencap", "-p", stdout=image)
 
