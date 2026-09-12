@@ -2,14 +2,31 @@ name: Windows Packaged GUI Acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      reverse-verification:
+        description: Rebuild a mutant and the restored package to prove the URL consent gate
+        type: boolean
+        default: false
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/windows-packaged-gui-acceptance.yml'
       - 'scripts/gates/test-windows-interactive-desktop.ps1'
       - 'scripts/gates/run-windows-packaged-gui-acceptance.ps1'
+      - 'scripts/gates/windows-elicitation-reverse-verification.py'
+      - 'scripts/gates/fixtures/native-elicitation-peer.py'
       - 'scripts/gates/windows-desktop-probe/**'
       - 'tests/SalmonEgg.GuiTests.Windows/**'
+      - '.tools/run-winui3-msix.ps1'
+      - 'src/SalmonEgg.Infrastructure/Services/PlatformCapabilityService.cs'
+      - 'src/SalmonEgg.Infrastructure.Desktop/Services/TerminalAuthenticationSessionFactory*'
+      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/Controls/XtermTerminalView*'
+      - 'SalmonEgg/SalmonEgg/Assets/Terminal/**'
+      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
+      - 'SalmonEgg/SalmonEgg/Presentation/Services/UnoAppLanguageService.cs'
+      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/TerminalAuthenticationDialog*'
       - 'SalmonEgg/SalmonEgg/Presentation/Services/TerminalAuthenticationInteraction.cs'
 
@@ -24,7 +41,7 @@ jobs:
   packaged-gui:
     name: Windows Installed WinUI GUI
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 80
     env:
       DOTNET_PROCESSOR_COUNT: '2'
       DOTNET_CLI_USE_MSBUILD_SERVER: '0'
@@ -57,6 +74,11 @@ jobs:
         timeout-minutes: 9
         shell: pwsh
         run: ./scripts/gates/run-windows-packaged-gui-acceptance.ps1
+      - name: Prove URL consent rejection and the restored installed product
+        if: github.event_name == 'workflow_dispatch' && inputs.reverse-verification
+        timeout-minutes: 40
+        shell: pwsh
+        run: python scripts/gates/windows-elicitation-reverse-verification.py
       - name: Upload installed-product and desktop evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -66,4 +88,5 @@ jobs:
             artifacts/windows-packaged-gui
             artifacts/msix/current-install.json
             artifacts/logs/msix/*.log
+            artifacts/windows-elicitation-reverse/**
           if-no-files-found: error
