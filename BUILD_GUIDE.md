@@ -301,7 +301,11 @@ python3 scripts/gates/skia-elicitation-consent-smoke.py \
 
 门禁使用隔离 AppData 中的真实 stdio 配置、已恢复的 conversation、生产聊天卡片和 XTest 鼠标输入；独立 DEBUG driver 仅导航到该 conversation 并读取可见控件，不创建测试 UI、不替换 launcher、不代用户同意。依次验证拒绝、取消零外访，打开与重开两次真实沙箱浏览器访问、单次 ACP accept，Agent complete 更新以及断连后清除 URL 和禁用旧操作。外部页面检查 `opener`、`referrer` 为空，页面私密值不进入 ACP 或应用日志。默认浏览器注册只写本次隔离的 XDG 配置，不修改用户设置；浏览器无调试桥、未关闭沙箱，结束时回收本门禁的进程组。协议对端是确定性 fixture，不能代替独立第三方 Agent 验收。
 
-Linux 产品能力注册与此 CI 门禁一同交付；CI 不会动态修改能力。Windows、macOS、iOS、Android 仍需各自原生产品验收后启用 URL 能力；Unix 终端认证另受当前 Porta.Pty 未公开信号退出状态的限制。本门禁不构成终端认证或其它原生平台的验证。源码移除 Linux launcher 注册时，`Native URL capability not advertised` 必须使该门禁失败。
+Linux 产品能力注册与此 CI 门禁一同交付；CI 不会动态修改能力。源码移除 Linux launcher 注册时，`Native URL capability not advertised` 必须使该门禁失败。该门禁不构成终端认证或其它原生平台的验证。
+
+macOS 的 `macOS Native Acceptance` workflow 使用本次 Debug Skia 产物、生产 stdio 链、真实 CGEvent 鼠标操作和 LaunchServices 默认浏览器验证同一 URL 流程：拒绝/取消零外访、打开与重开两次访问且只有一次 ACP accept、Agent 完成通知和断线失效。只有应用真实前台且系统窗口顺序已切回，才执行产品按钮操作。当前 Uno 依赖的 AX 控件树尚不完整，门禁使用独立 Debug 诊断组件只读采样按钮几何，再结合系统 AX 窗口几何定位；这不等于完整读屏验收。临时 Python fixture 的本地网络系统授权通过正常 Allow 按钮处理，不修改 TCC 数据库或全局安全设置。
+
+该 workflow 还临时加入未经用户同意的真实浏览器启动，要求门禁明确失败；随后按字节恢复源码、重新构建，再跑完整流程。证据包含提交、产物散列、进程来源、系统输入、浏览器隔离和恢复散列。Windows、iOS、Android 各自使用独立原生产品门禁；Unix 终端认证仍因当前 Porta.Pty 未公开信号退出状态而关闭。
 
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 

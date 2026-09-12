@@ -11,7 +11,13 @@ on:
       - 'scripts/gates/macos-elicitation-consent-smoke.py'
       - 'scripts/gates/macos-elicitation-reverse-verification.py'
       - 'scripts/gates/macos-native-ui.swift'
+      - 'scripts/gates/fixtures/native-elicitation-peer.py'
       - 'src/SalmonEgg.Infrastructure.Desktop/Services/DesktopElicitationUriLauncher.cs'
+      - 'src/SalmonEgg.Infrastructure.Desktop/Services/PlatformShellService.cs'
+      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
+      - 'SalmonEgg/SalmonEgg/Presentation/Diagnostics/NativeElicitationProbeDriver.cs'
 
 permissions:
   contents: read
