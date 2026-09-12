@@ -569,11 +569,13 @@
                                                            FontWeight="SemiBold"
                                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                                 <TextBlock Text="{x:Bind Prompt, Mode=OneWay}"
+                                                           AutomationProperties.Name="{x:Bind Prompt, Mode=OneWay}"
                                                            TextWrapping="WrapWholeWords"
                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                             </StackPanel>
 
                                             <TextBlock Text="{x:Bind AgentName, Mode=OneWay}"
+                                                       AutomationProperties.Name="{x:Bind AgentName, Mode=OneWay}"
                                                        Style="{StaticResource CaptionTextBlockStyle}"
                                                        TextWrapping="Wrap"/>
                                             <StackPanel Spacing="{StaticResource ChatElicitationFieldSpacing}"
@@ -581,14 +583,17 @@
                                                 <TextBlock x:Uid="ChatViewElicitationUrlConsent" TextWrapping="Wrap"/>
                                                 <TextBlock Text="{x:Bind UrlHost, Mode=OneWay}"
                                                            AutomationProperties.AutomationId="Elicitation.UrlHost"
+                                                           AutomationProperties.Name="{x:Bind UrlHost, Mode=OneWay}"
                                                            FontWeight="SemiBold" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
                                                 <TextBlock Text="{x:Bind FullUrl, Mode=OneWay}"
                                                            AutomationProperties.AutomationId="Elicitation.FullUrl"
+                                                           AutomationProperties.Name="{x:Bind FullUrl, Mode=OneWay}"
                                                            TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
                                                 <TextBlock x:Uid="ChatViewElicitationUrlWarning"
                                                            Visibility="{x:Bind HasUrlWarning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                            Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"/>
                                                 <TextBlock Text="{x:Bind UrlStatus, Mode=OneWay}"
+                                                           AutomationProperties.Name="{x:Bind UrlStatus, Mode=OneWay}"
                                                            Visibility="{x:Bind IsAwaitingCompletion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                            AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap"/>
                                             </StackPanel>
