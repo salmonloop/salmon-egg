@@ -109,9 +109,11 @@ def run(args):
     scenario.write_text(json.dumps({"url": url, "log": str(peer_log), "control": str(control), "cwd": str(project)}))
     scenario.chmod(0o600)
     browser_pid_file, browser_log = output / "browser.pid", output / "browser.log"
+    consent_dispatch, unauthorized_open = output / "consent-dispatched", output / "unconsented-browser-start"
     browser_log.touch(mode=0o600)
     launcher = output / "browser-handler"
     launcher.write_text("#!/bin/sh\n"
+        f"test -f {shlex.quote(str(consent_dispatch))} || : > {shlex.quote(str(unauthorized_open))}\n"
         # Chromium headless uses an exclusive profile, unlike the user's interactive browser.
         # Isolate each real handler invocation so reopening is measured without profile locking.
         f"profile=$(mktemp -d {shlex.quote(str(output / 'browser-profile.XXXXXX'))})\n"
@@ -166,6 +168,7 @@ def run(args):
             until = min(deadline, time.monotonic() + seconds)
             while time.monotonic() < until:
                 assert app.poll() is None, "Desktop exited before acceptance completed"
+                assert not unauthorized_open.exists(), "The product opened a URL without consent"
                 assert "NativeElicitationProbe failed" not in stdout_path.read_text(errors="replace"), "Native probe failed"
                 value = check()
                 if value:
@@ -250,6 +253,7 @@ def run(args):
         instruct("open")
         wait(lambda: state("open"), "No visible consent card")
         assert not visits
+        consent_dispatch.touch()
         click("submit", "open")
         reply = wait(lambda: replies("open"), "No accept response")
         assert len(reply) == 1 and reply[0].get("result") == {"action": "accept"}
