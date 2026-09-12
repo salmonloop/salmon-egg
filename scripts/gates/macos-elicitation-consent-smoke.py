@@ -154,10 +154,10 @@ def main():
             click(title)
             response = wait(lambda: replies(action), 'Native action did not reply')
             assert len(response) == 1 and response[0].get('result') == {'action': action}
-            assert not visits
+            assert not visits, 'macOS opened URL before consent'
         instruct('open')
         wait(lambda: state('open'), 'Open card not visible')
-        assert not visits
+        assert not visits, 'macOS opened URL before consent'
         click('Open in browser')
         response = wait(lambda: replies('open'), 'No native consent response')
         assert len(response) == 1 and response[0].get('result') == {'action': 'accept'}
