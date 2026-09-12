@@ -157,7 +157,7 @@ public sealed partial class MarkdownTextPresenter : Grid
         _markdown = CreateMarkdownBlock();
         _markdown.ImageResolving += (_, args) =>
         {
-            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer", "Child")) return;
+            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer, Uno.UI", "Child")) return;
             // The current Uno renderer cannot display inline image children. Keep the original
             // Markdown source readable through the existing fallback instead of acknowledging
             // decoded bytes that never became native content. No URL is fetched by this path.
