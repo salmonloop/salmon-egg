@@ -3,7 +3,9 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 
@@ -28,7 +30,19 @@ def main():
 
     def run(command, name, timeout):
         with (output / name).open("w") as log:
-            return subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT, timeout=timeout).returncode
+            process = subprocess.Popen(command, cwd=root, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            try:
+                return process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Give the native gate its signal handler/finally before enforcing the outer bound.
+                os.killpg(process.pid, signal.SIGTERM)
+                try: process.wait(timeout=30)
+                except subprocess.TimeoutExpired: pass
+                raise
+            finally:
+                try: os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                process.wait(timeout=5)
 
     red_exit = None
     try:
