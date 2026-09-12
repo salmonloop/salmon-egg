@@ -127,7 +127,7 @@ public static class SkiaDesktopGuiSeedWriter
     /// Pair with SALMONEGG_NAV_MASK_PROBE=1 so the app self-drives activation across the
     /// set and audits the realized NavigationViewItem tree on every rebuild.
     /// </summary>
-    public static SeedPaths WriteMultiSessionStressSeed(string appDataRoot, int sessionCount = 6)
+    public static SeedPaths WriteMultiSessionStressSeed(string appDataRoot, int sessionCount = 6, string grouping = "Project")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appDataRoot);
         if (sessionCount < 2)
@@ -140,7 +140,12 @@ public static class SkiaDesktopGuiSeedWriter
         Directory.CreateDirectory(paths.ConversationsDirectory);
         Directory.CreateDirectory(paths.ProjectRootPath);
 
-        File.WriteAllText(paths.AppYamlPath, BuildAppYaml(paths.ProjectRootPath), Encoding.UTF8);
+        var settings = BuildAppYaml(paths.ProjectRootPath)
+            + $"sidebar_conversation_grouping: {(grouping == "Status" ? "Status" : "Project")}{Environment.NewLine}"
+            + $"sidebar_attention_group_expanded: true{Environment.NewLine}"
+            + $"sidebar_working_group_expanded: true{Environment.NewLine}"
+            + $"sidebar_other_group_expanded: true{Environment.NewLine}";
+        File.WriteAllText(paths.AppYamlPath, settings, Encoding.UTF8);
         File.WriteAllText(paths.ConversationsPath, BuildMultiSessionStressConversationsJson(paths.ProjectRootPath, sessionCount), Encoding.UTF8);
 
         return paths;
@@ -195,12 +200,13 @@ public static class SkiaDesktopGuiSeedWriter
         return string.Join(
             Environment.NewLine,
             [
-                "version: 1",
+                "schema_version: 3",
                 "theme: Dark",
+                "telemetry_sharing_enabled: false",
                 "projects:",
-                $"  - id: {ProjectId}",
-                "    display_name: Skia Smoke Project",
-                $"    path: '{projectRootPath.Replace("'", "''", StringComparison.Ordinal)}'",
+                $"  - project_id: {ProjectId}",
+                "    name: Skia Smoke Project",
+                $"    root_path: '{projectRootPath.Replace("'", "''", StringComparison.Ordinal)}'",
                 $"last_selected_project_id: {ProjectId}",
                 string.Empty
             ]);

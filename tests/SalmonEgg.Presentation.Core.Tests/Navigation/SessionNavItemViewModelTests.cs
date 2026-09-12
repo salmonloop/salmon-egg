@@ -122,6 +122,31 @@ public sealed class SessionNavItemViewModelTests
         Assert.Empty(ui.InfoMessages);
     }
 
+    [Theory]
+    [InlineData(ConversationStatusIcon.Conversation, "Nav_StatusConversation")]
+    [InlineData(ConversationStatusIcon.Unread, "Nav_StatusUnread")]
+    [InlineData(ConversationStatusIcon.Permission, "Nav_StatusPermission")]
+    [InlineData(ConversationStatusIcon.Input, "Nav_StatusInput")]
+    [InlineData(ConversationStatusIcon.Error, "Nav_StatusError")]
+    [InlineData(ConversationStatusIcon.Working, "Nav_StatusWorking")]
+    public void StatusPresentation_Changes_UsesSameMeaningForTooltipAndAutomationName(
+        ConversationStatusIcon icon,
+        string resourceKey)
+    {
+        // Arrange
+        using var item = CreateItem(new RecordingUiInteractionService(), new FakeChatSessionCatalog());
+
+        // Act
+        item.StatusIcon = icon;
+        item.UpdateProject("project-1", "Demo project", showProjectDisplayName: true);
+        item.Title = "Updated title";
+
+        // Assert
+        Assert.Equal(new TestCoreStringLocalizer()[resourceKey].Value, item.StatusDescription);
+        Assert.Equal($"Updated title, Demo project, {item.StatusDescription}", item.AutomationName);
+        Assert.True(item.ShowProjectDisplayName);
+    }
+
     private static SessionNavItemViewModel CreateItem(
         IUiInteractionService ui,
         IChatSessionCatalog chatSessionCatalog,

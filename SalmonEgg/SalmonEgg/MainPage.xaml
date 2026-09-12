@@ -40,6 +40,11 @@
         <x:Double x:Key="NavCompactPaneLength">72</x:Double>
         <x:Double x:Key="NavOpenPaneLength">300</x:Double>
 
+        <!-- One native icon slot and the existing compact row rhythm for session status. -->
+        <x:Double x:Key="NavStatusIconSize">16</x:Double>
+        <x:Double x:Key="NavStatusSlotSize">20</x:Double>
+        <x:Double x:Key="NavSessionColumnSpacing">8</x:Double>
+
         <!-- Navigation section header sizing (keep consistent + tweakable in one place) -->
         <x:Double x:Key="NavSectionHeaderMinHeight">32</x:Double>
         <x:Double x:Key="NavSectionHeaderActionButtonSize">24</x:Double>
@@ -173,42 +178,79 @@
             </NavigationViewItem>
         </DataTemplate>
 
+        <DataTemplate x:Key="StatusGroupNavTemplate" x:DataType="nav:StatusGroupNavItemViewModel">
+            <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
+                                IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                                SelectsOnInvoked="False"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.StatusGroupItem(Group)}"
+                                AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
+                                Tag="{x:Bind navModels:NavItemTag.StatusGroup(Group)}">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="AllApps" />
+                </NavigationViewItem.Icon>
+                <NavigationViewItem.Content>
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="{StaticResource NavSessionColumnSpacing}">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="1"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{x:Bind Count, Mode=OneWay}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </NavigationViewItem.Content>
+            </NavigationViewItem>
+        </DataTemplate>
+
         <DataTemplate x:Key="SessionNavTemplate" x:DataType="nav:SessionNavItemViewModel">
             <NavigationViewItem SelectsOnInvoked="True"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionItem(SessionId)}"
                                 AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
-                                Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}"
-                                ContentTransitions="{x:Bind models:UiMotionController.Current.NavItemTransitions, Mode=OneWay}">
-                <NavigationViewItem.Icon>
-                    <SymbolIcon Symbol="Comment" />
-                </NavigationViewItem.Icon>
-
+                                Tag="{x:Bind navModels:NavItemTag.Session(SessionId)}">
                 <NavigationViewItem.Content>
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto"
-                          ColumnSpacing="8">
-                        <ProgressRing Width="14"
-                                      Height="14"
-                                      IsActive="{x:Bind IsPlaceholder, Mode=OneWay}"
-                                      Visibility="{x:Bind IsPlaceholder, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Grid ColumnDefinitions="Auto,*,Auto"
+                          ColumnSpacing="{StaticResource NavSessionColumnSpacing}">
+                        <Grid Width="{StaticResource NavStatusSlotSize}"
+                              Height="{StaticResource NavStatusSlotSize}"
+                              VerticalAlignment="Center"
+                              ToolTipService.ToolTip="{x:Bind StatusDescription, Mode=OneWay}">
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="{StaticResource NavStatusIconSize}"
+                                      Glyph="{x:Bind navUi:MainNavigationStatusVisuals.Glyph(StatusIcon), Mode=OneWay}"
+                                      Visibility="{x:Bind navUi:MainNavigationStatusVisuals.ShowGlyph(StatusIcon, IsPlaceholder), Mode=OneWay}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                            <ProgressRing Width="{StaticResource NavStatusIconSize}"
+                                          Height="{StaticResource NavStatusIconSize}"
+                                          IsActive="{x:Bind navUi:MainNavigationStatusVisuals.IsProgressActive(StatusIcon, IsPlaceholder), Mode=OneWay}"
+                                          Visibility="{x:Bind navUi:MainNavigationStatusVisuals.ShowProgress(StatusIcon, IsPlaceholder), Mode=OneWay}"
+                                          AutomationProperties.AccessibilityView="Raw" />
+                            <InfoBadge HorizontalAlignment="Right"
+                                       VerticalAlignment="Top"
+                                       AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionUnread(SessionId)}"
+                                       AutomationProperties.AccessibilityView="Raw"
+                                       Visibility="{x:Bind navUi:MainNavigationStatusVisuals.ShowUnread(StatusIcon), Mode=OneWay}" />
+                        </Grid>
 
-                        <TextBlock Grid.Column="1"
-                                   Text="{x:Bind Title, Mode=OneWay}"
-                                   TextTrimming="CharacterEllipsis"
-                                   MaxLines="1"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1" />
+                            <TextBlock Text="{x:Bind ProjectDisplayName, Mode=OneWay}"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1"
+                                       Visibility="{x:Bind ShowProjectDisplayName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </StackPanel>
 
-                        <Ellipse Grid.Column="2"
-                                 Width="8"
-                                 Height="8"
-                                 Fill="{ThemeResource AccentBrush}"
-                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionUnread(SessionId)}"
-                                 VerticalAlignment="Center"
-                                 Visibility="{x:Bind HasUnreadAttention, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                        <TextBlock Grid.Column="3"
+                        <TextBlock Grid.Column="2"
                                    Text="{x:Bind RelativeTimeText, Mode=OneWay}"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Margin="8,0,0,0"/>
+                                   VerticalAlignment="Center" />
                     </Grid>
                 </NavigationViewItem.Content>
 
@@ -230,9 +272,8 @@
         <DataTemplate x:Key="MoreNavTemplate" x:DataType="nav:MoreSessionsNavItemViewModel">
             <NavigationViewItem Content="{x:Bind Title, Mode=OneWay}"
                                 SelectsOnInvoked="False"
-                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.MoreItem(ProjectId)}"
-                                Tag="{x:Bind navModels:NavItemTag.More(ProjectId)}"
-                                ContentTransitions="{x:Bind models:UiMotionController.Current.NavItemTransitions, Mode=OneWay}">
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.MoreGroupItem(ProjectId, StatusGroup)}"
+                                Tag="{x:Bind Tag}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="More" />
                 </NavigationViewItem.Icon>
@@ -246,6 +287,7 @@
                                               LabelTemplate="{StaticResource SessionsLabelTemplate}"
                                               AddProjectTemplate="{StaticResource AddProjectTemplate}"
                                               ProjectTemplate="{StaticResource ProjectNavTemplate}"
+                                              StatusGroupTemplate="{StaticResource StatusGroupNavTemplate}"
                                               SessionTemplate="{StaticResource SessionNavTemplate}"
                                               MoreTemplate="{StaticResource MoreNavTemplate}" />
 

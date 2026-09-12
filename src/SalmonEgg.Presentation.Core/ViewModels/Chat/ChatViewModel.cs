@@ -168,7 +168,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ChatTranscriptProjectionCoordinator _transcriptProjectionCoordinator;
     private readonly ChatTranscriptProjectionContext _transcriptProjectionContext;
     private readonly ConversationHydrationCoordinator _hydrationCoordinator;
-    private readonly ConversationHydrationContext _hydrationContext;
     private readonly IVoiceInputService _voiceInputService;
     private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
     private readonly IShellLayoutMetricsSink? _shellLayoutMetricsSink;
@@ -181,7 +180,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private Task? _autoConnectInFlightTask;
     private bool _suppressAcpProfileConnect;
     private bool _suppressAutoConnectFromPreferenceChange;
-    private CancellationTokenSource? _sendPromptCts;
     private CancellationTokenSource? _voiceInputCts;
     private CancellationTokenSource? _transientNotificationCts;
     private CancellationTokenSource? _storeStateCts;
@@ -221,18 +219,19 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly object _sessionUpdateTrackingSync = new();
     private TaskCompletionSource<object?>? _sessionUpdatesDrainedTcs;
     private readonly object _sessionUpdateObservationSync = new();
-    private readonly Dictionary<string, long> _sessionUpdateObservationCounts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, long> _sessionTranscriptProjectionObservationCounts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, DateTime> _sessionUpdateLastObservedAtUtc = new(StringComparer.Ordinal);
+    private readonly Dictionary<SessionObservationKey, long> _sessionUpdateObservationCounts = new();
+    private readonly Dictionary<SessionObservationKey, long> _sessionTranscriptProjectionObservationCounts = new();
+    private readonly Dictionary<SessionObservationKey, DateTime> _sessionUpdateLastObservedAtUtc = new();
     private readonly Dictionary<string, int> _remoteHydrationKnownTranscriptBaselineCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTime> _remoteHydrationKnownTranscriptGrowthGraceDeadlineUtc = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _remoteHydrationSessionUpdateBaselineCounts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AcpSessionEventSource> _remoteHydrationObservationSources = new(StringComparer.Ordinal);
     private readonly object _remoteSessionRecoveryRequestsSync = new();
     private readonly Dictionary<RemoteSessionRecoveryLeaseKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
-    private int _foregroundChatServiceGeneration;
-    private EventHandler<SessionUpdateEventArgs>? _sessionUpdateHandler;
-    private EventHandler<PermissionRequestEventArgs>? _permissionRequestHandler;
-    private EventHandler<ElicitationRequestEventArgs>? _elicitationRequestHandler;
+    private readonly IAcpConnectionSessionRegistry? _connectionSessionRegistry;
+    private readonly object _chatServiceSubscriptionSync = new();
+    private readonly Dictionary<IChatService, ChatServiceSubscription> _chatServiceSubscriptions = new(ReferenceEqualityComparer.Instance);
+    private IDisposable? _foregroundConnectionUsage;
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
     private string? _hydrationOverlayPhaseConversationId;
     private int _pendingSessionUpdateCount;
@@ -693,36 +692,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return renderedCount;
         }
 
-        var observedCount = GetSessionUpdateObservationCount(remoteSessionId);
+        if (!_remoteHydrationObservationSources.TryGetValue(conversationId, out var source))
+        {
+            return renderedCount;
+        }
+
+        var observedCount = GetSessionUpdateObservationCount(source, remoteSessionId);
         var replayLoadedCount = Math.Max(0L, observedCount - replayBaseline);
         return Math.Max(renderedCount, replayLoadedCount);
-    }
-
-    private bool TryResolveCurrentHydrationConversationForRemoteSession(
-        string? remoteSessionId,
-        out string conversationId)
-    {
-        conversationId = string.Empty;
-        if (string.IsNullOrWhiteSpace(remoteSessionId))
-        {
-            return false;
-        }
-
-        var currentConversationId = CurrentSessionId;
-        if (string.IsNullOrWhiteSpace(currentConversationId)
-            || !string.Equals(_historyOverlayConversationId, currentConversationId, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var activeBinding = _conversationWorkspace.GetRemoteBinding(currentConversationId);
-        if (!string.Equals(activeBinding?.RemoteSessionId, remoteSessionId, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        conversationId = currentConversationId;
-        return true;
     }
 
     private void ResetHydrationOverlayPhaseIfOwnerChanged(string? historyConversationId)
@@ -1436,11 +1413,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         IRemoteDirectoryRegistrar? remoteDirectoryRegistrar = null,
         TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null,
-        IExternalUriLauncher? externalUriLauncher = null)
+        IExternalUriLauncher? externalUriLauncher = null,
+        ChatConversationPanelStateCoordinator? panelStateCoordinator = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
-        _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
+        _connectionSessionRegistry = connectionSessionRegistry;
+        _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore, connectionSessionRegistry);
         _localizer = localizer;
         _languageService = languageService;
         _uiInteractionService = uiInteractionService;
@@ -1454,7 +1433,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _miniWindowCoordinator = miniWindowCoordinator ?? throw new ArgumentNullException(nameof(miniWindowCoordinator));
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
-        _bindingCommands = bindingCommands ?? new BindingCoordinator(conversationWorkspace, chatStore);
+        _bindingCommands = bindingCommands ?? new BindingCoordinator(conversationWorkspace, chatStore, conversationAttentionStore);
         _acpConnectionCoordinator = acpConnectionCoordinator ?? NoopAcpConnectionCoordinator.Instance;
         _conversationMutationPipeline = conversationMutationPipeline ?? new ConversationMutationPipeline();
         _conversationActivationCoordinator = conversationActivationCoordinator
@@ -1494,7 +1473,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _taskOverviewChangeProjectionCoordinator = new TaskOverviewChangeProjectionCoordinator();
         _profileSelectionResolver = new ChatAcpProfileSelectionResolver();
         _conversationProfileConnectionGateway = new ChatConversationProfileConnectionGateway();
-        _panelStateCoordinator = new ChatConversationPanelStateCoordinator();
+        _panelStateCoordinator = panelStateCoordinator ?? new ChatConversationPanelStateCoordinator(uiDispatcher, connectionSessionRegistry);
         _panelRuntimeCoordinator = new ChatConversationPanelRuntimeCoordinator();
         _sessionOptionsPresenter = new ChatSessionOptionsPresenter();
         NewSessionDraftModeOptions = new ReadOnlyObservableCollection<SessionModeViewModel>(_newSessionDraftModeOptions);
@@ -1527,18 +1506,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ReplayStartTimeout: RemoteReplayStartTimeout,
                 ReplaySettleQuietPeriod: RemoteReplaySettleQuietPeriod,
                 PollDelay: TimeSpan.FromMilliseconds(RemoteReplayPollDelayMilliseconds)));
-        _hydrationContext = new ConversationHydrationContext
-        {
-            SetHydrationPhaseAsync = SetConversationHydrationPhaseAsync,
-            GetSessionUpdateObservationCount = GetSessionUpdateObservationCount,
-            GetTranscriptProjectionObservationCount = GetTranscriptProjectionObservationCount,
-            GetSessionUpdateLastObservedAtUtc = GetSessionUpdateLastObservedAtUtc,
-            AwaitBufferedReplayProjectionAsync = AwaitBufferedSessionReplayProjectionAsync,
-            GetProjectedTranscriptCountAsync = GetProjectedTranscriptCountAsync,
-            YieldToUiAsync = AwaitUiProjectionTurnAsync,
-            WaitForAdapterDrainAsync = WaitForAdapterReplayDrainAsync,
-            WaitForPendingSessionUpdatesAsync = WaitForPendingSessionUpdatesAsync
-        };
         _voiceInputService = voiceInputService ?? NoOpVoiceInputService.Instance;
         _applicationActivationSignalSource = applicationActivationSignalSource ?? NoOpApplicationActivationSignalSource.Instance;
         _shellNavigationRuntimeState = shellNavigationRuntimeState;
@@ -1551,6 +1518,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
         ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
         _acpConnectionCommands = acpConnectionCommands ?? throw new ArgumentNullException(nameof(acpConnectionCommands));
+        _panelStateCoordinator.Changed += OnPendingInteractionChanged;
         _voiceInputService.PartialResultReceived += OnVoiceInputPartialResultReceived;
         _voiceInputService.FinalResultReceived += OnVoiceInputFinalResultReceived;
         _voiceInputService.SessionEnded += OnVoiceInputSessionEnded;
@@ -1583,6 +1551,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _conversationCatalogPresenter.SetLoading(IsConversationListLoading);
         _conversationCatalogPresenter.Refresh(_conversationWorkspace.GetCatalog());
         RefreshProjectAffinityCorrectionState();
+
+        if (_connectionSessionRegistry is IAcpConnectionSessionEvents connectionEvents)
+        {
+            connectionEvents.ConnectionRegistered += OnConnectionRegistered;
+            connectionEvents.ConnectionRetired += OnConnectionRetired;
+            foreach (var session in _connectionSessionRegistry.GetSnapshot())
+            {
+                OnConnectionRegistered(session);
+            }
+        }
 
     }
 
@@ -2277,38 +2255,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             _transcriptProjectionCoordinator.SavePreviewSnapshot(snapshot);
             return Task.CompletedTask;
-        });
-    }
-
-    private void ClearCurrentPromptOnUiThread()
-    {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            CurrentPrompt = string.Empty;
-            return;
-        }
-
-        _ = PostToUiAsync(() => CurrentPrompt = string.Empty);
-    }
-
-    private void RestoreCurrentPromptOnUiThread(string promptText)
-    {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            if (string.IsNullOrWhiteSpace(CurrentPrompt))
-            {
-                CurrentPrompt = promptText;
-            }
-
-            return;
-        }
-
-        _ = PostToUiAsync(() =>
-        {
-            if (string.IsNullOrWhiteSpace(CurrentPrompt))
-            {
-                CurrentPrompt = promptText;
-            }
         });
     }
 
@@ -3386,57 +3332,301 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void SubscribeToChatService(IChatService chatService)
     {
-        var foregroundGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
-        _sessionUpdateHandler = (_, update) =>
+        if (ResolveRegisteredOrCurrentEventSource(chatService) is { } source)
         {
-            if (foregroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
-                && ReferenceEquals(chatService, _chatService) && update.IsCurrent)
-                OnSessionUpdateReceived(chatService, update,
-                    update.View is not null ? CaptureInteractionSource(chatService, foregroundGeneration) : null);
-        };
-        chatService.SessionUpdateReceived += _sessionUpdateHandler;
-        // Decorators forward events with the inner service as sender. Capture the actual subscribed
-        // service and generation here instead of guessing ownership from that forwarded sender.
-        _permissionRequestHandler = (_, request) => ProcessPermissionRequest(chatService, foregroundGeneration, request);
-        chatService.PermissionRequestReceived += _permissionRequestHandler;
-        chatService.FileSystemRequestReceived += OnFileSystemRequestReceived;
-        chatService.TerminalRequestReceived += OnTerminalRequestReceived;
-        chatService.TerminalStateChangedReceived += OnTerminalStateChangedReceived;
-        chatService.AskUserRequestReceived += OnAskUserRequestReceived;
-        _elicitationRequestHandler = (_, request) => ProcessElicitationRequest(chatService, foregroundGeneration, request);
-        chatService.ElicitationRequestReceived += _elicitationRequestHandler;
-        chatService.ErrorOccurred += OnErrorOccurred;
-
-        _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
+            SubscribeToChatService(source);
+        }
     }
 
-    private void UnsubscribeFromChatService(IChatService chatService)
+    private void SubscribeToChatService(AcpSessionEventSource source)
     {
-        if (_sessionUpdateHandler is not null)
+        lock (_chatServiceSubscriptionSync)
         {
-            chatService.SessionUpdateReceived -= _sessionUpdateHandler;
-            _sessionUpdateHandler = null;
+            if (_disposed || _chatServiceSubscriptions.TryGetValue(source.Service, out var current) && current.Source.Matches(source))
+            {
+                return;
+            }
         }
-        if (_permissionRequestHandler is not null)
+
+        var candidate = new ChatServiceSubscription(this, source);
+        ChatServiceSubscription? detached;
+        lock (_chatServiceSubscriptionSync)
         {
-            chatService.PermissionRequestReceived -= _permissionRequestHandler;
-            _permissionRequestHandler = null;
+            _chatServiceSubscriptions.TryGetValue(source.Service, out var current);
+            if (_disposed || current?.Source.Matches(source) == true
+                || ResolveRegisteredOrCurrentEventSource(source.Service, source.ProfileId) is not { } latest
+                || !latest.Matches(source))
+            {
+                detached = candidate;
+            }
+            else
+            {
+                detached = current;
+                _chatServiceSubscriptions[source.Service] = candidate;
+            }
         }
-        chatService.FileSystemRequestReceived -= OnFileSystemRequestReceived;
-        chatService.TerminalRequestReceived -= OnTerminalRequestReceived;
-        chatService.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
-        chatService.AskUserRequestReceived -= OnAskUserRequestReceived;
-        if (_elicitationRequestHandler is not null)
+
+        detached?.Dispose();
+    }
+
+    private void UnsubscribeFromChatService(IChatService chatService, AcpSessionEventSource? expectedSource = null)
+    {
+        ChatServiceSubscription? subscription;
+        lock (_chatServiceSubscriptionSync)
         {
-            chatService.ElicitationRequestReceived -= _elicitationRequestHandler;
-            _elicitationRequestHandler = null;
+            if (!_chatServiceSubscriptions.TryGetValue(chatService, out subscription)
+                || (expectedSource is { } expected && !subscription.Source.Matches(expected)))
+            {
+                return;
+            }
+
+            _chatServiceSubscriptions.Remove(chatService);
         }
-        chatService.ErrorOccurred -= OnErrorOccurred;
+
+        subscription.Dispose();
+    }
+
+    private bool IsCurrentEventSource(AcpSessionEventSource source)
+    {
+        if (_disposed || _disposeCts.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        lock (_chatServiceSubscriptionSync)
+        {
+            if (!_chatServiceSubscriptions.TryGetValue(source.Service, out var subscription)
+                || !subscription.Source.Matches(source))
+            {
+                return false;
+            }
+        }
+
+        if (_connectionSessionRegistry is null)
+        {
+            return !ReferenceEquals(_chatService, source.Service)
+                || string.Equals(ConnectionInstanceId, source.ConnectionInstanceId, StringComparison.Ordinal);
+        }
+
+        return string.IsNullOrWhiteSpace(source.ProfileId)
+            ? ReferenceEquals(_chatService, source.Service)
+                && string.Equals(ConnectionInstanceId, source.ConnectionInstanceId, StringComparison.Ordinal)
+            : !string.IsNullOrWhiteSpace(source.ProfileId)
+                && _connectionSessionRegistry.TryGetByProfile(source.ProfileId, out var session)
+                && source.Matches(session);
+    }
+
+    private void RefreshUnregisteredChatServiceSource()
+    {
+        if (_chatService is { } service
+            && _connectionSessionRegistry?.TryGetProfileId(service, out _) != true)
+        {
+            SubscribeToChatService(service);
+        }
+    }
+
+    private void RetireUnregisteredChatService(IChatService service, ServiceReplaceIntent intent)
+    {
+        if (intent == ServiceReplaceIntent.PoolOnly
+            || _connectionSessionRegistry?.TryGetProfileId(service, out _) == true)
+        {
+            return;
+        }
+
+        AcpSessionEventSource source;
+        lock (_chatServiceSubscriptionSync)
+        {
+            if (!_chatServiceSubscriptions.TryGetValue(service, out var subscription)) return;
+            source = subscription.Source;
+        }
+
+        UnsubscribeFromChatService(service, source);
+        // Replacement runs on the UI dispatcher. Detach request-owned SDK handlers before a queued
+        // old notification can run; turn retirement stays on the serial state ingress.
+        _panelStateCoordinator.RetireConnection(source);
+        SyncPermissionRequestProjection();
+        PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
+        PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(CurrentSessionId);
+        TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(
+            () => RetireConnectionStateAsync(source, AcpConnectionRetirementReason.Replaced)));
+    }
+
+    private void OnConnectionRegistered(AcpConnectionSession session)
+    {
+        if (_connectionSessionRegistry is not null
+            && _connectionSessionRegistry.TryGetByProfile(session.ProfileId, out var current)
+            && session.EventSource.Matches(current))
+        {
+            SubscribeToChatService(session.EventSource);
+            if (ReferenceEquals(_chatService, session.Service)) HoldForegroundConnectionUsage(session.EventSource);
+        }
+    }
+
+    private bool HoldForegroundConnectionUsage(AcpSessionEventSource source)
+    {
+        if (!TryAcquireConnectionUsage(source, out var usage)) return false;
+        Interlocked.Exchange(ref _foregroundConnectionUsage, usage)?.Dispose();
+        return true;
+    }
+
+    private void OnConnectionRetired(AcpConnectionSession session, AcpConnectionRetirementReason reason)
+    {
+        UnsubscribeFromChatService(session.Service, session.EventSource);
+        if (!_connectionSessionRegistry!.TryGetProfileId(session.Service, out _))
+        {
+            session.Service.SuppressAllBufferedUpdates("ConnectionRetired");
+        }
+        if (!_disposed)
+        {
+            TrackPendingSessionUpdate(_sessionUpdateWorkQueue.Enqueue(
+                () => RetireConnectionStateAsync(session.EventSource, reason)));
+        }
+    }
+
+    private async Task RetireConnectionStateAsync(AcpSessionEventSource source, AcpConnectionRetirementReason reason)
+    {
+        CancelRemoteSessionRecoveryRequests(source);
+        await ProcessRetiredConnectionAsync(source, reason).ConfigureAwait(false);
+        lock (_sessionUpdateObservationSync)
+        {
+            foreach (var key in _sessionUpdateObservationCounts.Keys.Where(key => key.Source.Matches(source)).ToArray())
+            {
+                _sessionUpdateObservationCounts.Remove(key);
+                _sessionTranscriptProjectionObservationCounts.Remove(key);
+                _sessionUpdateLastObservedAtUtc.Remove(key);
+            }
+        }
+
+        await PostToUiAsync(() =>
+        {
+            foreach (var (conversationId, owner) in _remoteHydrationObservationSources.ToArray())
+            {
+                if (owner.Matches(source))
+                {
+                    _remoteHydrationObservationSources.Remove(conversationId);
+                    _remoteHydrationSessionUpdateBaselineCounts.Remove(conversationId);
+                }
+            }
+
+            _panelStateCoordinator.RetireConnection(source);
+            SyncPermissionRequestProjection();
+            PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
+            PendingElicitationRequest = _panelStateCoordinator.GetPendingElicitationRequest(CurrentSessionId);
+        }).ConfigureAwait(false);
+    }
+
+    private void StopChatServiceSubscriptions()
+    {
+        Interlocked.Exchange(ref _foregroundConnectionUsage, null)?.Dispose();
+        if (_connectionSessionRegistry is IAcpConnectionSessionEvents connectionEvents)
+        {
+            connectionEvents.ConnectionRegistered -= OnConnectionRegistered;
+            connectionEvents.ConnectionRetired -= OnConnectionRetired;
+        }
+
+        ChatServiceSubscription[] subscriptions;
+        lock (_chatServiceSubscriptionSync)
+        {
+            subscriptions = _chatServiceSubscriptions.Values.ToArray();
+            _chatServiceSubscriptions.Clear();
+        }
+
+        foreach (var subscription in subscriptions) subscription.Dispose();
+    }
+
+    public async Task DrainSessionRuntimeAsync(CancellationToken cancellationToken = default)
+    {
+        var pendingPoolCleanup = StopPoolCleanupAsync();
+        CancelAllPromptOperations();
+        CancelAndClearRemoteSessionRecoveryRequests("Shutdown");
+        AcpChatServiceAdapter[] adapters;
+        lock (_chatServiceSubscriptionSync)
+        {
+            adapters = _chatServiceSubscriptions.Keys.OfType<AcpChatServiceAdapter>().ToArray();
+        }
+
+        StopChatServiceSubscriptions();
+        await Task.WhenAll(adapters.Select(static adapter => adapter.DrainResyncAsync())).WaitAsync(cancellationToken).ConfigureAwait(false);
+        await WaitForPendingSessionUpdatesAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+        await DrainPromptOperationsAsync(cancellationToken).ConfigureAwait(false);
+        await pendingPoolCleanup.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed class ChatServiceSubscription : IDisposable
+    {
+        private readonly EventHandler<SessionUpdateEventArgs> _sessionUpdate;
+        private readonly Action<BufferedSessionUpdate> _bufferedSessionUpdate;
+        private readonly EventHandler<PermissionRequestEventArgs> _permission;
+        private readonly EventHandler<FileSystemRequestEventArgs> _fileSystem;
+        private readonly EventHandler<TerminalRequestEventArgs> _terminal;
+        private readonly EventHandler<TerminalStateChangedEventArgs> _terminalState;
+        private readonly EventHandler<AskUserRequestEventArgs> _askUser;
+        private readonly EventHandler<ElicitationRequestEventArgs> _elicitation;
+        private readonly EventHandler<string> _error;
+        private readonly Func<string?, Task> _resync;
+        private readonly CancellationTokenSource _lifetime;
+        private bool _disposed;
+
+        public ChatServiceSubscription(ChatViewModel owner, AcpSessionEventSource source)
+        {
+            Source = source;
+            _lifetime = CancellationTokenSource.CreateLinkedTokenSource(owner._disposeCts.Token);
+            var lifetimeToken = _lifetime.Token;
+            _sessionUpdate = (_, args) => owner.OnSessionUpdateReceived(source, args);
+            _bufferedSessionUpdate = update => owner.OnSessionUpdateReceived(source, update.Update, update.IsReplay);
+            _permission = (_, args) => owner.ProcessPermissionRequest(source, args);
+            _fileSystem = (_, args) => owner.OnFileSystemRequestReceived(source, args);
+            _terminal = (_, args) => owner.OnTerminalRequestReceived(source, args);
+            _terminalState = (_, args) => owner.OnTerminalStateChangedReceived(source, args);
+            _askUser = (_, args) => owner.OnAskUserRequestReceived(source, args);
+            _elicitation = (_, args) => owner.ProcessElicitationRequest(source, args);
+            _error = (_, error) => owner.OnErrorOccurred(source, error);
+            _resync = remoteSessionId => owner.ResyncConnectionSessionAsync(source, remoteSessionId, lifetimeToken);
+            source.Service.PermissionRequestReceived += _permission;
+            source.Service.FileSystemRequestReceived += _fileSystem;
+            source.Service.TerminalRequestReceived += _terminal;
+            source.Service.TerminalStateChangedReceived += _terminalState;
+            source.Service.AskUserRequestReceived += _askUser;
+            source.Service.ElicitationRequestReceived += _elicitation;
+            source.Service.ErrorOccurred += _error;
+            if (source.Service is AcpChatServiceAdapter adapter)
+            {
+                adapter.BufferedSessionUpdateReceived += _bufferedSessionUpdate;
+                adapter.ResyncRequired += _resync;
+            }
+            else
+            {
+                source.Service.SessionUpdateReceived += _sessionUpdate;
+            }
+        }
+
+        public AcpSessionEventSource Source { get; }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _lifetime.Cancel();
+            Source.Service.SessionUpdateReceived -= _sessionUpdate;
+            Source.Service.PermissionRequestReceived -= _permission;
+            Source.Service.FileSystemRequestReceived -= _fileSystem;
+            Source.Service.TerminalRequestReceived -= _terminal;
+            Source.Service.TerminalStateChangedReceived -= _terminalState;
+            Source.Service.AskUserRequestReceived -= _askUser;
+            Source.Service.ElicitationRequestReceived -= _elicitation;
+            Source.Service.ErrorOccurred -= _error;
+            if (Source.Service is AcpChatServiceAdapter adapter)
+            {
+                adapter.BufferedSessionUpdateReceived -= _bufferedSessionUpdate;
+                adapter.ResyncRequired -= _resync;
+            }
+            _lifetime.Dispose();
+        }
     }
 
     private void SubscribeToEvents()
     {
-        // Only subscribe if _chatService is not null. 
+        // Only subscribe if _chatService is not null.
         // In constructor, _chatService might be null; it will be created in ApplyTransportConfigAsync.
         if (_chatService != null)
         {
@@ -3445,254 +3635,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
 
         }
-    }
-
-    private sealed class ScopedAcpChatCoordinatorSink : IAcpChatCoordinatorSink
-    {
-        private readonly ChatViewModel _owner;
-        private readonly AcpConnectionContext _connectionContext;
-        private readonly ScopedBindingCommands _bindingCommands;
-
-        public ScopedAcpChatCoordinatorSink(ChatViewModel owner, AcpConnectionContext connectionContext)
-        {
-            _owner = owner;
-            _connectionContext = connectionContext;
-            _bindingCommands = new ScopedBindingCommands(owner, connectionContext);
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged
-        {
-            add => _owner.PropertyChanged += value;
-            remove => _owner.PropertyChanged -= value;
-        }
-
-        public IChatService? CurrentChatService => _owner.CurrentChatService;
-        public bool IsConnected => _owner.IsConnected;
-        public bool IsConnecting => _owner.IsConnecting;
-        public bool IsInitializing => _owner.IsInitializing;
-        public bool IsSessionActive => _owner.IsSessionActive;
-        public bool IsAuthenticationRequired => _owner.IsAuthenticationRequired;
-        public string? ConnectionErrorMessage => _owner.ConnectionErrorMessage;
-        public string? AuthenticationHintMessage => _owner.AuthenticationHintMessage;
-        public string? AgentName => _owner.AgentName;
-        public string? AgentVersion => _owner.AgentVersion;
-        public string? CurrentSessionId => _owner.CurrentSessionId;
-        public bool IsHydrating => _owner.IsHydrating;
-        public bool IsInitialized => _owner.IsInitialized;
-        public string? CurrentRemoteSessionId => _owner.CurrentRemoteSessionId;
-        public string? SelectedProfileId => _owner.SelectedProfileId;
-        public ServerConfiguration? ResolveProfile(string? profileId) => _owner.ResolveNewSessionDraftProfile(profileId);
-        public IReadOnlyList<McpServer> CurrentMcpServers => _owner.CurrentMcpServers;
-        public string? ConnectionInstanceId => _owner.ConnectionInstanceId;
-        public long ConnectionGeneration => _owner.ConnectionGeneration;
-        public IUiDispatcher Dispatcher => _owner.Dispatcher;
-        public IConversationBindingCommands ConversationBindingCommands => _bindingCommands;
-        public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories()
-            => _owner._preferences.AgentRemoteDirectories;
-
-        public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
-        {
-            if (CanMutate())
-            {
-                _owner.SetCurrentMcpServers(mcpServers);
-            }
-        }
-
-        public ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
-            => _owner.GetCurrentRemoteBindingAsync(cancellationToken);
-
-        public ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
-            string conversationId,
-            CancellationToken cancellationToken = default)
-            => _owner.GetConversationRemoteBindingAsync(conversationId, cancellationToken);
-
-        public void SelectProfile(ServerConfiguration profile)
-        {
-            if (CanMutate())
-            {
-                _owner.SelectProfile(profile);
-            }
-        }
-
-        public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.SelectProfileAsync(profile, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public void ReplaceChatService(IChatService? chatService)
-        {
-            if (CanMutate())
-            {
-                _owner.ReplaceChatService(chatService);
-            }
-        }
-
-        public Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ReplaceChatServiceAsync(chatService, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ReplaceChatServiceWithIntentAsync(chatService, intent, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
-        {
-            if (CanMutate())
-            {
-                _owner.UpdateConnectionState(isConnecting, isConnected, isInitialized, errorMessage);
-            }
-        }
-
-        public void UpdateInitializationState(bool isInitializing)
-        {
-            if (CanMutate())
-            {
-                _owner.UpdateInitializationState(isInitializing);
-            }
-        }
-
-        public void UpdateAuthenticationState(bool isRequired, string? hintMessage)
-        {
-            if (CanMutate())
-            {
-                _owner.UpdateAuthenticationState(isRequired, hintMessage);
-            }
-        }
-
-        public void UpdateAgentIdentity(string? agentName, string? agentVersion)
-        {
-            if (CanMutate())
-            {
-                _owner.UpdateAgentIdentity(agentName, agentVersion);
-            }
-        }
-
-        public Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? ((IAcpChatCoordinatorSink)_owner).NotifyPromptRequestDispatchedAsync(cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ResetHydratedConversationForResyncAsync(cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ResetConversationForResyncAsync(conversationId, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public string? GetActiveSessionCwdOrDefault() => _owner.GetActiveSessionCwdOrDefault();
-
-        public string? GetSessionCwdOrDefault(string conversationId) => _owner.GetSessionCwdOrDefault(conversationId);
-
-        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
-            string conversationId,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.GetSessionRecoveryFallbackAsync(conversationId, cancellationToken)
-                : ValueTask.FromResult(default(AcpRemoteSessionRecoveryFallback));
-        }
-
-        public Task ApplyConversationRemoteSessionInfoAsync(
-            string conversationId,
-            AgentSessionInfo sessionInfo,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ApplyConversationRemoteSessionInfoAsync(conversationId, sessionInfo, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.SetIsHydratingAsync(isHydrating, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task SetConversationHydratingAsync(
-            string conversationId,
-            bool isHydrating,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.SetConversationHydratingAsync(conversationId, isHydrating, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.MarkActiveConversationRemoteHydratedAsync(cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task MarkConversationRemoteHydratedAsync(
-            string conversationId,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.MarkConversationRemoteHydratedAsync(conversationId, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        public Task ApplyConversationSessionLoadResponseAsync(
-            string conversationId,
-            SessionLoadResponse response,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return CanMutate()
-                ? _owner.ApplyConversationSessionLoadResponseAsync(conversationId, response, cancellationToken)
-                : Task.CompletedTask;
-        }
-
-        private bool CanMutate() => _owner.IsCurrentConnectionContext(_connectionContext);
-    }
-
-    private sealed class ScopedBindingCommands : IConversationBindingCommands
-    {
-        private readonly ChatViewModel _owner;
-        private readonly AcpConnectionContext _connectionContext;
-
-        public ScopedBindingCommands(ChatViewModel owner, AcpConnectionContext connectionContext)
-        {
-            _owner = owner;
-            _connectionContext = connectionContext;
-        }
-
-        public ValueTask<BindingUpdateResult> UpdateBindingAsync(string conversationId, string? remoteSessionId, string? boundProfileId)
-            => _owner.IsCurrentConnectionContext(_connectionContext)
-                ? _owner.ConversationBindingCommands.UpdateBindingAsync(conversationId, remoteSessionId, boundProfileId)
-                : ValueTask.FromResult(BindingUpdateResult.Success());
     }
 
     private sealed class NoopAcpConnectionCoordinator : IAcpConnectionCoordinator
@@ -3735,13 +3677,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return;
         }
 
+        _ = StopPoolCleanupAsync();
         _panelStateCoordinator.ClearPermissionRequests();
         foreach (var option in ConfigOptions) option.RetireEditor();
 
-        if (_chatService != null)
-        {
-            UnsubscribeFromChatService(_chatService);
-        }
+        StopChatServiceSubscriptions();
 
         _acpProfiles.PropertyChanged -= OnAcpProfilesPropertyChanged;
         _acpProfiles.Profiles.CollectionChanged -= OnAcpProfilesCollectionChanged;
@@ -3776,7 +3716,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _observedPendingElicitationRequest = null;
         }
 
-        _sendPromptCts?.Cancel();
+        CancelAllPromptOperations();
         _voiceInputCts?.Cancel();
         _transientNotificationCts?.Cancel();
         _newSessionDraftModeSelectionCts?.Cancel();
@@ -3787,7 +3727,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try { _ = _voiceInputService.StopAsync(); } catch { }
         StopStoreProjection();
 
-        try { _sendPromptCts?.Dispose(); } catch { }
         try { _voiceInputCts?.Dispose(); } catch { }
         try { _transientNotificationCts?.Dispose(); } catch { }
         try { _newSessionDraftModeSelectionCts?.Dispose(); } catch { }
@@ -3815,7 +3754,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         _selectedProfileConnectTask = null;
         _pendingSelectedProfileConnect = null;
-        _sendPromptCts = null;
         _voiceInputCts = null;
         _transientNotificationCts = null;
         _newSessionDraftModeSelectionCts = null;

@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Diagnostics;
@@ -38,11 +42,14 @@ internal static class NavigationMaskProbeDriver
     private const int CatalogChurnIntervalMilliseconds = 5;
     private const int TreeSettleDelayMilliseconds = 1500;
     private const int QuiesceDelayMilliseconds = 800;
+#if DEBUG
+    private static int _started;
+#endif
 
     /// <summary>
     /// Starts the stress run when explicitly enabled; otherwise does nothing.
     /// </summary>
-    public static void TryStart(IServiceProvider services)
+    public static void TryStart(IServiceProvider services, MainPage page)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -52,7 +59,26 @@ internal static class NavigationMaskProbeDriver
             return;
         }
 
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+        {
+            return;
+        }
+
         var navigation = services.GetRequiredService<MainNavigationViewModel>();
+        if (navigation.IsStatusGrouping)
+        {
+            _ = RunStatusAsync(
+                navigation,
+                services.GetRequiredService<IChatStore>(),
+                services.GetRequiredService<IConversationAttentionStore>(),
+                services.GetRequiredService<IApplicationShutdownProgress>(),
+                services.GetRequiredService<IUiDispatcher>(),
+                services.GetRequiredService<IShellNavigationRuntimeState>(),
+                services.GetRequiredService<IConversationCatalogDisplayReadModel>(),
+                page);
+            return;
+        }
+
         var catalog = services.GetService<ConversationCatalogPresenter>();
         if (catalog is null)
         {
@@ -65,6 +91,145 @@ internal static class NavigationMaskProbeDriver
     }
 
 #if DEBUG
+    private static async Task RunStatusAsync(
+        MainNavigationViewModel navigation,
+        IChatStore chat,
+        IConversationAttentionStore attention,
+        IApplicationShutdownProgress shutdown,
+        IUiDispatcher dispatcher,
+        IShellNavigationRuntimeState runtime,
+        IConversationCatalogDisplayReadModel display,
+        MainPage page)
+    {
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        void OnShutdown(object? sender, PropertyChangedEventArgs args)
+        {
+            if (shutdown.IsShuttingDown) stop.Cancel();
+        }
+
+        shutdown.PropertyChanged += OnShutdown;
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (navigation.Items.SelectMany(group => group.Children).OfType<SessionNavItemViewModel>()
+                       .Count(row => !row.IsPlaceholder) < 3)
+            {
+                if (DateTime.UtcNow >= deadline) throw new TimeoutException("Fixture navigation never materialized three sessions.");
+                await Task.Delay(50, stop.Token).ConfigureAwait(true);
+            }
+
+            var sessions = navigation.Items.SelectMany(group => group.Children)
+                .OfType<SessionNavItemViewModel>().Where(row => !row.IsPlaceholder)
+                .OrderBy(row => row.SessionId, StringComparer.Ordinal).Take(3).ToArray();
+            if (sessions.Length != 3)
+            {
+                throw new InvalidOperationException("The status probe requires three production conversation rows.");
+            }
+
+            App.BootLog("NavMaskProbe: status run started");
+            var step = 0;
+            for (var round = 0; round < 3; round++)
+            {
+                foreach (var row in sessions)
+                {
+                    if (!await navigation.ActivateSessionAsync(row.SessionId, row.ProjectId).WaitAsync(stop.Token).ConfigureAwait(true))
+                    {
+                        throw new InvalidOperationException($"Could not activate fixture conversation {row.SessionId}.");
+                    }
+
+                    App.BootLog($"NavStatusProbeActivation conversationId={row.SessionId} activePhase={runtime.ActiveSessionActivation?.Phase} inProgress={runtime.IsSessionActivationInProgress} activationVersion={runtime.ActiveSessionActivation?.Version}");
+                    var turnId = $"nav-status-probe-{round}-{row.SessionId}";
+                    await ApplyStatusStepAsync(navigation, row, ConversationStatusGroup.Working, ++step, sessions.Length,
+                        () => chat.Dispatch(new BeginTurnAction(row.SessionId, turnId, ChatTurnPhase.Thinking)), dispatcher, stop.Token, chat, runtime, display).ConfigureAwait(true);
+                    await ApplyStatusStepAsync(navigation, row, ConversationStatusGroup.NeedsAttention, ++step, sessions.Length,
+                        async () =>
+                        {
+                            await attention.Dispatch(new MarkConversationUnreadAction(row.SessionId, ConversationAttentionSource.AgentMessage, DateTime.UtcNow));
+                            await chat.Dispatch(new CompleteTurnAction(row.SessionId, turnId, "end_turn", HasStopReason: true));
+                        }, dispatcher, stop.Token, chat, runtime, display).ConfigureAwait(true);
+                    await ApplyStatusStepAsync(navigation, row, ConversationStatusGroup.Other, ++step, sessions.Length,
+                        async () =>
+                        {
+                            var state = await attention.GetCurrentStateAsync();
+                            if (state.TryGetConversation(row.SessionId, out var pending) && pending is not null)
+                            {
+                                await attention.Dispatch(new ClearConversationUnreadAction(row.SessionId, pending.UnreadVersion,
+                                    pending.ProfileId, pending.RemoteSessionId, pending.Content, pending.ContentConnectionInstanceId));
+                            }
+                        }, dispatcher, stop.Token, chat, runtime, display).ConfigureAwait(true);
+                }
+            }
+
+            App.BootLog($"NavMaskProbe: status run complete steps={step}");
+            await NavigationInteractionProbeDriver.RunIfEnabledAsync(page, navigation, chat, sessions, stop.Token).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.BootLog($"NavMaskProbe: status run faulted {ex}");
+        }
+        finally
+        {
+            shutdown.PropertyChanged -= OnShutdown;
+        }
+    }
+
+    private static async Task ApplyStatusStepAsync(
+        MainNavigationViewModel navigation,
+        SessionNavItemViewModel row,
+        ConversationStatusGroup expectedGroup,
+        int step,
+        int sessionCount,
+        Func<ValueTask> apply,
+        IUiDispatcher dispatcher,
+        CancellationToken token,
+        IChatStore chat,
+        IShellNavigationRuntimeState runtime,
+        IConversationCatalogDisplayReadModel display)
+    {
+        var projected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Observe(object? sender, EventArgs args)
+        {
+            var group = navigation.Items.OfType<StatusGroupNavItemViewModel>()
+                .SingleOrDefault(item => item.Group == expectedGroup);
+            var published = display.Snapshot.FirstOrDefault(item => item.ConversationId == row.SessionId);
+            var applied = navigation.Items.OfType<StatusGroupNavItemViewModel>().FirstOrDefault(item => item.Children.Contains(row));
+            App.BootLog($"NavStatusProbeRebuilt step={step} conversationId={row.SessionId} publishedGroup={published?.StatusGroup} appliedGroup={applied?.Group} activePhase={runtime.ActiveSessionActivation?.Phase} inProgress={runtime.IsSessionActivationInProgress}");
+            if (group?.Children.Contains(row) == true) projected.TrySetResult();
+        }
+
+        navigation.TreeRebuilt += Observe;
+        try
+        {
+            await apply().ConfigureAwait(false);
+            var state = await chat.GetCurrentStateAsync().ConfigureAwait(false);
+            App.BootLog($"NavStatusProbeStore step={step} conversationId={row.SessionId} turnPhase={state.ResolveTurn(row.SessionId)?.Phase}");
+            await projected.Task.WaitAsync(token).ConfigureAwait(false);
+            await dispatcher.EnqueueAsync(() =>
+            {
+                var groups = navigation.Items.OfType<StatusGroupNavItemViewModel>().ToArray();
+                var rows = groups.SelectMany(group => group.Children).OfType<SessionNavItemViewModel>()
+                    .Where(item => !item.IsPlaceholder).ToArray();
+                var actual = groups.Single(group => group.Children.Contains(row)).Group;
+                var stable = ReferenceEquals(navigation.ProjectedControlSelectedItem, row)
+                    && navigation.CurrentSelection is NavigationSelectionState.Session selection && selection.SessionId == row.SessionId;
+                var unique = rows.Select(item => item.SessionId).Distinct(StringComparer.Ordinal).Count();
+                var total = groups.Sum(group => group.Count);
+                App.BootLog($"NavStatusProbe step={step} conversationId={row.SessionId} expectedGroup={expectedGroup} actualGroup={actual} countTotal={total} unique={unique} selectedStable={stable}");
+                if (!stable || actual != expectedGroup || total != sessionCount || unique != sessionCount)
+                {
+                    throw new InvalidOperationException("Status navigation projection violated the fixture contract.");
+                }
+            }).ConfigureAwait(false);
+            // Bounded diagnostic pacing permits actual native frames between distinct status steps;
+            // it is not used to decide whether the semantic projection succeeded.
+            await Task.Delay(80, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            navigation.TreeRebuilt -= Observe;
+        }
+    }
+
     private static async Task RunAsync(MainNavigationViewModel navigation, ConversationCatalogPresenter catalog)
     {
         try

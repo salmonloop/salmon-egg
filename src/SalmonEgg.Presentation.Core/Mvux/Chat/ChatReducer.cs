@@ -16,6 +16,16 @@ public static class ChatReducer
 
         return action switch
         {
+            SetConversationOperationFailureAction failure when !string.IsNullOrWhiteSpace(failure.Failure.ConversationId)
+                => current with
+                {
+                    OperationFailures = (current.OperationFailures ?? ImmutableDictionary<string, ConversationOperationFailure>.Empty)
+                        .SetItem(failure.Failure.ConversationId, failure.Failure)
+                },
+            ClearConversationOperationFailureAction clearFailure => current with
+            {
+                OperationFailures = current.OperationFailures?.Remove(clearFailure.ConversationId)
+            },
             SelectConversationAction selectConversation => Mutate(current, ProjectConversation(current, selectConversation.ConversationId)),
             SetBindingSliceAction setBinding => Mutate(current, current with
             {
@@ -46,48 +56,57 @@ public static class ChatReducer
                 RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
             }),
             SetIsHydratingAction setIsHydrating => Mutate(current, current with { IsHydrating = setIsHydrating.IsHydrating }),
-            SetDraftTextAction draftText => Mutate(current, current with
-            {
-                DraftText = draftText.Text,
-                DraftRevision = checked(current.DraftRevision + 1)
-            }),
-            BeginTurnAction begin => Mutate(current, current with
-            {
-                ActiveTurn = new ActiveTurnState(
-                    begin.ConversationId,
-                    begin.TurnId,
-                    begin.InitialPhase,
-                    DateTime.UtcNow,
-                    DateTime.UtcNow,
-                    PendingUserMessageLocalId: begin.PendingUserMessageLocalId,
-                    PendingUserProtocolMessageId: begin.PendingUserProtocolMessageId,
-                    PendingUserMessageText: begin.PendingUserMessageText)
-            }),
-            AdvanceTurnPhaseAction advance when MatchesActiveTurn(current.ActiveTurn, advance.ConversationId, advance.TurnId)
-                && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
+            SetDraftTextAction draftText when (draftText.ExpectedConversationId is null
+                    || string.Equals(draftText.ExpectedConversationId, current.HydratedConversationId, StringComparison.Ordinal))
+                && (!draftText.ExpectedRevision.HasValue || draftText.ExpectedRevision.Value == current.DraftRevision)
+                => Mutate(current, current with
                 {
-                    ActiveTurn = current.ActiveTurn with { Phase = advance.NewPhase, ToolCallId = advance.ToolCallId, ToolTitle = advance.ToolTitle, LastUpdatedAtUtc = DateTime.UtcNow }
+                    DraftText = draftText.Text,
+                    DraftRevision = checked(current.DraftRevision + 1)
                 }),
-            CompleteTurnAction complete when MatchesActiveTurn(current.ActiveTurn, complete.ConversationId, complete.TurnId)
-                && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
+            BeginTurnAction begin => BeginTurn(current, begin),
+            SetTurnBindingAction binding when ResolveRunningTurn(current, binding.ConversationId, binding.TurnId, binding.ExpectedConnectionInstanceId) is { } bindingTurn
+                => SetTurn(current, bindingTurn with
                 {
-                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Completed, LastUpdatedAtUtc = DateTime.UtcNow }
+                    ProfileId = binding.ProfileId ?? bindingTurn.ProfileId,
+                    RemoteSessionId = binding.RemoteSessionId ?? bindingTurn.RemoteSessionId,
+                    ConnectionInstanceId = binding.ConnectionInstanceId ?? bindingTurn.ConnectionInstanceId
                 }),
-            FailTurnAction fail when MatchesActiveTurn(current.ActiveTurn, fail.ConversationId, fail.TurnId)
-                && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
+            AdvanceTurnPhaseAction advance when !IsTerminalPhase(advance.NewPhase)
+                && ResolveRunningTurn(current, advance.ConversationId, advance.TurnId, advance.ConnectionInstanceId) is { } advancingTurn
+                => SetTurn(current, advancingTurn with
                 {
-                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Failed, FailureMessage = fail.ErrorMessage, LastUpdatedAtUtc = DateTime.UtcNow }
+                    Phase = advance.NewPhase,
+                    ToolCallId = advance.ToolCallId,
+                    ToolTitle = advance.ToolTitle
                 }),
-            CancelTurnAction cancel when MatchesActiveTurn(current.ActiveTurn, cancel.ConversationId, cancel.TurnId)
-                && !IsTerminalPhase(current.ActiveTurn!.Phase) => Mutate(current, current with
+            CompleteTurnAction complete when ResolveRunningTurn(current, complete.ConversationId, complete.TurnId, complete.ConnectionInstanceId) is { } completingTurn
+                => SetTurn(current, completingTurn with
                 {
-                    ActiveTurn = current.ActiveTurn with { Phase = ChatTurnPhase.Cancelled, LastUpdatedAtUtc = DateTime.UtcNow }
+                    Phase = ChatTurnPhase.Completed,
+                    StopReason = complete.StopReason,
+                    HasStopReason = complete.HasStopReason
                 }),
-            ClearTerminalTurnAction clear when current.ActiveTurn?.ConversationId == clear.ConversationId
-                && IsTerminalPhase(current.ActiveTurn.Phase) => Mutate(current, current with
+            FailTurnAction fail when ResolveRunningTurn(current, fail.ConversationId, fail.TurnId, fail.ConnectionInstanceId) is { } failingTurn
+                => SetTurn(current, failingTurn with
                 {
-                    ActiveTurn = null
+                    Phase = ChatTurnPhase.Failed,
+                    FailureMessage = fail.ErrorMessage,
+                    StopReason = fail.StopReason,
+                    HasStopReason = fail.HasStopReason
                 }),
+            CancelTurnAction cancel when ResolveRunningTurn(current, cancel.ConversationId, cancel.TurnId, cancel.ConnectionInstanceId) is { } cancellingTurn
+                => SetTurn(current, cancellingTurn with
+                {
+                    Phase = ChatTurnPhase.Cancelled,
+                    StopReason = cancel.StopReason,
+                    HasStopReason = cancel.HasStopReason
+                }),
+            ClearTerminalTurnAction clear when current.ResolveTurn(clear.ConversationId) is { } clearingTurn
+                && IsTerminalPhase(clearingTurn.Phase) => current with
+                {
+                    Turns = current.Turns!.Remove(clear.ConversationId)
+                },
             AddMessageAction addMessage when !string.IsNullOrWhiteSpace(current.HydratedConversationId) => Mutate(current, current with
             {
                 ConversationContents = UpdateConversationContents(
@@ -231,6 +250,21 @@ public static class ChatReducer
         ChatState current,
         ApplyBindingUpdateAction action)
     {
+        var preservedTurn = action.PreservedTurn is { } expected
+            ? current.ResolveTurn(expected.ConversationId)
+            : null;
+        if (action.PreservedTurn is { } expectedTurn
+            && (preservedTurn is null
+                || !string.Equals(expectedTurn.ConversationId, action.Binding.ConversationId, StringComparison.Ordinal)
+                || !string.Equals(preservedTurn.TurnId, expectedTurn.TurnId, StringComparison.Ordinal)
+                || !string.Equals(preservedTurn.ProfileId, expectedTurn.ProfileId, StringComparison.Ordinal)
+                || !string.Equals(preservedTurn.RemoteSessionId, expectedTurn.RemoteSessionId, StringComparison.Ordinal)
+                || !string.Equals(preservedTurn.ConnectionInstanceId, expectedTurn.ConnectionInstanceId, StringComparison.Ordinal)
+                || IsTerminalPhase(preservedTurn.Phase)))
+        {
+            return current;
+        }
+
         var next = current with
         {
             Bindings = UpdateBindings(current.Bindings, action.Binding)
@@ -251,6 +285,17 @@ public static class ChatReducer
                 new ScrubConversationDerivedStateAction(
                     conversationId,
                     preservedSessionInfo));
+
+            if (preservedTurn is { } currentTurn
+                && string.Equals(conversationId, action.Binding.ConversationId, StringComparison.Ordinal)
+                && string.Equals(conversationId, currentTurn.ConversationId, StringComparison.Ordinal))
+            {
+                next = next with
+                {
+                    Turns = (next.Turns ?? ImmutableDictionary<string, ActiveTurnState>.Empty)
+                        .SetItem(conversationId, currentTurn)
+                };
+            }
 
             if (!string.Equals(conversationId, action.Binding.ConversationId, StringComparison.Ordinal)
                 || IsBindingEmpty(action.Binding))
@@ -294,9 +339,8 @@ public static class ChatReducer
                     null)),
             RuntimeStates = (current.RuntimeStates ?? ImmutableDictionary<string, ConversationRuntimeSlice>.Empty)
                 .Remove(scrub.ConversationId),
-            ActiveTurn = current.ActiveTurn?.ConversationId == scrub.ConversationId
-                ? null
-                : current.ActiveTurn
+            Turns = current.Turns?.Remove(scrub.ConversationId),
+            OperationFailures = current.OperationFailures?.Remove(scrub.ConversationId)
         };
 
         if (!string.Equals(current.HydratedConversationId, scrub.ConversationId, StringComparison.Ordinal))
@@ -345,10 +389,67 @@ public static class ChatReducer
         };
     }
 
-    private static bool MatchesActiveTurn(ActiveTurnState? activeTurn, string conversationId, string turnId)
-        => activeTurn is not null
-            && string.Equals(activeTurn.ConversationId, conversationId, StringComparison.Ordinal)
-            && string.Equals(activeTurn.TurnId, turnId, StringComparison.Ordinal);
+    private static ChatState BeginTurn(ChatState current, BeginTurnAction begin)
+    {
+        if (string.IsNullOrWhiteSpace(begin.ConversationId)
+            || string.IsNullOrWhiteSpace(begin.TurnId))
+        {
+            return current;
+        }
+
+        var previousTurn = current.ResolveTurn(begin.ConversationId);
+        if (previousTurn is not null
+            && (!IsTerminalPhase(previousTurn.Phase)
+                || string.Equals(previousTurn.TurnId, begin.TurnId, StringComparison.Ordinal)))
+        {
+            return current;
+        }
+
+        var now = DateTime.UtcNow;
+        return SetTurn(current, new ActiveTurnState(
+            begin.ConversationId,
+            begin.TurnId,
+            begin.InitialPhase,
+            now,
+            now,
+            PendingUserMessageLocalId: begin.PendingUserMessageLocalId,
+            PendingUserProtocolMessageId: begin.PendingUserProtocolMessageId,
+            PendingUserMessageText: begin.PendingUserMessageText,
+            ProfileId: begin.ProfileId,
+            RemoteSessionId: begin.RemoteSessionId,
+            ConnectionInstanceId: begin.ConnectionInstanceId));
+    }
+
+    private static ActiveTurnState? ResolveRunningTurn(
+        ChatState current,
+        string conversationId,
+        string turnId,
+        string? connectionInstanceId)
+    {
+        var turn = current.ResolveTurn(conversationId);
+        return turn is not null
+            && string.Equals(turn.ConversationId, conversationId, StringComparison.Ordinal)
+            && string.Equals(turn.TurnId, turnId, StringComparison.Ordinal)
+            && string.Equals(turn.ConnectionInstanceId, connectionInstanceId, StringComparison.Ordinal)
+            && !IsTerminalPhase(turn.Phase)
+                ? turn
+                : null;
+    }
+
+    private static ChatState SetTurn(ChatState current, ActiveTurnState turn)
+    {
+        var turns = current.Turns ?? ImmutableDictionary<string, ActiveTurnState>.Empty;
+        if (turns.TryGetValue(turn.ConversationId, out var previousTurn) && previousTurn == turn)
+        {
+            return current;
+        }
+
+        // Turn facts are process-local: publish the new state without advancing workspace persistence.
+        return current with
+        {
+            Turns = turns.SetItem(turn.ConversationId, turn with { LastUpdatedAtUtc = DateTime.UtcNow })
+        };
+    }
 
     private static bool IsTerminalPhase(ChatTurnPhase phase)
         => phase is ChatTurnPhase.Completed or ChatTurnPhase.Failed or ChatTurnPhase.Cancelled;
@@ -435,17 +536,9 @@ public static class ChatReducer
             AvailableCommands = sessionState?.AvailableCommands,
             SessionInfo = sessionState?.SessionInfo,
             Usage = sessionState?.Usage,
-            IsHydrating = false,
-            ActiveTurn = ShouldPreserveActiveTurnForSelection(current.ActiveTurn, conversationId)
-                ? current.ActiveTurn
-                : null
+            IsHydrating = false
         };
     }
-
-    private static bool ShouldPreserveActiveTurnForSelection(ActiveTurnState? activeTurn, string? conversationId)
-        => activeTurn is not null
-            && !string.IsNullOrWhiteSpace(conversationId)
-            && string.Equals(activeTurn.ConversationId, conversationId, StringComparison.Ordinal);
 
     private static bool ShouldProjectConversation(ChatState current, string? conversationId)
         => string.Equals(current.HydratedConversationId, conversationId, StringComparison.Ordinal);

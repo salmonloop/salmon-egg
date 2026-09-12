@@ -12,6 +12,7 @@ using Microsoft.Extensions.Localization;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
@@ -62,9 +63,13 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
 
     public object MessageId { get; }
 
+    internal DateTime ActivityAtUtc { get; private set; } = DateTime.UtcNow;
+
     public string? SessionId { get; }
 
     public string Prompt { get; }
+
+    internal AcpSessionEventSource? Source { get; set; }
 
     public ObservableCollection<ElicitationFieldViewModel> Fields { get; } = new();
 
@@ -240,6 +245,12 @@ public sealed partial class ElicitationRequestViewModel : ObservableObject, IDis
     partial void OnIsSubmittingChanged(bool value)
     {
         RefreshCommands();
+    }
+
+    partial void OnErrorMessageChanged(string? oldValue, string newValue)
+    {
+        if (string.IsNullOrWhiteSpace(oldValue) && !string.IsNullOrWhiteSpace(newValue))
+            ActivityAtUtc = DateTime.UtcNow;
     }
 
     [RelayCommand]

@@ -82,7 +82,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         _connectionPoolManager = connectionPoolManager ?? new AcpConnectionPoolManager(
             _sessionRegistry,
             cleaner,
-            NullLogger<AcpConnectionPoolManager>.Instance);
+            NullLogger<AcpConnectionPoolManager>.Instance,
+            connectionDependencySnapshotProvider);
         _connectionDependencySnapshotProvider = connectionDependencySnapshotProvider
             ?? NoopAcpConnectionDependencySnapshotProvider.Instance;
         _mcpServerProvider = mcpServerProvider ?? throw new ArgumentNullException(nameof(mcpServerProvider));
@@ -111,6 +112,12 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             sink,
             new AcpConnectionContext(sink.CurrentSessionId, preserveConversation),
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ReevaluatePoolAsync(IChatService? activeService, CancellationToken cancellationToken = default)
+    {
+        var dependencies = await _connectionDependencySnapshotProvider.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        await _connectionPoolManager.CleanupBeforeApplyAsync(activeService, dependencies, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AcpTransportApplyResult> ConnectToProfileAsync(
@@ -244,6 +251,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             && cachedSession.Service.UsesCredentialSnapshot(credentialSnapshot))
         {
             applyToken.ThrowIfCancellationRequested();
+            if (!_sessionRegistry.TryAcquireUsage(cachedSession.EventSource, out var reuseLease))
+                throw new OperationCanceledException("The cached ACP connection was retired before foreground admission.", applyToken);
+            using var admittedReuse = reuseLease;
 
             var currentService = sink.CurrentChatService;
             await sink.ReplaceChatServiceAsync(cachedSession.Service, replaceIntent, applyToken).ConfigureAwait(false);
@@ -261,11 +271,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 && !ReferenceEquals(currentService, cachedSession.Service)
                 && !ShouldKeepServiceAlive(currentService, selectedProfileId))
             {
+                _connectionPoolManager.RemoveByService(currentService, out _);
                 await DisconnectServiceQuietlyAsync(currentService).ConfigureAwait(false);
-                if (currentService != null)
-                {
-                    _connectionPoolManager.RemoveByService(currentService, out _);
-                }
             }
 
             await TryMarkHydratedForConnectionContextAsync(
@@ -292,7 +299,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 connectionContext.PreserveConversation);
             applyToken.ThrowIfCancellationRequested();
 
-            wrappedService = WrapChatService(candidateService, sink, applyToken, credentialSnapshot);
+            wrappedService = WrapChatService(candidateService, sink, credentialSnapshot);
             await _connectionCoordinator.SetInitializingAsync(selectedProfileId, applyToken).ConfigureAwait(false);
 
             var initializeResponse = await InitializeCandidateAsync(
@@ -318,11 +325,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             committed = true;
             if (!ShouldKeepServiceAlive(previousService, selectedProfileId))
             {
-                await DisconnectServiceQuietlyAsync(previousService).ConfigureAwait(false);
                 if (previousService != null)
                 {
                     _connectionPoolManager.RemoveByService(previousService, out _);
                 }
+                await DisconnectServiceQuietlyAsync(previousService).ConfigureAwait(false);
             }
 
             sink.UpdateAgentIdentity(ResolveDisplayAgentName(initializeResponse.AgentInfo), initializeResponse.AgentInfo?.Version);
@@ -407,11 +414,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
             try
             {
-                await DisposeServiceAsync(sink.CurrentChatService).ConfigureAwait(false);
                 if (sink.CurrentChatService != null)
                 {
-                    _connectionPoolManager.RemoveByService(sink.CurrentChatService, out _);
+                    _sessionRegistry.RemoveByService(sink.CurrentChatService, out _, AcpConnectionRetirementReason.TransportLost);
                 }
+                await DisposeServiceAsync(sink.CurrentChatService).ConfigureAwait(false);
             }
             catch (Exception disconnectEx)
             {
@@ -529,6 +536,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var chatService = sink.CurrentChatService;
         if (chatService != null)
         {
+            _connectionPoolManager.RemoveByService(chatService, out _);
             try
             {
                 await chatService.DisconnectAsync().ConfigureAwait(false);
@@ -550,7 +558,10 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 _logger.LogDebug(ex, "Failed to dispose ACP chat service cleanly during disconnect.");
             }
 
-            _connectionPoolManager.RemoveByService(chatService, out _);
+            if (chatService is AcpChatServiceAdapter adapter)
+            {
+                await adapter.DrainResyncAsync().ConfigureAwait(false);
+            }
         }
 
         await sink.ReplaceChatServiceAsync(null, cancellationToken).ConfigureAwait(false);
@@ -615,7 +626,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             requestGeneration,
             cancellationToken);
         var service = _chatServiceFactory.CreateChatService(profile);
-        var wrapped = WrapChatService(service, sink: null, attempt.Token, credentialSnapshot);
+        var wrapped = WrapChatService(service, sink: null, credentialSnapshot);
         attempt.AttachService(wrapped);
         try
         {
@@ -822,20 +833,16 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private AcpChatServiceAdapter WrapChatService(
         IChatService chatService,
         IAcpChatCoordinatorSink? sink,
-        CancellationToken applyScopeToken,
         ResolvedCredentialBinding? credentialSnapshot)
     {
         ArgumentNullException.ThrowIfNull(chatService);
 
         AcpChatServiceAdapter? wrappedService = null;
         var dispatcher = sink?.Dispatcher ?? InlineDispatcher.Instance;
-        Func<string?, Task>? resyncCallback = sink != null
-            ? sourceSessionId => HandleResyncRequiredAsync(
+        Func<string?, Task> resyncCallback = sourceSessionId => HandleResyncRequiredAsync(
                 sink,
                 wrappedService!,
-                sourceSessionId,
-                applyScopeToken)
-            : null;
+                sourceSessionId);
         var eventAdapter = new AcpEventAdapter(
             update => wrappedService!.PublishBufferedUpdate(update),
             dispatcher,
@@ -848,25 +855,24 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     }
 
     private async Task HandleResyncRequiredAsync(
-        IAcpChatCoordinatorSink sink,
+        IAcpChatCoordinatorSink? sink,
         AcpChatServiceAdapter sourceService,
-        string? sourceSessionId,
-        CancellationToken applyScopeToken)
+        string? sourceSessionId)
     {
-        if (applyScopeToken.IsCancellationRequested)
+        if (await sourceService.RequestResyncAsync(sourceSessionId).ConfigureAwait(false))
         {
-            sourceService.SuppressAllBufferedUpdates("StaleApplyScope");
-            _logger.LogDebug("Ignoring ACP resync request from stale apply scope.");
             return;
         }
 
-        if (!ReferenceEquals(sink.CurrentChatService, sourceService))
+        // Headless/legacy sinks can still use the coordinator recovery path. Production registry
+        // subscriptions above own both foreground and background recovery for the connection lifetime.
+        if (sink is null || !ReferenceEquals(sink.CurrentChatService, sourceService))
         {
             _logger.LogDebug("Ignoring ACP resync request from stale chat service instance.");
             return;
         }
 
-        var currentBinding = await sink.GetCurrentRemoteBindingAsync(applyScopeToken).ConfigureAwait(false);
+        var currentBinding = await sink.GetCurrentRemoteBindingAsync(CancellationToken.None).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(sourceSessionId)
             || !string.Equals(currentBinding?.RemoteSessionId, sourceSessionId, StringComparison.Ordinal))
         {
@@ -881,7 +887,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             "ACP update stream requested resync. remoteSessionId={RemoteSessionId}",
             currentBinding?.RemoteSessionId);
 
-        await _connectionCoordinator.ResyncAsync(sink, applyScopeToken).ConfigureAwait(false);
+        await _connectionCoordinator.ResyncAsync(sink, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static async Task UpdateBindingForCurrentConversationAsync(
@@ -1085,6 +1091,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to dispose ACP chat service cleanly during cleanup.");
+        }
+
+        if (service is AcpChatServiceAdapter adapter)
+        {
+            await adapter.DrainResyncAsync().ConfigureAwait(false);
         }
     }
 

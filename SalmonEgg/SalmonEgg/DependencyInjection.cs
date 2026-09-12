@@ -472,9 +472,11 @@ public static class DependencyInjection
         services.AddSingleton<IAcpConnectionDependencySnapshotProvider>(sp =>
             new AcpConnectionDependencySnapshotProvider(
                 sp.GetRequiredService<IChatStore>(),
-                sp.GetRequiredService<IChatConnectionStore>()));
+                sp.GetRequiredService<IChatConnectionStore>(),
+                sp.GetRequiredService<SalmonEgg.Presentation.ViewModels.Chat.Panels.ChatConversationPanelStateCoordinator>(),
+                sp.GetRequiredService<IAcpConnectionSessionRegistry>()));
         services.AddSingleton<IAuthoritativeRemoteSessionRouter>(sp =>
-            new AuthoritativeRemoteSessionRouter(sp.GetRequiredService<IChatStore>()));
+            new AuthoritativeRemoteSessionRouter(sp.GetRequiredService<IChatStore>(), sp.GetRequiredService<IAcpConnectionSessionRegistry>()));
         services.AddSingleton<IState<ChatConnectionState>>(sp => State.Value(sp, () => ChatConnectionState.Empty));
         services.AddSingleton<IChatConnectionStore, ChatConnectionStore>();
         services.AddSingleton<IAcpRemoteSessionRecoveryContextResolver, AcpRemoteSessionRecoveryContextResolver>();
@@ -501,7 +503,8 @@ public static class DependencyInjection
             new AcpConnectionPoolManager(
                 sp.GetRequiredService<IAcpConnectionSessionRegistry>(),
                 sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
-                sp.GetRequiredService<ILogger<AcpConnectionPoolManager>>()));
+                sp.GetRequiredService<ILogger<AcpConnectionPoolManager>>(),
+                sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>()));
         services.AddSingleton<IAcpSessionCommandOrchestrator>(sp =>
             new AcpSessionCommandOrchestrator(
                 sp.GetRequiredService<ILogger<AcpSessionCommandOrchestrator>>(),
@@ -615,6 +618,7 @@ public static class DependencyInjection
             sp.GetRequiredService<ConversationCatalogPresenter>());
         services.AddSingleton<IState<ConversationAttentionState>>(sp => State.Value(sp, () => ConversationAttentionState.Empty));
         services.AddSingleton<IConversationAttentionStore, ConversationAttentionStore>();
+        services.AddSingleton<SalmonEgg.Presentation.ViewModels.Chat.Panels.ChatConversationPanelStateCoordinator>();
         services.AddSingleton<ConversationCatalogDisplayPresenter>();
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
@@ -718,7 +722,8 @@ public static class DependencyInjection
         services.AddSingleton<BindingCoordinator>(sp =>
             new BindingCoordinator(
                 sp.GetRequiredService<ChatConversationWorkspace>(),
-                sp.GetRequiredService<IChatStore>()));
+                sp.GetRequiredService<IChatStore>(),
+                sp.GetRequiredService<IConversationAttentionStore>()));
         services.AddSingleton<IConversationBindingCommands>(sp => sp.GetRequiredService<BindingCoordinator>());
         services.AddSingleton<IConversationMutationPipeline, ConversationMutationPipeline>();
         services.AddSingleton<SerialAsyncWorkQueue>();

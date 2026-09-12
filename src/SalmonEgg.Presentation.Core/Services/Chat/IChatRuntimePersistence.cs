@@ -22,4 +22,6 @@ public interface IChatRuntimePersistence
     /// process to exit.
     /// </remarks>
     Task FlushPendingStateAsync(CancellationToken cancellationToken = default);
+
+    Task DrainSessionRuntimeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

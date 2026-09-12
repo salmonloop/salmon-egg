@@ -1,4 +1,5 @@
 using System;
+using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.Models.Navigation;
 
@@ -13,6 +14,8 @@ public static class NavItemTag
     private const string SessionPrefix = "Session:";
     private const string ProjectPrefix = "Project:";
     private const string MorePrefix = "More:";
+    private const string StatusGroupPrefix = "StatusGroup:";
+    private const string MoreStatusGroupPrefix = "MoreStatusGroup:";
 
     public static string Session(string sessionId) => string.IsNullOrWhiteSpace(sessionId)
         ? SessionPrefix
@@ -25,6 +28,16 @@ public static class NavItemTag
     public static string More(string projectId) => string.IsNullOrWhiteSpace(projectId)
         ? MorePrefix
         : MorePrefix + projectId;
+
+    public static string StatusGroup(ConversationStatusGroup group) => StatusGroupPrefix + group;
+
+    public static string MoreStatusGroup(ConversationStatusGroup group) => MoreStatusGroupPrefix + group;
+
+    public static bool TryParseStatusGroup(string? tag, out ConversationStatusGroup group)
+        => TryParseGroup(tag, StatusGroupPrefix, out group);
+
+    public static bool TryParseMoreStatusGroup(string? tag, out ConversationStatusGroup group)
+        => TryParseGroup(tag, MoreStatusGroupPrefix, out group);
 
     public static bool TryParseSession(string? tag, out string sessionId)
     {
@@ -60,5 +73,15 @@ public static class NavItemTag
 
         projectId = tag.Substring(MorePrefix.Length);
         return !string.IsNullOrWhiteSpace(projectId);
+    }
+
+    private static bool TryParseGroup(string? tag, string prefix, out ConversationStatusGroup group)
+    {
+        group = default;
+        return tag is not null
+            && tag.StartsWith(prefix, StringComparison.Ordinal)
+            && Enum.TryParse(tag[prefix.Length..], out group)
+            && Enum.IsDefined(group)
+            && string.Equals(group.ToString(), tag[prefix.Length..], StringComparison.Ordinal);
     }
 }
