@@ -29,7 +29,7 @@ def seed(container, endpoint):
     root = container / "Library/Application Support/SalmonEgg"
     (root / "config/servers").mkdir(parents=True)
     (root / "conversations").mkdir()
-    (root / "config/app.yaml").write_text("schema_version: 1\ntheme: Light\nlanguage: en\n"
+    (root / "config/app.yaml").write_text("schema_version: 1\ntheme: Light\nlanguage: en\ntelemetry_sharing_enabled: false\n"
         "last_selected_server_id: native-elicitation-profile\n"
         "last_selected_project_id: remote-directory:native-elicitation-directory\n"
         "agent_remote_directories:\n  - directory_id: native-elicitation-directory\n"
