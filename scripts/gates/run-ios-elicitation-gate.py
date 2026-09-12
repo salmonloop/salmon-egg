@@ -39,11 +39,11 @@ def seed(container, endpoint):
         "id: native-elicitation-profile\nname: Native Elicitation Fixture\ntransport: websocket\n"
         f"server_url: {endpoint}\nconnection_timeout_seconds: 30\n"
         "authentication:\n  mode: none\nproxy:\n  mode: none\n")
-    conversation = {"conversationId": "native-elicitation-conversation", "displayName": "Native acceptance session",
+    conversation = {"conversationId": "native-elicitation-conversation", "displayName": "Consent session",
         "createdAt": "2026-09-12T00:00:00Z", "lastUpdatedAt": "2026-09-12T00:00:00Z",
         "cwd": "/acceptance", "projectId": "remote-directory:native-elicitation-directory",
         "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session",
-        "sessionInfo": {"title": "Native acceptance session", "hasTitle": True, "cwd": "/acceptance"}, "messages": []}
+        "sessionInfo": {"title": "Consent session", "hasTitle": True, "cwd": "/acceptance"}, "messages": []}
     (root / "conversations/conversations.v1.json").write_text(json.dumps(
         {"version": 1, "lastActiveConversationId": None, "conversations": [conversation]}))
     return root
