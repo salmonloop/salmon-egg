@@ -10,8 +10,8 @@ namespace SalmonEgg.Acp.Client;
 
 /// <summary>Opt-in access to ACP v2 session projections and offline history replay.</summary>
 /// <remarks>
-/// These helpers do not enable live v2 negotiation. The public client continues to reject v2 until
-/// its complete lifecycle and feature gates are delivered. Replay consumes recorded update objects
+/// These helpers do not enable live v2 negotiation. The public client requires an explicit
+/// experimental policy separately. Replay consumes recorded update objects
 /// without connecting to an Agent or modifying a client's state.
 /// </remarks>
 [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]

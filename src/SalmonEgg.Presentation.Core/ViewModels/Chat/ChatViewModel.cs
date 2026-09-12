@@ -230,6 +230,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly object _remoteSessionRecoveryRequestsSync = new();
     private readonly Dictionary<RemoteSessionRecoveryLeaseKey, RemoteSessionRecoveryRequest> _remoteSessionRecoveryRequests = new();
     private int _foregroundChatServiceGeneration;
+    private EventHandler<SessionUpdateEventArgs>? _sessionUpdateHandler;
     private EventHandler<PermissionRequestEventArgs>? _permissionRequestHandler;
     private EventHandler<ElicitationRequestEventArgs>? _elicitationRequestHandler;
     private HydrationOverlayPhase _hydrationOverlayPhase = HydrationOverlayPhase.None;
@@ -3382,8 +3383,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void SubscribeToChatService(IChatService chatService)
     {
-        chatService.SessionUpdateReceived += OnSessionUpdateReceived;
         var foregroundGeneration = Volatile.Read(ref _foregroundChatServiceGeneration);
+        _sessionUpdateHandler = (_, update) =>
+        {
+            if (foregroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
+                && ReferenceEquals(chatService, _chatService) && update.IsCurrent)
+                OnSessionUpdateReceived(chatService, update);
+        };
+        chatService.SessionUpdateReceived += _sessionUpdateHandler;
         // Decorators forward events with the inner service as sender. Capture the actual subscribed
         // service and generation here instead of guessing ownership from that forwarded sender.
         _permissionRequestHandler = (_, request) => ProcessPermissionRequest(chatService, foregroundGeneration, request);
@@ -3401,7 +3408,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void UnsubscribeFromChatService(IChatService chatService)
     {
-        chatService.SessionUpdateReceived -= OnSessionUpdateReceived;
+        if (_sessionUpdateHandler is not null)
+        {
+            chatService.SessionUpdateReceived -= _sessionUpdateHandler;
+            _sessionUpdateHandler = null;
+        }
         if (_permissionRequestHandler is not null)
         {
             chatService.PermissionRequestReceived -= _permissionRequestHandler;

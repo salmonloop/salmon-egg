@@ -94,6 +94,15 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         bool IsConnected { get; }
 
+        /// <summary>The protocol negotiated by the active connection, or the stable default before initialization.</summary>
+        int NegotiatedProtocolVersion => AcpProtocolVersion.Default;
+
+        /// <summary>
+        /// Whether configuration RPC results also arrive through the ordered session update stream.
+        /// Legacy host implementations may retain their response-based application path.
+        /// </summary>
+        bool PublishesConfigurationResponses => false;
+
         /// <summary>
         /// Gets the current Agent information.
         /// </summary>
@@ -294,6 +303,20 @@ namespace SalmonEgg.Acp.Client
         /// The update payload.
         /// </summary>
         public SessionUpdate? Update { get; init; }
+
+        /// <summary>
+        /// Complete entity state projected by the SDK. Hosts consume this view without depending
+        /// on draft wire types; it is absent on legacy external client implementations.
+        /// </summary>
+        public AcpSessionUpdateView? View { get; init; }
+
+        /// <summary>True for authoritative configuration supplied by an RPC response rather than a notification.</summary>
+        public bool IsResponseProjection { get; init; }
+
+        internal Func<bool>? ConnectionIsCurrent { get; init; }
+
+        /// <summary>Whether this captured update still belongs to its receiving connection.</summary>
+        public bool IsCurrent => ConnectionIsCurrent?.Invoke() ?? true;
 
         /// <summary>
         /// Creates new session update event arguments.

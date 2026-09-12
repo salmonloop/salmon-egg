@@ -20,12 +20,13 @@ internal static class AcpInitializeTimeout
         string? conversationId,
         TimeSpan timeout,
         CancellationToken cancellationToken,
-        IPlatformCapabilityService? platformCapabilities = null)
+        IPlatformCapabilityService? platformCapabilities = null,
+        int protocolVersion = AcpProtocolVersion.Default)
     {
         try
         {
             return await chatService
-                .InitializeAsync(AcpInitializeRequestFactory.CreateDefault(platformCapabilities))
+                .InitializeAsync(AcpInitializeRequestFactory.CreateDefault(platformCapabilities, protocolVersion))
                 .WaitAsync(timeout, cancellationToken)
                 .ConfigureAwait(false);
         }

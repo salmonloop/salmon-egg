@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Acp.Client;
@@ -81,6 +83,86 @@ internal sealed class AcpSessionProjection
 
     internal void SetConfigOptions(IReadOnlyList<ConfigOption> configOptions)
         => _configOptions = configOptions.Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray();
+
+    internal AcpSessionUpdateView? CreateView(SessionUpdate update)
+    {
+        if (update is WholeMessageUpdate whole && _messages.TryGetValue(whole.MessageId, out var wholeState))
+        {
+            return MessageView(whole.MessageId, wholeState);
+        }
+        if (update is ContentChunkUpdate { MessageId: { } messageId } && _messages.TryGetValue(messageId, out var message))
+        {
+            return MessageView(messageId, message);
+        }
+        if (update is ToolCallStatusUpdate { ToolCallId: { } toolCallId } && _tools.TryGetValue(toolCallId, out var tool))
+        {
+            return new AcpSessionUpdateView(toolCall: StoreTool(toolCallId, tool));
+        }
+        if (update is ToolCallContentChunkUpdate chunk && _tools.TryGetValue(chunk.ToolCallId, out var chunkTool))
+        {
+            return new AcpSessionUpdateView(toolCall: StoreTool(chunk.ToolCallId, chunkTool));
+        }
+        var terminalId = update switch
+        {
+            TerminalSessionUpdate terminal => terminal.TerminalId,
+            TerminalOutputChunkSessionUpdate terminal => terminal.TerminalId,
+            _ => null
+        };
+        if (terminalId is not null && _terminals.TryGetValue(terminalId, out var terminalState))
+        {
+            var snapshot = terminalState.Snapshot();
+            var exit = snapshot.ExitStatus;
+            return new AcpSessionUpdateView(terminal: new AcpTerminalView(terminalId, snapshot.Command,
+                snapshot.Cwd, snapshot.Output, snapshot.HasExited, exit?.ExitCode, exit?.Signal));
+        }
+        return update switch
+        {
+            StateSessionUpdate work => new AcpSessionUpdateView(workState: work.State.State,
+                stopReason: (work.State as IdleSessionWorkState)?.StopReason),
+            ConfigOptionUpdate => new AcpSessionUpdateView(configOptions: _configOptions),
+            V2PlanUpdate { Plan: PlanItemsUpdateContent items } => new AcpSessionUpdateView(
+                planEntries: items.Entries.Select(static item => AcpSessionProjectionJson.Store(item)).ToImmutableArray()),
+            _ => null
+        };
+    }
+
+    private static AcpSessionUpdateView MessageView(string messageId, MessageState state)
+        => new(message: new AcpMessageView(messageId, state.Kind switch
+        {
+            AcpMessageKind.User => "user",
+            AcpMessageKind.Thought => "thought",
+            _ => "agent"
+        }, state.Content.ToImmutableArray()));
+
+    private static JsonElement StoreTool(string toolCallId, ToolState state)
+    {
+        // Application consumers share the existing stable tool view. Building its complete value
+        // directly preserves opaque structured diffs without requiring them to name draft types.
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("toolCallId", toolCallId);
+            writer.WriteString("title", state.Title);
+            writer.WriteString("kind", state.Kind?.Value);
+            writer.WriteString("status", state.Status?.Value);
+            writer.WritePropertyName("content");
+            writer.WriteStartArray();
+            foreach (var content in state.Content) content.WriteTo(writer);
+            writer.WriteEndArray();
+            writer.WritePropertyName("locations");
+            writer.WriteStartArray();
+            foreach (var location in state.Locations) location.WriteTo(writer);
+            writer.WriteEndArray();
+            writer.WritePropertyName("rawInput");
+            if (state.RawInput is { } input) input.WriteTo(writer); else writer.WriteNullValue();
+            writer.WritePropertyName("rawOutput");
+            if (state.RawOutput is { } output) output.WriteTo(writer); else writer.WriteNullValue();
+            writer.WriteEndObject();
+        }
+        using var document = JsonDocument.Parse(stream.GetBuffer().AsMemory(0, checked((int)stream.Length)));
+        return document.RootElement.Clone();
+    }
 
     private void RetainUnprojected(JsonElement payload)
     {

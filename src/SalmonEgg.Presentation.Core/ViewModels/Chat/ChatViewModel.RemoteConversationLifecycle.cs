@@ -314,7 +314,7 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
-        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities);
+        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities, chatService.NegotiatedProtocolVersion);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
             await PublishConversationFailureAsync(
@@ -1889,7 +1889,7 @@ public partial class ChatViewModel
         }
 
         var chatService = resolvedConnection.ChatService;
-        if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
+        if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities, chatService.NegotiatedProtocolVersion) == AcpSessionRecoveryMode.None)
         {
             await PublishConversationFailureAsync(
                     failureContext,

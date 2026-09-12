@@ -36,6 +36,7 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
     private readonly IAcpChatServiceFactory _chatServiceFactory;
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly ILogger<DiscoverSessionsConnectionFacade> _logger;
+    private readonly SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy _protocolExperiment;
     private readonly object _connectSync = new();
     private CancellationTokenSource? _connectCts;
     private long _connectVersion;
@@ -51,11 +52,13 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
     public DiscoverSessionsConnectionFacade(
         IAcpChatServiceFactory chatServiceFactory,
         ITransportSupportPolicy transportSupportPolicy,
-        ILogger<DiscoverSessionsConnectionFacade> logger)
+        ILogger<DiscoverSessionsConnectionFacade> logger,
+        SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy? protocolExperiment = null)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _protocolExperiment = protocolExperiment ?? new SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -135,7 +138,8 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
                     profile.Id,
                     conversationId: null,
                     AcpInitializeTimeout.Resolve(profile),
-                    cancellationToken)
+                    cancellationToken,
+                    protocolVersion: _protocolExperiment.OfferedProtocolVersion)
                 .ConfigureAwait(false);
 
             if (!IsLatestConnectRequest(requestVersion, cancellationToken))

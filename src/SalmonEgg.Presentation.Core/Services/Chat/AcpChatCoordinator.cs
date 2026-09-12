@@ -44,6 +44,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly Dictionary<PoolConnectionRequestKey, PoolConnectionRequestGate> _poolConnectionGates = new();
     private readonly Dictionary<string, long> _poolProfileDisconnectGenerations = new(StringComparer.Ordinal);
     private CancellationTokenSource? _activeApplyScopeCts;
+    private readonly SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy _protocolExperiment;
 
     public AcpChatCoordinator(
         IAcpChatServiceFactory chatServiceFactory,
@@ -58,9 +59,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         IAcpConnectionDependencySnapshotProvider? connectionDependencySnapshotProvider = null,
         int sessionUpdateBufferLimit = DefaultSessionUpdateBufferLimit,
         IPlatformCapabilityService? platformCapabilities = null,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy? protocolExperiment = null)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
+        _protocolExperiment = protocolExperiment ?? new SalmonEgg.Application.Services.Acp.AcpProtocolExperimentPolicy();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (sessionUpdateBufferLimit <= 0)
         {
@@ -1115,7 +1118,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             profileId,
             conversationId,
             initializeTimeout,
-            cancellationToken, _platformCapabilities).ConfigureAwait(false);
+            cancellationToken, _platformCapabilities, _protocolExperiment.OfferedProtocolVersion).ConfigureAwait(false);
     }
 
     private static TimeSpan ResolveInitializeTimeout(ServerConfiguration? profile)

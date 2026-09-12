@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -25,7 +26,7 @@ namespace SalmonEgg.Acp.Client
     public sealed class AcpClient : IAcpClient, IDisposable
     {
         private const string StableV1RuntimeOnlyMessage =
-            "ACP live client support is limited to stable protocolVersion 1 while newer modeled versions remain draft or incomplete.";
+            "ACP defaults to stable protocolVersion 1. Draft protocolVersion 2 requires an explicit experimental client policy.";
         private const string DisconnectIncompleteMessage =
             "ACP client disconnect has not completed successfully. Wait for it or retry DisconnectAsync before initializing.";
 
@@ -117,6 +118,7 @@ namespace SalmonEgg.Acp.Client
         private readonly IAcpClientSessionStore _sessionStore;
         private readonly IAcpTerminalSessionManager _terminalSessionManager;
         private readonly IAcpClientLogger _logger;
+        private readonly HashSet<int> _experimentalProtocolVersions;
         private readonly AcpSessionWorkController _sessionWork = new();
         private readonly ConcurrentDictionary<AcpRequestId, PendingOutboundRequest> _pendingRequests = new();
         // Inbound tool requests (agent -> client) are correlated by request id so we can format responses correctly.
@@ -151,6 +153,9 @@ namespace SalmonEgg.Acp.Client
         // Projection rather than a second field: a copy could drift from the contract actually in use,
         // and the two disagreeing is exactly the class of defect this refactor exists to remove.
         private int ProtocolVersion => _wire.Version;
+
+        /// <inheritdoc />
+        public int NegotiatedProtocolVersion => _isInitialized ? ProtocolVersion : AcpProtocolVersion.Default;
         private AgentInfo? _agentInfo;
         private AgentCapabilities? _agentCapabilities;
         private IReadOnlyList<AuthMethodDefinition>? _authMethods;
@@ -237,6 +242,9 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public AgentCapabilities? AgentCapabilities => _agentCapabilities;
 
+        /// <inheritdoc />
+        public bool PublishesConfigurationResponses => true;
+
         /// <summary>
         /// Creates a new <see cref="AcpClient"/> instance.
         /// </summary>
@@ -249,7 +257,24 @@ namespace SalmonEgg.Acp.Client
             IAcpClientLogger? logger = null,
             IAcpClientSessionStore? sessionStore = null,
             IAcpTerminalSessionManager? terminalSessionManager = null)
+            : this(transport, logger, sessionStore, terminalSessionManager, new AcpClientOptions())
         {
+        }
+
+        /// <summary>Creates a client with an explicit experimental-protocol policy.</summary>
+        public AcpClient(
+            IAcpTransport transport,
+            IAcpClientLogger? logger,
+            IAcpClientSessionStore? sessionStore,
+            IAcpTerminalSessionManager? terminalSessionManager,
+            AcpClientOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            _experimentalProtocolVersions = new HashSet<int>(options.ExperimentalProtocolVersions);
+            if (_experimentalProtocolVersions.Any(static version => version != AcpProtocolVersion.V2))
+            {
+                throw new ArgumentOutOfRangeException(nameof(options), "Only ACP v2 is available for explicit experimental evaluation.");
+            }
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = new MessageParser();
             _validator = new MessageValidator();
@@ -266,7 +291,7 @@ namespace SalmonEgg.Acp.Client
         /// Initializes the connection to the agent.
         /// </summary>
         public Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
-            => InitializeCoreAsync(@params, allowDraftRuntime: false, cancellationToken);
+            => InitializeCoreAsync(@params, allowDraftRuntime: _experimentalProtocolVersions.Contains(AcpProtocolVersion.V2), cancellationToken);
 
         // Assembly-internal staging seam: deterministic protocol peers exercise the actual parser,
         // dispatch and lifecycle before the full draft can be enabled by a future feature gate.
@@ -340,6 +365,9 @@ namespace SalmonEgg.Acp.Client
                 {
                     throw new InvalidOperationException("ACP client initialization is already in progress.");
                 }
+                // initialize is self-describing but its nested capabilities still use the offered
+                // surface. A reused client cannot serialize a new handshake through its old wire.
+                _wire = AcpWireFormat.For(@params.ProtocolVersion);
                 // The initialize request belongs to this connection too. Keep this same owner
                 // through the successful handshake instead of introducing it only afterwards.
                 _messageLoopCts = new CancellationTokenSource();
@@ -500,6 +528,19 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            if (ProtocolVersion == AcpProtocolVersion.V2)
+            {
+                ArgumentNullException.ThrowIfNull(@params);
+                // A product's restore intent is stable; the negotiated wire method is not. V2
+                // restores history with resume/start and must never send its removed load method.
+                var resumed = await ResumeSessionAsync(new SessionResumeParams(@params.SessionId,
+                    @params.Cwd, @params.McpServers, replayFrom: SessionReplayFrom.Start)
+                {
+                    AdditionalDirectories = @params.AdditionalDirectories,
+                    Meta = AcpMetaJson.Clone(@params.Meta)
+                }, cancellationToken).ConfigureAwait(false);
+                return new SessionLoadResponse(modes: null, configOptions: resumed.ConfigOptions) { Meta = AcpMetaJson.Clone(resumed.Meta) };
+            }
             var connectionToken = GetConnectionToken();
             if (!SupportsSessionLoad)
             {
@@ -904,9 +945,8 @@ namespace SalmonEgg.Acp.Client
                 JsonSerializer.SerializeToElement(@params, wire.TypeInfo<SessionSetConfigOptionParams>()));
 
             var response = await SendRequestAsync(request, cancellationToken, connectionToken,
-                responseObserver: wire.Version == AcpProtocolVersion.V2
-                    ? response => ReceiveDraftConfiguration(response, wire, connectionToken, @params.SessionId, isSetResponse: true)
-                    : null).ConfigureAwait(false);
+                responseObserver: response => ReceiveDraftConfiguration(response, wire, connectionToken,
+                    @params.SessionId, isSetResponse: true)).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -954,6 +994,17 @@ namespace SalmonEgg.Acp.Client
                 configOptions = created.ConfigOptions ?? [];
             }
             _sessionWork.ReceiveConfigOptions(sessionId!, configOptions, connectionToken, registerSession: !isSetResponse);
+            if (isSetResponse && IsCurrentConnection(connectionToken))
+            {
+                var update = new ConfigOptionUpdate { ConfigOptions = configOptions.ToList() };
+                SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(sessionId!, update)
+                {
+                    View = new AcpSessionUpdateView(configOptions: configOptions
+                        .Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray()),
+                    IsResponseProjection = true,
+                    ConnectionIsCurrent = () => IsCurrentConnection(connectionToken)
+                });
+            }
         }
 
         /// <summary>
@@ -2685,16 +2736,27 @@ namespace SalmonEgg.Acp.Client
                 {
                     return;
                 }
+                AcpSessionUpdateView? view = null;
                 if (connectionToken.CanBeCanceled
                     && !_sessionWork.ReceiveUpdate(
                         updateParams.SessionId,
                         updateParams.Update,
                         connectionToken,
-                        wire.Version == AcpProtocolVersion.V2 ? notification.Params.Value.GetProperty("update") : null))
+                        wire.Version == AcpProtocolVersion.V2 ? notification.Params.Value.GetProperty("update") : null,
+                        out view))
                 {
                     return;
                 }
-                SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(updateParams.SessionId, updateParams.Update));
+                if (view is null && updateParams.Update is ConfigOptionUpdate { ConfigOptions: { } options })
+                {
+                    view = new AcpSessionUpdateView(configOptions: options
+                        .Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray());
+                }
+                SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(updateParams.SessionId, updateParams.Update)
+                {
+                    View = view,
+                    ConnectionIsCurrent = () => IsCurrentConnection(connectionToken)
+                });
             }
             catch (Exception ex)
             {

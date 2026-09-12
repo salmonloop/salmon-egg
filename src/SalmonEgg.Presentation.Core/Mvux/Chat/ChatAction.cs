@@ -103,6 +103,13 @@ public sealed record HydrateConversationAction(
 
 public sealed record UpsertTranscriptMessageAction(string? ConversationId, ConversationMessageSnapshot Message) : ChatAction;
 
+public sealed record ReplaceProtocolMessageAction(
+    string ConversationId,
+    string ProtocolMessageId,
+    bool IsOutgoing,
+    IImmutableList<ConversationMessageSnapshot> Messages,
+    string? ReplacedLocalMessageId = null) : ChatAction;
+
 public sealed record SetConversationSessionStateAction(
     string? ConversationId,
     IImmutableList<ConversationModeOptionSnapshot> AvailableModes,

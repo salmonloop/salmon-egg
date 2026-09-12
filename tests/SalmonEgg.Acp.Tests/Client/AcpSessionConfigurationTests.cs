@@ -83,6 +83,99 @@ public sealed class AcpSessionConfigurationTests
     }
 
     [Fact]
+    public async Task SetOption_ResponseProjection_IsPublishedBeforeLaterNotifications()
+    {
+        using var peer = await ConfigurationPeer.CreateWithSessionAsync();
+        var events = new List<SessionUpdateEventArgs>();
+        peer.Client.SessionUpdateReceived += (_, update) => events.Add(update);
+        peer.OnSet = request =>
+        {
+            peer.Reply(request, OptionsResponse(BooleanOptions(true)));
+            peer.Update(BooleanOptions(false));
+        };
+
+        await peer.Client.SetSessionConfigOptionAsync(new("one", "reasoning", true), TestToken);
+
+        Assert.Equal(2, events.Count);
+        Assert.True(events[0].IsResponseProjection);
+        Assert.False(events[1].IsResponseProjection);
+        Assert.True(events[0].View!.ConfigOptions[0].CurrentBooleanValue);
+        Assert.False(events[1].View!.ConfigOptions[0].CurrentBooleanValue);
+        await peer.Client.DisconnectAsync();
+        Assert.All(events, static update => Assert.False(update.IsCurrent));
+    }
+
+    [Fact]
+    public async Task V1_SetOption_UsesTheSameOrderedApplicationProjection()
+    {
+        using var peer = await ConfigurationPeer.CreateAsync(version: AcpProtocolVersion.V1);
+        await peer.Client.CreateSessionAsync(new SessionNewParams("/workspace", []), TestToken);
+        SessionUpdateEventArgs? updated = null;
+        peer.Client.SessionUpdateReceived += (_, update) => updated = update;
+        peer.OnSet = request => peer.Reply(request,
+            """{"configOptions":[{"id":"reasoning","name":"Reasoning","type":"boolean","currentValue":true}]}""");
+
+        await peer.Client.SetSessionConfigOptionAsync(new("one", "reasoning", true), TestToken);
+
+        Assert.True(peer.Client.PublishesConfigurationResponses);
+        Assert.NotNull(updated);
+        Assert.True(updated.IsResponseProjection);
+        Assert.True(Assert.Single(updated.View!.ConfigOptions).CurrentBooleanValue);
+    }
+
+    [Fact]
+    public async Task V2_LoadIntent_UsesResumeWithFullReplay()
+    {
+        using var peer = await ConfigurationPeer.CreateWithSessionAsync();
+
+        await peer.Client.LoadSessionAsync(new SessionLoadParams("one", "/workspace"), TestToken);
+
+        Assert.Equal("session/resume", peer.LastResume!.Method);
+        Assert.Equal("start", peer.LastResume.Params!.Value.GetProperty("replayFrom").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task ExplicitExperimentalClient_OffersV2AndUsesThePublicLifecycle()
+    {
+        using var peer = await ConfigurationPeer.CreateAsync(explicitOptIn: true);
+
+        await peer.Client.CreateSessionAsync(new SessionNewParams("/workspace", []), TestToken);
+        peer.OnSet = request => peer.Reply(request, OptionsResponse(BooleanOptions(true)));
+        await peer.Client.SetSessionConfigOptionAsync(new("one", "reasoning", true), TestToken);
+
+        Assert.Equal(AcpProtocolVersion.V2, peer.Client.NegotiatedProtocolVersion);
+        Assert.True(peer.InitializeRequest!.Params!.Value.TryGetProperty("info", out _));
+        Assert.False(peer.InitializeRequest.Params.Value.TryGetProperty("clientInfo", out _));
+        Assert.True(peer.Client.GetSessionSnapshot("one")!.ConfigOptions[0].CurrentBooleanValue);
+    }
+
+    [Fact]
+    public async Task ExplicitExperimentalClient_AgentDowngrade_ReturnsToStableWire()
+    {
+        using var peer = await ConfigurationPeer.CreateAsync(version: AcpProtocolVersion.V1, explicitOptIn: true);
+        await peer.Client.CreateSessionAsync(new SessionNewParams("/workspace", []), TestToken);
+        peer.OnSet = request => peer.Reply(request, "{\"configOptions\":[]}");
+
+        await peer.Client.SetSessionConfigOptionAsync(new("one", "model", "fast"), TestToken);
+
+        Assert.Equal(2, peer.InitializeRequest!.Params!.Value.GetProperty("protocolVersion").GetInt32());
+        Assert.Equal(AcpProtocolVersion.V1, peer.Client.NegotiatedProtocolVersion);
+        Assert.False(peer.LastSet!.Params!.Value.TryGetProperty("type", out _));
+    }
+
+    [Fact]
+    public async Task PublicClient_WithoutExplicitOptIn_RejectsV2BeforeSending()
+    {
+        using var peer = new ConfigurationPeer(null, AcpProtocolVersion.V2, explicitOptIn: false);
+
+        await Assert.ThrowsAsync<AcpException>(() => peer.Client.InitializeAsync(
+            new InitializeParams(new ClientInfo("test", "1"), new ClientCapabilities())
+            { ProtocolVersion = AcpProtocolVersion.V2 }, TestToken));
+
+        Assert.Null(peer.InitializeRequest);
+    }
+
+    [Fact]
     public async Task SetOption_AbandonedAwait_StillCommitsThePeersFinalResponse()
     {
         using var peer = await ConfigurationPeer.CreateWithSessionAsync();
@@ -246,25 +339,32 @@ public sealed class AcpSessionConfigurationTests
     private sealed class ConfigurationPeer : IAcpTransport, IDisposable
     {
         private readonly int _version;
+        private readonly bool _explicitOptIn;
         private readonly MessageParser _parser = new();
         internal AcpClient Client { get; }
         internal List<string> Errors { get; } = [];
         internal JsonRpcRequest? LastSet { get; private set; }
+        internal JsonRpcRequest? LastResume { get; private set; }
+        internal JsonRpcRequest? InitializeRequest { get; private set; }
         internal Action<JsonRpcRequest>? OnSet { get; set; }
         public bool IsConnected { get; private set; } = true;
         public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
         public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred { add { } remove { } }
 
-        private ConfigurationPeer(IAcpClientSessionStore? store, int version)
+        internal ConfigurationPeer(IAcpClientSessionStore? store, int version, bool explicitOptIn = false)
         {
             _version = version;
-            Client = new AcpClient(this, sessionStore: store);
+            _explicitOptIn = explicitOptIn;
+            Client = explicitOptIn
+                ? new AcpClient(this, null, store, null, new AcpClientOptions { ExperimentalProtocolVersions = [AcpProtocolVersion.V2] })
+                : new AcpClient(this, sessionStore: store);
             Client.ErrorOccurred += (_, error) => Errors.Add(error);
         }
 
-        internal static async Task<ConfigurationPeer> CreateAsync(IAcpClientSessionStore? store = null, int version = AcpProtocolVersion.V2)
+        internal static async Task<ConfigurationPeer> CreateAsync(IAcpClientSessionStore? store = null, int version = AcpProtocolVersion.V2,
+            bool explicitOptIn = false)
         {
-            var peer = new ConfigurationPeer(store, version);
+            var peer = new ConfigurationPeer(store, version, explicitOptIn);
             await peer.InitializeAsync();
             return peer;
         }
@@ -278,8 +378,9 @@ public sealed class AcpSessionConfigurationTests
 
         internal Task<InitializeResponse> InitializeAsync()
         {
-            var request = new InitializeParams(new ClientInfo("config-test", "1"), new ClientCapabilities()) { ProtocolVersion = _version };
-            return _version == AcpProtocolVersion.V2
+            var request = new InitializeParams(new ClientInfo("config-test", "1"), new ClientCapabilities())
+            { ProtocolVersion = _explicitOptIn ? AcpProtocolVersion.V2 : _version };
+            return _version == AcpProtocolVersion.V2 && !_explicitOptIn
                 ? Client.InitializeDraftAsync(request, TestToken)
                 : Client.InitializeAsync(request, TestToken);
         }
@@ -303,6 +404,7 @@ public sealed class AcpSessionConfigurationTests
             switch (request.Method)
             {
                 case "initialize":
+                    InitializeRequest = request;
                     var initialize = new InitializeResponse(_version, new AgentInfo("config-peer", "1"), new AgentCapabilities
                     {
                         SessionCapabilities = new SessionCapabilities { Resume = new SessionResumeCapabilities(), Close = new SessionCloseCapabilities() }
@@ -315,6 +417,9 @@ public sealed class AcpSessionConfigurationTests
                         : "{\"sessionId\":\"one\"}");
                     break;
                 case "session/resume":
+                    LastResume = request;
+                    Reply(request, "{}");
+                    break;
                 case "session/close":
                     Reply(request, "{}");
                     break;

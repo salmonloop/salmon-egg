@@ -34,6 +34,10 @@ public sealed class DelayedLoadChatService : IChatService, IStdioInvocationSourc
 
     public bool IsConnected => _inner.IsConnected;
 
+    public bool PublishesConfigurationResponses => _inner.PublishesConfigurationResponses;
+
+    public int NegotiatedProtocolVersion => _inner.NegotiatedProtocolVersion;
+
     public SalmonEgg.Domain.Models.StdioInvocationSnapshot? StdioInvocation
         => (_inner as IStdioInvocationSource)?.StdioInvocation;
 

@@ -34,6 +34,12 @@ namespace SalmonEgg.Application.Services.Chat
         /// </summary>
         bool IsConnected { get; }
 
+        /// <summary>The active connection's negotiated ACP version.</summary>
+        int NegotiatedProtocolVersion => AcpProtocolVersion.Default;
+
+        /// <summary>Configuration responses are projected through the ordered update event stream.</summary>
+        bool PublishesConfigurationResponses => false;
+
         /// <summary>
         /// Agent 信息
         /// </summary>

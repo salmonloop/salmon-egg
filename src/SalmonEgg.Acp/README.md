@@ -20,15 +20,14 @@ JSON-RPC envelopes, message parser/validator, and all JsonConverters are assembl
 ## Protocol versions
 
 The live client runtime defaults to stable ACP v1 (`AcpProtocolVersion.Default`). ACP v2 is
-still an upstream Draft, so the SDK retains explicit v2 wire DTO and serializer coverage for
-development without negotiating v2 in live connections. `AcpProtocolVersion.HighestModeled`
-denotes the highest modeled wire version; it does not mean that the live client lifecycle is
-complete, and initializing a client with it throws. `AcpProtocolVersion.Latest` is the obsolete
+still an upstream Draft. A host can evaluate its full runtime only with explicit client options
+and an offered version of 2; ordinary clients reject that offer. `AcpProtocolVersion.HighestModeled`
+denotes the highest modeled wire version, not the production default. `AcpProtocolVersion.Latest` is the obsolete
 former name of `HighestModeled` and is kept only so 1.0.0 consumers still compile.
 
-Do not enable live v2 connections until prompt acknowledgement/state updates, versioned update
-variants, permission-subject handling, configuration workflows, and JSON-RPC batches are implemented
-and protected by a separate experimental feature flag. The modeled v2 contracts are marked
+Prompt acknowledgement/state updates, versioned entity views, permission subjects, configuration
+workflows and JSON-RPC batches share the existing client owners. Experimental negotiation is
+separate from the stable default. The modeled v2 contracts are marked
 `[Experimental("SEACP002")]`; see [ACP v2 draft surface](#acp-v2-draft-surface-seacp002).
 
 ## Capability support boundaries
@@ -43,7 +42,7 @@ hosts must enable optional capabilities only after implementing their interactio
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
 | URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM and Linux desktop through its platform capability service. Linux uses the existing system opener after explicit consent. | The Linux product gate exercises its real card, stdio peer, native pointer input and isolated external browser. Other native platforms and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
-| ACP v2 | Explicit wire contracts, prompt/work-state lifecycle, configuration lifecycle, message/tool/terminal projections, permission request handling, and version-gated JSON-RPC batches are covered by deterministic protocol peers. Draft SDK helpers support offline history replay and permission reading. Live initialization rejects v2. | Application UI integration and real-Agent interoperability remain incomplete; see [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
+| ACP v2 | Explicit opt-in enables the staged lifecycle while ordinary initialization continues to reject V2. The existing application event stream carries complete entity views without a draft-type dependency. | V2 remains an upstream draft. The official Rust echo Agent is interoperable; LLM Agent/platform acceptance must be reported separately in [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 Internal v2 batch validation follows the upstream schema at
 `5ebaf0aceb04a4ba6574cd63fa6355352dc6d931` and JSON-RPC 2.0 section 6.
@@ -61,7 +60,7 @@ requests. A batch with no remaining retry owner is abandoned after its failed se
 its retained responses, without starting an automatic retry loop.
 `tests/SalmonEgg.Acp.Desktop.Tests` and `scripts/gates/run-acp-batch-stdio-gate.sh` exercise real
 Linux pipes through the production transport and adapter. This gate does not establish
-interoperability with a public v2 Agent, and it does not enable public live v2 initialization.
+interoperability with a public v2 Agent. The separate pinned official Rust Agent gate covers that boundary.
 
 Terminal methods append their arguments to the invocation used by the active stdio connection and
 override its effective environment. SalmonEgg asks for consent before starting a separate PTY,
@@ -79,15 +78,17 @@ default-on-error and skip-invalid-item behavior applies only where the upstream 
 Resource-link icons are available through the experimental `ResourceLinkDraftExtensions` helper,
 so constructing them requires an explicit draft opt-in. Permission subjects reach the staged v2
 handler through the same pending-request owner as v1. Draft session snapshots supply message upserts, streaming
-tool content, and Agent-owned terminal projections; the production application does not consume
-them until its complete v2 feature gate is ready.
+tool content, and Agent-owned terminal projections. The same projection supplies stable
+`AcpSessionUpdateView` values on `SessionUpdateEventArgs`, so application consumers do not have to
+name draft DTOs. Message content replaces one authoritative message, tool views are complete,
+terminal views only display Agent-owned state, and idle ends work even when no reason is supplied.
 
 `SendPromptAsync` always waits for completed foreground work. The internal v2 development path
 records the prompt acknowledgement separately and finishes on an idle `state_update`; cancellation
 keeps accepting trailing updates until that idle arrives. One controller owns session work, including
 unsolicited running/requires-action/idle updates, and uses the connection's existing lifetime token
 to reject stale callbacks. This path is exercised through the actual JSON parser and client handlers,
-not exposed as a public v2 opt-in. V1 still completes from its terminal prompt response.
+available only with explicit experimental client options. V1 still completes from its terminal prompt response.
 
 The pinned [v2 lifecycle](https://github.com/agentclientprotocol/agent-client-protocol/blob/5ebaf0aceb04a4ba6574cd63fa6355352dc6d931/docs/protocol/v2/prompt-lifecycle.mdx)
 says an ending idle must carry a stop reason, while its
@@ -101,7 +102,7 @@ scoped to the supplied session. It uses the same v2 reader and projection as the
 handler without connecting, executing terminal commands, or changing a client's state.
 `client.GetSessionSnapshot(sessionId)` reads the same owner on an internally staged v2 connection;
 it returns null on the public v1 runtime and after session close or disconnect. Suppressing
-`SEACP002` does not enable live v2 initialization.
+`SEACP002` alone does not enable live v2 initialization.
 
 Snapshots expose messages, tool calls, and terminal output in first-seen order. Patch omission
 keeps a value, null clears it, and arrays replace complete content; chunks append. Terminal chunks
@@ -160,11 +161,23 @@ The host explicitly selects an offered option or cancels; failed sends and inval
 the original request for retry, and stale callbacks cannot answer a new request with a reused id.
 Subscriber failures also claim that original request, so an exception after an answer cannot send
 a second response. The nupkg consumer gate verifies optional subjects, opaque custom payloads,
-detached prompt data, and rejection of live v2 before any connection or write.
+detached prompt data, and rejection of unapproved v2 before any connection or write.
 
-Keep the v1 runtime and public API compatible while these gaps are addressed. Enabling v2 needs
-both the upstream stabilization/Agent prerequisites and end-to-end verification of the complete
-lifecycle. Passing DTO tests or suppressing `SEACP002` does not satisfy that requirement.
+The V1 runtime and existing public interfaces remain compatible. To evaluate V2, construct the
+client with `new AcpClientOptions { ExperimentalProtocolVersions = [2] }` as the fifth constructor
+argument and explicitly offer `InitializeParams.ProtocolVersion = 2`. The list is copied at
+construction and defaults to empty. The Agent may choose V1, after which all wire behavior follows
+V1. Other experimental version numbers are rejected. The application exposes this through the
+process-level `SALMONEGG_EXPERIMENTAL_ACP_V2=1` opt-in; the same immutable policy configures both
+client creation and initialization. This is experimental support, not a change to `Default` or
+`RuntimeServed`, and suppressing `SEACP002` does not change that policy.
+
+Configuration replies publish `IsResponseProjection=true` through the existing ordered session
+stream. Hosts that see `PublishesConfigurationResponses` must use that stream rather than reapply
+the returned full list from a delayed await. Wire recorders can distinguish these projections from
+peer notifications. Captured events expose `IsCurrent` so buffered consumers reject a closed
+connection's update. The SDK maps the application's stable history-load intent to V2
+`session/resume` with `replayFrom: { type: "start" }`; V2 never sends the removed `session/load`.
 
 ### Cancellation transport integration
 
@@ -251,8 +264,8 @@ browser isolation; it does not substitute for native GUI acceptance or five-plat
 
 Every v2 draft contract on the public surface carries `[Experimental("SEACP002")]`, so naming one is
 a **compile error** by default rather than a warning. That is deliberate: v2 is still an upstream
-draft, no live client negotiates it (`AcpProtocolVersion.RuntimeServed` is v1), and code built on
-these types cannot reach a real Agent today. The 46 marked types are the `state_update` work-state
+draft and `AcpProtocolVersion.RuntimeServed` remains V1. Naming draft contracts and allowing
+experimental negotiation are separate opt-ins. The 46 marked types are the `state_update` work-state
 family, the whole-message upsert updates, the terminal updates, streaming tool-call content, the
 v2 `plan_update` envelope, permission subjects, the v2 capability markers, the structured diff,
 `ResourceLinkDraftExtensions` for resource-link icons, and six session-projection types (the draft

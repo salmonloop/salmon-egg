@@ -83,6 +83,13 @@ Linux/macOS 暂不广告终端登录：当前 Porta.Pty 对 Unix 信号退出不
 
 ## 快速开始
 
+### ACP V2 实验连接
+
+默认连接仍使用稳定 V1。需要评估 V2 时，在启动应用的进程环境中显式设置
+`SALMONEGG_EXPERIMENTAL_ACP_V2=1`；客户端创建和 initialize 使用同一开关，Agent 可以降级为 V1。
+该开关不会修改持久化配置或默认协议版本。官方 Rust `simple_agent_v2` 可以验证真实协议互通，
+但它是 echo 示例，不代表第三方 LLM Agent 或全部原生平台的产品验收。
+
 ### Windows 用户
 ```bash
 # 方式 1: 使用构建脚本（Desktop）
