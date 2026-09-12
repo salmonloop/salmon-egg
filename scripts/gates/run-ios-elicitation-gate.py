@@ -16,6 +16,7 @@ import urllib.request
 
 
 def run(command, **kwargs):
+    print("[ios-gate] " + " ".join(command), flush=True)
     return subprocess.run(command, check=True, text=True, timeout=kwargs.pop("timeout", 180), **kwargs)
 
 
@@ -63,8 +64,13 @@ def main(args):
                        if item.get("isAvailable") and item["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-26"))
         device_type = next(item["identifier"] for item in listing["devicetypes"] if "iPad-Pro-13-inch" in item["identifier"])
         simulator = output(["xcrun", "simctl", "create", "SalmonEgg ACP acceptance", device_type, runtime])
+        (artifacts / "simulator.json").write_text(json.dumps({"id": simulator, "runtime": runtime,
+                                                            "deviceType": device_type}, indent=2) + "\n")
+        run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", simulator])
         run(["xcrun", "simctl", "boot", simulator])
-        run(["xcrun", "simctl", "bootstatus", simulator, "-b"], timeout=300)
+        with (artifacts / "simulator-boot.log").open("w") as boot_log:
+            run(["xcrun", "simctl", "bootstatus", simulator, "-b"], timeout=300,
+                stdout=boot_log, stderr=subprocess.STDOUT)
         run(["xcrun", "simctl", "install", simulator, str(app)])
         container = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "data"]))
         with socket.socket() as reservation:
@@ -120,9 +126,13 @@ def main(args):
         print("iOS installed product: consent, form, Safari isolation and completion passed")
     finally:
         if simulator:
-            subprocess.run(["xcrun", "simctl", "terminate", simulator, bundle_id], capture_output=True, timeout=20)
-            subprocess.run(["xcrun", "simctl", "shutdown", simulator], capture_output=True, timeout=45)
-            subprocess.run(["xcrun", "simctl", "delete", simulator], capture_output=True, timeout=45)
+            for command in (["xcrun", "simctl", "terminate", simulator, bundle_id],
+                            ["xcrun", "simctl", "shutdown", simulator], ["xcrun", "simctl", "delete", simulator]):
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True, timeout=45)
+                    print("[ios-gate] cleanup", command[2], result.returncode, flush=True)
+                except subprocess.TimeoutExpired:
+                    print("[ios-gate] cleanup timed out:", command[2], flush=True)
         if peer is not None:
             if peer.poll() is None:
                 os.killpg(peer.pid, signal.SIGTERM)

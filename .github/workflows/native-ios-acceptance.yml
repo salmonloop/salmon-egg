@@ -24,7 +24,9 @@ concurrency:
 jobs:
   installed-ios:
     name: iOS Installed ACP UI
-    runs-on: macos-15
+    # The older macOS 15 VM can stall CoreSimulator for Xcode 26 (runner-images #12777).
+    # Keep the repository's Xcode/.NET contract, using the serviced native host for execution.
+    runs-on: macos-26
     timeout-minutes: 35
     env:
       DOTNET_PROCESSOR_COUNT: 2
@@ -47,6 +49,8 @@ jobs:
           test -d "$xcode_developer_dir"
           sudo xcode-select --switch "$xcode_developer_dir"
           xcodebuild -version
+          sw_vers
+          uname -m
           xcrun --sdk iphonesimulator --show-sdk-path
           xcrun --sdk macosx --find actool
           dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
