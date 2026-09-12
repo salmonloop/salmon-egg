@@ -29,6 +29,18 @@ public sealed class InitializeTypesTests
     }
 
     [Fact]
+    public void ClientCapabilityDefaults_BooleanSettings_AdvertisesStableClientCapability()
+    {
+        // Arrange / Act
+        var json = JsonSerializer.SerializeToElement(ClientCapabilityDefaults.Create(), AcpJsonContext.Default.ClientCapabilities);
+
+        // Assert
+        var boolean = json.GetProperty("session").GetProperty("configOptions").GetProperty("boolean");
+        Assert.Equal(JsonValueKind.Object, boolean.ValueKind);
+        Assert.Empty(boolean.EnumerateObject());
+    }
+
+    [Fact]
     public void ClientCapabilityDefaults_Should_Advertise_AskUser_Extension_In_Meta()
     {
         var capabilities = ClientCapabilityDefaults.Create();

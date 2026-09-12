@@ -1767,6 +1767,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             RaiseOverlayStateChanged();
             PendingAskUserRequest?.ReprojectLocalizedState();
             PendingElicitationRequest?.ReprojectLocalizedState();
+            foreach (var option in ConfigOptions) option.ReprojectLocalizedText();
+            OnPropertyChanged(nameof(SessionSettingsText));
+            OnPropertyChanged(nameof(SessionSettingsHint));
             ReprojectConversationOperationFailureMessage();
             // SessionActivationFailureMessage re-localizes from snapshot resource identity on get.
             NotifySessionActivationFailureProjectionChanged();
@@ -3733,6 +3736,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         _panelStateCoordinator.ClearPermissionRequests();
+        foreach (var option in ConfigOptions) option.RetireEditor();
 
         if (_chatService != null)
         {

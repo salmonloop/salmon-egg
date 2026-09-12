@@ -28,6 +28,9 @@ export async function startAcpWebSocketServer(options = {}) {
   });
   const sockets = new Set();
   const clientRequests = new Map();
+  let configurationOptions;
+  let configurationFailure;
+  const configurationRequests = [];
 
   const sendSessionNewResponse = (socket, request) => {
     if (!request || !socket || socket.destroyed) {
@@ -169,6 +172,20 @@ export async function startAcpWebSocketServer(options = {}) {
           });
         }
 
+        if (message.method === "session/set_config_option" && configurationOptions) {
+          configurationRequests.push(message);
+          if (configurationFailure) {
+            writeJsonRpc(socket, { jsonrpc: "2.0", id: message.id,
+              error: { code: -32603, message: configurationFailure } });
+            configurationFailure = undefined;
+            continue;
+          }
+          configurationOptions = configurationOptions.map(option => option.id === message.params.configId
+            ? { ...option, currentValue: message.params.value } : option);
+          writeJsonRpc(socket, { jsonrpc: "2.0", id: message.id,
+            result: { configOptions: configurationOptions } });
+        }
+
         if (message.method === "session/cancel" && deferredPrompt?.request
           && deferredPrompt.socket === socket) {
           deferredPrompt.cancellations.push(message);
@@ -197,6 +214,13 @@ export async function startAcpWebSocketServer(options = {}) {
   return {
     url: `ws://127.0.0.1:${port}/acp`,
     sessionId,
+    publishConfiguration: options => {
+      configurationOptions = options;
+      for (const socket of sockets) writeSessionUpdate(socket, sessionId,
+        { sessionUpdate: "config_option_update", configOptions: configurationOptions });
+    },
+    configurationRequests: () => [...configurationRequests],
+    failNextConfiguration: message => { configurationFailure = message; },
     deferNextPrompt: () => {
       if (deferredPrompt) throw new Error("A deferred prompt is already active.");
       let resolve;

@@ -33,6 +33,7 @@ public partial class ConfigOptionViewModel : ObservableObject
     /// 配置选项的描述
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDescription))]
     private string? _description;
 
     /// <summary>
@@ -45,6 +46,8 @@ public partial class ConfigOptionViewModel : ObservableObject
     /// 配置选项的值类型（string, number, boolean, array 等）
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBoolType))]
+    [NotifyPropertyChangedFor(nameof(IsSelectType))]
     private string _valueType = "string";
 
     /// <summary>
@@ -106,7 +109,9 @@ public partial class ConfigOptionViewModel : ObservableObject
     /// <summary>
     /// 判断是否为选择类型
     /// </summary>
-    public bool IsSelectType => HasOptions;
+    public bool IsSelectType => ValueType == "select";
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 
     /// <summary>
     /// 获取显示用的值文本

@@ -14,7 +14,10 @@ namespace SalmonEgg.Acp.Protocol
             => new(
                 session: new ClientSessionCapabilities
                 {
-                    ConfigOptions = new SessionConfigOptionsCapabilities()
+                    ConfigOptions = new SessionConfigOptionsCapabilities
+                    {
+                        Boolean = new BooleanConfigOptionCapabilities()
+                    }
                 },
                 meta: ClientCapabilityMetadata.CreateDefault())
             {
