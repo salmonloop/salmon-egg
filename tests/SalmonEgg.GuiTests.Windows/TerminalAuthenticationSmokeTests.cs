@@ -176,7 +176,8 @@ public sealed class TerminalAuthenticationSmokeTests
             GuiAcceptanceDiagnostics.Record("Terminal: PTY process observed");
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(15)));
             var terminal = app.FindByAutomationIdAnywhere("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(15));
-            Assert.True(app.WaitUntil(() => terminal.Name.Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal), TimeSpan.FromSeconds(20)));
+            Assert.True(app.WaitUntil(() => (terminal.Properties.Name.ValueOrDefault ?? string.Empty)
+                .Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal), TimeSpan.FromSeconds(20)));
             GuiAcceptanceDiagnostics.Record("Terminal: PTY ready output observed");
             try
             {
