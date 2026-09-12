@@ -190,6 +190,8 @@ def main():
         (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report))
     finally:
+        (output / 'browser-observation.json').write_text(json.dumps({'visits': len(visits), 'reports': reports}, indent=2))
+        subprocess.run(['screencapture', '-x', str(output / 'final-screen.png')], timeout=5)
         if app is not None:
             with (output / 'native-controls.json').open('w') as tree:
                 subprocess.run([str(ax_tool), 'describe', str(app.pid)], stdout=tree, timeout=10)
