@@ -9,7 +9,7 @@
   ChevronStates set its native RotateTransform; inactive AnimatedIcon chevron state setters removed.
   The owning NavigationViewItem template must be included because its inner StaticResource style
   reference is resolved inside the framework dictionary. Other states/templates remain upstream.
-  Binding is retained only for the official TemplatedParent contract inside these templates.
+  Binding is required for the official TemplatedParent contract inside these templates.
   Pixel dimensions below are upstream template values, not app-specific layout adjustments.
 -->
 <ResourceDictionary x:Class="SalmonEgg.Platforms.iOS.NavigationResources"
@@ -198,7 +198,7 @@
                             Foreground="{ThemeResource NavigationViewItemForeground}"
                             FontSize="{ThemeResource NavigationViewItemExpandedGlyphFontSize}"
                             Glyph="{StaticResource NavigationViewItemExpandedGlyph}"
-                            FontFamily="{StaticResource SymbolThemeFontFamily}"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw"
                             RenderTransformOrigin="0.5,0.5" x:DeferLoadStrategy="Lazy">
