@@ -61,4 +61,5 @@ jobs:
             artifacts/macos-elicitation-consent/*.json
             artifacts/macos-elicitation-consent/*.jsonl
             artifacts/macos-elicitation-consent/*.log
+            artifacts/macos-elicitation-consent/*.png
           if-no-files-found: error
