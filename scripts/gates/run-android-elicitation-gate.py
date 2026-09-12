@@ -147,6 +147,7 @@ def seed_product(device, endpoint):
                 "lastUpdatedAt": "2026-09-12T00:00:00Z", "cwd": "/acceptance",
                 "projectId": "remote-directory:native-elicitation-directory",
                 "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session",
+                "sessionInfo": {"title": "Native acceptance session", "hasTitle": True, "cwd": "/acceptance"},
                 "messages": []}]}),
     }
     archive = io.BytesIO()
