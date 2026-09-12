@@ -117,13 +117,25 @@ def main():
                 and (completed is None or f'completed={completed}' in value)
 
         def click(title):
-            def locate_and_click():
-                attempt = subprocess.run([str(ax_tool), 'click', str(app.pid), title], capture_output=True, text=True, timeout=5)
-                if attempt.returncode == 3:
-                    return False
-                assert attempt.returncode == 0, attempt.stderr
-                return True
-            wait(locate_and_click, 'No native AX button with the requested title')
+            action = {'Decline': 'decline', 'Cancel': 'cancel', 'Open in browser': 'submit',
+                      'Open again': 'reopen', 'Close notice': 'dismiss'}[title]
+            previous, count = None, 0
+
+            def locate():
+                nonlocal previous, count
+                text = stdout.read_text().split('NativeElicitationProbe sample')[-1]
+                found = re.search(rf'button seq=\d+ action={action} enabled=True x=(\d+) y=(\d+) width=(\d+) height=(\d+) rootHeight=(\d+) scale=([0-9.]+)', text)
+                if not found:
+                    return None
+                values = found.groups()
+                count = count + 1 if values == previous else 1
+                previous = values
+                return values if count >= 3 else None
+
+            x, y, width, height, root_height, scale = map(float, wait(locate, 'No stable enabled native button'))
+            attempt = subprocess.run([str(ax_tool), 'pointer', str(app.pid), str((x + width / 2) / scale),
+                                      str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=5)
+            assert attempt.returncode == 0, attempt.stderr
 
         def replies(action):
             return [x for x in seed.read_json_lines(peer_log) if x.get('id') == 'native-url-' + action]
