@@ -28,6 +28,9 @@ public sealed class ChatSessionOptionsPresenter
             .ToList();
 
         var projectedConfigOptions = configOptions
+            // Unknown options remain in the authoritative store and persistence. Only variants
+            // with implemented editing semantics may create interactive controls.
+            .Where(static option => option.ValueType is null or "select" or "boolean")
             .Select(MapConfigOption)
             .ToList();
 
@@ -42,7 +45,7 @@ public sealed class ChatSessionOptionsPresenter
             projectedModes,
             resolvedSelectedModeId,
             projectedConfigOptions,
-            showConfigOptionsPanel,
+            showConfigOptionsPanel && projectedConfigOptions.Count > 0,
             modeConfigSelection.ModeConfigId,
             modelConfigSelection.ModelOptions,
             modelConfigSelection.ModelConfigId,
@@ -198,8 +201,9 @@ public sealed class ChatSessionOptionsPresenter
             Category = option.Category,
             ValueType = option.ValueType ?? "string",
             IsRequired = true,
-            Value = option.SelectedValue ?? string.Empty,
-            TextValue = option.SelectedValue ?? string.Empty
+            Value = option.ValueType == "boolean" ? option.BooleanValue : option.SelectedValue ?? string.Empty,
+            TextValue = option.SelectedValue ?? string.Empty,
+            BoolValue = option.BooleanValue ?? false
         };
 
         if (option.Options.Count > 0)

@@ -39,7 +39,9 @@ public sealed record ConfigOption : AcpProtocolObject
     [JsonIgnore]
     public List<ConfigOptionGroup> OptionGroups { get; init; } = new();
 
-    internal JsonElement? RawPayload { get; init; }
+    /// <summary>The received option payload, including custom types and uninterpreted extension fields.</summary>
+    [JsonIgnore]
+    public JsonElement? RawPayload { get; internal init; }
 }
 
 [JsonConverter(typeof(ConfigOptionValueJsonConverter))]
@@ -121,7 +123,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             CurrentBooleanValue = currentBoolean,
             Options = selectOptions,
             OptionGroups = optionGroups,
-            Meta = AcpMetaJson.Read(root),
+            Meta = ReadMetadata(root, options),
             RawPayload = root.Clone()
         };
     }
@@ -196,7 +198,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             {
                 try
                 {
-                    groupOptions.Add(ReadOption(item));
+                    groupOptions.Add(ReadOption(item, options));
                 }
                 catch (JsonException)
                 {
@@ -210,7 +212,7 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             Group = ReadRequiredString(element, GroupPropertyName(options)),
             Name = ReadRequiredString(element, "name"),
             Options = groupOptions,
-            Meta = AcpMetaJson.Read(element),
+            Meta = ReadMetadata(element, options),
             RawPayload = element.Clone()
         };
     }
@@ -260,18 +262,18 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             }
             else
             {
-                options.Add(ReadOption(item));
+                options.Add(ReadOption(item, serializerOptions));
             }
         }
     }
 
-    internal static ConfigOptionValue ReadOption(JsonElement element)
+    internal static ConfigOptionValue ReadOption(JsonElement element, JsonSerializerOptions options)
         => new()
         {
             Value = ReadRequiredString(element, "value"),
             Name = ReadRequiredString(element, "name"),
             Description = ReadOptionalString(element, "description"),
-            Meta = AcpMetaJson.Read(element),
+            Meta = ReadMetadata(element, options),
             RawPayload = element.Clone()
         };
 
@@ -312,7 +314,12 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             : null;
     }
 
-    private static void WriteUnknownFields(Utf8JsonWriter writer, JsonElement? rawPayload, params string[] knownPropertyNames)
+    private static Dictionary<string, object?>? ReadMetadata(JsonElement element, JsonSerializerOptions options)
+        => AcpWireFormat.NegotiatedVersion(options) == AcpProtocolVersion.V2
+            ? AcpMetaJson.ReadOrDefault(element)
+            : AcpMetaJson.Read(element);
+
+    internal static void WriteUnknownFields(Utf8JsonWriter writer, JsonElement? rawPayload, params string[] knownPropertyNames)
     {
         if (rawPayload is not { } payload)
         {
@@ -380,7 +387,7 @@ internal sealed class ConfigOptionValueJsonConverter : JsonConverter<ConfigOptio
     public override ConfigOptionValue? Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
-        return ConfigOptionJsonConverter.ReadOption(document.RootElement);
+        return ConfigOptionJsonConverter.ReadOption(document.RootElement, options);
     }
 
     public override void Write(Utf8JsonWriter writer, ConfigOptionValue value, JsonSerializerOptions options)

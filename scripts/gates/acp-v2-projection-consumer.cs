@@ -24,6 +24,15 @@ var history = new List<JsonElement>
 };
 
 var snapshot = AcpSessionDraftExtensions.ReplaySession("recorded-session", history);
+var configured = AcpSessionDraftExtensions.ReplaySession("configured-session",
+[
+    Parse("""{"sessionUpdate":"config_option_update","configOptions":[{"configId":"enabled","name":"Enabled","type":"boolean","currentValue":true},{"configId":"future","name":"Future","type":"_budget","value":{"tokens":1e2}}]}""")
+]);
+Require(configured.HasConfigOptions && configured.ConfigOptions.Length == 2
+    && configured.ConfigOptions[0].CurrentBooleanValue == true
+    && configured.ConfigOptions[1].RawPayload!.Value.GetProperty("value").GetProperty("tokens").GetRawText() == "1e2",
+    "Configuration replay must retain boolean and unknown option payloads in Agent order.");
+Require(!snapshot.HasConfigOptions, "Unreported configuration must remain distinct from an authoritative empty list.");
 Require(snapshot.Messages.Length == 2, "Message ids must upsert instead of creating duplicates.");
 Require(snapshot.Messages[0].Kind == AcpMessageKind.User, "First-seen order must be retained.");
 Require(Text(snapshot.Messages[1]) == "replacement tail", "A whole message replaces chunks; later chunks append.");

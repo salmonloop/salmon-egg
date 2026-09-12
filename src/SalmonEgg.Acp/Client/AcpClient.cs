@@ -465,7 +465,11 @@ namespace SalmonEgg.Acp.Client
                 "session/new",
                 ToElement<SessionNewParams>(@params));
 
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var wire = _wire;
+            var response = await SendRequestAsync(request, cancellationToken, connectionToken,
+                responseObserver: wire.Version == AcpProtocolVersion.V2
+                    ? response => ReceiveDraftConfiguration(response, wire, connectionToken)
+                    : null).ConfigureAwait(false);
 
             if (response.IsError)
             {
@@ -606,9 +610,17 @@ namespace SalmonEgg.Acp.Client
             CancellationToken connectionToken,
             CancellationToken cancellationToken)
         {
-            if (ProtocolVersion != AcpProtocolVersion.V2 || !RequestsFullReplay(request))
+            var wire = _wire;
+            if (wire.Version != AcpProtocolVersion.V2)
             {
                 return await SendRequestAsync(request, cancellationToken, connectionToken).ConfigureAwait(false);
+            }
+
+            if (!RequestsFullReplay(request))
+            {
+                return await SendRequestAsync(request, cancellationToken, connectionToken,
+                    responseObserver: response => ReceiveDraftConfiguration(response, wire, connectionToken, @params.SessionId))
+                    .ConfigureAwait(false);
             }
 
             AcpSessionProjection? replay = null;
@@ -619,7 +631,17 @@ namespace SalmonEgg.Acp.Client
                 request,
                 cancellationToken,
                 connectionToken,
-                responseObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
+                responseObserver: response =>
+                {
+                    try
+                    {
+                        ReceiveDraftConfiguration(response, wire, connectionToken, @params.SessionId);
+                    }
+                    finally
+                    {
+                        _sessionWork.EndReplay(@params.SessionId, replay, connectionToken);
+                    }
+                },
                 requestNotSentObserver: _ => _sessionWork.EndReplay(@params.SessionId, replay, connectionToken),
                 beforeSend: () => replay = _sessionWork.BeginReplay(@params.SessionId, connectionToken)).ConfigureAwait(false);
         }
@@ -872,26 +894,66 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            ArgumentNullException.ThrowIfNull(@params);
+            var connectionToken = GetConnectionToken();
+            var wire = _wire;
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/set_config_option",
-                ToElement<SessionSetConfigOptionParams>(@params));
+                JsonSerializer.SerializeToElement(@params, wire.TypeInfo<SessionSetConfigOptionParams>()));
 
-            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await SendRequestAsync(request, cancellationToken, connectionToken,
+                responseObserver: wire.Version == AcpProtocolVersion.V2
+                    ? response => ReceiveDraftConfiguration(response, wire, connectionToken, @params.SessionId, isSetResponse: true)
+                    : null).ConfigureAwait(false);
 
             if (response.IsError)
             {
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            var configResponse = FromElement<SessionSetConfigOptionResponse>(response.Result!.Value);
+            var configResponse = response.Result!.Value.Deserialize(wire.TypeInfo<SessionSetConfigOptionResponse>());
             if (configResponse == null)
             {
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_config_option response");
             }
 
             return configResponse;
+        }
+
+        private void ReceiveDraftConfiguration(
+            JsonRpcResponse response,
+            AcpWireFormat wire,
+            CancellationToken connectionToken,
+            string? sessionId = null,
+            bool isSetResponse = false)
+        {
+            if (response.IsError) return;
+            if (response.Result is not { ValueKind: JsonValueKind.Object } result)
+            {
+                throw new JsonException("ACP v2 session configuration responses must be objects.");
+            }
+
+            // Apply in response dispatch, before another frame can replace this full list. The
+            // caller may cancel or its continuation may run after later notifications. None of
+            // those scheduling facts can replace receive order as the configuration authority.
+            IReadOnlyList<ConfigOption> configOptions;
+            if (isSetResponse)
+            {
+                configOptions = result.Deserialize(wire.TypeInfo<SessionSetConfigOptionResponse>())!.ConfigOptions ?? [];
+            }
+            else if (sessionId is not null)
+            {
+                configOptions = result.Deserialize(wire.TypeInfo<SessionResumeResponse>())!.ConfigOptions ?? [];
+            }
+            else
+            {
+                var created = result.Deserialize(wire.TypeInfo<SessionNewResponse>())!;
+                sessionId = created.SessionId;
+                configOptions = created.ConfigOptions ?? [];
+            }
+            _sessionWork.ReceiveConfigOptions(sessionId!, configOptions, connectionToken, registerSession: !isSetResponse);
         }
 
         /// <summary>
@@ -2381,7 +2443,17 @@ namespace SalmonEgg.Acp.Client
             {
                 return;
             }
-            pending.ResponseObserver?.Invoke(response);
+            try
+            {
+                pending.ResponseObserver?.Invoke(response);
+            }
+            catch (Exception error)
+            {
+                // The response owner has already claimed this id. Contract failures must fault
+                // its waiter rather than leave it waiting forever after correlation is removed.
+                pending.Completion.TrySetException(error);
+                return;
+            }
             if (!pending.Completion.TrySetResult(response))
             {
                 // Caller cancellation leaves correlation alive until the peer sends its terminal

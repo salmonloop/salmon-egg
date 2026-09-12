@@ -24,6 +24,35 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class WorkspaceWriterTests
 {
     [Fact]
+    public async Task FlushAsync_ConfigurationRoundTrip_PreservesBooleanAndUnknownRawValues()
+    {
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+        const string raw = """{"configId":"budget","name":"Budget","type":"_budget","currentValue":{"tokens":1e2}}""";
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-config",
+            ConfigOptions: ImmutableList.Create(
+                new ConversationConfigOptionSnapshot { Id = "enabled", ValueType = "boolean", BooleanValue = true },
+                new ConversationConfigOptionSnapshot { Id = "budget", ValueType = "_budget", RawProtocolJson = raw }),
+            ShowConfigOptionsPanel: true,
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+
+        var snapshot = workspace.GetConversationSnapshot("session-config");
+        Assert.NotNull(snapshot);
+        Assert.Equal(2, snapshot.ConfigOptions!.Count);
+        Assert.True(snapshot.ConfigOptions[0].BooleanValue);
+        Assert.Equal(raw, snapshot.ConfigOptions[1].RawProtocolJson);
+        snapshot.ConfigOptions[0].BooleanValue = false;
+        Assert.True(workspace.GetConversationSnapshot("session-config")!.ConfigOptions![0].BooleanValue);
+    }
+
+    [Fact]
     public async Task FlushAsync_HydratedConversation_DoesNotAdvanceLastUpdatedAt()
     {
         var dispatcher = new ImmediateUiDispatcher();

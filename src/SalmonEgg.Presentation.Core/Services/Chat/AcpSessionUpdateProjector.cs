@@ -68,13 +68,13 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
     {
         var projectedOptions = configOptions?
             .Where(static option => option is not null)
-            .Where(static option => IsSupportedConfigOptionType(option.Type))
             .Select(MapConfigOption)
             .ToArray() ?? Array.Empty<AcpConfigOptionSnapshot>();
 
         var modeOption = projectedOptions.FirstOrDefault(option =>
-            string.Equals(option.Category, "mode", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(option.Id, "mode", StringComparison.OrdinalIgnoreCase));
+            string.Equals(option.ValueType, "select", StringComparison.Ordinal)
+            && (string.Equals(option.Category, "mode", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(option.Id, "mode", StringComparison.OrdinalIgnoreCase)));
 
         var availableModes = modeOption?.Options?
             .Select(static option => new AcpModeOption(option.Value, option.Name, option.Description ?? string.Empty))
@@ -84,7 +84,7 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
             AvailableModes: availableModes,
             SelectedModeId: modeOption?.SelectedValue,
             ConfigOptions: projectedOptions,
-            ShowConfigOptionsPanel: projectedOptions.Length > 0);
+            ShowConfigOptionsPanel: projectedOptions.Any(static option => IsSupportedConfigOptionType(option.ValueType)));
     }
 
     private static AcpSessionUpdateDelta BuildSessionProjection(
@@ -117,7 +117,7 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
     }
 
     private static bool IsSupportedConfigOptionType(string? valueType)
-        => string.Equals(valueType, "select", StringComparison.Ordinal);
+        => valueType is "select" or "boolean";
 
     private static IReadOnlyList<ConversationPlanEntrySnapshot> MapPlanEntries(IReadOnlyList<PlanEntry>? entries)
     {
@@ -195,7 +195,9 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
             option.Category,
             option.Type,
             option.CurrentValue,
-            projectedOptions);
+            projectedOptions,
+            option.CurrentBooleanValue,
+            IsSupportedConfigOptionType(option.Type) ? null : option.RawPayload?.GetRawText());
     }
 }
 
@@ -226,7 +228,9 @@ public sealed partial record AcpConfigOptionSnapshot(
     string? Category,
     string? ValueType,
     string? SelectedValue,
-    IReadOnlyList<AcpConfigOptionChoice> Options);
+    IReadOnlyList<AcpConfigOptionChoice> Options,
+    bool? BooleanValue = null,
+    string? RawProtocolJson = null);
 
 public sealed record AcpSessionInfoSnapshot(
     string? Title,

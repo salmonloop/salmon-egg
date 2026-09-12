@@ -86,7 +86,7 @@ public class AcpSessionUpdateProjectorTests
     }
 
     [Fact]
-    public void ProjectSessionLoad_WhenConfigOptionsIncludeUnknownType_IgnoresSessionModesAndUnknownOptions()
+    public void ProjectSessionLoad_WhenConfigOptionsIncludeUnknownType_KeepsOptionsWithoutProjectingUnknownModes()
     {
         var projector = new AcpSessionUpdateProjector();
         var response = new SessionLoadResponse(
@@ -134,8 +134,10 @@ public class AcpSessionUpdateProjectorTests
             delta.AvailableModes!,
             mode => Assert.Contains(mode.ModeId, new[] { "config-mode", "config-alt" }));
         Assert.True(delta.ShowConfigOptionsPanel);
-        var configOption = Assert.Single(delta.ConfigOptions!);
+        Assert.Equal(2, delta.ConfigOptions!.Count);
+        var configOption = delta.ConfigOptions[0];
         Assert.Equal("mode", configOption.Id);
+        Assert.Equal("future-type", delta.ConfigOptions[1].ValueType);
     }
 
     [Fact]
@@ -350,7 +352,7 @@ public class AcpSessionUpdateProjectorTests
     }
 
     [Fact]
-    public void Project_ConfigOptionUpdate_IgnoresOptionsWithoutRecognizedType()
+    public void Project_ConfigOptionUpdate_RetainsUnknownOptionsWithoutCreatingSelectors()
     {
         var projector = new AcpSessionUpdateProjector();
         var update = new ConfigOptionUpdate
@@ -378,7 +380,7 @@ public class AcpSessionUpdateProjectorTests
 
         var delta = projector.Project(new SessionUpdateEventArgs("remote-1", update));
 
-        Assert.Empty(delta.ConfigOptions!);
+        Assert.Equal(2, delta.ConfigOptions!.Count);
         Assert.False(delta.ShowConfigOptionsPanel);
         Assert.Empty(delta.AvailableModes!);
         Assert.Null(delta.SelectedModeId);

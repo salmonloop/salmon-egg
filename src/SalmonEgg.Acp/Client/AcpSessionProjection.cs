@@ -23,6 +23,7 @@ internal sealed class AcpSessionProjection
     private readonly Queue<(JsonElement Payload, int ByteCount)> _unprojected = new();
     private int _unprojectedBytes;
     private long _omittedUnprojectedUpdateCount;
+    private ImmutableArray<JsonElement>? _configOptions;
 
     internal void Apply(SessionUpdate update, JsonElement payload)
     {
@@ -58,6 +59,9 @@ internal sealed class AcpSessionProjection
                 break;
             case StateSessionUpdate:
                 break;
+            case ConfigOptionUpdate configuration:
+                SetConfigOptions(configuration.ConfigOptions ?? []);
+                break;
             default:
                 RetainUnprojected(payload);
                 break;
@@ -72,7 +76,11 @@ internal sealed class AcpSessionProjection
             _terminalOrder.Select(static value => value.Snapshot()).ToImmutableArray(),
             _unprojected.Select(static entry => entry.Payload).ToImmutableArray(),
             _omittedUnprojectedUpdateCount,
-            state is null ? null : AcpSessionProjectionJson.Store<SessionWorkState>(state));
+            state is null ? null : AcpSessionProjectionJson.Store<SessionWorkState>(state),
+            _configOptions);
+
+    internal void SetConfigOptions(IReadOnlyList<ConfigOption> configOptions)
+        => _configOptions = configOptions.Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray();
 
     private void RetainUnprojected(JsonElement payload)
     {

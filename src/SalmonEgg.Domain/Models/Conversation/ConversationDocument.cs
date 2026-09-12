@@ -83,6 +83,11 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public string? SelectedValue { get; set; }
 
+        public bool? BooleanValue { get; set; }
+
+        /// <summary>Original configuration payload retained when its option type is unknown.</summary>
+        public string? RawProtocolJson { get; set; }
+
         public List<ConversationConfigOptionChoiceSnapshot> Options { get; set; } = new();
     }
 

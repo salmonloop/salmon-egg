@@ -1373,6 +1373,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             Category = source.Category,
             ValueType = source.ValueType,
             SelectedValue = source.SelectedValue,
+            BooleanValue = source.BooleanValue,
+            RawProtocolJson = source.RawProtocolJson,
             Options = (source.Options ?? [])
                 .Select(CloneConfigOptionChoice)
                 .ToList()
