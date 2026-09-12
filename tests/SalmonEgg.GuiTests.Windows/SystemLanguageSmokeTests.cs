@@ -25,11 +25,17 @@ public sealed class SystemLanguageSmokeTests
         var explicitLabel = originalChinese ? "UI language" : "选择界面语言";
         Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(explicitLabel, StringComparer.Ordinal),
             TimeSpan.FromSeconds(15)), "The explicit language did not reach the reloaded page.");
+        GuiAcceptanceDiagnostics.Record("Language: explicit page reloaded");
+        var explicitTag = originalChinese ? "en-US" : "zh-Hans";
+        Assert.True(app.WaitUntil(() => appData.ReadAppYaml().Contains("language: " + explicitTag, StringComparison.Ordinal),
+            TimeSpan.FromSeconds(10)), "The explicit choice was not persisted before the next preference change.");
         SelectLanguage(app, originalChinese ? "System" : "跟随系统");
 
         // Assert: System restores the observed native language, without assuming the runner is English.
         Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(originalLabel, StringComparer.Ordinal),
-            TimeSpan.FromSeconds(15)), "Switching back to System did not restore the system-language page.");
+            TimeSpan.FromSeconds(15)), "Switching back to System did not restore the system-language page. Visible: "
+                + string.Join(" | ", app.GetVisibleTexts()) + Environment.NewLine + appData.ReadBootLogTail()
+                + Environment.NewLine + appData.ReadLatestAppLogTail());
         Assert.True(app.WaitUntilEnabled("GeneralSettings.Language", TimeSpan.FromSeconds(10)));
         var selector = app.FindByAutomationId("GeneralSettings.Language", TimeSpan.FromSeconds(10));
         Assert.Equal(originalChinese ? "跟随系统" : "System", selector.AsComboBox().SelectedItem?.Name);
@@ -37,16 +43,17 @@ public sealed class SystemLanguageSmokeTests
 
     private static void SelectLanguage(WindowsGuiAppSession app, string name)
     {
+        Assert.True(app.WaitUntilEnabled("GeneralSettings.Language", TimeSpan.FromSeconds(10)));
         var selector = app.FindByAutomationId("GeneralSettings.Language", TimeSpan.FromSeconds(10));
-        Assert.True(selector.IsEnabled);
-        app.ClickElement(selector);
-        var text = app.FindVisibleTextAnywhere(name, TimeSpan.FromSeconds(10));
+        selector.AsComboBox().Expand();
+        var text = app.FindVisibleElementByNameAnywhere(name, TimeSpan.FromSeconds(10));
         Assert.NotNull(text);
         AutomationElement? item = text;
         for (var index = 0; index < 8 && item is not null; index++, item = item.Parent)
         {
             if (!item.Patterns.SelectionItem.IsSupported) continue;
             item.Patterns.SelectionItem.Pattern.Select();
+            GuiAcceptanceDiagnostics.Record("Language: native selected " + name);
             return;
         }
         throw new InvalidOperationException("The real language option has no native selection provider.");

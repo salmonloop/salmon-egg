@@ -156,7 +156,7 @@ public sealed class UrlElicitationSmokeTests
 
         public void WaitForCard(WindowsGuiAppSession app, string action)
         {
-            Assert.NotNull(app.FindVisibleTextAnywhere("native-url-" + action, TimeSpan.FromSeconds(20)));
+            Assert.NotNull(app.FindVisibleElementByNameAnywhere("native-url-" + action, TimeSpan.FromSeconds(20)));
             Assert.Equal(Url, app.FindByAutomationIdAnywhere("Elicitation.FullUrl", TimeSpan.FromSeconds(10)).Name);
             Assert.Equal("127.0.0.1", app.FindByAutomationIdAnywhere("Elicitation.UrlHost", TimeSpan.FromSeconds(10)).Name);
         }
