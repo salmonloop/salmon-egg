@@ -283,12 +283,19 @@ public partial class ChatViewModel
             }
             if (activeTurn is not null && workState == "idle")
             {
+                await RequestVisibleReplyObservationAsync().ConfigureAwait(true);
+                if (!isCurrent()) return true;
                 if (view.StopReason == StopReason.Cancelled)
-                    await CommitSessionViewAsync(new CancelTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
-                else if (view.StopReason == StopReason.Refusal)
-                    await CommitSessionViewAsync(new FailTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
+                    await CommitSessionViewAsync(new CancelTurnAction(conversationId, activeTurn.TurnId,
+                        ConnectionInstanceId: source.ConnectionInstanceId), isCurrent).ConfigureAwait(true);
+                else if (view.StopReason == StopReason.Refusal || view.StopReason == StopReason.MaxTokens || view.StopReason == StopReason.MaxTurnRequests)
+                    await CommitSessionViewAsync(new FailTurnAction(conversationId, activeTurn.TurnId,
+                        StopReason: view.StopReason?.Value, HasStopReason: view.StopReason is not null,
+                        ConnectionInstanceId: source.ConnectionInstanceId), isCurrent).ConfigureAwait(true);
                 else
-                    await CommitSessionViewAsync(new CompleteTurnAction(conversationId, activeTurn.TurnId), isCurrent).ConfigureAwait(true);
+                    await CommitSessionViewAsync(new CompleteTurnAction(conversationId, activeTurn.TurnId,
+                        StopReason: view.StopReason?.Value, HasStopReason: view.StopReason is not null,
+                        ConnectionInstanceId: source.ConnectionInstanceId), isCurrent).ConfigureAwait(true);
             }
             else if (workState is "running" or "requires_action")
             {
@@ -335,7 +342,8 @@ public partial class ChatViewModel
     private Task AdvanceSessionViewPhaseAsync(ActiveTurnState? turn, ChatTurnPhase phase,
         Func<bool> isCurrent, string? toolCallId = null, string? title = null)
         => turn is null ? Task.CompletedTask : CommitSessionViewAsync(
-            new AdvanceTurnPhaseAction(turn.ConversationId, turn.TurnId, phase, toolCallId, title), isCurrent);
+            new AdvanceTurnPhaseAction(turn.ConversationId, turn.TurnId, phase, toolCallId, title,
+                ConnectionInstanceId: turn.ConnectionInstanceId), isCurrent);
 
     private void RaiseOverlayStateChanged()
     {
