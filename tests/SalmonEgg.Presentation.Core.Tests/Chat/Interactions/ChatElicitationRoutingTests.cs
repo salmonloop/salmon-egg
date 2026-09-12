@@ -204,9 +204,24 @@ public sealed class ChatElicitationRoutingTests
         launcher.Setup(x => x.OpenAsync(It.IsAny<ExternalUriTarget>(), It.IsAny<CancellationToken>())).ReturnsAsync(ExternalUriOpenResult.Dispatched);
         using var previous = ElicitationInteractionViewModelFactory.Create(oldArgs!, _ => Task.CompletedTask, uriLauncher: launcher.Object);
         using var current = ElicitationInteractionViewModelFactory.Create(newArgs!, _ => Task.CompletedTask, uriLauncher: launcher.Object);
+        var expired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        previous.PropertyChanged += OnPreviousChanged;
+
+        void OnPreviousChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(previous.FullUrl) && previous.FullUrl.Length == 0) expired.TrySetResult();
+        }
 
         // Act
-        await oldClient.DisconnectAsync();
+        try
+        {
+            await oldClient.DisconnectAsync();
+            await expired.Task.WaitAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            previous.PropertyChanged -= OnPreviousChanged;
+        }
         oldTransport.Raise(t => t.MessageReceived += null, new AcpTransportMessageReceivedEventArgs(
             """{"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"opaque"}}"""));
         await previous.SubmitCommand.ExecuteAsync(null);
