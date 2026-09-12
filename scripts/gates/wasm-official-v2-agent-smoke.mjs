@@ -8,7 +8,7 @@ import { navigateToSettingsSection } from "./wasm-smoke-lib/settings-shell.mjs";
 import { createWebSocketProfile, createRemoteDirectory, ensureAcpProfilesReady, clickProfileConnectionToggle }
   from "./wasm-smoke-lib/acp-ui-fixture.mjs";
 import {
-  selectComboBoxItem, clickVisibleNavigationTarget, typeIntoVisibleTextField,
+  clickVisibleNavigationTarget, typeIntoVisibleTextField, waitForNativeControlFocus,
   clickStartComposerSendButton, waitForSemanticText, collectVisibleInteractiveDebug, waitForControlEnabledState
 } from "./wasm-smoke-lib/ui-affordances.mjs";
 
@@ -69,8 +69,28 @@ try {
     assert.equal(initialized.result.protocolVersion, 2);
 
     await clickVisibleNavigationTarget(page, { labels: ["Start", "开始"], automationIds: ["MainNav.Start"] });
-    await selectComboBoxItem(page, "AgentSelectorHost", profile, { verifySelectionText: false, keyboardSelectVisibleItem: true });
-    await selectComboBoxItem(page, "ProjectSelectorHost", directory, { verifySelectionText: false, keyboardSelectVisibleItem: true });
+    // Connecting the unique profile already selects it through the authoritative connection owner.
+    // Opening and reselecting the same native ComboBox is unnecessary and races its close animation.
+    await waitForControlEnabledState(page, { automationIds: ["AgentSelectorHost"] }, true, "connected Agent selector");
+    // The isolated profile has one eligible remote directory. Native closed-ComboBox keyboard
+    // selection avoids depending on transient popup label mirrors. The wire cwd assertion below
+    // is the authoritative result of this input, so a wrong selection cannot pass.
+    await page.evaluate(() => window.__salmoneggSmoke.semantic.focusControl({ automationIds: ["ProjectSelectorHost"], labels: [] }));
+    await waitForNativeControlFocus(page, { automationIds: ["ProjectSelectorHost"], labels: [] }, "project selector");
+    await page.keyboard.press("F4");
+    await page.waitForFunction(() => {
+      const state = window.__salmoneggSmoke.semantic.describe({ automationIds: ["ProjectSelectorHost"], labels: [] });
+      const element = state?.id ? document.getElementById(state.id) : null;
+      const popup = element?.getAttribute("aria-controls");
+      return state?.expanded === true && popup && document.getElementById(popup)?.children.length > 0;
+    }, undefined, { timeout: 10_000 });
+    await page.keyboard.press("End");
+    await page.waitForFunction(() => {
+      const state = window.__salmoneggSmoke.semantic.describe({ automationIds: ["ProjectSelectorHost"], labels: [] });
+      const element = state?.id ? document.getElementById(state.id) : null;
+      return Boolean(element?.getAttribute("aria-activedescendant"));
+    }, undefined, { timeout: 10_000 });
+    await page.keyboard.press("Enter");
     const created = await awaitFrame(item => item.direction === "client" && item.frame.method === "session/new", "session creation");
     assert.equal(created.params.cwd, cwd);
     await awaitFrame(item => item.direction === "agent" && item.frame.id === created.id, "created session response");
@@ -80,10 +100,12 @@ try {
     const accepted = await awaitFrame(item => item.direction === "agent" && item.frame.id === prompt.id, "prompt acknowledgement");
     assert.equal(accepted.result.stopReason, undefined, "V2 acknowledgement is not a terminal prompt result.");
     const idle = await awaitFrame(item => item.direction === "agent" && item.frame.method === "session/update"
-      && item.frame.params.update.sessionUpdate === "state_update" && item.frame.params.update.state === "idle", "ending idle");
+      && item.frame.params.sessionId === prompt.params.sessionId
+      && item.frame.params.update.sessionUpdate === "state_update" && item.frame.params.update.state === "idle"
+      && item.frame.params.update.stopReason === "end_turn", "ending idle for this prompt session");
     assert.equal(idle.params.update.stopReason, "end_turn");
     await waitForSemanticText(page, new RegExp(`Echo: ${marker}`), "official Agent response visible in ChatView", 30_000);
-    await waitForControlEnabledState(page, { automationIds: ["ChatInputArea.Input"] }, true, "input enabled after authoritative idle", 30_000);
+    await waitForControlEnabledState(page, { automationIds: ["InputBox"], role: "textarea" }, true, "input enabled after authoritative idle", 30_000);
     assert.equal(frames.filter(item => item.direction === "client" && item.frame.method === "session/prompt").length, 1);
     assert.equal(frames.filter(item => item.direction === "client" && item.frame.method === "session/load").length, 0);
     assertNoFatalConsoleMessages(fatalConsoleMessages);
