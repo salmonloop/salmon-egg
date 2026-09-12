@@ -53,6 +53,24 @@ public sealed class ConversationStatusPolicyTests
     }
 
     [Theory]
+    [InlineData(false, false, ConversationStatusIcon.Input)]
+    [InlineData(true, false, ConversationStatusIcon.Permission)]
+    [InlineData(true, true, ConversationStatusIcon.Error)]
+    public void Resolve_WaitingForUser_RequiresAttentionWithExistingReasonPriority(
+        bool permission, bool failure, ConversationStatusIcon expectedIcon)
+    {
+        // Arrange
+        var interaction = new ConversationInteractionSummary(permission, false, failure);
+
+        // Act
+        var result = ConversationStatusPolicy.Resolve(Turn(ChatTurnPhase.WaitingForUser), interaction, Attention(true));
+
+        // Assert
+        Assert.Equal(ConversationStatusGroup.NeedsAttention, result.Group);
+        Assert.Equal(expectedIcon, result.Icon);
+    }
+
+    [Theory]
     [InlineData(ChatTurnPhase.CreatingRemoteSession)]
     [InlineData(ChatTurnPhase.DispatchingPrompt)]
     [InlineData(ChatTurnPhase.WaitingForAgent)]
