@@ -133,8 +133,11 @@ def main():
                 return values if count >= 3 else None
 
             x, y, width, height, root_height, scale = map(float, wait(locate, 'No stable enabled native button'))
+            subprocess.run(['screencapture', '-x', str(output / ('before-' + action + '.png'))], check=True, timeout=5)
             attempt = subprocess.run([str(ax_tool), 'pointer', str(app.pid), str((x + width / 2) / scale),
                                       str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=5)
+            with (output / 'native-pointer.log').open('a') as log:
+                log.write(attempt.stdout + attempt.stderr)
             assert attempt.returncode == 0, attempt.stderr
 
         def replies(action):

@@ -79,6 +79,8 @@ if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]
     // and the system AX frame determine that inset; no fixed titlebar pixel value is assumed.
     let point = CGPoint(x: position.x + localX, y: position.y + size.height - height + localY)
     NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+    print("CGEvent target pid=\(pid) x=\(point.x) y=\(point.y) nativeWindow=\(position) size=\(size) contentHeight=\(height)")
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     print("Native system window bounds and read-only product sample used for CGEvent pointer")
