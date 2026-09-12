@@ -47,6 +47,12 @@ jobs:
         timeout-minutes: 35
         shell: pwsh
         run: ./.tools/run-winui3-msix.ps1 -Configuration Debug
+      - name: Build the Windows GUI test application
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          dotnet build tests/SalmonEgg.GuiTests.Windows/SalmonEgg.GuiTests.Windows.csproj `
+            --configuration Debug -p:UseSharedCompilation=false -m:1 --disable-build-servers
       - name: Exercise the current installed WinUI application
         timeout-minutes: 5
         shell: pwsh
