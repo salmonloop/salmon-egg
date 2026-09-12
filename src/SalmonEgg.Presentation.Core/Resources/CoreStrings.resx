@@ -1497,6 +1497,7 @@
   </data>
   <data name="ChatTurnStatus_WaitingForUser" xml:space="preserve">
     <value>Waiting for your action...</value>
+  </data>
   <data name="SessionConfig_Title" xml:space="preserve">
     <value>会话设置</value>
   </data>
