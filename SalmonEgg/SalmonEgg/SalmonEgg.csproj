@@ -22,6 +22,14 @@
     <SalmonEggSupportsDesktopProcessHost>false</SalmonEggSupportsDesktopProcessHost>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('net10.0-ios')) AND $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('iossimulator-'))">
+    <!-- A Simulator has no provisioning profile to supply its private Keychain access group.
+         .NET embeds these native entitlements in the executable; device signing keeps its profile.
+         https://github.com/dotnet/maui/discussions/29989 -->
+    <CodesignEntitlements>Platforms/iOS/SimulatorEntitlements.plist</CodesignEntitlements>
+    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
     <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj" />
