@@ -79,9 +79,14 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/android-acp-acceptance
           "$ANDROID_SDK_ROOT/emulator/emulator" -accel-check
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/salmonegg-android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd \
             --name salmonegg-acp-acceptance --device pixel_tablet \
+            --path "$ANDROID_AVD_HOME/salmonegg-acp-acceptance.avd" \
             --package 'system-images;android-36;google_apis;x86_64' --force
+          "$ANDROID_SDK_ROOT/emulator/emulator" -list-avds
+          test -f "$ANDROID_AVD_HOME/salmonegg-acp-acceptance.ini"
           setsid "$ANDROID_SDK_ROOT/emulator/emulator" -avd salmonegg-acp-acceptance \
             -port 5554 -accel on -cores 2 -memory 2048 -no-window -gpu swiftshader_indirect \
             -no-snapshot -noaudio -no-boot-anim \
@@ -93,8 +98,15 @@ jobs:
             wait "$emulator_pid" 2>/dev/null || true
           }
           trap cleanup_emulator EXIT
-          timeout 300s adb -s emulator-5554 wait-for-device
-          timeout 300s bash -c 'until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 1; done'
+          export SALMONEGG_EMULATOR_PID="$emulator_pid"
+          timeout 300s bash -c '
+            until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do
+              if ! kill -0 "$SALMONEGG_EMULATOR_PID" 2>/dev/null; then
+                cat artifacts/android-acp-acceptance/emulator.log
+                exit 1
+              fi
+              sleep 1
+            done'
           adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 0
           adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
           adb -s emulator-5554 shell wm dismiss-keyguard

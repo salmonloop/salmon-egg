@@ -36,7 +36,13 @@ def eventually(description, condition, timeout=30):
 
 
 def command(arguments, **kwargs):
-    return subprocess.run(arguments, check=kwargs.pop("check", True), timeout=kwargs.pop("timeout", 90), **kwargs)
+    try:
+        return subprocess.run(arguments, check=kwargs.pop("check", True), timeout=kwargs.pop("timeout", 90), **kwargs)
+    except subprocess.CalledProcessError as error:
+        for message in (error.stdout, error.stderr):
+            if message:
+                print(message.decode(errors="replace") if isinstance(message, bytes) else message, file=sys.stderr)
+        raise
 
 
 def output(arguments):
@@ -66,14 +72,16 @@ class AndroidDevice:
         return self.adb(*arguments, text=True, capture_output=True).stdout.strip()
 
     def tree(self):
+        self.text("shell", "rm", "-f", "/sdcard/salmonegg-acceptance.xml")
         self.text("shell", "uiautomator", "dump", "/sdcard/salmonegg-acceptance.xml")
         xml = self.text("shell", "cat", "/sdcard/salmonegg-acceptance.xml")
         (self.artifacts / "last-ui.xml").write_text(xml)
         return ET.fromstring(xml)
 
     def find(self, label, package=PACKAGE, enabled=False, editable=False):
+        labels = (label,) if isinstance(label, str) else label
         for node in self.tree().iter("node"):
-            if node.get("package") != package or not has_label(node, label) or not bounds(node):
+            if node.get("package") != package or not any(has_label(node, item) for item in labels) or not bounds(node):
                 continue
             if editable and (not node.get("class", "").endswith(("EditText", "TextBox"))
                              and not any(child.get("class", "").endswith("EditText") for child in node.iter("node"))):
@@ -83,7 +91,7 @@ class AndroidDevice:
         return None
 
     def wait(self, label, package=PACKAGE, timeout=30):
-        return eventually("The native control is absent or disabled: " + label,
+        return eventually("The native control is absent or disabled: " + str(label),
                           lambda: self.find(label, package, enabled=True), timeout)
 
     def tap_node(self, node):
@@ -208,17 +216,17 @@ class ConsentFlow:
     def activate_conversation(self):
         self.device.activate_product()
         eventually("The installed app is not foreground", lambda: self.device.foreground(PACKAGE))
-        session = self.device.find(SESSION)
+        session_labels = (SESSION, "Native acceptance session")
+        project_labels = (PROJECT, "Native acceptance")
+        session = self.device.find(session_labels, enabled=True)
         if session is None:
-            project = self.device.find(PROJECT)
+            project = self.device.find(project_labels, enabled=True)
             if project is None:
-                project = self.device.find("Native acceptance")
-            if project is None:
-                self.device.tap("Toggle sidebar")
-                project = self.device.wait("Native acceptance")
-            self.device.tap_node(project)
-        session = self.device.find(SESSION)
-        self.device.tap_node(session) if session is not None else self.device.tap("Native acceptance session")
+                self.device.tap(("TitleBar.ToggleSidebar", "Toggle sidebar"))
+                self.device.wait(project_labels)
+            if self.device.find(session_labels, enabled=True) is None:
+                self.device.tap(project_labels)
+        self.device.tap(session_labels)
         eventually("The product did not load the authoritative session", lambda: self.state()["loaded"], timeout=45)
         capabilities = self.state()["capabilities"].get("elicitation", {})
         assert "form" in capabilities and "url" in capabilities, "The installed app did not advertise its UI capabilities"
@@ -370,6 +378,8 @@ def main(args):
         if reverse is not None:
             cleanup.append(("reverse", "--remove", reverse))
         try:
+            with (artifacts / "final-screen.png").open("wb") as image:
+                device.adb("exec-out", "screencap", "-p", stdout=image, check=False, timeout=20)
             with (artifacts / "logcat.log").open("wb") as log:
                 device.adb("logcat", "-d", stdout=log, check=False, timeout=20)
         except (OSError, subprocess.TimeoutExpired) as error:
