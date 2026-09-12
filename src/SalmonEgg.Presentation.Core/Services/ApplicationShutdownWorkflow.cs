@@ -84,6 +84,11 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
                 "Application shutdown child-process drain failed",
                 cancellationToken: default).ConfigureAwait(false);
 
+            await RunStageAsync(
+                () => _chatRuntimePersistence.DrainSessionRuntimeAsync(CancellationToken.None),
+                "Application shutdown session task drain failed",
+                cancellationToken: default).ConfigureAwait(false);
+
             // Telemetry is last and unconditional: user state durability comes first, and a failure
             // above is exactly the kind of event whose spans must still reach the backend. Shutdown no
             // longer waits for export (see ITelemetryRuntime.ShutdownAsync), so this cannot stall exit.

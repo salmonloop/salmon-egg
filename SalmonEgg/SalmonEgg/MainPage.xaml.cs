@@ -194,6 +194,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
         // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
         DetachGamepadInput();
+        DetachNavigationInteraction();
         DetachDebugKeyLogging();
         Microsoft.UI.Xaml.Input.FocusManager.GettingFocus -= OnMainPageGettingFocus;
         _metricsProvider.Detach();
@@ -725,6 +726,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         Microsoft.UI.Xaml.Input.FocusManager.GettingFocus -= OnMainPageGettingFocus;
         Microsoft.UI.Xaml.Input.FocusManager.GettingFocus += OnMainPageGettingFocus;
         AttachGamepadInput();
+        AttachNavigationInteraction();
         AttachDebugKeyLogging();
         AttachAppWindowClosing();
         _titleBarAdapter.Configure(App.MainWindowInstance);
@@ -773,7 +775,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // Diagnostics-only left-nav selection-mask stress driver. It owns its own dependencies and
         // self-gates on the environment; the shell only offers it the service provider once the
         // navigation tree is live. No-op unless explicitly enabled.
-        NavigationMaskProbeDriver.TryStart(App.ServiceProvider);
+        NavigationMaskProbeDriver.TryStart(App.ServiceProvider, this);
+        ReadReceiptProbeDriver.TryStart(App.ServiceProvider, this);
 
         // Diagnostics-only NumberBox theme probe. Navigation, focus cycling, and realized-template
         // sampling remain owned by the independent probe; the page only exposes the live shell root.
@@ -1225,7 +1228,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private string BuildMainNavAutomationSelectionState()
     {
         var sessionItem = TryResolveCurrentSessionItem();
-        var projectItem = sessionItem is null ? null : TryResolveProjectItem(sessionItem.ProjectId);
+        MainNavItemViewModel? projectItem = sessionItem is null ? null
+            : NavVM.IsStatusGrouping
+                ? NavVM.Items.OfType<StatusGroupNavItemViewModel>().FirstOrDefault(group => group.Children.Contains(sessionItem))
+                : TryResolveProjectItem(sessionItem.ProjectId);
         var startItem = NavVM.StartItem;
 
         var projectContainer = projectItem is null ? null : MainNavView.ContainerFromMenuItem(projectItem) as NavigationViewItem;
@@ -1283,8 +1289,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         }
 
         return NavVM.Items
-            .OfType<ProjectNavItemViewModel>()
-            .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+            .SelectMany(group => group.Children.OfType<SessionNavItemViewModel>())
             .FirstOrDefault(session => string.Equals(session.SessionId, sessionId, StringComparison.Ordinal));
     }
 
@@ -1328,6 +1333,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         var containers = new List<NavigationViewItem>();
         CollectNavigationViewItems(MainNavView, containers);
+        ScheduleNavigationContentAudit();
 
         var selectedCount = 0;
         var descriptions = new List<string>(containers.Count);
@@ -1338,7 +1344,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
                 selectedCount++;
             }
 
-            descriptions.Add($"{DescribeNavContainer(container)}:IsSelected={container.IsSelected}");
+            descriptions.Add($"{DescribeNavContainer(container)}:Tag={container.Tag}:IsSelected={container.IsSelected}:IsChildSelected={container.IsChildSelected}:FocusState={container.FocusState}");
         }
 
         App.BootLog(

@@ -23,4 +23,7 @@ public sealed record ConversationCatalogDisplayItem(
     bool HasUnreadAttention,
     string? RemoteSessionId = null,
     string? BoundProfileId = null,
-    string? ProjectAffinityOverrideProjectId = null);
+    string? ProjectAffinityOverrideProjectId = null,
+    ConversationStatusGroup StatusGroup = ConversationStatusGroup.Other,
+    ConversationStatusIcon StatusIcon = ConversationStatusIcon.Conversation,
+    DateTime? ActivityAt = null);

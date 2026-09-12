@@ -47,13 +47,14 @@ public sealed class ChatInteractionEventBridge
     public async Task<(string ConversationId, AskUserRequestViewModel ViewModel)?> BuildAskUserRequestAsync(
         AskUserRequestEventArgs args,
         Func<string, Task> clearPendingRequestAsync,
-        ILogger logger)
+        ILogger logger,
+        AcpSessionEventSource? source = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(clearPendingRequestAsync);
         ArgumentNullException.ThrowIfNull(logger);
 
-        var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(args.SessionId).ConfigureAwait(false);
+        var conversationId = await ResolveConversationIdAsync(args.SessionId, source).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             logger.LogWarning("Ask-user request ignored because no bound conversation matched remote session {RemoteSessionId}", args.SessionId);
@@ -76,6 +77,7 @@ public sealed class ChatInteractionEventBridge
                 return true;
             },
             _localizer);
+        requestViewModel.Source = source;
 
         return (conversationId, requestViewModel);
     }
@@ -87,6 +89,7 @@ public sealed class ChatInteractionEventBridge
         Func<Action, Task>? dispatchAsync = null,
         string agentName = "",
         Func<ElicitationRequestEventArgs, Task>? cancelUndisplayedAsync = null,
+        AcpSessionEventSource? source = null,
         Func<string, ValueTask<string?>>? resolveConversationAsync = null)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -106,7 +109,7 @@ public sealed class ChatInteractionEventBridge
         try
         {
             conversationId = resolveConversationAsync is null
-                ? await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(args.SessionId).ConfigureAwait(false)
+                ? await ResolveConversationIdAsync(args.SessionId, source).ConfigureAwait(false)
                 : await resolveConversationAsync(args.SessionId).ConfigureAwait(false);
         }
         catch (Exception)
@@ -121,12 +124,12 @@ public sealed class ChatInteractionEventBridge
             return null;
         }
 
-        return (
-            conversationId,
-            ElicitationInteractionViewModelFactory.Create(
+        var viewModel = ElicitationInteractionViewModelFactory.Create(
                 args,
                 viewModel => clearPendingRequestAsync(conversationId, viewModel),
-                _localizer, _uriLauncher, dispatchAsync, agentName));
+                _localizer, _uriLauncher, dispatchAsync, agentName);
+        viewModel.Source = source;
+        return (conversationId, viewModel);
     }
 
     internal static async Task<bool> CancelUndisplayedElicitationAsync(ElicitationRequestEventArgs args, ILogger logger)
@@ -158,13 +161,14 @@ public sealed class ChatInteractionEventBridge
         TerminalRequestEventArgs args,
         ChatConversationPanelStateCoordinator panelStateCoordinator,
         string? currentConversationId,
-        ILogger logger)
+        ILogger logger,
+        AcpSessionEventSource? source = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(panelStateCoordinator);
         ArgumentNullException.ThrowIfNull(logger);
 
-        var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(args.SessionId).ConfigureAwait(false);
+        var conversationId = await ResolveConversationIdAsync(args.SessionId, source).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             logger.LogWarning("Terminal request ignored because no bound conversation matched remote session {RemoteSessionId}", args.SessionId);
@@ -185,13 +189,14 @@ public sealed class ChatInteractionEventBridge
         TerminalStateChangedEventArgs args,
         ChatConversationPanelStateCoordinator panelStateCoordinator,
         string? currentConversationId,
-        ILogger logger)
+        ILogger logger,
+        AcpSessionEventSource? source = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(panelStateCoordinator);
         ArgumentNullException.ThrowIfNull(logger);
 
-        var conversationId = await _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(args.SessionId).ConfigureAwait(false);
+        var conversationId = await ResolveConversationIdAsync(args.SessionId, source).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             logger.LogWarning("Terminal state ignored because no bound conversation matched remote session {RemoteSessionId}", args.SessionId);
@@ -207,4 +212,9 @@ public sealed class ChatInteractionEventBridge
                 ? (conversationId, selection)
                 : null;
     }
+
+    private System.Threading.Tasks.ValueTask<string?> ResolveConversationIdAsync(string remoteSessionId, AcpSessionEventSource? source)
+        => source is { } identity
+            ? _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(remoteSessionId, identity)
+            : _authoritativeRemoteSessionRouter.ResolveConversationIdAsync(remoteSessionId);
 }

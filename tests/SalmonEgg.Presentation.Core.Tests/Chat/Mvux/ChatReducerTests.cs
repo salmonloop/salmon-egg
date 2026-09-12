@@ -66,6 +66,72 @@ public class ChatReducerTests
         Assert.Equal(1, newState.Generation);
     }
 
+    [Theory]
+    [InlineData("conv-2", 7)]
+    [InlineData("conv-1", 6)]
+    public void SetDraftText_StaleConversationOrRevision_PreservesCurrentDraft(string expectedConversation, long expectedRevision)
+    {
+        var state = ChatState.Empty with { HydratedConversationId = "conv-1", DraftText = "new input", DraftRevision = 7 };
+
+        var result = ChatReducer.Reduce(state, new SetDraftTextAction("old input", expectedConversation, expectedRevision));
+
+        Assert.Same(state, result);
+    }
+
+    [Fact]
+    public void SetDraftText_MatchingConversationAndRevision_UpdatesDraftOnce()
+    {
+        var state = ChatState.Empty with { HydratedConversationId = "conv-1", DraftText = "input", DraftRevision = 7 };
+        var action = new SetDraftTextAction(string.Empty, "conv-1", 7);
+
+        var result = ChatReducer.Reduce(state, action);
+
+        Assert.Equal(string.Empty, result.DraftText);
+        Assert.Equal(8, result.DraftRevision);
+        Assert.Same(result, ChatReducer.Reduce(result, action));
+    }
+
+    [Fact]
+    public void ApplyBindingUpdate_ScopedRecovery_PreservesCurrentTurnWithoutRestoringStalePhase()
+    {
+        var original = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow,
+            ProfileId: "profile", RemoteSessionId: "old-remote", ConnectionInstanceId: "connection");
+        var currentTurn = original with { Phase = ChatTurnPhase.ToolRunning };
+        var state = ChatState.Empty with
+        {
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", currentTurn)
+        };
+        var action = new ApplyBindingUpdateAction(
+            new("conv-1", "new-remote", "profile"),
+            ImmutableDictionary<string, ConversationSessionInfoSnapshot?>.Empty,
+            ImmutableHashSet.Create("conv-1"),
+            original);
+
+        var result = ChatReducer.Reduce(state, action);
+
+        Assert.Same(currentTurn, result.ResolveTurn("conv-1"));
+        Assert.Equal("new-remote", result.ResolveBinding("conv-1")!.RemoteSessionId);
+    }
+
+    [Fact]
+    public void ApplyBindingUpdate_StaleRecoveryTurn_RejectsBindingAndPreservesNewTurn()
+    {
+        var original = new ActiveTurnState("conv-1", "old-turn", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow,
+            ProfileId: "profile", RemoteSessionId: "old-remote", ConnectionInstanceId: "connection");
+        var state = ChatState.Empty with
+        {
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", original with { TurnId = "new-turn" })
+        };
+
+        var result = ChatReducer.Reduce(state, new ApplyBindingUpdateAction(
+            new("conv-1", "new-remote", "profile"),
+            ImmutableDictionary<string, ConversationSessionInfoSnapshot?>.Empty,
+            ImmutableHashSet.Create("conv-1"),
+            original));
+
+        Assert.Same(state, result);
+    }
+
     [Fact]
     public void GivenMultipleBindings_WhenSelectingConversation_ThenMatchingBindingProjectsFromDictionary()
     {
@@ -1122,17 +1188,33 @@ public class ChatReducerTests
     }
 
     [Fact]
-    public void BeginTurn_SetsActiveTurnAndGeneration()
+    public void BeginTurn_StoresActiveTurnWithoutAdvancingWorkspaceGeneration()
     {
-        var initialState = ChatState.Empty with { Generation = 10 };
-        var action = new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent);
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1", Generation = 10 };
+        var action = new BeginTurnAction(
+            "conv-1",
+            "turn-1",
+            ChatTurnPhase.WaitingForAgent,
+            PendingUserMessageLocalId: "local-1",
+            PendingUserProtocolMessageId: "protocol-1",
+            PendingUserMessageText: "hello",
+            ProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            ConnectionInstanceId: "connection-1");
 
         var newState = ChatReducer.Reduce(initialState, action);
 
-        Assert.Equal(11, newState.Generation);
+        Assert.Equal(initialState.Generation, newState.Generation);
         Assert.NotNull(newState.ActiveTurn);
         Assert.Equal("turn-1", newState.ActiveTurn!.TurnId);
         Assert.Equal(ChatTurnPhase.WaitingForAgent, newState.ActiveTurn.Phase);
+        Assert.Equal("local-1", newState.ActiveTurn.PendingUserMessageLocalId);
+        Assert.Equal("protocol-1", newState.ActiveTurn.PendingUserProtocolMessageId);
+        Assert.Equal("hello", newState.ActiveTurn.PendingUserMessageText);
+        Assert.Equal("profile-1", newState.ActiveTurn.ProfileId);
+        Assert.Equal("remote-1", newState.ActiveTurn.RemoteSessionId);
+        Assert.Equal("connection-1", newState.ActiveTurn.ConnectionInstanceId);
+        Assert.Null(initialState.ResolveTurn("conv-1"));
     }
 
     [Fact]
@@ -1140,7 +1222,9 @@ public class ChatReducerTests
     {
         var initialState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-current", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow),
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-current", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)),
             Generation = 10
         };
         var action = new AdvanceTurnPhaseAction("conv-1", "turn-stale", ChatTurnPhase.Responding);
@@ -1156,7 +1240,9 @@ public class ChatReducerTests
     {
         var initialState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow),
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)),
             Generation = 4
         };
         var action = new AdvanceTurnPhaseAction("conv-remote", "turn-1", ChatTurnPhase.Responding);
@@ -1168,12 +1254,13 @@ public class ChatReducerTests
     }
 
     [Fact]
-    public void SelectConversation_ClearsActiveTurnForPreviousConversation()
+    public void SelectConversation_PreservesPreviousTurnAndRestoresItsProjectionWhenSelectedAgain()
     {
         var initialState = ChatState.Empty with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow))
         };
         var action = new SelectConversationAction("conv-2");
 
@@ -1181,6 +1268,10 @@ public class ChatReducerTests
 
         Assert.Null(newState.ActiveTurn);
         Assert.Equal("conv-2", newState.HydratedConversationId);
+        Assert.Same(initialState.ActiveTurn, newState.ResolveTurn("conv-1"));
+
+        var selectedAgain = ChatReducer.Reduce(newState, new SelectConversationAction("conv-1"));
+        Assert.Same(initialState.ActiveTurn, selectedAgain.ActiveTurn);
     }
 
     [Fact]
@@ -1191,7 +1282,7 @@ public class ChatReducerTests
         var initialState = ChatState.Empty with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = activeTurn,
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", activeTurn),
             Generation = 12
         };
 
@@ -1207,7 +1298,9 @@ public class ChatReducerTests
         var startedAt = DateTime.UtcNow;
         var initialState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Responding, startedAt, startedAt),
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Responding, startedAt, startedAt)),
             Generation = 12
         };
 
@@ -1223,13 +1316,15 @@ public class ChatReducerTests
         var startedAt = DateTime.UtcNow;
         var initialState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Completed, startedAt, startedAt),
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Completed, startedAt, startedAt)),
             Generation = 12
         };
 
         var newState = ChatReducer.Reduce(initialState, new ClearTerminalTurnAction("conv-1"));
 
-        Assert.Equal(13, newState.Generation);
+        Assert.Equal(initialState.Generation, newState.Generation);
         Assert.Null(newState.ActiveTurn);
     }
 
@@ -1238,7 +1333,9 @@ public class ChatReducerTests
     {
         var failedState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Failed, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Failed, DateTime.UtcNow, DateTime.UtcNow))
         };
         var action = new CompleteTurnAction("conv-1", "turn-1");
 
@@ -1248,7 +1345,9 @@ public class ChatReducerTests
 
         var cancelledState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Cancelled, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Cancelled, DateTime.UtcNow, DateTime.UtcNow))
         };
         var newState2 = ChatReducer.Reduce(cancelledState, action);
 
@@ -1260,7 +1359,9 @@ public class ChatReducerTests
     {
         var completedState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Completed, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Completed, DateTime.UtcNow, DateTime.UtcNow))
         };
 
         var newState = ChatReducer.Reduce(
@@ -1268,6 +1369,299 @@ public class ChatReducerTests
             new AdvanceTurnPhaseAction("conv-1", "turn-1", ChatTurnPhase.Responding));
 
         Assert.Equal(ChatTurnPhase.Completed, newState.ActiveTurn!.Phase);
+    }
+
+    [Theory]
+    [InlineData(ChatTurnPhase.WaitingForAgent, "turn-1")]
+    [InlineData(ChatTurnPhase.Thinking, "turn-2")]
+    [InlineData(ChatTurnPhase.Completed, "turn-1")]
+    public void BeginTurn_ExistingRunningTurnOrRepeatedId_DoesNotReplaceTurn(
+        ChatTurnPhase existingPhase,
+        string nextTurnId)
+    {
+        // Arrange
+        var now = DateTime.UtcNow;
+        var initialState = ChatState.Empty with
+        {
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", existingPhase, now, now))
+        };
+
+        // Act
+        var result = ChatReducer.Reduce(
+            initialState,
+            new BeginTurnAction("conv-1", nextTurnId, ChatTurnPhase.DispatchingPrompt));
+
+        // Assert
+        Assert.Same(initialState, result);
+    }
+
+    [Fact]
+    public void BeginTurn_NewTurnAfterCompletion_ReplacesOnlyItsConversationAndRejectsOldResult()
+    {
+        // Arrange
+        var initialState = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "old-turn", ChatTurnPhase.Thinking));
+        initialState = ChatReducer.Reduce(initialState,
+            new BeginTurnAction("conv-2", "background-turn", ChatTurnPhase.ToolRunning));
+        initialState = ChatReducer.Reduce(initialState,
+            new CompleteTurnAction("conv-1", "old-turn", "end_turn", HasStopReason: true));
+
+        // Act
+        var result = ChatReducer.Reduce(initialState,
+            new BeginTurnAction("conv-1", "new-turn", ChatTurnPhase.WaitingForAgent));
+        var afterOldFailure = ChatReducer.Reduce(result,
+            new FailTurnAction("conv-1", "old-turn", "late failure"));
+
+        // Assert
+        Assert.Same(result, afterOldFailure);
+        Assert.Equal("new-turn", result.ResolveTurn("conv-1")!.TurnId);
+        Assert.Equal(ChatTurnPhase.WaitingForAgent, result.ResolveTurn("conv-1")!.Phase);
+        Assert.Null(result.ResolveTurn("conv-1")!.StopReason);
+        Assert.False(result.ResolveTurn("conv-1")!.HasStopReason);
+        Assert.Same(initialState.ResolveTurn("conv-2"), result.ResolveTurn("conv-2"));
+    }
+
+    [Theory]
+    [InlineData(ChatTurnPhase.Responding)]
+    [InlineData(ChatTurnPhase.Completed)]
+    [InlineData(ChatTurnPhase.Failed)]
+    [InlineData(ChatTurnPhase.Cancelled)]
+    public void UpdateTurn_BackgroundConversation_LeavesForegroundTurnAndDraftUnchanged(ChatTurnPhase phase)
+    {
+        // Arrange
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-2",
+            DraftText = "new foreground draft",
+            DraftRevision = 9,
+            Generation = 3
+        };
+        initialState = ChatReducer.Reduce(initialState,
+            new BeginTurnAction("conv-1", "same-turn-id", ChatTurnPhase.Thinking, ConnectionInstanceId: "connection-1"));
+        initialState = ChatReducer.Reduce(initialState,
+            new BeginTurnAction("conv-2", "same-turn-id", ChatTurnPhase.Thinking, ConnectionInstanceId: "connection-2"));
+
+        // Act
+        var result = ChatReducer.Reduce(initialState,
+            CreateTurnUpdate(phase, "conv-1", "same-turn-id", "connection-1"));
+
+        // Assert
+        Assert.Equal(phase, result.ResolveTurn("conv-1")!.Phase);
+        Assert.Same(initialState.ActiveTurn, result.ActiveTurn);
+        Assert.Equal("conv-2", result.HydratedConversationId);
+        Assert.Equal(initialState.DraftText, result.DraftText);
+        Assert.Equal(initialState.DraftRevision, result.DraftRevision);
+        Assert.Equal(initialState.Generation, result.Generation);
+        Assert.Equal(2, result.Turns!.Count);
+    }
+
+    [Theory]
+    [InlineData(ChatTurnPhase.Responding)]
+    [InlineData(ChatTurnPhase.Completed)]
+    [InlineData(ChatTurnPhase.Failed)]
+    [InlineData(ChatTurnPhase.Cancelled)]
+    public void UpdateTurn_StaleConversationTurnOrConnection_IsIgnored(ChatTurnPhase phase)
+    {
+        // Arrange
+        var initialState = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Thinking, ConnectionInstanceId: "connection-2"));
+        var staleActions = new[]
+        {
+            CreateTurnUpdate(phase, "other-conversation", "turn-1", "connection-2"),
+            CreateTurnUpdate(phase, "conv-1", "old-turn", "connection-2"),
+            CreateTurnUpdate(phase, "conv-1", "turn-1", "connection-1"),
+            CreateTurnUpdate(phase, "conv-1", "turn-1", null)
+        };
+
+        // Act / Assert
+        foreach (var action in staleActions)
+        {
+            Assert.Same(initialState, ChatReducer.Reduce(initialState, action));
+        }
+    }
+
+    [Theory]
+    [InlineData(ChatTurnPhase.Completed)]
+    [InlineData(ChatTurnPhase.Failed)]
+    [InlineData(ChatTurnPhase.Cancelled)]
+    public void UpdateTurn_TerminalTurn_RejectsFurtherPhaseAndTerminalUpdates(ChatTurnPhase terminalPhase)
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Thinking));
+        state = ChatReducer.Reduce(state, CreateTurnUpdate(terminalPhase, "conv-1", "turn-1", null));
+        var nextPhases = new[]
+        {
+            ChatTurnPhase.Responding,
+            ChatTurnPhase.Completed,
+            ChatTurnPhase.Failed,
+            ChatTurnPhase.Cancelled
+        };
+
+        // Act / Assert
+        foreach (var phase in nextPhases)
+        {
+            Assert.Same(state, ChatReducer.Reduce(state, CreateTurnUpdate(phase, "conv-1", "turn-1", null)));
+        }
+    }
+
+    [Theory]
+    [InlineData("end_turn", true)]
+    [InlineData("max_tokens", true)]
+    [InlineData("max_turn_requests", true)]
+    [InlineData("refusal", true)]
+    [InlineData("future_reason", true)]
+    [InlineData("_agent_extension", true)]
+    [InlineData("", true)]
+    [InlineData(null, false)]
+    [InlineData("end_turn", false)]
+    public void CompleteTurn_RawReasonAndPresence_ArePreserved(string? stopReason, bool hasStopReason)
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Responding));
+
+        // Act
+        var result = ChatReducer.Reduce(state,
+            new CompleteTurnAction("conv-1", "turn-1", stopReason, hasStopReason));
+
+        // Assert
+        var turn = Assert.IsType<ActiveTurnState>(result.ResolveTurn("conv-1"));
+        Assert.Equal(ChatTurnPhase.Completed, turn.Phase);
+        Assert.Equal(stopReason, turn.StopReason);
+        Assert.Equal(hasStopReason, turn.HasStopReason);
+        Assert.Null(result.ActiveTurn);
+    }
+
+    [Fact]
+    public void FailAndCancelTurn_ProtocolReason_RemainsAvailableAfterTermination()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Responding));
+        state = ChatReducer.Reduce(state,
+            new BeginTurnAction("conv-2", "turn-2", ChatTurnPhase.Responding));
+
+        // Act
+        var result = ChatReducer.Reduce(state,
+            new FailTurnAction("conv-1", "turn-1", "retry available", "max_tokens", HasStopReason: true));
+        result = ChatReducer.Reduce(result,
+            new CancelTurnAction("conv-2", "turn-2", "cancelled", HasStopReason: true));
+
+        // Assert
+        Assert.Equal(ChatTurnPhase.Failed, result.ResolveTurn("conv-1")!.Phase);
+        Assert.Equal("retry available", result.ResolveTurn("conv-1")!.FailureMessage);
+        Assert.Equal("max_tokens", result.ResolveTurn("conv-1")!.StopReason);
+        Assert.True(result.ResolveTurn("conv-1")!.HasStopReason);
+        Assert.Equal(ChatTurnPhase.Cancelled, result.ResolveTurn("conv-2")!.Phase);
+        Assert.Equal("cancelled", result.ResolveTurn("conv-2")!.StopReason);
+        Assert.True(result.ResolveTurn("conv-2")!.HasStopReason);
+    }
+
+    [Fact]
+    public void SetTurnBinding_Reconnect_RejectsOldBindingAndOldConnectionResults()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.CreatingRemoteSession));
+        state = ChatReducer.Reduce(state,
+            new SetTurnBindingAction("conv-1", "turn-1", "profile-1", "remote-1", "connection-1"));
+
+        // Act
+        var rebound = ChatReducer.Reduce(state,
+            new SetTurnBindingAction("conv-1", "turn-1", "profile-1", "remote-1", "connection-2", "connection-1"));
+        var staleBinding = ChatReducer.Reduce(rebound,
+            new SetTurnBindingAction("conv-1", "turn-1", "old-profile", "old-remote", "connection-1"));
+        var staleCompletion = ChatReducer.Reduce(rebound,
+            new CompleteTurnAction("conv-1", "turn-1", "end_turn", true, "connection-1"));
+        var completed = ChatReducer.Reduce(rebound,
+            new CompleteTurnAction("conv-1", "turn-1", "end_turn", true, "connection-2"));
+
+        // Assert
+        Assert.Same(rebound, staleBinding);
+        Assert.Same(rebound, staleCompletion);
+        Assert.Equal("profile-1", rebound.ResolveTurn("conv-1")!.ProfileId);
+        Assert.Equal("remote-1", rebound.ResolveTurn("conv-1")!.RemoteSessionId);
+        Assert.Equal("connection-2", rebound.ResolveTurn("conv-1")!.ConnectionInstanceId);
+        Assert.Equal(ChatTurnPhase.Completed, completed.ResolveTurn("conv-1")!.Phase);
+        Assert.Equal("connection-2", completed.ResolveTurn("conv-1")!.ConnectionInstanceId);
+    }
+
+    [Fact]
+    public void SetTurnBinding_StaleTurnOrTerminalTurn_IsIgnored()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.CreatingRemoteSession));
+        var binding = new SetTurnBindingAction("conv-1", "turn-1", "profile", "remote", "connection");
+
+        // Act
+        var wrongTurn = ChatReducer.Reduce(state, binding with { TurnId = "old-turn" });
+        var wrongConversation = ChatReducer.Reduce(state, binding with { ConversationId = "conv-2" });
+        var cancelled = ChatReducer.Reduce(state, new CancelTurnAction("conv-1", "turn-1"));
+        var lateBinding = ChatReducer.Reduce(cancelled, binding);
+
+        // Assert
+        Assert.Same(state, wrongTurn);
+        Assert.Same(state, wrongConversation);
+        Assert.Same(cancelled, lateBinding);
+    }
+
+    [Fact]
+    public void AdvanceTurnPhase_IdenticalPhaseAndTool_DoesNotRepublishOrChangeActivityTime()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(ChatState.Empty,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.ToolRunning));
+        var action = new AdvanceTurnPhaseAction("conv-1", "turn-1", ChatTurnPhase.ToolRunning, "tool-1", "read_file");
+        state = ChatReducer.Reduce(state, action);
+
+        // Act
+        var duplicate = ChatReducer.Reduce(state, action);
+
+        // Assert
+        Assert.Same(state, duplicate);
+        Assert.Equal("tool-1", duplicate.ResolveTurn("conv-1")!.ToolCallId);
+        Assert.Equal("read_file", duplicate.ResolveTurn("conv-1")!.ToolTitle);
+    }
+
+    [Fact]
+    public void ClearTerminalTurn_BackgroundTurn_LeavesForegroundAndOtherTurnsUnchanged()
+    {
+        // Arrange
+        var state = ChatState.Empty with { HydratedConversationId = "conv-2" };
+        state = ChatReducer.Reduce(state,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Thinking));
+        state = ChatReducer.Reduce(state,
+            new BeginTurnAction("conv-2", "turn-2", ChatTurnPhase.Thinking));
+        state = ChatReducer.Reduce(state, new CompleteTurnAction("conv-1", "turn-1"));
+
+        // Act
+        var result = ChatReducer.Reduce(state, new ClearTerminalTurnAction("conv-1"));
+
+        // Assert
+        Assert.Null(result.ResolveTurn("conv-1"));
+        Assert.Same(state.ActiveTurn, result.ActiveTurn);
+        Assert.Equal(state.Generation, result.Generation);
+    }
+
+    [Fact]
+    public void ScrubConversationDerivedState_BackgroundTurn_RemovesOnlyAffectedTurn()
+    {
+        // Arrange
+        var state = ChatState.Empty with { HydratedConversationId = "conv-2" };
+        state = ChatReducer.Reduce(state,
+            new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.Thinking));
+        state = ChatReducer.Reduce(state,
+            new BeginTurnAction("conv-2", "turn-2", ChatTurnPhase.Thinking));
+
+        // Act
+        var result = ChatReducer.Reduce(state, new ScrubConversationDerivedStateAction("conv-1"));
+
+        // Assert
+        Assert.Null(result.ResolveTurn("conv-1"));
+        Assert.Same(state.ActiveTurn, result.ActiveTurn);
     }
 
     [Fact]
@@ -1354,6 +1748,19 @@ public class ChatReducerTests
         Assert.Equal("Hello world", message.TextContent);
         Assert.Equal(originalTime, message.Timestamp);
     }
+
+    private static ChatAction CreateTurnUpdate(
+        ChatTurnPhase phase,
+        string conversationId,
+        string turnId,
+        string? connectionInstanceId)
+        => phase switch
+        {
+            ChatTurnPhase.Completed => new CompleteTurnAction(conversationId, turnId, ConnectionInstanceId: connectionInstanceId),
+            ChatTurnPhase.Failed => new FailTurnAction(conversationId, turnId, "failure", ConnectionInstanceId: connectionInstanceId),
+            ChatTurnPhase.Cancelled => new CancelTurnAction(conversationId, turnId, ConnectionInstanceId: connectionInstanceId),
+            _ => new AdvanceTurnPhaseAction(conversationId, turnId, phase, ConnectionInstanceId: connectionInstanceId)
+        };
 
     private static ConversationRuntimeSlice CreateRuntime(
         ConversationRuntimePhase phase,

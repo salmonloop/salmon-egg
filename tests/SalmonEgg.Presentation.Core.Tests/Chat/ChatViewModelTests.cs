@@ -88,7 +88,8 @@ public partial class ChatViewModelTests
         IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         bool enableWorkspacePersistence = false,
         TerminalAuthenticationCoordinator? terminalAuthenticationCoordinator = null,
-        IExternalUriLauncher? externalUriLauncher = null)
+        IExternalUriLauncher? externalUriLauncher = null,
+        SalmonEgg.Presentation.ViewModels.Chat.Panels.ChatConversationPanelStateCoordinator? panelStateCoordinator = null)
     {
         var stateOwner = new object();
         var connectionStateOwner = new object();
@@ -240,7 +241,8 @@ public partial class ChatViewModelTests
                 aiContentReportLauncher: aiContentReportLauncher,
                 shellLayoutMetricsSink: shellLayoutMetricsSink,
                 terminalAuthenticationCoordinator: terminalAuthenticationCoordinator,
-                externalUriLauncher: externalUriLauncher);
+                externalUriLauncher: externalUriLauncher,
+                panelStateCoordinator: panelStateCoordinator);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -2512,6 +2514,9 @@ public partial class ChatViewModelTests
             SetCurrentSessionId(fixture.ViewModel, "conv-foreground");
             SetCurrentRemoteSessionId(fixture.ViewModel, "remote-foreground");
 
+            await fixture.DispatchAsync(new BeginTurnAction("conv-background", "turn-background", ChatTurnPhase.WaitingForAgent,
+                ProfileId: "profile-1", RemoteSessionId: "remote-background"));
+
             chatService.Raise(
                 service => service.SessionUpdateReceived += null,
                 new SessionUpdateEventArgs("remote-background", new AgentMessageUpdate(new TextContentBlock("background update"))));
@@ -2653,12 +2658,12 @@ public partial class ChatViewModelTests
                 Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                     .Add("conv-foreground", new ConversationBindingSlice("conv-foreground", "remote-foreground", "profile-1"))
                     .Add("conv-background", new ConversationBindingSlice("conv-background", "remote-background", "profile-1")),
-                ActiveTurn = new ActiveTurnState(
+                Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-background", new ActiveTurnState(
                     "conv-background",
                     "turn-background",
                     ChatTurnPhase.Responding,
                     DateTime.UtcNow,
-                    DateTime.UtcNow)
+                    DateTime.UtcNow))
             });
             await WaitForConditionAsync(async () =>
             {
@@ -2775,6 +2780,8 @@ public partial class ChatViewModelTests
             SetCurrentSessionId(fixture.ViewModel, "conv-foreground");
             SetCurrentRemoteSessionId(fixture.ViewModel, "remote-foreground");
             await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
+            await fixture.DispatchAsync(new BeginTurnAction("conv-active-profile-background", "turn-background", ChatTurnPhase.WaitingForAgent,
+                ProfileId: "profile-2", RemoteSessionId: "remote-active-background"));
 
             oldProfileService.Raise(
                 service => service.SessionUpdateReceived += null,
@@ -4730,7 +4737,7 @@ public partial class ChatViewModelTests
     [Fact]
     public async Task Dispose_CancelsStoreSubscription_DoesNotUpdateAfterDispose()
     {
-        var initialState = ChatState.Empty with { ActiveTurn = null };
+        var initialState = ChatState.Empty;
         var chatStore = new Mock<IChatStore>();
         await using var state = State.Value(this, () => initialState);
         chatStore.Setup(s => s.State).Returns(state);
@@ -4825,7 +4832,12 @@ public partial class ChatViewModelTests
 
         viewModel.Dispose();
 
-        var newState = initialState with { ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow) };
+        var newState = initialState with
+        {
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow))
+        };
         await state.Update(_ => newState, CancellationToken.None);
 
         syncContext.RunAll();
@@ -4835,7 +4847,7 @@ public partial class ChatViewModelTests
     [Fact]
     public async Task Dispose_DropsAlreadyQueuedStoreProjection()
     {
-        var initialState = ChatState.Empty with { ActiveTurn = null };
+        var initialState = ChatState.Empty;
         await using var state = State.Value(this, () => initialState);
         var chatStore = new Mock<IChatStore>();
         chatStore.Setup(s => s.State).Returns(state);
@@ -4926,7 +4938,12 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
         Assert.False(viewModel.IsTurnStatusVisible);
 
-        await state.Update(_ => initialState with { ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow) }, CancellationToken.None);
+        await state.Update(_ => initialState with
+        {
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow))
+        }, CancellationToken.None);
         viewModel.Dispose();
 
         syncContext.RunAll();
@@ -6971,7 +6988,7 @@ public partial class ChatViewModelTests
             }
 
             CurrentSessionId = @params.SessionId;
-            return Task.FromResult(new SessionPromptResponse(StopReason.EndTurn));
+            return Task.FromResult(new SessionPromptResponse(StopReason.EndTurn) { HasStopReason = true });
         }
 
         public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params)
@@ -7021,6 +7038,9 @@ public partial class ChatViewModelTests
     private sealed class ForwardingAcpConnectionCommands : IAcpConnectionCommands
     {
         public IAcpConnectionCommands? Inner { get; set; }
+
+        public Task ReevaluatePoolAsync(IChatService? activeService, CancellationToken cancellationToken = default)
+            => RequireInner().ReevaluatePoolAsync(activeService, cancellationToken);
 
         public Task<AcpTransportApplyResult> ConnectToProfileAsync(
             ServerConfiguration profile,
@@ -7291,6 +7311,8 @@ public partial class ChatViewModelTests
         public async Task<ChatConnectionState> GetConnectionStateAsync() => await _connectionStore.GetCurrentStateAsync();
 
         public async Task<ConversationAttentionState> GetAttentionStateAsync() => await _conversationAttentionStore.GetCurrentStateAsync();
+
+        public ValueTask DispatchAttentionAsync(ConversationAttentionAction action) => _conversationAttentionStore.Dispatch(action);
 
         public ValueTask MarkUnreadAsync(string conversationId, ConversationAttentionSource source)
             => _conversationAttentionStore.Dispatch(
@@ -7707,8 +7729,8 @@ public partial class ChatViewModelTests
         Assert.True(viewModel.ComposerState.ShowCancelButton);
 
         // Now complete the prompt dispatch
-        tcsPrompt.SetResult(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false));
-        await sendTask;
+        tcsPrompt.SetResult(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse { HasStopReason = true }, false));
+        await AwaitPromptOperationTaskAsync(syncContext, sendTask);
 
         // Flush the terminal-state projection that follows the prompt response.
         await WaitForConditionAsync(async () =>
@@ -7882,13 +7904,13 @@ public partial class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = new ActiveTurnState(
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Failed,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                FailureMessage: "provider failed")
+                FailureMessage: "provider failed"))
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
 
@@ -7910,13 +7932,13 @@ public partial class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = new ActiveTurnState(
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Failed,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                FailureMessage: "provider failed")
+                FailureMessage: "provider failed"))
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
 
@@ -7936,13 +7958,13 @@ public partial class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = new ActiveTurnState(
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Failed,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                FailureMessage: "provider failed")
+                FailureMessage: "provider failed"))
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
 
@@ -7967,13 +7989,13 @@ public partial class ChatViewModelTests
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
-            ActiveTurn = new ActiveTurnState(
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Failed,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                FailureMessage: "provider failed")
+                FailureMessage: "provider failed"))
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
 
@@ -8011,7 +8033,7 @@ public partial class ChatViewModelTests
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
                     return new AcpPromptDispatchResult(
                         "remote-1",
-                        new SessionPromptResponse(StopReason.EndTurn),
+                        new SessionPromptResponse(StopReason.EndTurn) { HasStopReason = true },
                         false);
                 });
 
@@ -8104,7 +8126,7 @@ public partial class ChatViewModelTests
                 {
                     capturedPromptMessageId = promptMessageId;
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn) { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8145,7 +8167,7 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState(
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Completed,
@@ -8153,7 +8175,7 @@ public partial class ChatViewModelTests
                 DateTime.UtcNow,
                 PendingUserMessageLocalId: "local-1",
                 PendingUserProtocolMessageId: "client-request-1",
-                PendingUserMessageText: "hello"),
+                PendingUserMessageText: "hello")),
             ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
                 "conv-1",
                 new ConversationContentSlice(
@@ -8224,7 +8246,7 @@ public partial class ChatViewModelTests
                 async (_, _, _, sink, _, cancellationToken) =>
                 {
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8304,7 +8326,7 @@ public partial class ChatViewModelTests
                 async (_, _, _, sink, _, cancellationToken) =>
                 {
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8326,7 +8348,7 @@ public partial class ChatViewModelTests
             return Task.FromResult(viewModel.CanSendPromptUi);
         });
 
-        await viewModel.SendPromptCommand.ExecuteAsync(null);
+        await AwaitPromptOperationTaskAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
 
         await WaitForConditionAsync(async () =>
         {
@@ -8359,7 +8381,7 @@ public partial class ChatViewModelTests
                 async (_, _, _, sink, _, cancellationToken) =>
                 {
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Cancelled), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Cancelled) { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8388,7 +8410,7 @@ public partial class ChatViewModelTests
             return Task.FromResult(viewModel.CanSendPromptUi);
         }, timeoutMilliseconds: 2000);
 
-        await viewModel.SendPromptCommand.ExecuteAsync(null);
+        await AwaitPromptOperationTaskAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.Cancelled, state.ActiveTurn!.Phase);
     }
@@ -8468,7 +8490,7 @@ public partial class ChatViewModelTests
                 It.IsAny<Func<CancellationToken, Task<bool>>>(),
                 It.IsAny<CancellationToken>()))
             .Callback(() => dispatchCalled = true)
-            .ReturnsAsync(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(), false));
+            .ReturnsAsync(new AcpPromptDispatchResult("remote-1", new SessionPromptResponse { HasStopReason = true }, false));
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
         var viewModel = fixture.ViewModel;
@@ -8575,14 +8597,14 @@ public partial class ChatViewModelTests
             return !viewModel.IsPromptSubmitInFlight && viewModel.IsPromptInFlight;
         });
 
-        await viewModel.CancelPromptCommand.ExecuteAsync(null);
+        await viewModel.CancelPromptCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.True(viewModel.IsPromptInFlight);
         Assert.False(viewModel.CanSendPromptUi);
         Assert.True(viewModel.ComposerState.ShowCancelButton);
         Assert.NotEqual(ChatTurnPhase.Cancelled, (await fixture.GetStateAsync()).ActiveTurn?.Phase);
         Assert.False(promptCancellationToken.IsCancellationRequested);
 
-        var cancelledResponse = new SessionPromptResponse(StopReason.Cancelled);
+        var cancelledResponse = new SessionPromptResponse(StopReason.Cancelled) { HasStopReason = true };
         promptResponse.SetResult(new AcpPromptDispatchResult("remote-1", cancelledResponse, false));
         await AwaitWithSynchronizationContextAsync(syncContext, sendTask);
         await fixture.ApplyCurrentStoreProjectionAsync();
@@ -8654,12 +8676,13 @@ public partial class ChatViewModelTests
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, turnStartedAt, turnStartedAt),
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, turnStartedAt, turnStartedAt)),
         });
         syncContext.RunAll();
         await syncContext.RunUntilIdleAsync();
 
-        await viewModel.CancelPromptCommand.ExecuteAsync(null);
+        await AwaitPromptOperationTaskAsync(syncContext, viewModel.CancelPromptCommand.ExecuteAsync(null));
 
         await WaitForConditionAsync(async () =>
         {
@@ -8723,7 +8746,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         });
         syncContext.RunAll();
 
@@ -8904,7 +8928,7 @@ public partial class ChatViewModelTests
                 {
                     capturedPromptMessageId = promptMessageId;
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.EndTurn) { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8952,7 +8976,7 @@ public partial class ChatViewModelTests
                 async (_, _, _, sink, _, cancellationToken) =>
                 {
                     await sink.NotifyPromptRequestDispatchedAsync(cancellationToken);
-                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Refusal), false);
+                    return new AcpPromptDispatchResult("remote-1", new SessionPromptResponse(StopReason.Refusal) { HasStopReason = true }, false);
                 });
 
         await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
@@ -8967,7 +8991,7 @@ public partial class ChatViewModelTests
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
         await WaitForQueueingPromptReadyAsync(syncContext, fixture, "conv-1", "refuse me");
 
-        await viewModel.SendPromptCommand.ExecuteAsync(null);
+        await AwaitPromptOperationTaskAsync(syncContext, viewModel.SendPromptCommand.ExecuteAsync(null));
         syncContext.RunAll();
 
         var state = await fixture.GetStateAsync();
@@ -8989,7 +9013,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         SetCurrentSessionId(viewModel, "conv-1");
@@ -9082,7 +9107,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9119,7 +9145,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9152,7 +9179,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9195,7 +9223,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9391,7 +9420,8 @@ public partial class ChatViewModelTests
                 ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "title"
             }),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9451,7 +9481,8 @@ public partial class ChatViewModelTests
                 ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "Read File"
             }),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -9512,7 +9543,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolPending, DateTime.UtcNow, DateTime.UtcNow)
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolPending, DateTime.UtcNow, DateTime.UtcNow))
         };
         await fixture.UpdateStateAsync(_ => initialState);
         syncContext.RunAll();
@@ -10233,7 +10265,8 @@ public partial class ChatViewModelTests
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
                 .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow),
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent, DateTime.UtcNow, DateTime.UtcNow)),
             Generation = 42
         };
         await fixture.UpdateStateAsync(_ => initialState);
@@ -10674,19 +10707,26 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(
             syncContext,
             fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
-        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+        await AwaitPromptOperationTaskAsync(syncContext,
+            fixture.DispatchAsync(new SelectConversationAction("conv-a")).AsTask());
 
         chatService.Raise(
             service => service.ErrorOccurred += null!,
             chatService.Object,
             "Transport failed for A");
-        SetCurrentSessionId(fixture.ViewModel, "conv-b");
-        syncContext.RunAll();
+        await fixture.ChatStore.Dispatch(new SelectConversationAction("conv-b"));
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ChatStore.LatestState.ResolveOperationFailure("conv-a") is not null);
+        }, timeoutMilliseconds: 5000);
+        await AwaitPromptOperationTaskAsync(syncContext, fixture.ApplyCurrentStoreProjectionAsync());
 
         Assert.False(fixture.ViewModel.HasConversationOperationFailure);
         Assert.Null(fixture.ViewModel.ConversationOperationFailureMessage);
 
-        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+        await AwaitPromptOperationTaskAsync(syncContext,
+            fixture.DispatchAsync(new SelectConversationAction("conv-a")).AsTask());
 
         Assert.True(fixture.ViewModel.HasConversationOperationFailure);
         Assert.Equal("Transport failed for A", fixture.ViewModel.ConversationOperationFailureMessage);
@@ -10702,21 +10742,33 @@ public partial class ChatViewModelTests
             syncContext,
             fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
 
-        SetCurrentSessionId(fixture.ViewModel, "conv-b");
+        await AwaitPromptOperationTaskAsync(syncContext,
+            fixture.DispatchAsync(new SelectConversationAction("conv-b")).AsTask());
         chatService.Raise(
             service => service.ErrorOccurred += null!,
             chatService.Object,
             "B failed");
-        syncContext.RunAll();
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ChatStore.LatestState.ResolveOperationFailure("conv-b") is not null);
+        }, timeoutMilliseconds: 5000);
+        await AwaitPromptOperationTaskAsync(syncContext, fixture.ApplyCurrentStoreProjectionAsync());
         Assert.Equal("B failed", fixture.ViewModel.ConversationOperationFailureMessage);
 
-        SetCurrentSessionId(fixture.ViewModel, "conv-a");
+        await AwaitPromptOperationTaskAsync(syncContext,
+            fixture.DispatchAsync(new SelectConversationAction("conv-a")).AsTask());
         chatService.Raise(
             service => service.ErrorOccurred += null!,
             chatService.Object,
             "A failed late");
-        SetCurrentSessionId(fixture.ViewModel, "conv-b");
-        syncContext.RunAll();
+        await fixture.ChatStore.Dispatch(new SelectConversationAction("conv-b"));
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ChatStore.LatestState.ResolveOperationFailure("conv-a") is not null);
+        }, timeoutMilliseconds: 5000);
+        await AwaitPromptOperationTaskAsync(syncContext, fixture.ApplyCurrentStoreProjectionAsync());
 
         Assert.Equal("B failed", fixture.ViewModel.ConversationOperationFailureMessage);
     }
