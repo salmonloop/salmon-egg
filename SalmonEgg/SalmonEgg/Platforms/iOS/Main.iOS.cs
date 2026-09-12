@@ -17,10 +17,15 @@ public class EntryPoint
         IosSystemNotificationService.InstallActivationDelegate();
 
         var host = UnoPlatformHostBuilder.Create()
-            .App(() => new App())
+            .App(CreateApp)
             .UseAppleUIKit()
             .Build();
 
         host.Run();
     }
+
+    // Uno 6.7.103 selects UIKit's app delegate via factory.Method.ReturnType. A Func<Application>
+    // lambda has the base return type; this method preserves App (unoplatform/uno@3f8aa845).
+    // Keep until the upstream hosting fix (unoplatform/uno@54b88197) reaches our dependency line.
+    private static App CreateApp() => new();
 }
