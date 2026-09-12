@@ -63,8 +63,8 @@ jobs:
         run: |
           dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
             --runtime iossimulator-arm64 -p:SalmonEggTargetFrameworks=net10.0-ios \
-            -p:Configuration=Release -p:SalmonEggSupportsDesktopProcessHost=false -p:UseInterpreter=true -p:TrimMode=copy
-          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj --configuration Release \
+            -p:Configuration=Debug -p:SalmonEggSupportsDesktopProcessHost=false -p:UseInterpreter=true -p:TrimMode=copy
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj --configuration Debug \
             --framework net10.0-ios --runtime iossimulator-arm64 --no-restore \
             -p:SalmonEggTargetFrameworks=net10.0-ios -p:SalmonEggSupportsDesktopProcessHost=false \
             -p:UseInterpreter=true -p:TrimMode=copy -p:UseSharedCompilation=false -m:1
@@ -82,7 +82,7 @@ jobs:
       - name: Install product and exercise native consent
         run: |
           "$RUNNER_TEMP/ios-acp-tools/bin/python" scripts/gates/run-ios-elicitation-gate.py \
-            --app SalmonEgg/SalmonEgg/bin/Release/net10.0-ios/iossimulator-arm64/SalmonEgg.app \
+            --app SalmonEgg/SalmonEgg/bin/Debug/net10.0-ios/iossimulator-arm64/SalmonEgg.app \
             --xcodegen "$RUNNER_TEMP/xcodegen-tools/xcodegen/bin/xcodegen" \
             --artifacts artifacts/ios-acp-acceptance
 
