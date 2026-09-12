@@ -16,17 +16,23 @@ public sealed class SystemLanguageSmokeTests
         app.ClickElement(app.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(15)));
         app.ClickElement(app.FindByAutomationId("SettingsNav.General", TimeSpan.FromSeconds(15)));
         Assert.True(app.WaitUntilOnscreen("GeneralSettings.Language", TimeSpan.FromSeconds(15)));
+        var originalChinese = app.GetVisibleTexts().Contains("选择界面语言", StringComparer.Ordinal);
+        var originalLabel = originalChinese ? "选择界面语言" : "UI language";
+        Assert.Contains(originalLabel, app.GetVisibleTexts());
 
         // Act: both selections use the native ComboBox and the normal language service/reload chain.
-        SelectLanguage(app, "Simplified Chinese");
-        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Any(text => text.Contains("简体中文", StringComparison.Ordinal)),
+        SelectLanguage(app, originalChinese ? "English" : "Simplified Chinese");
+        var explicitLabel = originalChinese ? "UI language" : "选择界面语言";
+        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(explicitLabel, StringComparer.Ordinal),
             TimeSpan.FromSeconds(15)), "The explicit language did not reach the reloaded page.");
-        SelectLanguage(app, "跟随系统");
+        SelectLanguage(app, originalChinese ? "System" : "跟随系统");
 
-        // Assert: hosted Windows runs English; the System choice and page are loaded afresh.
-        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Any(text => text == "UI language"),
+        // Assert: System restores the observed native language, without assuming the runner is English.
+        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(originalLabel, StringComparer.Ordinal),
             TimeSpan.FromSeconds(15)), "Switching back to System did not restore the system-language page.");
         Assert.True(app.WaitUntilEnabled("GeneralSettings.Language", TimeSpan.FromSeconds(10)));
+        var selector = app.FindByAutomationId("GeneralSettings.Language", TimeSpan.FromSeconds(10));
+        Assert.Contains(originalChinese ? "跟随系统" : "System", app.GetVisibleTexts(selector));
     }
 
     private static void SelectLanguage(WindowsGuiAppSession app, string name)
