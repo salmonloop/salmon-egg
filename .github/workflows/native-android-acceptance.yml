@@ -1,0 +1,143 @@
+name: Android Installed ACP Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-android-acceptance.yml'
+      - 'global.json'
+      - 'Directory.Build.*'
+      - 'scripts/gates/run-android-elicitation-gate.py'
+      - 'scripts/gates/android-elicitation-reverse-verification.py'
+      - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
+      - 'SalmonEgg/SalmonEgg/SalmonEgg.csproj'
+      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
+      - 'SalmonEgg/SalmonEgg/Platforms/Android/**'
+      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/MainPage.xaml'
+      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
+      - 'src/SalmonEgg.Acp/Client/**'
+      - 'src/SalmonEgg.Application/Services/Chat/**'
+      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+  workflow_dispatch:
+    inputs:
+      reverse-verification:
+        description: Rebuild the mutant and restored APK to prove the URL consent gate
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-acp-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-android:
+    name: Android Installed ACP UI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DOTNET_PROCESSOR_COUNT: 2
+      DOTNET_CLI_USE_MSBUILD_SERVER: 0
+      MSBUILDDISABLENODEREUSE: 1
+      SALMONEGG_ANDROID_REVERSE: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification || false }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          global-json-file: global.json
+
+      - name: Install Android toolchain and isolated peer
+        run: |
+          dotnet workload install android --skip-manifest-update --disable-parallel --no-http-cache
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-36' 'build-tools;36.0.0' platform-tools emulator 'system-images;android-36;google_apis;x86_64'
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          python3 -m venv "$RUNNER_TEMP/android-acp-tools"
+          "$RUNNER_TEMP/android-acp-tools/bin/python" -m pip install aiohttp==3.12.15
+
+      - name: Build current installable APK
+        run: |
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --runtime android-x64 -p:Configuration=Debug \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:EmbedAssembliesIntoApk=true
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj --configuration Debug \
+            --framework net10.0-android36.0 --runtime android-x64 --no-restore \
+            -t:SignAndroidPackage -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT" -p:UseSharedCompilation=false -m:1 --disable-build-servers
+
+      - name: Enable hosted hardware acceleration
+        run: |
+          test -c /dev/kvm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install product and exercise native consent
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification && 40 || 15 }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-acp-acceptance
+          "$ANDROID_SDK_ROOT/emulator/emulator" -accel-check
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/salmonegg-android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd \
+            --name salmonegg-acp-acceptance --device pixel_tablet \
+            --path "$ANDROID_AVD_HOME/salmonegg-acp-acceptance.avd" \
+            --package 'system-images;android-36;google_apis;x86_64' --force
+          "$ANDROID_SDK_ROOT/emulator/emulator" -list-avds
+          test -f "$ANDROID_AVD_HOME/salmonegg-acp-acceptance.ini"
+          setsid "$ANDROID_SDK_ROOT/emulator/emulator" -avd salmonegg-acp-acceptance \
+            -port 5554 -accel on -cores 4 -memory 3072 -no-window -gpu swiftshader_indirect \
+            -no-snapshot -noaudio -no-boot-anim \
+            > artifacts/android-acp-acceptance/emulator.log 2>&1 &
+          emulator_pid=$!
+          cleanup_emulator() {
+            timeout 5s adb -s emulator-5554 emu kill >/dev/null 2>&1 || true
+            kill -TERM -- "-$emulator_pid" 2>/dev/null || true
+            for attempt in {1..50}; do
+              kill -0 "$emulator_pid" 2>/dev/null || break
+              sleep 0.1
+            done
+            kill -KILL -- "-$emulator_pid" 2>/dev/null || true
+            wait "$emulator_pid" 2>/dev/null || true
+            timeout 5s adb kill-server >/dev/null 2>&1 || true
+          }
+          trap cleanup_emulator EXIT
+          export SALMONEGG_EMULATOR_PID="$emulator_pid"
+          timeout 300s bash -c '
+            until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do
+              if ! kill -0 "$SALMONEGG_EMULATOR_PID" 2>/dev/null; then
+                cat artifacts/android-acp-acceptance/emulator.log
+                exit 1
+              fi
+              sleep 1
+            done'
+          adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 0
+          # Preserve the tablet's 1280x800 dp layout with fewer physical pixels on software graphics.
+          adb -s emulator-5554 shell wm size 1280x800
+          adb -s emulator-5554 shell wm density 160
+          adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
+          adb -s emulator-5554 shell wm dismiss-keyguard
+          timeout --signal=TERM --kill-after=10s 600s \
+            "$RUNNER_TEMP/android-acp-tools/bin/python" scripts/gates/run-android-elicitation-gate.py \
+            --artifacts artifacts/android-acp-acceptance
+          if [ "$SALMONEGG_ANDROID_REVERSE" = true ]; then
+            "$RUNNER_TEMP/android-acp-tools/bin/python" scripts/gates/android-elicitation-reverse-verification.py
+          fi
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-installed-acp-acceptance
+          path: artifacts/android-acp-acceptance
+          retention-days: 7
