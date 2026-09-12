@@ -9,7 +9,7 @@ if (-not $IsWindows) { throw 'This gate requires an actual Windows desktop.' }
 New-Item -ItemType Directory -Force -Path $ArtifactsDirectory | Out-Null
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @'
+Add-Type -ReferencedAssemblies @('System.Windows.Forms', 'System.Drawing.Common', 'System.Drawing.Primitives', 'System.ComponentModel.Primitives', 'System.ComponentModel', 'System.Runtime.InteropServices', 'System.Console', 'System.Threading') -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
@@ -72,6 +72,39 @@ public static class NativeDesktopAcceptance
         up.Data.Keyboard.Flags |= 2;
         return SendInput(2, new[] { down, up }, Marshal.SizeOf<Input>()) == 2;
     }
+
+    public static bool[] RunKeyboardWindow()
+    {
+        using var form = new System.Windows.Forms.Form {
+            Text = "SalmonEgg hosted desktop acceptance", Width = 500, Height = 160 };
+        using var input = new System.Windows.Forms.TextBox { Dock = System.Windows.Forms.DockStyle.Fill };
+        using var timer = new System.Windows.Forms.Timer { Interval = 100 };
+        form.Controls.Add(input);
+        var sent = false;
+        var entered = false;
+        var received = false;
+        var started = DateTime.UtcNow;
+        // PowerShell delegates cannot run while ShowDialog blocks their pipeline. Keep both the
+        // native message pump and callbacks inside managed code so this tests the desktop, not PS reentry.
+        form.Shown += (_, _) => {
+            form.Activate();
+            input.Focus();
+            timer.Start();
+            Console.WriteLine("[desktop] window shown; waiting for native keyboard input");
+        };
+        timer.Tick += (_, _) => {
+            if (!sent && input.Focused) {
+                sent = true;
+                entered = TypeCharacter('x');
+                Console.WriteLine("[desktop] SendInput result=" + entered);
+            }
+            received = input.Text == "x";
+            if (received || (DateTime.UtcNow - started).TotalSeconds >= 15) form.Close();
+        };
+        try { form.ShowDialog(); }
+        finally { timer.Stop(); }
+        return new[] { entered, received };
+    }
 }
 '@
 
@@ -89,43 +122,12 @@ $evidence = [ordered]@{
 if ($inputDesktop -ne [IntPtr]::Zero) { [void][NativeDesktopAcceptance]::CloseDesktop($inputDesktop) }
 $evidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'desktop-preflight.json')
 
-$form = [System.Windows.Forms.Form]::new()
-$input = [System.Windows.Forms.TextBox]::new()
-$input.Dock = [System.Windows.Forms.DockStyle]::Fill
-$form.Controls.Add($input)
-$form.Text = 'SalmonEgg hosted desktop acceptance'
-$form.Width = 500
-$form.Height = 160
-$timer = [System.Windows.Forms.Timer]::new()
-$timer.Interval = 100
-$state = @{ sent = $false; started = [DateTime]::UtcNow; entered = $false }
-$form.Add_Shown({
-    [void]$form.Activate()
-    [void]$input.Focus()
-    $timer.Start()
-})
-$timer.Add_Tick({
-    if (-not $state.sent -and $input.Focused) {
-        $state.sent = $true
-        $state.entered = [NativeDesktopAcceptance]::TypeCharacter('x')
-    }
-    if ($input.Text -eq 'x' -or ([DateTime]::UtcNow - $state.started).TotalSeconds -ge 15) {
-        $form.Close()
-    }
-})
-try {
-    [void]$form.ShowDialog()
-    $evidence.nativeInputSent = $state.entered
-    $evidence.nativeTextReceived = $input.Text -eq 'x'
-    $evidence.passed = $evidence.nativeInputSent -and $evidence.nativeTextReceived
-    $evidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'desktop-preflight.json')
-    $evidence | ConvertTo-Json
-    if (-not $evidence.passed) {
-        throw 'This runner did not deliver native keyboard input to its visible window. Do not treat package compilation as GUI acceptance.'
-    }
-}
-finally {
-    $timer.Stop()
-    $timer.Dispose()
-    $form.Dispose()
+$result = [NativeDesktopAcceptance]::RunKeyboardWindow()
+$evidence.nativeInputSent = $result[0]
+$evidence.nativeTextReceived = $result[1]
+$evidence.passed = $evidence.nativeInputSent -and $evidence.nativeTextReceived
+$evidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'desktop-preflight.json')
+$evidence | ConvertTo-Json
+if (-not $evidence.passed) {
+    throw 'This runner did not deliver native keyboard input to its visible window. Do not treat package compilation as GUI acceptance.'
 }
