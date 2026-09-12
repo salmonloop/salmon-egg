@@ -11,6 +11,19 @@ func children(_ element: AXUIElement) -> [AXUIElement] {
     attribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] ?? []
 }
 
+func activate(_ pid: pid_t, _ window: AXUIElement) -> Bool {
+    guard let application = NSRunningApplication(processIdentifier: pid) else { return false }
+    let requested = application.activate(options: [.activateAllWindows])
+    _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+    let deadline = Date().addingTimeInterval(5)
+    while Date() < deadline {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    fputs("Native application did not become foreground after activation request \(requested).\n", stderr)
+    return false
+}
+
 func findButton(_ element: AXUIElement, _ title: String, _ depth: Int = 0) -> AXUIElement? {
     if depth > 30 { return nil }
     let role = attribute(element, kAXRoleAttribute as CFString) as? String
@@ -113,7 +126,7 @@ if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]
     // Uno's native content frame begins below the OS window chrome. The current XamlRoot height
     // and the system AX frame determine that inset; no fixed titlebar pixel value is assumed.
     let point = CGPoint(x: position.x + localX, y: position.y + size.height - height + localY)
-    NSRunningApplication(processIdentifier: pid)?.activate(options: [])
+    guard activate(pid, windows[0]) else { exit(9) }
     print("CGEvent target pid=\(pid) x=\(point.x) y=\(point.y) nativeWindow=\(position) size=\(size) contentHeight=\(height)")
     CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
