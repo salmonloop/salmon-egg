@@ -321,16 +321,15 @@ function Sync-TrustedCertificateStores {
     )
 
     Add-CertificateToStore -Cert $Cert -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
-    Add-CertificateToStore -Cert $Cert -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     Remove-ExtraCertificates -Subject $Subject -ThumbprintToKeep $Cert.Thumbprint -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
-    Remove-ExtraCertificates -Subject $Subject -ThumbprintToKeep $Cert.Thumbprint -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
     Remove-ExtraCertificates -Subject $Subject -ThumbprintToKeep $Cert.Thumbprint -StoreName 'My' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
 
     if ($IsAdmin) {
+        # MSIX developer signing needs TrustedPeople, not a root CA. Adding a CurrentUser root
+        # opens a native trust-confirmation dialog and can stall unattended install indefinitely.
+        # https://learn.microsoft.com/windows/msix/package/create-certificate-package-signing
         Add-CertificateToStore -Cert $Cert -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
-        Add-CertificateToStore -Cert $Cert -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
         Remove-ExtraCertificates -Subject $Subject -ThumbprintToKeep $Cert.Thumbprint -StoreName 'TrustedPeople' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
-        Remove-ExtraCertificates -Subject $Subject -ThumbprintToKeep $Cert.Thumbprint -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
     } else {
         Write-Host "NOTE: For MSIX install to succeed you may need to run this script from an elevated PowerShell once (Run as Administrator) to trust the dev certificate for LocalMachine."
     }
@@ -367,9 +366,6 @@ function Assert-TrustedCertificateStores {
             throw "LocalMachine\\TrustedPeople does not contain signing certificate $($Cert.Thumbprint)."
         }
 
-        if (-not (Test-CertificateThumbprintPresent -Thumbprint $Cert.Thumbprint -StoreName 'Root' -StoreLocation ([System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine))) {
-            throw "LocalMachine\\Root does not contain signing certificate $($Cert.Thumbprint)."
-        }
     }
 }
 
@@ -850,8 +846,10 @@ $identityName = $manifestInfo.IdentityName
 $appId = $manifestInfo.AppId
 
 # Trust cert. Add-AppxPackage validates against LocalMachine trust in many configurations.
+Write-Host 'Configuring TrustedPeople for the current package signing certificate...'
 Sync-TrustedCertificateStores -Cert $cert -Subject $certSubject -IsAdmin $isAdmin
 Assert-TrustedCertificateStores -Cert $cert -IsAdmin $isAdmin
+Write-Host 'TrustedPeople validation completed.'
 
 if ($SkipInstall) {
     Write-Host "SkipInstall set; skipping uninstall/install/launch. MSIX output is under '$msixOutDir'."
