@@ -46,10 +46,10 @@ public partial class ChatViewModel
             {
                 row = projectedRow;
                 ConfigOptions.Add(row);
-                if (source is not null && binding is not null)
+                if (source is { } capturedSource && binding is not null)
                 {
-                    row.BindEditor(option => ApplySessionConfigurationAsync(option, source, binding),
-                        () => IsConfigurationCurrent(row, source, binding), _localizer, _uiDispatcher,
+                    row.BindEditor(option => ApplySessionConfigurationAsync(option, capturedSource, binding),
+                        () => IsConfigurationCurrent(row, capturedSource, binding), _localizer, _uiDispatcher,
                         ConvergeSessionConfigurationOrder);
                 }
             }
