@@ -13,6 +13,7 @@ public partial class App
         // Install the UIKit resource boundary before Uno's launch callback constructs the shell.
         var navigationResources = new NavigationResources();
         Resources.MergedDictionaries.Add(navigationResources);
+        Resources[typeof(NavigationView)] = navigationResources["IosNavigationContainerStyle"];
         Resources[typeof(NavigationViewItem)] = navigationResources["IosNavigationViewItemStyle"];
         return base.FinishedLaunching(application, launchOptions);
     }
