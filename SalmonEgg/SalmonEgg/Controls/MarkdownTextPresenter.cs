@@ -27,8 +27,10 @@ public sealed partial class MarkdownTextPresenter : Grid
 #endif
     private bool _requestedIsTextSelectionEnabled;
     private string? _formattedText;
+    private bool _hasUnsupportedImage;
     public event EventHandler? ContentFormatted;
-    public bool IsContentFormatted => string.Equals(_formattedText, Text, StringComparison.Ordinal);
+    public bool IsContentFormatted => string.Equals(_formattedText, Text, StringComparison.Ordinal)
+        && !_hasUnsupportedImage;
 
     public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
         nameof(Text),
@@ -153,6 +155,21 @@ public sealed partial class MarkdownTextPresenter : Grid
         _activeMarkdown = _nonSelectableMarkdown;
 #else
         _markdown = CreateMarkdownBlock();
+        _markdown.ImageResolving += (_, args) =>
+        {
+            if (Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent("Microsoft.UI.Xaml.Documents.InlineUIContainer", "Child")) return;
+            // The current Uno renderer cannot display inline image children. Keep the original
+            // Markdown source readable through the existing fallback instead of acknowledging
+            // decoded bytes that never became native content. No URL is fetched by this path.
+            _hasUnsupportedImage = true;
+            args.Handled = true;
+            args.Image = null;
+            var content = Text;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_hasUnsupportedImage && string.Equals(Text, content, StringComparison.Ordinal)) RenderFailureSink?.MarkRenderFailed();
+            });
+        };
         _markdown.MarkdownRendered += (_, args) =>
         {
             _formattedText = args.Exception is null ? _markdown.Text : null;
@@ -337,6 +354,7 @@ public sealed partial class MarkdownTextPresenter : Grid
     private void ApplyMarkdownText(string? value)
     {
         _formattedText = null;
+        _hasUnsupportedImage = false;
         if (!ShouldRenderMarkdown)
         {
             ClearMarkdownText();

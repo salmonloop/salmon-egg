@@ -2905,7 +2905,10 @@ public sealed partial class AcpChatCoordinatorTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var profile = new ServerConfiguration
         {
-            Id = "background", Name = "Background", Transport = TransportType.Stdio, StdioCommand = "agent"
+            Id = "background",
+            Name = "Background",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
         };
         SetupProfileChatService(factory, profile, service.Object);
         var sut = CreateCoordinator(factory.Object, NullLogger<AcpChatCoordinator>.Instance,

@@ -134,19 +134,31 @@ PY
 cp "${APPDATA_ROOT}/boot.log" "${RESULT_DIR}/boot.log"
 python3 - "${RESULT_DIR}/boot.log" <<'PY'
 from pathlib import Path
+import os
 import re
 import sys
 
 text = Path(sys.argv[1]).read_text(errors="replace")
 assert "ReadReceiptProbe: started" in text, "Driver never started"
-assert "ReadReceiptProbe: complete cases=9 passed=True" in text, "Driver did not pass all nine cases"
+image_probe = bool(os.environ.get("SALMONEGG_READ_RECEIPT_IMAGE_URL"))
+expected_count = 10 if image_probe else 9
+assert f"ReadReceiptProbe: complete cases={expected_count} passed=True" in text, "Driver did not pass every requested case"
 assert "ReadReceiptProbe: faulted" not in text, "Driver faulted"
 samples = re.findall(r"ReadReceiptProbe case=(\S+) version=(\d+) unread=(\S+) active=(\S+).*passed=True", text)
-assert [row[0] for row in samples] == ["plain", "same-size", "modal", "modal-closed", "minimized", "restored", "markdown", "detached", "scroll-end"], samples
-assert [row[2] for row in samples] == ["False", "False", "True", "False", "True", "False", "False", "True", "False"], samples
-assert [row[3] for row in samples] == ["True", "True", "True", "True", "False", "True", "True", "True", "True"], samples
+expected_names = ["plain", "same-size", "modal", "modal-closed", "minimized", "restored", "markdown", "detached", "scroll-end"]
+expected_unread = ["False", "False", "True", "False", "True", "False", "False", "True", "False"]
+expected_active = ["True", "True", "True", "True", "False", "True", "True", "True", "True"]
+if image_probe:
+    expected_names += ["markdown-image-fallback"]
+    expected_unread += ["False"]
+    expected_active += ["True"]
+assert [row[0] for row in samples] == expected_names, samples
+assert [row[2] for row in samples] == expected_unread, samples
+assert [row[3] for row in samples] == expected_active, samples
 versions = [int(row[1]) for row in samples]
 assert versions[0] < versions[1] < versions[2] == versions[3] < versions[4] == versions[5] < versions[6] < versions[7] == versions[8], samples
-print("Read receipt probe passed: nine actual-observer cases including modal and minimized windows.")
+if image_probe:
+    assert versions[8] < versions[9], samples
+print(f"Read receipt probe passed: {expected_count} actual-observer cases including modal and minimized windows.")
 PY
 echo "Artifacts: ${RESULT_DIR}"

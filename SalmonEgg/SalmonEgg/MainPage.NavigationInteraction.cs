@@ -7,6 +7,8 @@ using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using Windows.System;
+using FocusManager = Microsoft.UI.Xaml.Input.FocusManager;
+using KeyEventHandler = Microsoft.UI.Xaml.Input.KeyEventHandler;
 
 namespace SalmonEgg;
 

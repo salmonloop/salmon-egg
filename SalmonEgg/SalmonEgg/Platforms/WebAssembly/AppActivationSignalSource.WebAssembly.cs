@@ -27,6 +27,7 @@ public sealed partial class AppActivationSignalSource
 
     partial void DetachPlatformActivity(Window window)
     {
+        if (!OperatingSystem.IsBrowser()) return;
         if (!ReferenceEquals(_browserActivityWindow, window)) return;
         _browserActivityWindow = null;
         _isBrowserDocumentActive = false;
@@ -55,6 +56,7 @@ public sealed partial class AppActivationSignalSource
 
     private async Task ObserveBrowserActivityAsync(Window window, CancellationToken cancellationToken)
     {
+        if (!OperatingSystem.IsBrowser()) return;
         try
         {
             await WasmPlatformShellService.EnsureShellModuleImportedAsync(cancellationToken).ConfigureAwait(true);
@@ -87,7 +89,7 @@ public sealed partial class AppActivationSignalSource
         {
             if (cancellationToken.IsCancellationRequested || !ReferenceEquals(_browserActivityWindow, window)) return;
             _isBrowserDocumentActive = active;
-            ActivityChanged?.Invoke(this, EventArgs.Empty);
+            PublishActivity();
         }
 
         if (window.DispatcherQueue.HasThreadAccess) Apply();

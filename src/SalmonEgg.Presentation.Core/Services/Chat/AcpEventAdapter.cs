@@ -419,6 +419,26 @@ public sealed class AcpEventAdapter
         return cancellationToken.CanBeCanceled ? completed.WaitAsync(cancellationToken) : completed;
     }
 
+    internal Task WaitForSessionUpdatesDrainedAsync(string? sessionId, CancellationToken cancellationToken)
+    {
+        Task pendingGlobal;
+        Task pendingSession = Task.CompletedTask;
+        lock (_gate)
+        {
+            // A different session can own the latest hydration attempt while this prompt's
+            // final chunks still await steady-state dispatch. Observe both existing queues.
+            pendingGlobal = _buffer.Count == 0 && !_drainScheduled ? Task.CompletedTask
+                : (_drainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            if (sessionId is not null && _hydrationScopesBySessionId.TryGetValue(sessionId, out var scope)
+                && (scope.Buffer.Count != 0 || scope.DrainScheduled))
+            {
+                pendingSession = (scope.DrainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+        }
+
+        return Task.WhenAll(pendingGlobal, pendingSession).WaitAsync(cancellationToken);
+    }
+
     public Task WaitForDrainIdleAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
     {
         Task waitTask;
