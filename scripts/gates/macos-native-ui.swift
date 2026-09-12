@@ -24,6 +24,21 @@ func findButton(_ element: AXUIElement, _ title: String, _ depth: Int = 0) -> AX
     return nil
 }
 
+func describeTree(_ element: AXUIElement, _ depth: Int = 0) -> [[String: Any]] {
+    if depth > 20 { return [] }
+    let role = attribute(element, kAXRoleAttribute as CFString) as? String ?? "unknown"
+    var result: [[String: Any]] = []
+    if role == kAXButtonRole as String || depth < 3 {
+        // Buttons have public action labels. Do not capture field values, messages or URLs.
+        result.append(["depth": depth, "role": role,
+                       "title": attribute(element, kAXTitleAttribute as CFString) as? String ?? "",
+                       "description": attribute(element, kAXDescriptionAttribute as CFString) as? String ?? "",
+                       "enabled": attribute(element, kAXEnabledAttribute as CFString) as? Bool ?? false])
+    }
+    for child in children(element) { result.append(contentsOf: describeTree(child, depth + 1)) }
+    return result
+}
+
 let arguments = CommandLine.arguments
 guard arguments.count >= 3 else { exit(2) }
 if arguments[1] == "pids" {
@@ -32,6 +47,13 @@ if arguments[1] == "pids" {
     }
         .map { Int($0.processIdentifier) }
     print(String(data: try JSONSerialization.data(withJSONObject: values), encoding: .utf8)!)
+    exit(0)
+}
+if arguments[1] == "describe", let pid = Int32(arguments[2]) {
+    let target = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(target, 2)
+    let result: [String: Any] = ["trusted": AXIsProcessTrusted(), "pid": Int(pid), "tree": describeTree(target)]
+    print(String(data: try JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
     exit(0)
 }
 if arguments[1] == "click", arguments.count == 4, let pid = Int32(arguments[2]) {
@@ -47,7 +69,7 @@ if arguments[1] == "click", arguments.count == 4, let pid = Int32(arguments[2]) 
     var size = CGSize.zero
     guard AXValueGetValue(rawPosition as! AXValue, .cgPoint, &position),
           AXValueGetValue(rawSize as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { exit(4) }
-    NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
+    NSRunningApplication(processIdentifier: pid)?.activate(options: [])
     let point = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
