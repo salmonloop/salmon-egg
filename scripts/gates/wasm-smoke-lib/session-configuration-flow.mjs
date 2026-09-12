@@ -5,6 +5,7 @@ import {
   clickVisibleControlWithTrustedPointer,
   waitForControlEnabledState,
   waitForLaidOutControl,
+  waitForNativeControlFocus,
   waitForSemanticText
 } from "./ui-affordances.mjs";
 
@@ -23,12 +24,19 @@ export async function verifySessionConfiguration(page, server, initialize) {
     type: "boolean", currentValue: false };
   server.publishConfiguration([grouped, flag,
     { id: "future-setting", name: "Future knob", type: "future", currentValue: { opaque: true } }]);
+  const entry = await waitForLaidOutControl(page, settings, "session settings icon");
+  const entryName = await page.locator(`#${entry.id}`).getAttribute("aria-label");
+  assert.equal(entryName, "Session settings", "The icon needs a readable accessible name.");
   await clickVisibleControlWithTrustedPointer(page, settings, "session settings");
+  await waitForLaidOutControl(page, { automationIds: ["ChatView.SessionSettingsDialog"] }, "native session settings dialog");
   await waitForSemanticText(page, /Choose the detail used in this conversation\./, "configuration description");
   await waitForLaidOutControl(page, selector, "response style selector");
   if (process.env.WASM_SMOKE_ARTIFACTS_DIR) {
     await mkdir(process.env.WASM_SMOKE_ARTIFACTS_DIR, { recursive: true });
     await page.screenshot({ path: `${process.env.WASM_SMOKE_ARTIFACTS_DIR}/session-settings.png` });
+  }
+  if (process.env.SALMONEGG_CAPTURE_SESSION_SETTINGS === "1") {
+    await verifyCompactSessionSettings(page, server, settings);
   }
   const focused = await page.evaluate(options => {
     const state = window.__salmoneggSmoke.semantic.describe(options);
@@ -57,7 +65,7 @@ export async function verifySessionConfiguration(page, server, initialize) {
     assert.equal(request.params.type, undefined, "V1 string values retain the stable wire format.");
     assert.equal(request.params.sessionId, server.sessionId);
   }
-  await page.keyboard.press("Escape");
+  await closeSessionSettings(page, settings, "Escape");
   server.publishConfiguration([flag]);
   await clickVisibleControlWithTrustedPointer(page, settings, "boolean session settings");
   const toggle = { labels: ["Show the plan"], role: "switch" };
@@ -70,6 +78,52 @@ export async function verifySessionConfiguration(page, server, initialize) {
   assert.equal(boolean.params.configId, "show-plan");
   assert.equal(boolean.params.type, "boolean");
   assert.equal(boolean.params.value, true);
-  await page.keyboard.press("Escape");
-  console.log("WASM session configuration passed: grouped select, retry, boolean and stable V1 wire");
+  await closeSessionSettings(page, settings, "Close");
+  console.log("WASM session configuration passed: icon entry, native modal, per-setting apply, retry, boolean and focus return");
+}
+
+async function verifyCompactSessionSettings(page, server, settings) {
+  const artifacts = process.env.WASM_SMOKE_ARTIFACTS_DIR;
+  const originalViewport = page.viewportSize();
+  const originalRequests = server.configurationRequests().length;
+  await closeSessionSettings(page, settings, "Escape");
+  if (artifacts) await page.screenshot({ path: `${artifacts}/session-settings-icon.png` });
+  await page.setViewportSize({ width: 640, height: 800 });
+  const title = { automationIds: ["ChatView.CurrentSessionTitle"] };
+  await waitForLaidOutControl(page, title, "narrow session title");
+  const entry = await waitForLaidOutControl(page, settings, "narrow session settings icon");
+  const titleState = await waitForLaidOutControl(page, title, "narrow session title alignment");
+  assert.ok(Math.abs(entry.y - titleState.y) <= 3, "The settings icon must stay on the title row when Agent details wrap.");
+  if (artifacts) await page.screenshot({ path: `${artifacts}/session-settings-icon-narrow.png` });
+  // After a viewport resize Skia's pointer coordinates can lag its native layout. Exercise
+  // the same icon through native keyboard focus; screenshots verify the rendered placement.
+  await page.locator(`#${entry.id}`).focus();
+  await waitForNativeControlFocus(page, settings, "narrow session settings icon");
+  await page.keyboard.press("Enter");
+  await waitForLaidOutControl(page, { automationIds: ["ChatView.SessionSettingsDialog"] }, "narrow native dialog");
+  const close = await waitForLaidOutControl(page, { labels: ["Close"], role: "button" }, "narrow dialog close");
+  assert.ok(close.x > 0 && close.x < 640 && close.y > 0 && close.y < 800, "Native close must remain within the window.");
+  if (artifacts) await page.screenshot({ path: `${artifacts}/session-settings-narrow.png` });
+  await closeSessionSettings(page, settings, "Escape");
+  assert.equal(server.configurationRequests().length, originalRequests, "Opening or closing a dialog must not apply any row.");
+  await page.setViewportSize(originalViewport);
+  const restoredEntry = await waitForLaidOutControl(page, settings, "session settings after resize");
+  await page.locator(`#${restoredEntry.id}`).focus();
+  await waitForNativeControlFocus(page, settings, "restored settings icon");
+  await page.keyboard.press("Enter");
+  await waitForLaidOutControl(page, { automationIds: ["ChatView.SessionSettingsDialog"] }, "restored native dialog");
+}
+
+async function closeSessionSettings(page, settings, action) {
+  if (action === "Escape") {
+    await page.keyboard.press("Escape");
+  } else {
+    await waitForControlEnabledState(page, { labels: ["Close"], role: "button" }, true, "native dialog close");
+    await clickVisibleControl(page, { labels: ["Close"], role: "button" }, "close session settings");
+  }
+  await page.waitForFunction(() => Array.from(document.querySelectorAll(
+    "#uno-semantics-root [xamlautomationid='ChatView.SessionSettingsDialog']"))
+    .every(element => Boolean(element.closest("[hidden]")) || element.getBoundingClientRect().width === 0));
+  await waitForControlEnabledState(page, settings, true, "settings icon after dialog closes");
+  await waitForNativeControlFocus(page, settings, "focus restored to session settings icon");
 }
