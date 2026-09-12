@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -10,6 +11,7 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
 {
     private readonly ApplicationWindowActivityTracker<Window> _activityTracker = new();
     private readonly ILogger<AppActivationSignalSource> _logger;
+    private bool _isActive;
 
     public AppActivationSignalSource(ILogger<AppActivationSignalSource> logger)
     {
@@ -21,17 +23,8 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
 
     public Window? ActiveWindow => _activityTracker.ActiveWindow;
 
-    public bool IsActive
-    {
-        get
-        {
-            var window = ActiveWindow;
-            var isActive = _activityTracker.IsActive && window is { Visible: true }
-                && window.AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
-            ConstrainPlatformActivity(ref isActive);
-            return isActive;
-        }
-    }
+    // Notification consumers run outside the UI thread; native Window properties do not.
+    public bool IsActive => Volatile.Read(ref _isActive);
 
     public void Attach(Window window)
     {
@@ -45,7 +38,9 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
         window.Activated += OnWindowActivated;
         window.Closed += OnWindowClosed;
         window.VisibilityChanged += OnWindowVisibilityChanged;
+        window.AppWindow.Changed += OnAppWindowChanged;
         AttachPlatformActivity(window);
+        PublishActivity();
     }
 
     public void Detach(Window window)
@@ -60,8 +55,9 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
         window.Activated -= OnWindowActivated;
         window.Closed -= OnWindowClosed;
         window.VisibilityChanged -= OnWindowVisibilityChanged;
+        window.AppWindow.Changed -= OnAppWindowChanged;
         DetachPlatformActivity(window);
-        ActivityChanged?.Invoke(this, EventArgs.Empty);
+        PublishActivity();
     }
 
     private void OnWindowActivated(object sender, WindowActivatedEventArgs e)
@@ -71,7 +67,7 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
             if (sender is Window deactivatedWindow)
             {
                 _activityTracker.Deactivate(deactivatedWindow);
-                ActivityChanged?.Invoke(this, EventArgs.Empty);
+                PublishActivity();
             }
 
             return;
@@ -85,8 +81,8 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
             }
         }
 
+        PublishActivity();
         Activated?.Invoke(this, EventArgs.Empty);
-        ActivityChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs e)
@@ -98,7 +94,20 @@ public sealed partial class AppActivationSignalSource : IApplicationActivationSi
     }
 
     private void OnWindowVisibilityChanged(object sender, object args)
-        => ActivityChanged?.Invoke(this, EventArgs.Empty);
+        => PublishActivity();
+
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        => PublishActivity();
+
+    private void PublishActivity()
+    {
+        var window = ActiveWindow;
+        var isActive = _activityTracker.IsActive && window is { Visible: true }
+            && window.AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+        ConstrainPlatformActivity(ref isActive);
+        Volatile.Write(ref _isActive, isActive);
+        ActivityChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     partial void AttachPlatformActivity(Window window);
 

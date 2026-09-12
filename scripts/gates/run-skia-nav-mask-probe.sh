@@ -13,7 +13,7 @@ SCRIPT_DIR="${SCRIPT_SOURCE%/*}"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
 
 PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
-APP_PATH="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/SalmonEgg"
+APP_PATH="${SALMONEGG_NAV_MASK_APP_PATH:-${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/SalmonEgg}"
 SEED_WRITER_PROJECT="${REPO_ROOT}/tests/SalmonEgg.TestSupport/SalmonEgg.TestSupport.csproj"
 X11_PROBE="${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py"
 

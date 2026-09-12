@@ -310,6 +310,9 @@ public sealed class AcpChatServiceAdapter : IChatService, IStdioInvocationSource
     public Task WaitForBufferedUpdatesDrainedAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
         => _eventAdapter.WaitForDrainIdleAsync(hydrationAttemptId, cancellationToken);
 
+    internal Task WaitForSessionUpdatesDrainedAsync(string? sessionId, CancellationToken cancellationToken)
+        => _eventAdapter.WaitForSessionUpdatesDrainedAsync(sessionId, cancellationToken);
+
     public void Dispose()
     {
         if (_disposed)

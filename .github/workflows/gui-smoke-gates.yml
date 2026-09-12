@@ -69,7 +69,8 @@ jobs:
             libxtst6 \
             openbox \
             xdotool \
-            x11-utils
+            x11-utils \
+            ffmpeg
 
       - name: Run Skia Desktop GUI smoke
         run: ./scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
@@ -107,7 +108,8 @@ jobs:
           MSBUILDDISABLENODEREUSE: "1"
         run: |
           timeout --signal=TERM --kill-after=10s 180s \
-            bash scripts/gates/run-skia-read-receipt-probe.sh
+            python3 scripts/gates/skia-read-receipt-image-smoke.py \
+              --artifacts "${SALMONEGG_READ_RECEIPT_RESULT_DIR}"
 
       - name: Upload read receipt evidence
         if: always()

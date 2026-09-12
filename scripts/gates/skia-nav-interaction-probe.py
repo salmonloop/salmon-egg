@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import time
 
@@ -17,6 +18,9 @@ def main():
     parser.add_argument("--exchange", required=True, type=Path)
     parser.add_argument("--artifacts", required=True, type=Path)
     args = parser.parse_args()
+    for tool in ("xdotool", "ffmpeg"):
+        if shutil.which(tool) is None:
+            parser.error(f"Missing native input/screenshot dependency: {tool}")
     environment = dict(os.environ, DISPLAY=args.display)
     args.exchange.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + 45
