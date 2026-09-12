@@ -178,6 +178,9 @@ public sealed class SessionNavItemViewModelTests
 
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)
             => Task.CompletedTask;
+
+        public Task ShowSessionSettingsAsync(SalmonEgg.Presentation.ViewModels.Chat.ChatViewModel viewModel)
+            => Task.CompletedTask;
     }
 
     private sealed class RecordingPlatformShellService : IPlatformShellService

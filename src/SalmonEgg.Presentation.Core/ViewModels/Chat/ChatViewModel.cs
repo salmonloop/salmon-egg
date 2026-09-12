@@ -1283,6 +1283,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private ObservableCollection<ConfigOptionViewModel> _configOptions = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenSessionSettings))]
+    [NotifyCanExecuteChangedFor(nameof(OpenSessionSettingsCommand))]
     private bool _showConfigOptionsPanel;
 
     private readonly HashSet<string> _configAuthoritativeConversationIds = new(StringComparer.Ordinal);

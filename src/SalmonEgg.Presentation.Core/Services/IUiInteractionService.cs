@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Services;
 
@@ -33,5 +34,7 @@ public interface IUiInteractionService
         string title,
         IReadOnlyList<SessionNavItemViewModel> sessions,
         Action<string> onPickSession);
+
+    Task ShowSessionSettingsAsync(ChatViewModel viewModel);
 
 }
