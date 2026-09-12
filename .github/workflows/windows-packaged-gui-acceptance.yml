@@ -8,6 +8,7 @@ on:
       - '.github/workflows/windows-packaged-gui-acceptance.yml'
       - 'scripts/gates/test-windows-interactive-desktop.ps1'
       - 'scripts/gates/run-windows-packaged-gui-acceptance.ps1'
+      - 'scripts/gates/windows-desktop-probe/**'
       - 'tests/SalmonEgg.GuiTests.Windows/**'
       - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/TerminalAuthenticationDialog*'
       - 'SalmonEgg/SalmonEgg/Presentation/Services/TerminalAuthenticationInteraction.cs'
@@ -34,14 +35,14 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
-      - name: Verify the hosted interactive desktop with real input
-        timeout-minutes: 2
-        shell: pwsh
-        run: ./scripts/gates/test-windows-interactive-desktop.ps1
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+      - name: Verify the hosted interactive desktop with real input
+        timeout-minutes: 3
+        shell: pwsh
+        run: ./scripts/gates/test-windows-interactive-desktop.ps1
       - name: Build, sign and install this commit's MSIX
         timeout-minutes: 35
         shell: pwsh
