@@ -283,6 +283,17 @@ python3 scripts/gates/skia-acp-setup-path-smoke.py --artifacts /tmp/acp-setup-pa
 
 目录须为空或尚未存在。脚本默认构建当前工作树；仅在同一工作树刚完成 Debug Desktop 构建后使用 `--no-build`，CI 会复用上一 Skia 步骤的产物。门禁经正式设置入口和原生按钮进入向导，要求真实探测确认 Qwen 未安装（本机已安装时可用 `--agent goose` 选择另一确实缺失的目录项），再用 XTest 逐字符输入、清空及重新输入，逐次断言控件仍可见、焦点仍属于该输入框且绑定值一致。它记录产物路径、DLL 哈希、提交与工作树状态、PID 和每次采样；结束时回收自身进程组。此验证限 Linux Skia，不代替 Windows WinUI/MSIX 或 WASM 验收。修改编辑区可见性后，须临时恢复缺失状态控制的旧可见性并确认首字采样失败，再恢复修复重跑。
 
+Linux URL elicitation 的产品门禁复用同一 Debug Skia 产物：
+
+```bash
+python3 scripts/gates/skia-elicitation-consent-smoke.py \
+  --no-build --chromium /usr/bin/google-chrome --artifacts /tmp/native-elicitation-consent
+```
+
+门禁使用隔离 AppData 中的真实 stdio 配置、已恢复的 conversation、生产聊天卡片和 XTest 鼠标输入；独立 DEBUG driver 仅导航到该 conversation 并读取可见控件，不创建测试 UI、不替换 launcher、不代用户同意。依次验证拒绝、取消零外访，打开与重开两次真实沙箱浏览器访问、单次 ACP accept，Agent complete 更新以及断连后清除 URL 和禁用旧操作。外部页面检查 `opener`、`referrer` 为空，页面私密值不进入 ACP 或应用日志。默认浏览器注册只写本次隔离的 XDG 配置，不修改用户设置；浏览器无调试桥、未关闭沙箱，结束时回收本门禁的进程组。协议对端是确定性 fixture，不能代替独立第三方 Agent 验收。
+
+Linux 产品能力注册与此 CI 门禁一同交付；CI 不会动态修改能力。Windows、macOS、iOS、Android 仍需各自原生产品验收后启用 URL 能力；Unix 终端认证另受当前 Porta.Pty 未公开信号退出状态的限制。本门禁不构成终端认证或其它原生平台的验证。源码移除 Linux launcher 注册时，`Native URL capability not advertised` 必须使该门禁失败。
+
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；

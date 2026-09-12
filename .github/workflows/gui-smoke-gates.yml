@@ -85,8 +85,29 @@ jobs:
           path: ${{ runner.temp }}/acp-setup-path-smoke
           if-no-files-found: ignore
 
-      # This checks the native launcher only. Native URL capability stays disabled until the
-      # product's GUI consent-to-browser path has its own platform gate as well.
+      - name: Verify native URL consent with the actual Linux product
+        timeout-minutes: 5
+        env:
+          DOTNET_PROCESSOR_COUNT: "2"
+        run: |
+          test -x /usr/bin/google-chrome
+          test -x /usr/bin/xdg-open
+          python3 scripts/gates/skia-elicitation-consent-smoke.py --no-build \
+            --chromium /usr/bin/google-chrome --artifacts "${RUNNER_TEMP}/native-elicitation-consent"
+
+      - name: Upload native elicitation evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: native-elicitation-consent
+          path: |
+            ${{ runner.temp }}/native-elicitation-consent/provenance.json
+            ${{ runner.temp }}/native-elicitation-consent/result.json
+            ${{ runner.temp }}/native-elicitation-consent/peer.jsonl
+            ${{ runner.temp }}/native-elicitation-consent/stdout.log
+          if-no-files-found: error
+
+      # Retain the independent opener check: the product gate above owns consent and wire behavior.
       - name: Run Linux external browser isolation probe
         timeout-minutes: 3
         env:

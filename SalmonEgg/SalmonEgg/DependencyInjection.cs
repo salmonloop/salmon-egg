@@ -389,9 +389,12 @@ public static class DependencyInjection
 #pragma warning disable CA1416 // This registration exists only in the browser target.
         services.AddSingleton<IExternalUriLauncher, WasmElicitationUriLauncher>();
 #pragma warning restore CA1416
+#elif __UNO_SKIA__
+        // The launcher advertises Linux only. skia-elicitation-consent-smoke.py verifies the real
+        // consent card, native pointer input, stdio replies and sandboxed external browser together.
+        services.AddSingleton<IExternalUriLauncher, DesktopElicitationUriLauncher>();
 #else
-        // Native URL elicitation stays off until the real GUI consent-to-browser chain is gated.
-        // The Linux launcher has its own browser isolation probe; that does not prove the GUI path.
+        // Other native targets require their own product consent-to-browser acceptance.
         services.AddSingleton<IExternalUriLauncher>(UnsupportedExternalUriLauncher.Instance);
 #endif
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
