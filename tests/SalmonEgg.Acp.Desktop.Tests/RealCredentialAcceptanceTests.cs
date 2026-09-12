@@ -49,7 +49,7 @@ public sealed class RealCredentialAcceptanceTests
             var reloaded = await manager.LoadConfigurationAsync(profile.Id);
             Assert.NotNull(reloaded);
             var yaml = await File.ReadAllTextAsync(Path.Combine(paths.ConfigRootPath, "servers", "acceptance.yaml"), token);
-            Assert.DoesNotContain(secret!, yaml, StringComparison.Ordinal);
+            Assert.False(yaml.Contains(secret!, StringComparison.Ordinal), "Profile persistence must never expose the real credential.");
             var factory = new TransportFactory(Log.Logger, new TransportSupportPolicy(new PlatformCapabilityService()), new DesktopStdioTransportFactory());
             using var transport = factory.CreateTransport(reloaded);
             using var client = new AcpClient(new DomainAcpTransportAdapter(transport));
