@@ -89,10 +89,22 @@ public sealed class TerminalAuthenticationSmokeTests
 
     private static void ClickNamedButton(WindowsGuiAppSession app, string text)
     {
-        var button = app.FindVisibleElementByNameAnywhere(text, TimeSpan.FromSeconds(15));
-        Assert.NotNull(button);
+        var button = FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
+            && element.Properties.Name.ValueOrDefault == text);
         Assert.True(app.WaitUntil(() => button.IsEnabled, TimeSpan.FromSeconds(10)));
         app.ClickElement(button);
+    }
+
+    private static AutomationElement FindNativeElement(WindowsGuiAppSession app, Func<AutomationElement, bool> matches)
+    {
+        AutomationElement? found = null;
+        Assert.True(app.WaitUntil(() =>
+        {
+            found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
+                !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
+            return found is not null;
+        }, TimeSpan.FromSeconds(20)), "The requested native terminal element did not appear.");
+        return found!;
     }
 
     private sealed class Fixture : IDisposable
@@ -167,8 +179,8 @@ public sealed class TerminalAuthenticationSmokeTests
 
         public void WaitForConsent(WindowsGuiAppSession app)
         {
-            var consent = app.FindVisibleElementByNameAnywhere("Open sign-in", TimeSpan.FromSeconds(20));
-            Assert.NotNull(consent);
+            FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
+                && element.Properties.Name.ValueOrDefault == "Open sign-in");
             GuiAcceptanceDiagnostics.Record("Terminal: consent displayed");
             Assert.False(File.Exists(LoginPath));
         }
@@ -178,21 +190,18 @@ public sealed class TerminalAuthenticationSmokeTests
             Assert.True(app.WaitUntil(() => File.Exists(LoginPath), TimeSpan.FromSeconds(20)));
             GuiAcceptanceDiagnostics.Record("Terminal: PTY process observed");
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(15)));
-            var terminal = app.FindByAutomationIdAnywhere("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(15));
-            Assert.True(app.WaitUntil(() => (terminal.Properties.Name.ValueOrDefault ?? string.Empty)
-                .Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal), TimeSpan.FromSeconds(20)));
+            FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "BottomPanel.TerminalWebView"
+                && (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal));
             GuiAcceptanceDiagnostics.Record("Terminal: PTY ready output observed");
             try
             {
                 // RenderedText is the PTY output projection, not proof that WebView2 has loaded.
                 // The actual xterm textarea must exist and own native keyboard focus first.
-                AutomationElement? input = null;
-                Assert.True(app.WaitUntil(() =>
-                {
-                    input = terminal.FindFirstDescendant(cf => cf.ByControlType(ControlType.Edit));
-                    return input is not null && input.IsEnabled;
-                }, TimeSpan.FromSeconds(20)), "The terminal's native accessible input did not load.");
-                input!.Focus();
+                var input = FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Edit
+                    && element.Properties.Name.ValueOrDefault == "Terminal input"
+                    && element.Properties.ClassName.ValueOrDefault == "xterm-helper-textarea"
+                    && element.Properties.IsEnabled.ValueOrDefault);
+                input.Focus();
                 Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.Value, TimeSpan.FromSeconds(10)),
                     "The real terminal input did not acquire native keyboard focus.");
                 GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
