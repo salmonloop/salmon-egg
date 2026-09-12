@@ -11,16 +11,35 @@ $env:DOTNET_PROCESSOR_COUNT = '2'
 $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
 $env:MSBUILDDISABLENODEREUSE = '1'
 $env:UseSharedCompilation = 'false'
+$env:SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS = (Resolve-Path $ArtifactsDirectory).Path
 
 $log = Join-Path $ArtifactsDirectory 'packaged-gui-tests.log'
 $arguments = @(
     'test', '--project', 'tests/SalmonEgg.GuiTests.Windows/SalmonEgg.GuiTests.Windows.csproj',
-    '--configuration', 'Debug', '-p:UseSharedCompilation=false',
+    '--configuration', 'Debug', '--no-build', '-p:UseSharedCompilation=false',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.AcpSettingsSmokeTests',
     '--minimum-expected-tests', '1', '--timeout', '3m', '--no-ansi', '--output', 'Detailed'
 )
-& dotnet @arguments *> $log
-$testExit = $LASTEXITCODE
+$info = [Diagnostics.ProcessStartInfo]::new()
+$info.FileName = (Get-Command dotnet).Source
+$info.UseShellExecute = $false
+$info.RedirectStandardOutput = $true
+$info.RedirectStandardError = $true
+foreach ($argument in $arguments) { $info.ArgumentList.Add($argument) }
+$test = [Diagnostics.Process]::Start($info)
+$standardOutput = $test.StandardOutput.ReadToEndAsync()
+$standardError = $test.StandardError.ReadToEndAsync()
+try {
+    if (-not $test.WaitForExit(210000)) {
+        throw 'Installed GUI test process exceeded the 210-second runtime bound. See gui-stage.jsonl.'
+    }
+    $testExit = $test.ExitCode
+}
+finally {
+    if (-not $test.HasExited) { $test.Kill($true); [void]$test.WaitForExit(5000) }
+    [IO.File]::WriteAllText($log, $standardOutput.GetAwaiter().GetResult() + $standardError.GetAwaiter().GetResult())
+    $test.Dispose()
+}
 $contents = Get-Content -LiteralPath $log -Raw
 Write-Host $contents
 $passed = [regex]::Match($contents, '(?m)^\s+succeeded:\s+(\d+)\s*$')

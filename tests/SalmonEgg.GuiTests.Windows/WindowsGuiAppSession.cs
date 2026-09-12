@@ -91,17 +91,22 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     public static WindowsGuiAppSession LaunchFresh()
     {
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: validate package");
         GuiTestGate.RequireEnabled();
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: stop prior package instance");
         StopAllRunningInstances();
 
         var currentInstall = GuiTestGate.GetRequiredCurrentInstall();
         var executablePath = currentInstall.InstalledExecutablePath
             ?? throw new InvalidOperationException(currentInstall.FailureMessage);
         using var activationEnvironment = ActivationEnvironmentScope.ApplySalmonEggVariables();
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: activation environment ready");
         var launchedAtUtc = DateTime.UtcNow;
         var activatedProcessId = LaunchInstalledMsix(executablePath);
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: activation returned");
 
         var process = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
+        GuiAcceptanceDiagnostics.Record("LaunchFresh: current package process found");
 
         return AttachToProcess(process, ownsProcess: true);
     }
@@ -1389,6 +1394,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
         out string executablePath,
         out string failureMessage)
     {
+        GuiAcceptanceDiagnostics.Record("Package discovery: Get-AppxPackage");
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
         {
@@ -1404,6 +1410,7 @@ internal sealed class WindowsGuiAppSession : IDisposable
         var output = process.StandardOutput.ReadToEnd().Trim();
         var error = process.StandardError.ReadToEnd().Trim();
         process.WaitForExit();
+        GuiAcceptanceDiagnostics.Record("Package discovery: Get-AppxPackage completed");
 
         if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
         {
@@ -1609,15 +1616,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     private static WindowsGuiAppSession AttachToProcess(Process process, bool ownsProcess)
     {
+        GuiAcceptanceDiagnostics.Record("AttachToProcess: create UIA3");
         var automation = new UIA3Automation();
         try
         {
             var application = Application.Attach(process);
+            GuiAcceptanceDiagnostics.Record("AttachToProcess: read main window");
             var mainWindow = RetryUntil(
                 () => application.GetMainWindow(automation),
                 window => window != null && !TryGetIsOffscreen(window),
                 TimeSpan.FromSeconds(20),
                 "Timed out waiting for SalmonEgg main window.");
+            GuiAcceptanceDiagnostics.Record("AttachToProcess: main window acquired");
 
             return new WindowsGuiAppSession(application, automation, mainWindow!, ownsProcess);
         }

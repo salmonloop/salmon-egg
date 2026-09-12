@@ -10,10 +10,14 @@ public sealed class AcpSettingsSmokeTests
     [Fact]
     public void AcpSettingsPage_OpensProfilesManagementByDefault()
     {
+        GuiAcceptanceDiagnostics.Record("ACP settings: creating AppData");
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        GuiAcceptanceDiagnostics.Record("ACP settings: launching current package");
         using var session = WindowsGuiAppSession.LaunchFresh();
+        GuiAcceptanceDiagnostics.Record("ACP settings: window attached");
         EnsureMainWindowWide(session);
         NavigateToAcpSettings(session);
+        GuiAcceptanceDiagnostics.Record("ACP settings: navigation completed");
 
         Assert.True(
             session.WaitUntilOnscreen("Acp.Profiles.Refresh", TimeSpan.FromSeconds(10)),
