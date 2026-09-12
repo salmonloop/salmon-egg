@@ -64,6 +64,12 @@ jobs:
         run: bash scripts/gates/run-acp-cancellation-transport-gates.sh Release
       - name: Verify bound credentials on real transports without skips
         run: bash scripts/gates/run-acp-credential-transport-gates.sh Release
+      - name: Verify a published ACP WebSocket bridge
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/acp-bridge-venv"
+          "$RUNNER_TEMP/acp-bridge-venv/bin/pip" install acpremote==1.9.0
+          python3 scripts/gates/run-acp-published-bridge-gate.py --bridge "$RUNNER_TEMP/acp-bridge-venv/bin/acpremote"
       - name: Upload transport evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -72,6 +78,7 @@ jobs:
           path: |
             artifacts/acp-cancellation/
             artifacts/acp-credentials/
+            artifacts/acp-published-bridge/
 
   build-and-test:
     name: Build and Test
