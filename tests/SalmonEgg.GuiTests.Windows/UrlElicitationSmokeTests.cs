@@ -122,6 +122,7 @@ public sealed class UrlElicitationSmokeTests
         private readonly HttpListener _server = new();
         private readonly Task _serverTask;
         private readonly HashSet<int> _originalBrowsers = BrowserPids();
+        private readonly string _urlToken = Guid.NewGuid().ToString("N");
         private int _phase;
 
         public Fixture()
@@ -141,7 +142,7 @@ public sealed class UrlElicitationSmokeTests
             var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
             portProbe.Stop();
             _server.Prefixes.Add($"http://127.0.0.1:{port}/");
-            Url = $"http://127.0.0.1:{port}/authorize?token={Guid.NewGuid():N}";
+            Url = $"http://127.0.0.1:{port}/authorize?token={_urlToken}";
             var scenario = Path.Combine(Root, "scenario.json");
             File.WriteAllText(scenario, "{\"url\":" + Json(Url) + ",\"log\":" + Json(PeerLog)
                 + ",\"control\":" + Json(ControlPath) + ",\"cwd\":" + Json(project) + "}");
@@ -240,24 +241,38 @@ public sealed class UrlElicitationSmokeTests
 
         public void Dispose()
         {
-            WindowsGuiAppSession.StopAllRunningInstances();
-            _server.Close();
-            Assert.True(_serverTask.Wait(TimeSpan.FromSeconds(5)), "The loopback browser fixture did not stop.");
-            foreach (var pid in BrowserPids().Except(_originalBrowsers))
+            var cleanupFailures = new List<Exception>();
+            void Cleanup(Action action)
             {
-                try
-                {
-                    using var process = Process.GetProcessById(pid);
-                    process.Kill(entireProcessTree: true);
-                    process.WaitForExit(5000);
-                }
-                catch (ArgumentException) { }
-                catch (InvalidOperationException) { }
+                try { action(); }
+                catch (Exception error) { cleanupFailures.Add(error); }
             }
-            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", _previousRoot);
-            var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
-            if (!string.IsNullOrWhiteSpace(artifacts))
+
+            Cleanup(WindowsGuiAppSession.StopAllRunningInstances);
+            Cleanup(() =>
             {
+                _server.Close();
+                Assert.True(_serverTask.Wait(TimeSpan.FromSeconds(5)), "The loopback browser fixture did not stop.");
+            });
+            Cleanup(() =>
+            {
+                foreach (var pid in BrowserPids().Except(_originalBrowsers))
+                {
+                    try
+                    {
+                        using var process = Process.GetProcessById(pid);
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(5000);
+                    }
+                    catch (ArgumentException) { }
+                    catch (InvalidOperationException) { }
+                }
+            });
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", _previousRoot);
+            Cleanup(() =>
+            {
+                var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+                if (string.IsNullOrWhiteSpace(artifacts)) return;
                 if (File.Exists(PeerLog)) File.Copy(PeerLog, Path.Combine(artifacts, "url-peer.jsonl"), overwrite: true);
                 using var stream = File.Create(Path.Combine(artifacts, "url-browser-observation.json"));
                 using var writer = new Utf8JsonWriter(stream);
@@ -267,8 +282,20 @@ public sealed class UrlElicitationSmokeTests
                 foreach (var report in Reports) report.WriteTo(writer);
                 writer.WriteEndArray();
                 writer.WriteEndObject();
-            }
-            Directory.Delete(Root, recursive: true);
+            });
+            Cleanup(() =>
+            {
+                var ownedInputs = new[] { "scenario.json", "control.json", "control.json.tmp", "peer.jsonl" };
+                foreach (var path in Directory.EnumerateFiles(Root, "*", SearchOption.AllDirectories))
+                {
+                    if (ownedInputs.Contains(Path.GetRelativePath(Root, path), StringComparer.Ordinal)) continue;
+                    var content = File.ReadAllText(path);
+                    Assert.False(content.Contains(PrivateValue, StringComparison.Ordinal) || content.Contains(_urlToken, StringComparison.Ordinal),
+                        "Private URL or page data entered product configuration, history, logs or diagnostics.");
+                }
+            });
+            Cleanup(() => Directory.Delete(Root, recursive: true));
+            if (cleanupFailures.Count != 0) throw new AggregateException("Native URL fixture cleanup failed.", cleanupFailures);
         }
 
         private static HashSet<int> BrowserPids()
