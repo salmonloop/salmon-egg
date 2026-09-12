@@ -23,6 +23,7 @@
 - [`SPEC-CONFIG-PERSISTENCE-YAML.md`](SPEC-CONFIG-PERSISTENCE-YAML.md)：配置持久化和安全存储协议。
 - [`ui-conventions.md`](ui-conventions.md)：UI 绑定、生命周期和轻量样式约定。
 - [`opentelemetry-config-best-practices.md`](opentelemetry-config-best-practices.md)：遥测设置与文案约定。
+- [`ahp-integration.md`](ahp-integration.md)：AHP 的收益、CLI 宿主与设备互信决策，以及实现验收边界。
 
 ## 使用文档
 
