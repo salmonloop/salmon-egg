@@ -141,6 +141,7 @@
                                 SelectsOnInvoked="False"
                                 HorizontalContentAlignment="Stretch"
                                 AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.ProjectItem(ProjectId)}"
+                                AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
                                 Tag="{x:Bind navModels:NavItemTag.Project(ProjectId)}">
                 <NavigationViewItem.Icon>
                     <SymbolIcon Symbol="Folder" />
