@@ -12,6 +12,7 @@ $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
 $env:MSBUILDDISABLENODEREUSE = '1'
 $env:UseSharedCompilation = 'false'
 $env:SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS = (Resolve-Path $ArtifactsDirectory).Path
+$env:SALMONEGG_APPDATA_ROOT = Join-Path $env:SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS 'appdata'
 
 $log = Join-Path $ArtifactsDirectory 'packaged-gui-tests.log'
 $arguments = @(
@@ -38,6 +39,12 @@ try {
 finally {
     if (-not $test.HasExited) { $test.Kill($true); [void]$test.WaitForExit(5000) }
     [IO.File]::WriteAllText($log, $standardOutput.GetAwaiter().GetResult() + $standardError.GetAwaiter().GetResult())
+    $profileData = $env:SALMONEGG_APPDATA_ROOT
+    foreach ($source in @((Join-Path $profileData 'boot.log'), (Join-Path $profileData 'logs'))) {
+        if (Test-Path -LiteralPath $source) {
+            Copy-Item -LiteralPath $source -Destination $ArtifactsDirectory -Recurse -Force
+        }
+    }
     $test.Dispose()
 }
 $contents = Get-Content -LiteralPath $log -Raw
