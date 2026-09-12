@@ -15,7 +15,7 @@ public sealed class AcpSettingsSmokeTests
         GuiAcceptanceDiagnostics.Record("ACP settings: launching current package");
         using var session = WindowsGuiAppSession.LaunchFresh();
         GuiAcceptanceDiagnostics.Record("ACP settings: window attached");
-        EnsureMainWindowWide(session);
+        MaximizeMainWindow(session);
         NavigateToAcpSettings(session);
         GuiAcceptanceDiagnostics.Record("ACP settings: navigation completed");
 
@@ -52,19 +52,19 @@ public sealed class AcpSettingsSmokeTests
             "ACP profiles section did not become visible.");
     }
 
-    private static void EnsureMainWindowWide(WindowsGuiAppSession session)
+    private static void MaximizeMainWindow(WindowsGuiAppSession session)
     {
         try
         {
             if (session.MainWindow.Patterns.Window.IsSupported)
             {
-                session.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Normal);
+                session.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Maximized);
             }
         }
         catch
         {
         }
-
-        session.ResizeMainWindow(width: 1400, height: 900);
+        // A hosted desktop may be smaller than 1400x900. ACP navigation is the contract here;
+        // its native onscreen controls below must work at the window size Windows actually permits.
     }
 }

@@ -145,7 +145,8 @@ public sealed class TerminalAuthenticationSmokeTests
 
         public void SendPrompt(WindowsGuiAppSession app)
         {
-            app.ResizeMainWindow(1400, 900);
+            if (app.MainWindow.Patterns.Window.IsSupported)
+                app.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Maximized);
             var session = app.FindByAutomationId("MainNav.Session.terminal-conversation", TimeSpan.FromSeconds(30));
             app.ClickElement(session);
             Assert.True(app.WaitUntilOnscreen("InputBox", TimeSpan.FromSeconds(30)));
