@@ -87,6 +87,7 @@ $evidence = [ordered]@{
     passed = $false
 }
 if ($inputDesktop -ne [IntPtr]::Zero) { [void][NativeDesktopAcceptance]::CloseDesktop($inputDesktop) }
+$evidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'desktop-preflight.json')
 
 $form = [System.Windows.Forms.Form]::new()
 $input = [System.Windows.Forms.TextBox]::new()
