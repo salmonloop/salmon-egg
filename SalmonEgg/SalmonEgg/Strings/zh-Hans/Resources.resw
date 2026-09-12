@@ -1083,6 +1083,9 @@
   <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
     <value>关闭</value>
   </data>
+  <data name="SessionSettingsDialog.CloseButtonText" xml:space="preserve">
+    <value>关闭</value>
+  </data>
   <data name="SessionsDialogSearchBox.PlaceholderText" xml:space="preserve">
     <value>搜索会话</value>
   </data>

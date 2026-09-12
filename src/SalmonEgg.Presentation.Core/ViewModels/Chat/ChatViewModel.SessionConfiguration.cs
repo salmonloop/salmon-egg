@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -16,6 +17,19 @@ public partial class ChatViewModel
 
     public string SessionSettingsText => Localize("SessionConfig_Title", "Session settings");
     public string SessionSettingsHint => Localize("SessionConfig_Hint", "Settings supplied by the agent apply to this conversation.");
+    public bool CanOpenSessionSettings => ShowConfigOptionsPanel && _uiInteractionService is not null;
+
+    // ContentDialog restores native focus to its invoker while ShowAsync is completing.
+    // Keep that invoker enabled; the UI service owns the one in-flight dialog task.
+    [RelayCommand(CanExecute = nameof(CanOpenSessionSettings), AllowConcurrentExecutions = true)]
+    private async Task OpenSessionSettingsAsync()
+    {
+        await _uiDispatcher.EnqueueAsync(async () =>
+        {
+            if (!CanOpenSessionSettings) return;
+            await _uiInteractionService!.ShowSessionSettingsAsync(this).ConfigureAwait(true);
+        }).ConfigureAwait(false);
+    }
 
     private void ReconcileSessionConfiguration(IReadOnlyList<ConfigOptionViewModel> projected)
     {

@@ -1128,6 +1128,9 @@
   <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
     <value>Close</value>
   </data>
+  <data name="SessionSettingsDialog.CloseButtonText" xml:space="preserve">
+    <value>Close</value>
+  </data>
   <data name="SessionsDialogSearchBox.PlaceholderText" xml:space="preserve">
     <value>Search sessions</value>
   </data>

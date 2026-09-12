@@ -146,6 +146,7 @@ public sealed class NavigationSelectionProjectorTests
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText) => Task.FromResult<string?>(null);
         public Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(RemoteProjectSelectionViewModel viewModel) => Task.FromResult(RemoteProjectSelectionResult.Cancel);
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;
+        public Task ShowSessionSettingsAsync(SalmonEgg.Presentation.ViewModels.Chat.ChatViewModel viewModel) => Task.CompletedTask;
     }
 
 }
