@@ -20,6 +20,39 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class AcpChatServiceAdapterTests
 {
     [Fact]
+    public async Task AvailableUpdates_OriginalScopeDrainingAndNewScopeEmpty_AwaitsOriginalDrain()
+    {
+        var dispatcher = new QueueingUiDispatcher();
+        var observed = new List<SessionUpdateEventArgs>();
+        var events = new AcpEventAdapter(observed.Add, dispatcher);
+        var first = events.BeginHydrationBuffering("first");
+        events.Enqueue(new SessionUpdateEventArgs("first", new PlanUpdate(CreatePlanEntries("response"))));
+        Assert.True(events.MarkHydrated(first, lowTrust: false));
+        events.BeginHydrationBuffering("second");
+
+        var settled = events.WaitForAvailableUpdatesAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(settled.IsCompleted);
+        while (dispatcher.RunNext()) { }
+        await settled;
+        Assert.Equal("first", Assert.Single(observed).SessionId);
+    }
+
+    [Fact]
+    public async Task AvailableUpdates_UnreleasedHydration_DoesNotWaitForItsCallerToReleaseIt()
+    {
+        var dispatcher = new QueueingUiDispatcher();
+        var events = new AcpEventAdapter(_ => { }, dispatcher);
+        events.BeginHydrationBuffering("first");
+        events.Enqueue(new SessionUpdateEventArgs("first", new PlanUpdate(CreatePlanEntries("buffered"))));
+
+        var settled = events.WaitForAvailableUpdatesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(settled.IsCompletedSuccessfully);
+        await settled;
+    }
+
+    [Fact]
     public void SessionUpdateReceived_BuffersUntilHydrated_ThenPublishes()
     {
         // Arrange

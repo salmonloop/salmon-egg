@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Services;
@@ -395,16 +394,25 @@ public sealed class AcpEventAdapter
 
     public Task WaitForAvailableUpdatesAsync(CancellationToken cancellationToken = default)
     {
+        var drains = new List<Task>();
         lock (_gate)
         {
             // A settings apply must not wait for a hydration scope whose release depends on that
             // same caller. An already scheduled UI drain, however, must finish before it settles.
-            if (!_drainScheduled && !_hydrationScopesByAttemptId.Values.Any(static scope => scope.DrainScheduled))
+            if (_drainScheduled)
             {
-                return Task.CompletedTask;
+                _drainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously);
+                drains.Add(_drainIdleTcs.Task);
+            }
+            foreach (var scope in _hydrationScopesByAttemptId.Values)
+            {
+                if (!scope.DrainScheduled) continue;
+                scope.DrainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously);
+                drains.Add(scope.DrainIdleTcs.Task);
             }
         }
-        return WaitForDrainIdleAsync(cancellationToken);
+        var completed = Task.WhenAll(drains);
+        return cancellationToken.CanBeCanceled ? completed.WaitAsync(cancellationToken) : completed;
     }
 
     public Task WaitForDrainIdleAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
