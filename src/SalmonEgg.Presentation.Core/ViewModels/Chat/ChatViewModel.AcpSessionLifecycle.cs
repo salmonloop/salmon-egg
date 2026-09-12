@@ -729,8 +729,16 @@ public partial class ChatViewModel
         string turnId,
         string? remoteSessionId,
         SessionPromptResponse response,
-        AcpSessionEventSource source)
+        AcpSessionEventSource source,
+        CancellationToken cancellationToken)
     {
+        // The adapter queues native dispatch separately from state ingress. Drain before joining
+        // the latter so end_turn cannot overtake its final content or deadlock waiting behind itself.
+        if (source.Service is AcpChatServiceAdapter adapter)
+        {
+            await adapter.WaitForSessionUpdatesDrainedAsync(remoteSessionId, cancellationToken).ConfigureAwait(false);
+        }
+
         await _sessionUpdateWorkQueue.Enqueue(async () =>
         {
             if (!IsCurrentEventSource(source)) return;
@@ -2499,7 +2507,6 @@ public partial class ChatViewModel
 
     private async Task ProcessRetiredConnectionAsync(AcpSessionEventSource source, AcpConnectionRetirementReason reason)
     {
-        CancelPromptOperationsForSource(source, reason);
         if (_conversationAttentionStore is not null)
         {
             await _conversationAttentionStore.Dispatch(new DetachConversationAttentionContentAction(
@@ -2520,6 +2527,10 @@ public partial class ChatViewModel
                     ConnectionInstanceId: turn.ConnectionInstanceId);
             await _chatStore.Dispatch(action).ConfigureAwait(false);
         }
+
+        // Cancellation completes the prompt's catch path, so commit the retirement reason first;
+        // otherwise an unexpected disconnect can win the terminal-state race as a user cancellation.
+        CancelPromptOperationsForSource(source, reason);
     }
 
     // When the underlying transport genuinely dies, the connection projection can otherwise keep

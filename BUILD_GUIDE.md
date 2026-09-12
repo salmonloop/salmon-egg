@@ -332,10 +332,10 @@ macOS 的 `macOS Native Acceptance` workflow 使用本次 Debug Skia 产物、�
 ```bash
 SALMONEGG_NAV_MASK_SKIP_BUILD=1 SALMONEGG_NAV_INTERACTION_PROBE=1 \
   scripts/gates/run-skia-nav-mask-probe.sh Debug
-scripts/gates/run-skia-read-receipt-probe.sh
+python3 scripts/gates/skia-read-receipt-image-smoke.py --artifacts artifacts/read-receipts
 ```
 
-Linux 需要 Xvfb、Openbox、xdotool、xprop 和 XTest。门禁各自创建临时 AppData、虚拟屏与应用进程并负责回收。导航检查真实键鼠输入、焦点留位、跨组迁移、折叠祖先指示与标题可见性；阅读检查同尺寸更新、Markdown、弹窗遮挡、最小化恢复与长正文滚动。结果目录包含源码状态、产物路径/哈希、boot.log 和原生窗口事实。
+Linux 需要 Xvfb、Openbox、xdotool、xprop、ffmpeg 和 XTest。门禁各自创建临时 AppData、虚拟屏与应用进程并负责回收。导航检查真实键鼠输入、焦点留位、跨组迁移、折叠祖先指示与标题可见性；阅读检查同尺寸更新、Markdown、弹窗遮挡、最小化恢复、长正文滚动，以及不支持内联图片时完整原文兜底且不下载图片。结果目录包含源码状态、产物路径/哈希、boot.log 和原生窗口事实。
 
 当前状态导航 PR 保持草稿，等待 [Uno NavigationView #24509](https://github.com/unoplatform/uno/pull/24509) 与 [Toolkit ThemeListener #242](https://github.com/unoplatform/Uno.WindowsCommunityToolkit/pull/242) 进入正式依赖版本。发布的 Uno.WinUI 6.7.103 / Toolkit 7.1.206 仍会触发相应门禁；不能跳过断言换取全绿。上游 CI 包或源代码构建只能作为明确标注来源的开发验证，不得手改已安装的 NuGet 缓存。
 

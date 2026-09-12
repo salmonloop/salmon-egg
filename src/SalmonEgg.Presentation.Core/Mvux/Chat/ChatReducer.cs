@@ -23,9 +23,9 @@ public static class ChatReducer
                         .SetItem(failure.Failure.ConversationId, failure.Failure)
                 },
             ClearConversationOperationFailureAction clearFailure => current with
-                {
-                    OperationFailures = current.OperationFailures?.Remove(clearFailure.ConversationId)
-                },
+            {
+                OperationFailures = current.OperationFailures?.Remove(clearFailure.ConversationId)
+            },
             SelectConversationAction selectConversation => Mutate(current, ProjectConversation(current, selectConversation.ConversationId)),
             SetBindingSliceAction setBinding => Mutate(current, current with
             {
@@ -60,10 +60,10 @@ public static class ChatReducer
                     || string.Equals(draftText.ExpectedConversationId, current.HydratedConversationId, StringComparison.Ordinal))
                 && (!draftText.ExpectedRevision.HasValue || draftText.ExpectedRevision.Value == current.DraftRevision)
                 => Mutate(current, current with
-            {
-                DraftText = draftText.Text,
-                DraftRevision = checked(current.DraftRevision + 1)
-            }),
+                {
+                    DraftText = draftText.Text,
+                    DraftRevision = checked(current.DraftRevision + 1)
+                }),
             BeginTurnAction begin => BeginTurn(current, begin),
             SetTurnBindingAction binding when ResolveRunningTurn(current, binding.ConversationId, binding.TurnId, binding.ExpectedConnectionInstanceId) is { } bindingTurn
                 => SetTurn(current, bindingTurn with

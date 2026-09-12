@@ -320,7 +320,9 @@ public sealed class ConversationCatalogDisplayPresenterTests
         };
         await chat.Dispatch(new UpsertTranscriptMessageAction("conversation", new ConversationMessageSnapshot
         {
-            Id = "message", ContentType = "text", TextContent = "reply"
+            Id = "message",
+            ContentType = "text",
+            TextContent = "reply"
         }));
 
         var resetObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
