@@ -45,16 +45,23 @@ def run_owned(command, timeout, **kwargs):
 def reap_owned_children():
     # Linux makes grandchildren ours when a leader dies. This process has no unrelated children.
     children = Path(f"/proc/{os.getpid()}/task/{os.getpid()}/children")
-    for value in children.read_text().split():
-        try:
-            os.kill(int(value), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-    while True:
-        try:
-            os.waitpid(-1, 0)
-        except ChildProcessError:
-            break
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        for value in children.read_text().split():
+            try:
+                os.kill(int(value), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        while True:
+            try:
+                pid, _ = os.waitpid(-1, os.WNOHANG)
+                if not pid:
+                    break
+            except ChildProcessError:
+                return
+        # A killed parent can make its independent-session descendants newly adoptable.
+        time.sleep(0.02)
+    raise RuntimeError("Owned credential processes did not exit within the cleanup deadline")
 
 
 def run_inside_bus(args):
