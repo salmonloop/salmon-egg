@@ -78,10 +78,14 @@ internal sealed class WindowsGuiAppSession : IDisposable
             existing = WaitForProcess(executablePath, launchedAtUtc, TimeSpan.FromSeconds(20), activatedProcessId);
         }
 
-        var automation = new UIA3Automation();
+        var automation = new UIA3Automation
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(5),
+            TransactionTimeout = TimeSpan.FromSeconds(5)
+        };
         var application = Application.Attach(existing);
         var mainWindow = RetryUntil(
-            () => application.GetMainWindow(automation),
+            () => application.GetMainWindow(automation, TimeSpan.FromMilliseconds(200)),
             window => window != null && !TryGetIsOffscreen(window),
             TimeSpan.FromSeconds(20),
             "Timed out waiting for SalmonEgg main window.");
@@ -1450,19 +1454,19 @@ internal sealed class WindowsGuiAppSession : IDisposable
         int? activatedProcessId)
     {
         return RetryUntil(
-            () => FindActivatedProcess(activatedProcessId)
+            () => FindActivatedProcess(activatedProcessId, executablePath)
                 ?? Process.GetProcessesByName(ProcessName)
                     .OrderByDescending(process => process.StartTime)
                     .FirstOrDefault(process =>
-                        (TryGetProcessExecutablePath(process, out var candidatePath)
-                            && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase))
-                        || WasProcessStartedAfter(process, launchedAtUtc)),
+                        TryGetProcessExecutablePath(process, out var candidatePath)
+                        && string.Equals(candidatePath, executablePath, StringComparison.OrdinalIgnoreCase)
+                        && WasProcessStartedAfter(process, launchedAtUtc)),
             process => process != null,
             timeout,
             $"Timed out waiting for SalmonEgg process from installed executable '{executablePath}'.")!;
     }
 
-    private static Process? FindActivatedProcess(int? processId)
+    private static Process? FindActivatedProcess(int? processId, string executablePath)
     {
         if (processId is null or <= 0)
         {
@@ -1472,7 +1476,9 @@ internal sealed class WindowsGuiAppSession : IDisposable
         try
         {
             var process = Process.GetProcessById(processId.Value);
-            if (!process.HasExited)
+            if (!process.HasExited
+                && TryGetProcessExecutablePath(process, out var actualPath)
+                && string.Equals(actualPath, executablePath, StringComparison.OrdinalIgnoreCase))
             {
                 return process;
             }
@@ -1617,13 +1623,18 @@ internal sealed class WindowsGuiAppSession : IDisposable
     private static WindowsGuiAppSession AttachToProcess(Process process, bool ownsProcess)
     {
         GuiAcceptanceDiagnostics.Record("AttachToProcess: create UIA3");
-        var automation = new UIA3Automation();
+        var automation = new UIA3Automation
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(5),
+            TransactionTimeout = TimeSpan.FromSeconds(5)
+        };
         try
         {
             var application = Application.Attach(process);
             GuiAcceptanceDiagnostics.Record("AttachToProcess: read main window");
             var mainWindow = RetryUntil(
-                () => application.GetMainWindow(automation),
+                // FlaUI otherwise waits forever for MainWindowHandle inside the outer retry.
+                () => application.GetMainWindow(automation, TimeSpan.FromMilliseconds(200)),
                 window => window != null && !TryGetIsOffscreen(window),
                 TimeSpan.FromSeconds(20),
                 "Timed out waiting for SalmonEgg main window.");
