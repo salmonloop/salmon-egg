@@ -64,6 +64,41 @@ if arguments[1] == "describe", let pid = Int32(arguments[2]) {
     print(String(data: try JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
     exit(0)
 }
+if arguments[1] == "allow-local-network" {
+    var candidates: [(AXUIElement, [String])] = []
+    for application in NSWorkspace.shared.runningApplications where application.bundleIdentifier == "com.apple.UserNotificationCenter" {
+        let root = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(root, 2)
+        let windows = attribute(root, kAXWindowsAttribute as CFString) as? [AXUIElement] ?? []
+        for window in windows {
+            var stack = [window]
+            var texts: [String] = []
+            while let element = stack.popLast() {
+                for name in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
+                    if let text = attribute(element, name as CFString) as? String { texts.append(text) }
+                }
+                stack.append(contentsOf: children(element))
+            }
+            let text = texts.joined(separator: " ").lowercased()
+            if text.contains("python") && text.contains("local network") { candidates.append((window, texts)) }
+        }
+    }
+    if candidates.isEmpty { print("No Python local-network permission prompt"); exit(0) }
+    guard candidates.count == 1, let button = findButton(candidates[0].0, "Allow"),
+          let rawPosition = attribute(button, kAXPositionAttribute as CFString),
+          let rawSize = attribute(button, kAXSizeAttribute as CFString) else { exit(7) }
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(rawPosition as! AXValue, .cgPoint, &point),
+          AXValueGetValue(rawSize as! AXValue, .cgSize, &size) else { exit(8) }
+    point.x += size.width / 2
+    point.y += size.height / 2
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    print("Allowed the temporary Python fixture local-network prompt through native UI")
+    exit(0)
+}
 if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]),
    let localX = Double(arguments[3]), let localY = Double(arguments[4]), let height = Double(arguments[5]) {
     let target = AXUIElementCreateApplication(pid)
