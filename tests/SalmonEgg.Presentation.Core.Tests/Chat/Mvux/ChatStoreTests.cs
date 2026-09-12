@@ -101,12 +101,12 @@ public class ChatStoreTests
 
         // Act
         await store.Dispatch(new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent));
-        var running = await observedPhases[ChatTurnPhase.WaitingForAgent].Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var running = await observedPhases[ChatTurnPhase.WaitingForAgent].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await store.Dispatch(new SetTurnBindingAction("conv-1", "turn-1", "profile-1", "remote-1", "connection-1"));
         await store.Dispatch(new AdvanceTurnPhaseAction("conv-1", "turn-1", ChatTurnPhase.Responding, ConnectionInstanceId: "connection-1"));
-        var responding = await observedPhases[ChatTurnPhase.Responding].Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var responding = await observedPhases[ChatTurnPhase.Responding].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await store.Dispatch(new CompleteTurnAction("conv-1", "turn-1", "end_turn", true, "connection-1"));
-        var completed = await observedPhases[ChatTurnPhase.Completed].Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var completed = await observedPhases[ChatTurnPhase.Completed].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await store.Dispatch(new ClearTerminalTurnAction("conv-1"));
 
         // Assert

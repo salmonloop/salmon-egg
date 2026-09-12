@@ -29,6 +29,16 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
             CheckPathProperty(SafePathsAccepted);
         }
 
+        [Theory]
+        [InlineData(".~.")]
+        [InlineData(".$HOME.")]
+        [InlineData(".$USER.")]
+        [InlineData(".\0.")]
+        public void SafePathGeneration_RemovingTokens_DoesNotJoinTraversalDots(string pathSegment)
+        {
+            Assert.True(SafePathsAccepted(pathSegment));
+        }
+
         [Fact]
         public void NullByte_Injection_Rejected()
         {
@@ -72,11 +82,11 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         {
             // 生成安全路径（过滤掉危险字符）
             var safeSegment = pathSegment
-                .Replace("..", "")
-                .Replace("~", "")
-                .Replace("\0", "")
-                .Replace("$HOME", "", StringComparison.OrdinalIgnoreCase)
-                .Replace("$USER", "", StringComparison.OrdinalIgnoreCase);
+                .Replace("..", "_")
+                .Replace("~", "_")
+                .Replace("\0", "_")
+                .Replace("$HOME", "_", StringComparison.OrdinalIgnoreCase)
+                .Replace("$USER", "_", StringComparison.OrdinalIgnoreCase);
 
             var safePath = System.IO.Path.Combine("safe", safeSegment);
 
