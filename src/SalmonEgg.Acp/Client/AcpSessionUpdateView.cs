@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using SalmonEgg.Acp.Content;
@@ -17,6 +18,7 @@ public sealed class AcpSessionUpdateView
 {
     private readonly JsonElement? _toolCall;
     private readonly ImmutableArray<JsonElement>? _configOptions;
+    private readonly int _configProtocolVersion;
     private readonly ImmutableArray<JsonElement>? _planEntries;
 
     internal AcpSessionUpdateView(
@@ -26,7 +28,8 @@ public sealed class AcpSessionUpdateView
         string? workState = null,
         StopReason? stopReason = null,
         ImmutableArray<JsonElement>? configOptions = null,
-        ImmutableArray<JsonElement>? planEntries = null)
+        ImmutableArray<JsonElement>? planEntries = null,
+        int configProtocolVersion = AcpProtocolVersion.V2)
     {
         Message = message;
         _toolCall = toolCall;
@@ -34,6 +37,7 @@ public sealed class AcpSessionUpdateView
         WorkState = workState;
         StopReason = stopReason;
         _configOptions = configOptions;
+        _configProtocolVersion = configProtocolVersion;
         _planEntries = planEntries;
     }
 
@@ -57,7 +61,8 @@ public sealed class AcpSessionUpdateView
 
     /// <summary>Detached configuration options in Agent priority order.</summary>
     public ImmutableArray<ConfigOption> ConfigOptions => _configOptions is { } options
-        ? AcpSessionProjectionJson.ReadArray<ConfigOption>(options) : [];
+        ? options.Select(option => option.Deserialize(AcpWireFormat.For(_configProtocolVersion).TypeInfo<ConfigOption>())!)
+            .ToImmutableArray() : [];
 
     /// <summary>True when the complete plan list is supplied.</summary>
     public bool HasPlanEntries => _planEntries.HasValue;

@@ -1000,7 +1000,8 @@ namespace SalmonEgg.Acp.Client
                 SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(sessionId!, update)
                 {
                     View = new AcpSessionUpdateView(configOptions: configOptions
-                        .Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray()),
+                        .Select(option => JsonSerializer.SerializeToElement(option, wire.TypeInfo<ConfigOption>())).ToImmutableArray(),
+                        configProtocolVersion: wire.Version),
                     IsResponseProjection = true,
                     ConnectionIsCurrent = () => IsCurrentConnection(connectionToken)
                 });
@@ -2750,7 +2751,8 @@ namespace SalmonEgg.Acp.Client
                 if (view is null && updateParams.Update is ConfigOptionUpdate { ConfigOptions: { } options })
                 {
                     view = new AcpSessionUpdateView(configOptions: options
-                        .Select(static option => AcpSessionProjectionJson.Store(option)).ToImmutableArray());
+                        .Select(option => JsonSerializer.SerializeToElement(option, wire.TypeInfo<ConfigOption>())).ToImmutableArray(),
+                        configProtocolVersion: wire.Version);
                 }
                 SessionUpdateReceived?.Invoke(this, new SessionUpdateEventArgs(updateParams.SessionId, updateParams.Update)
                 {
