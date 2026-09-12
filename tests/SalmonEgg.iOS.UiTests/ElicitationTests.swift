@@ -1,4 +1,5 @@
 import Foundation
+import Vision
 import XCTest
 
 @MainActor
@@ -26,15 +27,13 @@ final class ElicitationTests: XCTestCase {
     }
 
     func testInstalledProductRequiresConsentAndKeepsBrowserPrivate() async throws {
-        // Use the same native names VoiceOver sees; production does not enable Uno's test-ID mapping.
-        let session = product.descendants(matching: .any)["Native acceptance session"].firstMatch
-        if !session.waitForExistence(timeout: 30) || !session.isHittable {
+        // UIKit's current Uno container peers hide nested elements from XCTest. Read the actual
+        // screen with Apple's Vision, then deliver a native tap; no product state or test-ID mode.
+        if try textBounds("Native acceptance session") == nil {
             let sidebar = product.buttons["Toggle sidebar"]
             if sidebar.waitForExistence(timeout: 10) && sidebar.isHittable { sidebar.tap() }
-            let project = product.descendants(matching: .any)["Native acceptance"].firstMatch
-            if project.waitForExistence(timeout: 10) && project.isHittable { project.tap() }
         }
-        try tap(session)
+        try await tapVisibleText("Native acceptance session")
         try await eventually("The authoritative session was not loaded") { try await self.state()["loaded"] as? Bool == true }
         let initialState = try await state()
         let capabilities = try XCTUnwrap(initialState["capabilities"] as? [String: Any])
@@ -107,6 +106,33 @@ final class ElicitationTests: XCTestCase {
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, "The native control is not interactable")
         element.tap()
+    }
+
+    private func textBounds(_ text: String) throws -> CGRect? {
+        let screenshot = XCUIScreen.main.screenshot()
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(data: screenshot.pngRepresentation).perform([request])
+        let matches = (request.results ?? []).compactMap { observation -> CGRect? in
+            guard observation.topCandidates(1).first?.string == text else { return nil }
+            return observation.boundingBox
+        }
+        guard matches.count == 1, let rectangle = matches.first else { return nil }
+        return CGRect(x: rectangle.minX, y: 1 - rectangle.maxY, width: rectangle.width, height: rectangle.height)
+    }
+
+    private func tapVisibleText(_ text: String) async throws {
+        try await eventually("The visible native label is absent or ambiguous: " + text) {
+            try self.textBounds(text) != nil
+        }
+        let rectangle = try XCTUnwrap(textBounds(text))
+        let evidence = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        evidence.name = "Before native tap: " + text
+        evidence.lifetime = .keepAlways
+        add(evidence)
+        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).tap()
     }
 
     private func expectUrlCard() async throws {
