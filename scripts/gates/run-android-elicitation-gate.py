@@ -162,11 +162,15 @@ def seed_product(device, endpoint):
 
 
 def prepare_browser(device):
-    assert device.text("shell", "pm", "path", CHROME).startswith("package:"), "The system image has no Chrome"
+    # Fresh Google APIs images unpack Chrome after boot_completed. Its stub package can exist
+    # before the actual launcher activity; wait for PackageManager's authoritative resolution.
+    def installed_browser():
+        activity = device.text("shell", "cmd", "package", "resolve-activity", "--components",
+                               "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", CHROME)
+        return activity if activity.startswith(CHROME + "/") else None
+
+    browser_activity = eventually("The system Chrome package has no launcher activity", installed_browser, timeout=90)
     device.text("shell", "cmd", "role", "add-role-holder", "android.app.role.BROWSER", CHROME)
-    browser_activity = device.text("shell", "cmd", "package", "resolve-activity", "--components",
-                                   "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", CHROME)
-    assert browser_activity.startswith(CHROME + "/"), "The system Chrome package has no launcher activity"
     device.text("shell", "am", "start", "-W", "-a", "android.intent.action.MAIN",
                 "-c", "android.intent.category.LAUNCHER", "-n", browser_activity)
     allowed = ("Use without an account", "Continue without an account", "Accept & continue", "No thanks",
