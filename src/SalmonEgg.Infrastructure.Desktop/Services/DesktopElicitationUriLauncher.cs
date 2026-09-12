@@ -18,7 +18,7 @@ public sealed class DesktopElicitationUriLauncher : IExternalUriLauncher
     }
 
     // Each additional native target requires its own real handler/isolation gate before advertising.
-    public bool IsSupported => OperatingSystem.IsLinux() && _runtimeProbe.IsDesktopProcessHost
+    public bool IsSupported => (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) && _runtimeProbe.IsDesktopProcessHost
         && _runtimeProbe.HasExternalFileOpener;
 
     public async Task<ExternalUriOpenResult> OpenAsync(ExternalUriTarget target, CancellationToken cancellationToken)
