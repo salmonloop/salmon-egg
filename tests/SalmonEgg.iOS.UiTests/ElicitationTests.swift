@@ -4,6 +4,7 @@ import XCTest
 
 @MainActor
 final class ElicitationTests: XCTestCase {
+    private enum GateFailure: Error { case unmetCondition(String) }
     private let product = XCUIApplication(bundleIdentifier: "com.companyname.salmonegg")
     private var control: URL!
     private var recognizedLines: [String] = []
@@ -107,9 +108,13 @@ final class ElicitationTests: XCTestCase {
     }
 
     private func tap(_ element: XCUIElement) throws {
-        XCTAssertTrue(element.waitForExistence(timeout: 20), "The required native control is absent")
+        guard element.waitForExistence(timeout: 30) else {
+            throw GateFailure.unmetCondition("The required native control is absent")
+        }
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed, "The native control is not interactable")
+        guard XCTWaiter.wait(for: [ready], timeout: 30) == .completed else {
+            throw GateFailure.unmetCondition("The native control is not interactable")
+        }
         // Keep the touch down long enough for UIKit's native scroll-view touch delivery.
         element.press(forDuration: 0.2)
     }
@@ -148,7 +153,8 @@ final class ElicitationTests: XCTestCase {
         let current = try await state()
         let expected = try XCTUnwrap(current["url"] as? String)
         let fullUrl = product.staticTexts[expected].firstMatch
-        XCTAssertTrue(fullUrl.waitForExistence(timeout: 20))
+        // session/load's response precedes the app's hydration commit and buffered card projection.
+        try await eventually("The complete URL card did not appear after hydration") { fullUrl.exists }
         XCTAssertTrue(fullUrl.label == expected, "The native card must show the full address")
         XCTAssertEqual(product.staticTexts["127.0.0.1"].firstMatch.label, "127.0.0.1")
     }
@@ -194,6 +200,6 @@ final class ElicitationTests: XCTestCase {
             if try await condition() { return }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        XCTFail(message)
+        throw GateFailure.unmetCondition(message)
     }
 }
