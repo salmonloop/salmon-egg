@@ -1,0 +1,38 @@
+name: macOS Native Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/macos-native-acceptance.yml'
+      - 'scripts/gates/macos-desktop-input-probe.swift'
+      - 'scripts/gates/run-macos-desktop-input-probe.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-native-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-desktop:
+    name: macOS Native Desktop Input
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Exercise native Cocoa input with the selected Xcode
+        timeout-minutes: 3
+        run: python3 scripts/gates/run-macos-desktop-input-probe.py
+      - name: Upload native desktop evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: macos-native-desktop-input
+          path: |
+            artifacts/macos-native-input/*.json
+            artifacts/macos-native-input/*.log
+          if-no-files-found: error
