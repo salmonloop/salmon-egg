@@ -42,7 +42,7 @@ SalmonEgg.Acp (独立 ACP 协议 SDK，供 Application / Infrastructure / Presen
 - **`src/SalmonEgg.Acp/`** — 可独立分发的 ACP 协议 SDK（`net10.0`，`PackageId` 为 `SalmonEgg.Acp`）。零包依赖、AOT/trim 兼容，由 Application、Infrastructure 和 Presentation.Core 共同消费，不反向依赖本仓库其他项目。公开面与协议版本策略见 [`../src/SalmonEgg.Acp/README.md`](../src/SalmonEgg.Acp/README.md)。
 - **`src/SalmonEgg.Cli/`** — 配置管理命令行（`net10.0`，产物名 `salmon-egg`，self-contained 单文件）。引用 `Application` / `Infrastructure` / `Infrastructure.Desktop`，不引用任何 Presentation 项目。安装与 PATH 契约见 [`release-guide.md`](release-guide.md)。
 
-安装 GUI 不会注册 `salmon-egg` 命令；全局命令只来自 CLI 安装包。
+桌面安装包包含 `salmon-egg` CLI，并通过平台安装机制注册命令：Windows MSIX 使用应用执行别名，Linux deb 使用符号链接，macOS pkg 使用安装脚本。具体发布与 PATH 契约见 [`release-guide.md`](release-guide.md)；移动端和 WASM 不携带本地 CLI。
 
 ## 项目结构
 

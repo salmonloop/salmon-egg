@@ -14,7 +14,7 @@
 | “VS Code host 无法独立启动” | VS Code 已提供独立 Node 入口、端口参数和连接 token；详见下节。发布包是否携带这些构建产物、具体版本能否运行，仍需实测。 |
 | “AHP OAuth 是设备互信的替代方案” | [传输规范](https://github.com/microsoft/agent-host-protocol/blob/d1a2b199cdb493e914165322a925c1a5f0113616/docs/specification/transport.md#authentication) 将 endpoint access 放在传输握手；[协议授权](https://github.com/microsoft/agent-host-protocol/blob/d1a2b199cdb493e914165322a925c1a5f0113616/docs/specification/authentication.md) 面向 Agent/MCP 等受保护资源，两者独立。 |
 | “手机连接桌面 Agent 需要 AHP” | 单客户端远程连接已有 ACP WebSocket；AHP 增加的是多个客户端共享状态、动作排序与断线恢复，见 [AHP 与 ACP 分层](https://github.com/microsoft/agent-host-protocol/blob/d1a2b199cdb493e914165322a925c1a5f0113616/docs/guide/ahp-and-acp.md)。 |
-| “安装 GUI 就已有 CLI 宿主” | 当前 GUI 安装包不注册 `salmon-egg`；命令来自独立 CLI 安装包，见 [交付单元](architecture.md#独立交付单元)。 |
+| “安装 GUI 就已有 AHP 宿主” | 桌面安装包已包含配置 CLI，并按平台注册命令；例如 Windows MSIX 的 [AppExecutionAlias](../SalmonEgg/SalmonEgg/Package.appxmanifest) 指向 `cli/salmon-egg.exe`。这不代表尚未实现的 AHP `serve` 命令已经存在。 |
 
 官方 [.NET 工程](https://github.com/microsoft/agent-host-protocol/blob/d1a2b199cdb493e914165322a925c1a5f0113616/clients/dotnet/src/AgentHostProtocol/AgentHostProtocol.csproj) 是 client、reducer 和 WebSocket transport，目标为 `netstandard2.0;net8.0`，包含 `Microsoft.Extensions.*` 包依赖。它可作为 AHP 客户端起点，不能当成已经交付的 .NET server。
 
@@ -38,7 +38,7 @@ AHP 运行时和第三方包放进独立工程，由 CLI 组装。AHP 客户端�
 
 | 候选宿主 | 选择及代价 |
 |---|---|
-| CLI 显式服务 | 采用；复用发布入口，并有独立进程生命周期。没有 CLI 安装包的用户需要安装它。 |
+| CLI 显式服务 | 采用；复用桌面安装包中的 CLI 交付链，并有独立进程生命周期。移动端和网页作为客户端，不启动本地宿主。 |
 | GUI 内后台服务 | 暂不采用；服务生命周期会与窗口关闭、导航及应用恢复耦合。GUI 后续可管理独立 CLI 服务。 |
 | 另发一个独立可执行程序 | 暂不采用；会增加安装、升级与进程管理入口。独立协议工程并不要求再造发布入口。 |
 
