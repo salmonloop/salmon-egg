@@ -161,6 +161,31 @@ def seed_product(device, endpoint):
     assert stored == files["config/app.yaml"].strip(), "The installed product did not receive its configuration"
 
 
+def wait_for_boot_work(device):
+    # boot_completed precedes Google image first-run dexopt and service setup. Starting Chrome
+    # during that CPU storm caused a measured OS ANR; require actual idle CPU before user input.
+    previous = None
+    calm_samples = 0
+
+    def calm():
+        nonlocal previous, calm_samples
+        line = device.text("shell", "cat", "/proc/stat").splitlines()[0].split()
+        values = [int(value) for value in line[1:]]
+        current = sum(values[:8]), values[3] + values[4]
+        if previous is None:
+            previous = current
+            return False
+        elapsed, idle = current[0] - previous[0], current[1] - previous[1]
+        previous = current
+        fraction = idle / elapsed if elapsed else 0
+        with (device.artifacts / "boot-load.jsonl").open("a") as log:
+            log.write(json.dumps({"idleFraction": fraction, "load": device.text("shell", "cat", "/proc/loadavg")}) + "\n")
+        calm_samples = calm_samples + 1 if fraction >= 0.4 else 0
+        return calm_samples >= 3
+
+    eventually("The Android system first-run work did not settle", calm, timeout=120)
+
+
 def prepare_browser(device):
     # Fresh Google APIs images unpack Chrome after boot_completed. Its stub package can exist
     # before the actual launcher activity; wait for PackageManager's authoritative resolution.
@@ -338,6 +363,7 @@ def main(args):
     peer = None
     reverse = None
     try:
+        wait_for_boot_work(device)
         prepare_browser(device)
         device.adb("install", "--no-streaming", "-r", "-g", str(apk), timeout=180)
         device.text("shell", "am", "force-stop", PACKAGE)

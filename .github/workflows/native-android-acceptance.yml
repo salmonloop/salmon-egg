@@ -88,7 +88,7 @@ jobs:
           "$ANDROID_SDK_ROOT/emulator/emulator" -list-avds
           test -f "$ANDROID_AVD_HOME/salmonegg-acp-acceptance.ini"
           setsid "$ANDROID_SDK_ROOT/emulator/emulator" -avd salmonegg-acp-acceptance \
-            -port 5554 -accel on -cores 2 -memory 2048 -no-window -gpu swiftshader_indirect \
+            -port 5554 -accel on -cores 4 -memory 3072 -no-window -gpu swiftshader_indirect \
             -no-snapshot -noaudio -no-boot-anim \
             > artifacts/android-acp-acceptance/emulator.log 2>&1 &
           emulator_pid=$!
@@ -108,6 +108,9 @@ jobs:
               sleep 1
             done'
           adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 0
+          # Preserve the tablet's 1280x800 dp layout with fewer physical pixels on software graphics.
+          adb -s emulator-5554 shell wm size 1280x800
+          adb -s emulator-5554 shell wm density 160
           adb -s emulator-5554 shell input keyevent KEYCODE_WAKEUP
           adb -s emulator-5554 shell wm dismiss-keyguard
           timeout --signal=TERM --kill-after=10s 600s \
