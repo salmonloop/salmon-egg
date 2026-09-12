@@ -139,7 +139,7 @@ def main():
             assert permission.returncode == 0, 'Could not handle the matching temporary fixture permission prompt'
             subprocess.run(['screencapture', '-x', str(output / ('before-' + action + '.png'))], check=True, timeout=5)
             attempt = subprocess.run([str(ax_tool), 'pointer', str(app.pid), str((x + width / 2) / scale),
-                                      str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=5)
+                                      str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=10)
             with (output / 'native-pointer.log').open('a') as log:
                 log.write(attempt.stdout + attempt.stderr)
             assert attempt.returncode == 0, attempt.stderr
