@@ -260,6 +260,7 @@
                                                                   ItemsSource="{x:Bind Options, Mode=OneWay}"
                                                                   DisplayMemberPath="Name"
                                                                   SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}"
+                                                                  IsFocusEngagementEnabled="True"
                                                                   IsEnabled="{x:Bind EditorEnabled, Mode=OneWay}"
                                                                   HorizontalAlignment="Stretch"
                                                                   Visibility="{x:Bind IsSelectType, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
