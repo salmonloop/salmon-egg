@@ -104,6 +104,10 @@ public sealed class UrlElicitationSmokeTests
         public Fixture()
         {
             GuiTestGate.RequireEnabled();
+            var python = Environment.GetEnvironmentVariable("SALMONEGG_GUI_PYTHON")
+                ?? throw new InvalidOperationException("The gate must supply its actual Python executable.");
+            Assert.True(File.Exists(python), "The selected Python executable is missing.");
+            var peer = FindPeer();
             Root = Path.Combine(Path.GetTempPath(), "SalmonEgg.UrlGui", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(Root, "config", "servers"));
             Directory.CreateDirectory(Path.Combine(Root, "conversations"));
@@ -114,12 +118,7 @@ public sealed class UrlElicitationSmokeTests
             var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
             portProbe.Stop();
             _server.Prefixes.Add($"http://127.0.0.1:{port}/");
-            _server.Start();
             Url = $"http://127.0.0.1:{port}/authorize?token={Guid.NewGuid():N}";
-            _serverTask = ServeAsync();
-            var python = Environment.GetEnvironmentVariable("SALMONEGG_GUI_PYTHON")
-                ?? throw new InvalidOperationException("The gate must supply its actual Python executable.");
-            var peer = FindPeer();
             var scenario = Path.Combine(Root, "scenario.json");
             File.WriteAllText(scenario, "{\"url\":" + Json(Url) + ",\"log\":" + Json(PeerLog)
                 + ",\"control\":" + Json(ControlPath) + ",\"cwd\":" + Json(project) + "}");
@@ -137,6 +136,8 @@ public sealed class UrlElicitationSmokeTests
                 + "\"remoteSessionId\":\"native-elicitation-session\",\"messages\":[]}]}");
             _previousRoot = Environment.GetEnvironmentVariable("SALMONEGG_APPDATA_ROOT");
             Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Root);
+            _server.Start();
+            _serverTask = ServeAsync();
         }
 
         public string Root { get; }
@@ -231,8 +232,18 @@ public sealed class UrlElicitationSmokeTests
             }
             Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", _previousRoot);
             var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
-            if (!string.IsNullOrWhiteSpace(artifacts) && File.Exists(PeerLog))
-                File.Copy(PeerLog, Path.Combine(artifacts, "url-peer.jsonl"), overwrite: true);
+            if (!string.IsNullOrWhiteSpace(artifacts))
+            {
+                if (File.Exists(PeerLog)) File.Copy(PeerLog, Path.Combine(artifacts, "url-peer.jsonl"), overwrite: true);
+                using var stream = File.Create(Path.Combine(artifacts, "url-browser-observation.json"));
+                using var writer = new Utf8JsonWriter(stream);
+                writer.WriteStartObject();
+                writer.WriteNumber("browserVisits", Visits.Count);
+                writer.WriteStartArray("reports");
+                foreach (var report in Reports) report.WriteTo(writer);
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+            }
             Directory.Delete(Root, recursive: true);
         }
 
