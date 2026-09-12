@@ -329,6 +329,8 @@ python3 scripts/gates/run-android-elicitation-gate.py \
 
 门禁验证拒绝和取消零导航、显式打开和重开两次浏览器访问但只有一个 ACP accept、未知及重复 complete、表单 accept/decline/cancel 和断线后清空 URL；外部页面的 opener、referrer 与私密字段由浏览器回报，私密字段和完整 URL 不得进入 ACP 回复或应用持久化。产物、设备指纹、UI XML、截图与日志写入 artifacts。它证明当前安装物的原生 Android 流程，不代替物理设备、Release 裁剪/签名或独立第三方 Agent 验收。
 
+修改这条原生门禁时，手动触发 `Android Installed ACP Acceptance` 的 `reverse-verification=true`：先验证正常安装物，再临时加入未同意就打开浏览器的行为并重新打包，要求实际网页访问使门禁明确失败；按字节恢复源文件、重建安装原 APK 后再次全链通过。普通 PR 只运行一次完整流程，避免每次构建三份 APK。
+
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
