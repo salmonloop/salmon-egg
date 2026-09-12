@@ -96,6 +96,8 @@ public partial class ChatViewModelTests
         await DrainVersionedUpdatesAsync(fixture, dispatcher);
         Assert.Equal(ChatTurnPhase.WaitingForAgent, (await fixture.ChatStore.GetCurrentStateAsync()).ActiveTurn!.Phase);
         peer.Update("""{"sessionUpdate":"state_update","state":"requires_action"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        Assert.Equal(ChatTurnPhase.WaitingForUser, (await fixture.ChatStore.GetCurrentStateAsync()).ActiveTurn!.Phase);
         peer.Update("""{"sessionUpdate":"state_update","state":"idle"}""");
         await DrainVersionedUpdatesAsync(fixture, dispatcher);
 
@@ -158,6 +160,118 @@ public partial class ChatViewModelTests
 
         Assert.True(Assert.Single(result.ConfigOptions!).CurrentBooleanValue);
         Assert.False(Assert.Single((await fixture.ChatStore.GetCurrentStateAsync()).ResolveSessionStateSlice("conv-1")!.Value.ConfigOptions).BooleanValue);
+    }
+
+    [Fact]
+    public async Task VersionedUpdates_BackgroundContentAfterIdle_CannotRestartTheFinishedTurn()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        peer.Update("""{"sessionUpdate":"state_update","state":"running"}""");
+        peer.Update("""{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        var oldTurn = (await fixture.ChatStore.GetCurrentStateAsync()).ActiveTurn!;
+
+        peer.Update("""{"sessionUpdate":"tool_call_update","toolCallId":"background","status":"completed"}""");
+        peer.Update("""{"sessionUpdate":"agent_message_chunk","messageId":"background-message","content":{"type":"text","text":"background"}}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+        Assert.Equal(ChatTurnPhase.Completed, (await fixture.ChatStore.GetCurrentStateAsync()).ActiveTurn!.Phase);
+        peer.Update("""{"sessionUpdate":"state_update","state":"running"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        var newTurn = (await fixture.ChatStore.GetCurrentStateAsync()).ActiveTurn!;
+        Assert.NotEqual(oldTurn.TurnId, newTurn.TurnId);
+        Assert.Equal(ChatTurnPhase.WaitingForAgent, newTurn.Phase);
+    }
+
+    [Fact]
+    public async Task VersionedUpdates_UnknownPlanPreservesKnownPlan_EmptyItemsClearsIt()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        peer.Update("""{"sessionUpdate":"plan_update","plan":{"type":"items","planId":"p","entries":[{"content":"Keep","priority":"medium","status":"pending"}]}}""");
+        peer.Update("""{"sessionUpdate":"plan_update","plan":{"type":"_future","planId":"p","custom":"keep raw"}}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        Assert.Equal("Keep", Assert.Single((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")!.Value.PlanEntries).Content);
+
+        peer.Update("""{"sessionUpdate":"plan_update","plan":{"type":"items","planId":"p","entries":[]}}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+        Assert.Empty((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")!.Value.PlanEntries);
+    }
+
+    [Fact]
+    public async Task VersionedUpdates_SameRemoteIdOnDifferentProfiles_UsesTheReceivingConnection()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "other",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new("conv-1", "remote-1", "profile"))
+                .Add("other", new("other", "remote-1", "different-profile"))
+        });
+
+        peer.Update("""{"sessionUpdate":"agent_message","messageId":"owned","content":[{"type":"text","text":"original profile"}]}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+        var state = await fixture.ChatStore.GetCurrentStateAsync();
+        Assert.Equal("original profile", Assert.Single(state.ResolveContentSlice("conv-1")!.Value.Transcript).TextContent);
+        Assert.Empty(state.ResolveContentSlice("other")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty);
+    }
+
+    [Theory]
+    [InlineData("message")]
+    [InlineData("tool")]
+    public async Task VersionedUpdates_ConnectionChangesDuringProjectionRead_RejectsTheOldCommit(string kind)
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        var readEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readCount = 0;
+        fixture.ChatStore.ReadState = async () =>
+        {
+            var captured = fixture.ChatStore.LatestState;
+            if (Interlocked.Increment(ref readCount) == 2)
+            {
+                readEntered.TrySetResult();
+                await release.Task.WaitAsync(TestContext.Current.CancellationToken);
+            }
+            return captured;
+        };
+        peer.Update(kind == "message"
+            ? """{"sessionUpdate":"agent_message","messageId":"old","content":[{"type":"text","text":"stale"}]}"""
+            : """{"sessionUpdate":"tool_call_update","toolCallId":"old-tool","title":"stale"}""");
+        await AwaitPermissionUiSignalAsync(dispatcher, readEntered.Task);
+        try
+        {
+            await peer.DisconnectClientAsync();
+            await AwaitWithSynchronizationContextAsync(dispatcher,
+                fixture.ViewModel.ReplaceChatServiceAsync(stablePeer.Service, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        fixture.ChatStore.ReadState = null;
+
+        Assert.Empty((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty);
     }
 
     [Fact]

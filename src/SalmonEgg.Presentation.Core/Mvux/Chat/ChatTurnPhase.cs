@@ -11,5 +11,6 @@ public enum ChatTurnPhase
     Responding,
     Completed,
     Failed,
-    Cancelled
+    Cancelled,
+    WaitingForUser
 }

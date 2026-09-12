@@ -3388,7 +3388,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             if (foregroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
                 && ReferenceEquals(chatService, _chatService) && update.IsCurrent)
-                OnSessionUpdateReceived(chatService, update);
+                OnSessionUpdateReceived(chatService, update,
+                    update.View is not null ? CaptureInteractionSource(chatService, foregroundGeneration) : null);
         };
         chatService.SessionUpdateReceived += _sessionUpdateHandler;
         // Decorators forward events with the inner service as sender. Capture the actual subscribed
