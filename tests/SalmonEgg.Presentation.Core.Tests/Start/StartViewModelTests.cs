@@ -2322,7 +2322,7 @@ public sealed class StartViewModelTests
             });
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.StreamableHttp, ServerUrl = "https://example.test" });
-            chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
+            chat.ViewModel.SelectProfileForDefaultProjection(chat.ViewModel.AcpProfileList[0]);
             var chatService = CreateConnectedChatService();
             chatService
                 .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
