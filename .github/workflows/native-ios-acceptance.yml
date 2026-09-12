@@ -24,8 +24,8 @@ concurrency:
 jobs:
   installed-ios:
     name: iOS Installed ACP UI
-    # The older macOS 15 VM can stall CoreSimulator for Xcode 26 (runner-images #12777).
-    # Keep the repository's Xcode/.NET contract, using the serviced native host for execution.
+    # Pair the repository's .NET 10 SDK with the published 10.0.300.3 Apple workload set.
+    # Xcode 26.5 / iOS 26.5 are both installed on this serviced native host.
     runs-on: macos-26
     timeout-minutes: 35
     env:
@@ -45,7 +45,7 @@ jobs:
 
       - name: Select matching Apple toolchain
         run: |
-          xcode_developer_dir="$(python3 -c 'import os; print(os.path.realpath("/Applications/Xcode_26.0.app/Contents/Developer"))')"
+          xcode_developer_dir="$(python3 -c 'import os; print(os.path.realpath("/Applications/Xcode_26.5.app/Contents/Developer"))')"
           test -d "$xcode_developer_dir"
           sudo xcode-select --switch "$xcode_developer_dir"
           xcodebuild -version
@@ -53,15 +53,10 @@ jobs:
           uname -m
           xcrun --sdk iphonesimulator --show-sdk-path
           xcrun --sdk macosx --find actool
-          dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
-
-      - name: Install matching Simulator runtime
-        timeout-minutes: 12
-        run: |
-          # Hosted images retain older Xcode SDKs after removing their runtimes (runner-images #13570).
-          # Download through Xcode so actool and the installed UI test use the same supported runtime.
-          simulator_sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
-          xcodebuild -downloadPlatform iOS -buildVersion "$simulator_sdk_version"
+          # https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode26.5-10284
+          dotnet workload install ios --version 10.0.300.3 --disable-parallel --no-http-cache
+          dotnet workload list
+          # Wait for CoreSimulatorService before actool / xcodebuild (runner-images #12777).
           xcrun simctl list runtimes
 
       - name: Build current Simulator application

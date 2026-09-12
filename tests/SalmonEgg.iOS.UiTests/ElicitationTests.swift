@@ -14,15 +14,24 @@ final class ElicitationTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        let hierarchy = XCTAttachment(string: product.debugDescription)
+        hierarchy.name = "Product accessibility hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Installed product screen"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         product.terminate()
     }
 
     func testInstalledProductRequiresConsentAndKeepsBrowserPrivate() async throws {
-        let session = product.descendants(matching: .any)["MainNav.Session.native-elicitation-conversation"].firstMatch
+        // Use the same native names VoiceOver sees; production does not enable Uno's test-ID mapping.
+        let session = product.descendants(matching: .any)["Native acceptance session"].firstMatch
         if !session.waitForExistence(timeout: 30) || !session.isHittable {
-            let sidebar = product.buttons["TitleBar.ToggleSidebar"]
+            let sidebar = product.buttons["Toggle sidebar"]
             if sidebar.waitForExistence(timeout: 10) && sidebar.isHittable { sidebar.tap() }
-            let project = product.descendants(matching: .any)["MainNav.Project.remote-directory:native-elicitation-directory"].firstMatch
+            let project = product.descendants(matching: .any)["Native acceptance"].firstMatch
             if project.waitForExistence(timeout: 10) && project.isHittable { project.tap() }
         }
         try tap(session)
@@ -79,10 +88,11 @@ final class ElicitationTests: XCTestCase {
 
         try await instruct("url-expire")
         try await expectUrlCard()
+        let expiringState = try await state()
+        let expiringUrl = try XCTUnwrap(expiringState["url"] as? String)
         try await instruct("disconnect")
         try await eventually("A disconnected request retained its URL") {
-            !self.product.staticTexts["Elicitation.FullUrl"].firstMatch.exists
-                || self.product.staticTexts["Elicitation.FullUrl"].firstMatch.label.isEmpty
+            !self.product.staticTexts[expiringUrl].firstMatch.exists
         }
         for report in try await reports() {
             XCTAssertEqual(report["openerNull"] as? Bool, true)
@@ -100,12 +110,12 @@ final class ElicitationTests: XCTestCase {
     }
 
     private func expectUrlCard() async throws {
-        let fullUrl = product.staticTexts["Elicitation.FullUrl"].firstMatch
-        XCTAssertTrue(fullUrl.waitForExistence(timeout: 20))
         let current = try await state()
         let expected = try XCTUnwrap(current["url"] as? String)
+        let fullUrl = product.staticTexts[expected].firstMatch
+        XCTAssertTrue(fullUrl.waitForExistence(timeout: 20))
         XCTAssertTrue(fullUrl.label == expected, "The native card must show the full address")
-        XCTAssertEqual(product.staticTexts["Elicitation.UrlHost"].firstMatch.label, "127.0.0.1")
+        XCTAssertEqual(product.staticTexts["127.0.0.1"].firstMatch.label, "127.0.0.1")
     }
 
     private func assertNoNavigation() async throws {
