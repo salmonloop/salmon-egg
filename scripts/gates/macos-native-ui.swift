@@ -11,8 +11,18 @@ func children(_ element: AXUIElement) -> [AXUIElement] {
     attribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] ?? []
 }
 
+func isFrontmost(_ pid: pid_t) -> Bool {
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+          let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return false }
+    // NSWorkspace changes before the app-switcher animation finishes. Native z-order must
+    // also expose the actual application window before mouse input can reach its content.
+    let front = windows.first { ($0[kCGWindowLayer as String] as? Int) == 0 }
+    return (front?[kCGWindowOwnerPID as String] as? Int) == Int(pid)
+}
+
 func activate(_ pid: pid_t, _ titlebarPoint: CGPoint) -> Bool {
-    if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+    if isFrontmost(pid) { return true }
     let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
     if ["com.apple.Safari", "com.google.Chrome", "org.mozilla.firefox", "com.microsoft.edgemac"].contains(frontmost) {
         // Opening the system browser makes it frontmost. Return to the preceding product with
@@ -33,7 +43,7 @@ func activate(_ pid: pid_t, _ titlebarPoint: CGPoint) -> Bool {
     }
     let deadline = Date().addingTimeInterval(5)
     while Date() < deadline {
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { return true }
+        if isFrontmost(pid) { return true }
         RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     }
     fputs("Native application did not become foreground after native application activation.\n", stderr)
