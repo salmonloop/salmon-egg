@@ -94,10 +94,13 @@ public sealed class TerminalAuthenticationSmokeTests
     private sealed class Fixture : IDisposable
     {
         private readonly string? _oldRoot;
+        private readonly string _scenario;
 
         public Fixture(string scenario)
         {
             GuiTestGate.RequireEnabled();
+            _scenario = scenario;
+            GuiAcceptanceDiagnostics.Record("Terminal: create fixture " + scenario);
             Root = Path.Combine(Path.GetTempPath(), "SalmonEgg.TerminalGui", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(Root, "config", "servers"));
             Directory.CreateDirectory(Path.Combine(Root, "conversations"));
@@ -145,6 +148,7 @@ public sealed class TerminalAuthenticationSmokeTests
 
         public void SendPrompt(WindowsGuiAppSession app)
         {
+            GuiAcceptanceDiagnostics.Record("Terminal: navigate conversation");
             if (app.MainWindow.Patterns.Window.IsSupported)
                 app.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Maximized);
             var session = app.FindByAutomationId("MainNav.Session.terminal-conversation", TimeSpan.FromSeconds(30));
@@ -153,25 +157,30 @@ public sealed class TerminalAuthenticationSmokeTests
             app.EnterText("InputBox", "packaged terminal authentication");
             Assert.True(app.WaitUntilEnabled("ChatInputArea.Send", TimeSpan.FromSeconds(15)));
             app.InvokeButton("ChatInputArea.Send");
+            GuiAcceptanceDiagnostics.Record("Terminal: prompt invoked");
         }
 
         public void WaitForConsent(WindowsGuiAppSession app)
         {
             var consent = app.FindVisibleElementByNameAnywhere("Open sign-in", TimeSpan.FromSeconds(20));
             Assert.NotNull(consent);
+            GuiAcceptanceDiagnostics.Record("Terminal: consent displayed");
             Assert.False(File.Exists(LoginPath));
         }
 
         public void EnterTerminalInput(WindowsGuiAppSession app)
         {
             Assert.True(app.WaitUntil(() => File.Exists(LoginPath), TimeSpan.FromSeconds(20)));
+            GuiAcceptanceDiagnostics.Record("Terminal: PTY process observed");
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(15)));
             var terminal = app.FindByAutomationIdAnywhere("BottomPanel.TerminalWebView", TimeSpan.FromSeconds(15));
             Assert.True(app.WaitUntil(() => terminal.Name.Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal), TimeSpan.FromSeconds(20)));
+            GuiAcceptanceDiagnostics.Record("Terminal: ready text rendered");
             app.ClickElement(terminal);
             Keyboard.Type("user confirmed");
             Keyboard.Press(VirtualKeyShort.RETURN);
             Keyboard.Release(VirtualKeyShort.RETURN);
+            GuiAcceptanceDiagnostics.Record("Terminal: native keyboard delivered");
         }
 
         public void AssertLoginExited(WindowsGuiAppSession app)
@@ -191,6 +200,17 @@ public sealed class TerminalAuthenticationSmokeTests
         {
             WindowsGuiAppSession.StopAllRunningInstances();
             Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", _oldRoot);
+            var artifacts = Environment.GetEnvironmentVariable("SALMONEGG_GUI_ACCEPTANCE_ARTIFACTS");
+            if (!string.IsNullOrWhiteSpace(artifacts))
+            {
+                var evidence = Path.Combine(artifacts, "terminal-" + _scenario);
+                Directory.CreateDirectory(evidence);
+                foreach (var file in new[] { "requests.jsonl", "login.json", "boot.log" })
+                {
+                    var source = Path.Combine(Root, file);
+                    if (File.Exists(source)) File.Copy(source, Path.Combine(evidence, file), overwrite: true);
+                }
+            }
             if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
         }
 

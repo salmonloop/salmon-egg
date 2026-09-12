@@ -19,7 +19,8 @@ $arguments = @(
     'test', '--project', 'tests/SalmonEgg.GuiTests.Windows/SalmonEgg.GuiTests.Windows.csproj',
     '--configuration', 'Debug', '--no-build', '-p:UseSharedCompilation=false',
     '--filter-class', 'SalmonEgg.GuiTests.Windows.AcpSettingsSmokeTests',
-    '--minimum-expected-tests', '1', '--timeout', '3m', '--no-ansi', '--output', 'Detailed'
+    '--filter-class', 'SalmonEgg.GuiTests.Windows.TerminalAuthenticationSmokeTests',
+    '--minimum-expected-tests', '5', '--timeout', '5m', '--no-ansi', '--output', 'Detailed'
 )
 $info = [Diagnostics.ProcessStartInfo]::new()
 $info.FileName = (Get-Command dotnet).Source
@@ -31,8 +32,8 @@ $test = [Diagnostics.Process]::Start($info)
 $standardOutput = $test.StandardOutput.ReadToEndAsync()
 $standardError = $test.StandardError.ReadToEndAsync()
 try {
-    if (-not $test.WaitForExit(210000)) {
-        throw 'Installed GUI test process exceeded the 210-second runtime bound. See gui-stage.jsonl.'
+    if (-not $test.WaitForExit(330000)) {
+        throw 'Installed GUI test process exceeded the 330-second runtime bound. See gui-stage.jsonl.'
     }
     $testExit = $test.ExitCode
 }
@@ -51,7 +52,7 @@ $contents = Get-Content -LiteralPath $log -Raw
 Write-Host $contents
 $passed = [regex]::Match($contents, '(?m)^\s+succeeded:\s+(\d+)\s*$')
 $skipped = [regex]::Match($contents, '(?m)^\s+skipped:\s+(\d+)\s*$')
-if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 1 `
+if ($testExit -ne 0 -or -not $passed.Success -or [int]$passed.Groups[1].Value -lt 5 `
     -or -not $skipped.Success -or [int]$skipped.Groups[1].Value -ne 0) {
     throw "Installed WinUI GUI acceptance failed or skipped: exit=$testExit."
 }
@@ -62,7 +63,7 @@ $provenance = [ordered]@{
     currentInstall = $marker
     acceptedTests = [int]$passed.Groups[1].Value
     skippedTests = [int]$skipped.Groups[1].Value
-    scope = 'Actual installed MSIX launch and native ACP settings navigation; terminal sign-in remains separately gated.'
+    scope = 'Current installed MSIX ACP settings and complete terminal consent/input/exit/reconnect/retry/cancellation.'
 }
 $provenance | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $ArtifactsDirectory 'result.json')
-Write-Host '[gate] Current installed MSIX accepted native ACP settings input with no skipped tests.'
+Write-Host '[gate] Current installed MSIX accepted native settings and terminal sign-in with no skipped tests.'
