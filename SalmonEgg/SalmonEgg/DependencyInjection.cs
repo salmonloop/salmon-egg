@@ -389,7 +389,7 @@ public static class DependencyInjection
 #pragma warning disable CA1416 // This registration exists only in the browser target.
         services.AddSingleton<IExternalUriLauncher, WasmElicitationUriLauncher>();
 #pragma warning restore CA1416
-#elif WINDOWS || __ANDROID__
+#elif WINDOWS || __ANDROID__ || __IOS__
         services.AddSingleton<IExternalUriLauncher, Platforms.NativeElicitationUriLauncher>();
 #elif __UNO_SKIA__
         // The launcher advertises Linux only. skia-elicitation-consent-smoke.py verifies the real
