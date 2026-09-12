@@ -55,7 +55,7 @@ jobs:
         run: |
           dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
             --runtime iossimulator-arm64 -p:SalmonEggTargetFrameworks=net10.0-ios \
-            -p:SalmonEggSupportsDesktopProcessHost=false -p:UseInterpreter=true -p:TrimMode=copy
+            -p:Configuration=Release -p:SalmonEggSupportsDesktopProcessHost=false -p:UseInterpreter=true -p:TrimMode=copy
           dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj --configuration Release \
             --framework net10.0-ios --runtime iossimulator-arm64 --no-restore \
             -p:SalmonEggTargetFrameworks=net10.0-ios -p:SalmonEggSupportsDesktopProcessHost=false \
