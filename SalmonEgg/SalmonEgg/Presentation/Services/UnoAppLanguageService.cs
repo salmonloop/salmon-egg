@@ -57,7 +57,24 @@ public sealed class UnoAppLanguageService : IAppLanguageService
             string.Equals(normalizedTag, AppLanguageCatalog.SystemTag, StringComparison.Ordinal));
 #endif
 #if WINDOWS
-        Microsoft.Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = platformTag;
+        // MRT rejects an empty override (WindowsAppSDK #5335; proposed fix #5726 is not
+        // released). Clear the packaged WinRT override first so Languages reflects the user's
+        // real system preference order, then use that authoritative choice for this process.
+        // Keep the persisted WinRT preference empty for System; remove this bridge when MRT's
+        // setter supports clearing. No hard-coded language or stale previous override is used.
+        if (platformTag.Length == 0)
+        {
+            Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = string.Empty;
+            var systemLanguages = Windows.Globalization.ApplicationLanguages.Languages;
+            if (systemLanguages.Count == 0)
+                throw new InvalidOperationException("Windows did not resolve an application language from system preferences.");
+            Microsoft.Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = systemLanguages[0];
+            Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = string.Empty;
+        }
+        else
+        {
+            Microsoft.Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = platformTag;
+        }
 #else
         Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = platformTag;
 #endif
