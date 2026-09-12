@@ -60,8 +60,10 @@ def main(args):
     peer = None
     try:
         listing = json.loads(output(["xcrun", "simctl", "list", "--json"]))
+        sdk_version = output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"])
         runtime = next(item["identifier"] for item in listing["runtimes"]
-                       if item.get("isAvailable") and item["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-26"))
+                       if item.get("isAvailable") and item["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+                       and item["version"] == sdk_version)
         device_type = next(item["identifier"] for item in listing["devicetypes"] if "iPad-Pro-13-inch" in item["identifier"])
         simulator = output(["xcrun", "simctl", "create", "SalmonEgg ACP acceptance", device_type, runtime])
         (artifacts / "simulator.json").write_text(json.dumps({"id": simulator, "runtime": runtime,
