@@ -117,7 +117,9 @@ public partial class ChatViewModel
                     return;
                 }
                 await ApplySessionConfigOptionResponseAsync(binding.ConversationId, response, binding.RemoteSessionId).ConfigureAwait(true);
+                if (!IsConfigurationCurrent(row, source, binding)) return;
                 await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
+                if (!IsConfigurationCurrent(row, source, binding)) return;
                 outcome = ConfigOptionApplyOutcome.Applied;
             }).ConfigureAwait(false);
             return outcome;
