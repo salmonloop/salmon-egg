@@ -94,5 +94,6 @@ jobs:
           path: |
             artifacts/ios-acp-acceptance/*.json
             artifacts/ios-acp-acceptance/*.log
+            artifacts/ios-acp-acceptance/product-logs/**
             artifacts/ios-acp-acceptance/results.xcresult
           retention-days: 7
