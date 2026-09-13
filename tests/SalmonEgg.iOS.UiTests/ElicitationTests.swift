@@ -33,8 +33,13 @@ final class ElicitationTests: XCTestCase {
     }
 
     func testInstalledProductRequiresConsentAndKeepsBrowserPrivate() async throws {
-        // Exercise normal restoration of the persisted last active conversation. Native row
-        // tapping is tracked independently in #217 and must not gate the URL consent contract.
+        // UIKit's current Uno container peers hide nested elements from XCTest. Read the actual
+        // screen with Apple's Vision, then deliver a native tap; no product state or test-ID mode.
+        if try textBounds("Add project") == nil {
+            let sidebar = product.buttons["Toggle sidebar"]
+            if sidebar.waitForExistence(timeout: 10) && sidebar.isHittable { sidebar.tap() }
+        }
+        try await tapVisibleText("Consent session")
         try await eventually("The authoritative session was not loaded") { try await self.state()["loaded"] as? Bool == true }
         let initialState = try await state()
         let capabilities = try XCTUnwrap(initialState["capabilities"] as? [String: Any])
