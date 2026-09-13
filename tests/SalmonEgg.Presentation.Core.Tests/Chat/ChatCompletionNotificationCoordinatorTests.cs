@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -75,7 +76,12 @@ public sealed class ChatCompletionNotificationCoordinatorTests
     [Fact]
     public async Task FirstObservedStateAlreadyCompleted_DoesNotShowNotification()
     {
-        await using var state = State.Value(new object(), () => ChatState.Empty);
+        var completed = new ActiveTurnState(
+            "conversation-1", "turn-1", ChatTurnPhase.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await using var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conversation-1", completed)
+        });
         var store = new ChatStore(state);
         var notifications = new RecordingNotificationService();
         using var coordinator = new ChatCompletionNotificationCoordinator(
@@ -85,12 +91,6 @@ public sealed class ChatCompletionNotificationCoordinatorTests
             new FakeVisibilityState { IsActive = false },
             CreateLocalizer(),
             NullLogger<ChatCompletionNotificationCoordinator>.Instance);
-
-        // A single dispatch that lands straight in Completed reproduces what a restored session looks
-        // like: the very first state this coordinator ever sees already holds a completed turn, with
-        // no earlier phase to compare against. Nothing completed while the user was away, so no
-        // notification is owed.
-        await store.Dispatch(new BeginTurnAction("conversation-1", "turn-1", ChatTurnPhase.Completed));
 
         await CompleteTurnAsync(store, "turn-2");
         var shown = await WaitForNotificationAsync(notifications, SecondNotificationId);
@@ -196,12 +196,116 @@ public sealed class ChatCompletionNotificationCoordinatorTests
         // An unrelated mutation re-publishes the same completed turn. Note the reducer already drops
         // a second CompleteTurnAction on a terminal turn, so this is the realistic duplicate shape.
         await store.Dispatch(new SetDraftTextAction("anything"));
+        await store.Dispatch(new SelectConversationAction("other-conversation"));
+        await store.Dispatch(new SelectConversationAction("conversation-1"));
         await CompleteTurnAsync(store, "turn-2");
         var shown = await WaitForNotificationAsync(notifications, SecondNotificationId);
 
         Assert.Equal(
             new[] { FirstNotificationId, SecondNotificationId },
             shown.Select(request => request.NotificationId));
+    }
+
+    [Fact]
+    public async Task BackgroundConversations_WithMatchingRemoteAndTurnIds_NotifyIndependently()
+    {
+        // Arrange
+        await using var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            HydratedConversationId = "foreground"
+        });
+        var store = new ChatStore(state);
+        var notifications = new RecordingNotificationService();
+        using var coordinator = new ChatCompletionNotificationCoordinator(
+            store,
+            notifications,
+            new FakeNotificationSettings { SystemNotificationsEnabled = true },
+            new FakeVisibilityState { IsActive = false },
+            CreateLocalizer(),
+            NullLogger<ChatCompletionNotificationCoordinator>.Instance);
+        await store.Dispatch(new BeginTurnAction(
+            "background-1", "same-turn", ChatTurnPhase.Thinking,
+            ProfileId: "profile-1", RemoteSessionId: "same-remote", ConnectionInstanceId: "connection-1"));
+        await store.Dispatch(new BeginTurnAction(
+            "background-2", "same-turn", ChatTurnPhase.Thinking,
+            ProfileId: "profile-2", RemoteSessionId: "same-remote", ConnectionInstanceId: "connection-2"));
+
+        // Act
+        await store.Dispatch(new CompleteTurnAction("background-1", "same-turn", "end_turn", true, "connection-1"));
+        await WaitForNotificationAsync(notifications, "turn:background-1:same-turn");
+        await store.Dispatch(new CompleteTurnAction("background-2", "same-turn", "end_turn", true, "connection-2"));
+        var shown = await WaitForNotificationAsync(notifications, "turn:background-2:same-turn");
+
+        // Assert
+        Assert.Equal(new[] { "turn:background-1:same-turn", "turn:background-2:same-turn" },
+            shown.Select(request => request.NotificationId));
+        Assert.Equal("foreground", (await store.GetCurrentStateAsync()).HydratedConversationId);
+        Assert.Null((await store.GetCurrentStateAsync()).ActiveTurn);
+    }
+
+    [Fact]
+    public async Task BackgroundCompletion_AfterSwitchingForeground_NotifiesOnce()
+    {
+        // Arrange
+        await using var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            HydratedConversationId = "conversation-1"
+        });
+        var store = new ChatStore(state);
+        var notifications = new RecordingNotificationService();
+        using var coordinator = new ChatCompletionNotificationCoordinator(
+            store,
+            notifications,
+            new FakeNotificationSettings { SystemNotificationsEnabled = true },
+            new FakeVisibilityState { IsActive = false },
+            CreateLocalizer(),
+            NullLogger<ChatCompletionNotificationCoordinator>.Instance);
+        await store.Dispatch(new BeginTurnAction("conversation-1", "turn-1", ChatTurnPhase.Thinking));
+
+        // Act
+        await store.Dispatch(new SelectConversationAction("conversation-2"));
+        await store.Dispatch(new CompleteTurnAction("conversation-1", "turn-1"));
+        await WaitForNotificationAsync(notifications, FirstNotificationId);
+        await store.Dispatch(new SelectConversationAction("conversation-1"));
+        await CompleteTurnAsync(store, "turn-2");
+        var shown = await WaitForNotificationAsync(notifications, SecondNotificationId);
+
+        // Assert
+        Assert.Equal(new[] { FirstNotificationId, SecondNotificationId }, shown.Select(request => request.NotificationId));
+    }
+
+    [Fact]
+    public async Task Dispose_StopsNotificationsWhileAnotherSubscriberContinuesReceivingTurns()
+    {
+        // Arrange
+        await using var state = State.Value(new object(), () => ChatState.Empty);
+        var store = new ChatStore(state);
+        var notifications = new RecordingNotificationService();
+        using var coordinator = new ChatCompletionNotificationCoordinator(
+            store,
+            notifications,
+            new FakeNotificationSettings { SystemNotificationsEnabled = true },
+            new FakeVisibilityState { IsActive = false },
+            CreateLocalizer(),
+            NullLogger<ChatCompletionNotificationCoordinator>.Instance);
+        await CompleteTurnAsync(store, "turn-1");
+        await WaitForNotificationAsync(notifications, FirstNotificationId);
+        var otherNotifications = new RecordingNotificationService();
+        using var otherCoordinator = new ChatCompletionNotificationCoordinator(
+            store,
+            otherNotifications,
+            new FakeNotificationSettings { SystemNotificationsEnabled = true },
+            new FakeVisibilityState { IsActive = false },
+            CreateLocalizer(),
+            NullLogger<ChatCompletionNotificationCoordinator>.Instance);
+
+        // Act
+        coordinator.Dispose();
+        await CompleteTurnAsync(store, "turn-2");
+        await WaitForNotificationAsync(otherNotifications, SecondNotificationId);
+
+        // Assert
+        Assert.Equal(new[] { FirstNotificationId }, notifications.Requests.Select(request => request.NotificationId));
     }
 
     [Fact]

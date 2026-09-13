@@ -325,6 +325,22 @@ macOS 的 `macOS Native Acceptance` workflow 使用本次 Debug Skia 产物、�
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
 - Skia Desktop GUI readiness + seeded transcript projection + focused NumberBox contrast：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness、投影混排 transcript，并在真实 Data & Storage 页面验证深色主题 NumberBox 焦点态；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
+#### 会话状态导航与阅读门禁
+
+先构建当前工作树的 Debug Desktop 产物，再串行执行：
+
+```bash
+SALMONEGG_NAV_MASK_SKIP_BUILD=1 SALMONEGG_NAV_INTERACTION_PROBE=1 \
+  scripts/gates/run-skia-nav-mask-probe.sh Debug
+python3 scripts/gates/skia-read-receipt-image-smoke.py --artifacts artifacts/read-receipts
+```
+
+Linux 需要 Xvfb、Openbox、xdotool、xprop、ffmpeg 和 XTest。门禁各自创建临时 AppData、虚拟屏与应用进程并负责回收。导航检查真实键鼠输入、焦点留位、跨组迁移、折叠祖先指示与标题可见性；阅读检查同尺寸更新、Markdown、弹窗遮挡、最小化恢复、长正文滚动，以及不支持内联图片时完整原文兜底且不下载图片。结果目录包含源码状态、产物路径/哈希、boot.log 和原生窗口事实。
+
+当前状态导航 PR 保持草稿，等待 [Uno NavigationView #24509](https://github.com/unoplatform/uno/pull/24509) 与 [Toolkit ThemeListener #242](https://github.com/unoplatform/Uno.WindowsCommunityToolkit/pull/242) 进入正式依赖版本。发布的 Uno.WinUI 6.7.103 / Toolkit 7.1.206 仍会触发相应门禁；不能跳过断言换取全绿。上游 CI 包或源代码构建只能作为明确标注来源的开发验证，不得手改已安装的 NuGet 缓存。
+
+这两项 Linux 门禁不替代 Windows MSIX、浏览器整条阅读链路、Markdown 异步图片或移动端验收。依赖发布后须更新正式版本并重跑这些平台门禁，再解除草稿状态。
+
 #### WASM notification gate
 WASM 原生通知走浏览器 Notification API。该桥接层是纯浏览器交互，用托管单测会变成 stub 掉被测 API 本身，
 所以门禁在真实浏览器里加载**本次构建产出**的模块，并让通知权限真实处于授予/拒绝状态：

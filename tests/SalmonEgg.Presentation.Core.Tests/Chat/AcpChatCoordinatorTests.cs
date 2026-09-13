@@ -2002,6 +2002,39 @@ public sealed partial class AcpChatCoordinatorTests
         Assert.Equal("remote-session-1", sink.BindingCommands.Updates[0].RemoteSessionId);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnsureRemoteSessionAsync_ConnectionChangesWhilePending_DoesNotBindOldResponse(bool replaceService)
+    {
+        var service = CreateChatService();
+        var replacement = CreateChatService();
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1",
+            ConnectionInstanceId = "connection-1",
+            ActiveSessionCwd = @"C:\repo\demo",
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
+        };
+        var response = new TaskCompletionSource<SessionNewResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Setup(chat => chat.CreateSessionAsync(It.IsAny<SessionNewParams>())).Returns(response.Task);
+        var coordinator = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), Mock.Of<ILogger<AcpChatCoordinator>>(),
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var ensure = coordinator.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
+
+        if (replaceService) sink.CurrentChatService = replacement.Object;
+        else sink.ConnectionInstanceId = "connection-2";
+        response.TrySetResult(new SessionNewResponse("old-remote-session"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ensure);
+        Assert.Empty(sink.BindingCommands.Updates);
+    }
+
     [Fact]
     public async Task ApplyTransportConfigurationAsync_WhenSelectedProfileChangesDuringInitialize_UsesOriginalProfileForConnectionState()
     {
@@ -2861,6 +2894,79 @@ public sealed partial class AcpChatCoordinatorTests
 
         Assert.Same(first.ChatService, second.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ConnectProfileInPoolAsync_BufferOverflowAfterConnectTokenCancelled_UsesExistingConnectionResyncCallback()
+    {
+        // Arrange
+        var service = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var profile = new ServerConfiguration
+        {
+            Id = "background",
+            Name = "Background",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent"
+        };
+        SetupProfileChatService(factory, profile, service.Object);
+        var sut = CreateCoordinator(factory.Object, NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider, sessionRegistry: registry, sessionUpdateBufferLimit: 1);
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var result = await sut.ConnectProfileInPoolAsync(profile, new FakeTransportConfiguration(), connectCts.Token);
+        using var adapter = Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
+        string? resyncedSession = null;
+        adapter.ResyncRequired += remoteSessionId =>
+        {
+            Assert.True(registry.TryGetByProfile(profile.Id, out var registered));
+            Assert.Same(adapter, registered.Service);
+            resyncedSession = remoteSessionId;
+            return Task.CompletedTask;
+        };
+
+        // Act
+        connectCts.Cancel();
+        service.Raise(x => x.SessionUpdateReceived += null, new SessionUpdateEventArgs("same-remote", new PlanUpdate(CreatePlanEntries("one"))));
+        service.Raise(x => x.SessionUpdateReceived += null, new SessionUpdateEventArgs("same-remote", new PlanUpdate(CreatePlanEntries("two"))));
+
+        // Assert
+        Assert.Equal("same-remote", resyncedSession);
+        service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReevaluatePoolAsync_AfterBusyConnectionCompletes_ReleasesItUnderExistingBudget()
+    {
+        // Arrange
+        var service = CreateChatService();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var adapter = new AcpChatServiceAdapter(service.Object, new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
+        registry.Upsert(new AcpConnectionSession("background", adapter, new InitializeResponse(),
+            new AcpConnectionReuseKey(TransportType.Stdio, "agent", "", ""), "connection"));
+        var options = new AcpConnectionEvictionOptions { EnablePolicyEviction = true, MaxWarmProfiles = 0, MaxPinnedProfiles = 0 };
+        var cleaner = new AcpConnectionSessionCleaner(registry, new ConservativeAcpConnectionEvictionPolicy(options), options,
+            NullLogger<AcpConnectionSessionCleaner>.Instance);
+        var snapshot = AcpConnectionDependencySnapshot.Empty with
+        {
+            BusyConnections = ImmutableHashSet.Create(("background", "connection"))
+        };
+        var snapshots = new Mock<IAcpConnectionDependencySnapshotProvider>();
+        snapshots.Setup(provider => provider.GetSnapshotAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => snapshot);
+        var sut = CreateCoordinator(Mock.Of<IAcpChatServiceFactory>(), NullLogger<AcpChatCoordinator>.Instance,
+            CreateTransportSupportPolicy(), EmptyMcpServerProvider, sessionRegistry: registry, sessionCleaner: cleaner,
+            connectionDependencySnapshotProvider: snapshots.Object);
+
+        // Act
+        await sut.ReevaluatePoolAsync(null, TestContext.Current.CancellationToken);
+        Assert.True(registry.TryGetByProfile("background", out _));
+        snapshot = AcpConnectionDependencySnapshot.Empty;
+        await sut.ReevaluatePoolAsync(null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(registry.TryGetByProfile("background", out _));
+        service.Verify(chat => chat.DisconnectAsync(), Times.Once);
+        service.Verify(chat => chat.Dispose(), Times.Once);
     }
 
     [Fact]

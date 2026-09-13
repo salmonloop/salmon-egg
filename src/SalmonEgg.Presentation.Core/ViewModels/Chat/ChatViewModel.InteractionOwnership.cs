@@ -1,8 +1,6 @@
 using System;
-using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Client;
-using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
@@ -12,29 +10,11 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private sealed record InteractionRequestSource(
-        IChatService Service, int ForegroundGeneration, AcpAuthoritativeConnectionSnapshot? Connection);
-
-    private InteractionRequestSource CaptureInteractionSource(IChatService service, int foregroundGeneration)
-        => new(service, foregroundGeneration,
-            _authoritativeConnectionResolver.TryResolveSourceConnection(service, out var connection) ? connection : null);
-
-    private bool IsInteractionSourceActive(InteractionRequestSource source)
-        => !_disposed && source.ForegroundGeneration == Volatile.Read(ref _foregroundChatServiceGeneration)
-            && source.Service.IsConnected;
-
-    private bool IsInteractionConnectionCurrent(InteractionRequestSource source)
-        => IsInteractionSourceActive(source) && source.Connection is { } connection
-            && _authoritativeConnectionResolver.IsSourceConnectionCurrent(connection);
-
-    private string? ResolveInteractionConversation(ChatState state, string? remoteSessionId, InteractionRequestSource source)
-        => source.Connection?.ProfileId is { } profileId && !string.IsNullOrWhiteSpace(remoteSessionId)
-            ? _authoritativeRemoteSessionRouter.ResolveConversationId(state, remoteSessionId, profileId)
-            : null;
-
-    private bool IsInteractionBindingCurrent(InteractionRequestSource source, ConversationBindingSlice binding)
-        => IsInteractionConnectionCurrent(source)
-            && string.Equals(source.Connection?.ProfileId, binding.ProfileId, StringComparison.Ordinal)
+    private bool IsInteractionBindingCurrent(AcpSessionEventSource source, ConversationBindingSlice binding)
+        // Consent keeps the browser's synchronous user activation while checking the same
+        // connection identity used by every background event, not the foreground selection.
+        => IsCurrentEventSource(source) && source.Service.IsConnected
+            && string.Equals(source.ProfileId, binding.ProfileId, StringComparison.Ordinal)
             && _chatStore.ReadCommittedState()?.ResolveBinding(binding.ConversationId) == binding;
 
     private void ReconcileElicitationBindings()
@@ -46,7 +26,7 @@ public partial class ChatViewModel
     }
 
     private void AttachElicitationOwnership(
-        ElicitationRequestViewModel viewModel, InteractionRequestSource source,
+        ElicitationRequestViewModel viewModel, AcpSessionEventSource source,
         ConversationBindingSlice binding, ElicitationRequestEventArgs request)
     {
         viewModel.BindToConversation(
@@ -55,14 +35,14 @@ public partial class ChatViewModel
     }
 
     private async Task<bool> CancelBoundElicitationAsync(
-        ElicitationRequestViewModel viewModel, InteractionRequestSource source,
+        ElicitationRequestViewModel viewModel, AcpSessionEventSource source,
         ConversationBindingSlice binding, ElicitationRequestEventArgs request)
     {
         var sent = await ChatInteractionEventBridge.CancelUndisplayedElicitationAsync(request, Logger).ConfigureAwait(false);
         if (sent) return true;
         await PostToUiAsync(async () =>
         {
-            if (!IsInteractionSourceActive(source) || !request.State.CanCancel) return;
+            if (!IsCurrentEventSource(source) || !request.State.CanCancel) return;
             if (IsChatShellVisibleForRemoteUi
                 && ReferenceEquals(_panelStateCoordinator.GetPendingElicitationRequest(binding.ConversationId), viewModel)) return;
             await _acpConnectionCommands.DisconnectAfterInteractionFailureAsync(source.Service, this,

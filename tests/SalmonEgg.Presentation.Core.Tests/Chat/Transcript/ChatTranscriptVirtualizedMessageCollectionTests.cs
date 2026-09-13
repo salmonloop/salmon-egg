@@ -367,6 +367,29 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         Assert.Contains(nameof(ChatMessageViewModel.TextContent), propertyChanges);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Reset_EqualBodyWithNewSnapshot_UpdatesReadIdentityWithoutResettingMarkdownFallback(bool appendsMessage)
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var original = BuildTranscript(1);
+        sut.Reset("conv-1", original, Project, MatchesSnapshot, PatchProjectedMessage);
+        var displayed = sut[0];
+        displayed.ApplySnapshot(original[0], 0);
+        displayed.MarkRenderFailed();
+        var changes = new List<string?>();
+        displayed.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        var updated = BuildTranscript(appendsMessage ? 2 : 1);
+
+        sut.Reset("conv-1", updated, Project, MatchesSnapshot, PatchProjectedMessage);
+
+        Assert.Same(displayed, sut[0]);
+        Assert.Same(updated[0], displayed.PresentedSnapshot);
+        Assert.True(displayed.IsMarkdownFallbackSticky);
+        Assert.Equal(new[] { nameof(ChatMessageViewModel.PresentedSnapshot) }, changes);
+    }
+
     private static ImmutableList<ConversationMessageSnapshot> BuildTranscript(int count) =>
         Enumerable.Range(0, count)
             .Select(CreateMessage)

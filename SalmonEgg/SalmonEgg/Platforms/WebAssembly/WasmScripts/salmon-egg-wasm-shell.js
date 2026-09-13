@@ -21,6 +21,35 @@ export function openExternalElicitation(value) {
     return true;
 }
 
+export function observeDocumentActivity(sink) {
+    let disposed = false;
+    let lastActive;
+    const report = () => {
+        if (disposed) return;
+        const active = document.visibilityState === "visible" && document.hasFocus();
+        if (active === lastActive) return;
+        lastActive = active;
+        sink(active);
+    };
+    document.addEventListener("visibilitychange", report);
+    window.addEventListener("focus", report);
+    window.addEventListener("blur", report);
+    report();
+    return {
+        dispose() {
+            if (disposed) return;
+            disposed = true;
+            document.removeEventListener("visibilitychange", report);
+            window.removeEventListener("focus", report);
+            window.removeEventListener("blur", report);
+        }
+    };
+}
+
+export function stopObservingDocumentActivity(subscription) {
+    subscription.dispose();
+}
+
 export async function copyToClipboard(text) {
     const value = text ?? "";
     if (navigator?.clipboard?.writeText) {
