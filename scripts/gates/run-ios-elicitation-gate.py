@@ -87,7 +87,11 @@ def main(args):
         runtime = next(item["identifier"] for item in listing["runtimes"]
                        if item.get("isAvailable") and item["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
                        and item["version"] == sdk_version)
-        device_type = next(item["identifier"] for item in listing["devicetypes"] if "iPad-Pro-13-inch" in item["identifier"])
+        # Prefer the large iPad for readable native UI; Xcode image updates rename device families,
+        # so fall back to any iPad rather than dying on an absent marketing name.
+        device_type = next((item["identifier"] for item in listing["devicetypes"] if "iPad-Pro-13-inch" in item["identifier"]),
+                           next((item["identifier"] for item in listing["devicetypes"] if item["identifier"].startswith("com.apple.CoreSimulator.SimDeviceType.iPad")), None))
+        assert device_type is not None, "No iPad simulator device type is installed"
         simulator = output(["xcrun", "simctl", "create", "SalmonEgg ACP acceptance", device_type, runtime])
         (artifacts / "simulator.json").write_text(json.dumps({"id": simulator, "runtime": runtime,
                                                             "deviceType": device_type}, indent=2) + "\n")
