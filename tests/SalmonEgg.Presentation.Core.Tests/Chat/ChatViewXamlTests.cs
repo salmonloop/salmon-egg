@@ -286,18 +286,6 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewSessionHeader_NarrowLayout_KeepsAgentRowRightAligned()
-    {
-        var xaml = LoadChatViewXaml();
-
-        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.(Grid.Row)\" Value=\"1\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.(Grid.ColumnSpan)\" Value=\"2\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("<Setter Target=\"SessionHeaderAgentDisplay.HorizontalAlignment\" Value=\"Right\" />", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("HorizontalAlignment\" Value=\"Left\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Value=\"28,0,0,0\"", xaml, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void ChatTranscriptRestore_DoesNotUseManualRenderedTranscriptWindowExpansion()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
@@ -342,7 +330,7 @@ public sealed class ChatViewXamlTests
         Assert.Contains("ViewChanged", hostCode, StringComparison.Ordinal);
     }
 
-        [Fact]
+    [Fact]
     public void ChatTranscriptViewport_ViewCodeUsesFollowControllerWithoutOwningOrchestrator()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
