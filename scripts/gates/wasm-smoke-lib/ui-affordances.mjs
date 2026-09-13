@@ -404,8 +404,16 @@ async function setSemanticInputValue(page, options, value, label, timeoutMs) {
     const element = current?.id ? document.getElementById(current.id) : null;
     if (element && !current.disabled) element.focus();
     // Uno flushes semantic nodes and pending managed focus at the animation-frame boundary.
-    // Check the current focus owner after that boundary before issuing any keys.
-    await new Promise(requestAnimationFrame);
+    // A previous field's committed Tab can still own the managed focus handoff for a few frames;
+    // keep re-claiming focus until this field holds it across a boundary, not just for one frame.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise(requestAnimationFrame);
+      if (document.activeElement === element) return {
+        current: window.__salmoneggSmoke.semantic.resolveEditableField(input),
+        focusedId: document.activeElement.id
+      };
+      if (element && !current.disabled) element.focus();
+    }
     return {
       current: window.__salmoneggSmoke.semantic.resolveEditableField(input),
       focusedId: document.activeElement?.id ?? null
