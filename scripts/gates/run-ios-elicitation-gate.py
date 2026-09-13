@@ -64,6 +64,22 @@ def main(args):
     root = None
     installed = False
     try:
+        # Start the peer before first-boot CoreSimulator work competes for the host CPU.
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+        ready = artifacts / "peer-ready.json"
+        with (artifacts / "peer.log").open("w") as peer_log:
+            peer = subprocess.Popen([sys.executable, str(repo / "scripts/gates/fixtures/mobile-elicitation-peer.py"),
+                "--port", str(port), "--ready", str(ready), "--artifacts", str(artifacts)],
+                stdout=peer_log, stderr=subprocess.STDOUT, start_new_session=True)
+        deadline = time.monotonic() + 15
+        while not ready.exists():
+            assert peer.poll() is None, "The mobile fixture failed to start"
+            if time.monotonic() >= deadline:
+                raise TimeoutError("The mobile fixture did not become ready")
+            time.sleep(0.05)
+        endpoints = json.loads(ready.read_text())
         listing = json.loads(output(["xcrun", "simctl", "list", "--json"]))
         sdk_version = output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"])
         runtime = next(item["identifier"] for item in listing["runtimes"]
@@ -81,21 +97,6 @@ def main(args):
         run(["xcrun", "simctl", "install", simulator, str(app)])
         installed = True
         container = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "data"]))
-        with socket.socket() as reservation:
-            reservation.bind(("127.0.0.1", 0))
-            port = reservation.getsockname()[1]
-        ready = artifacts / "peer-ready.json"
-        with (artifacts / "peer.log").open("w") as peer_log:
-            peer = subprocess.Popen([sys.executable, str(repo / "scripts/gates/fixtures/mobile-elicitation-peer.py"),
-                "--port", str(port), "--ready", str(ready), "--artifacts", str(artifacts)],
-                stdout=peer_log, stderr=subprocess.STDOUT, start_new_session=True)
-        deadline = time.monotonic() + 15
-        while not ready.exists():
-            assert peer.poll() is None, "The mobile fixture failed to start"
-            if time.monotonic() >= deadline:
-                raise TimeoutError("The mobile fixture did not become ready")
-            time.sleep(0.05)
-        endpoints = json.loads(ready.read_text())
         root = seed(container, endpoints["endpoint"])
         # Capture the normal launch's output, including failures before a native window exists.
         with (artifacts / "product-console.log").open("w") as log:
