@@ -90,9 +90,19 @@ final class ElicitationTests: XCTestCase {
         let form = try XCTUnwrap(formResponses.first { $0["id"] as? String == "native-form-accept" })
         let content = (form["result"] as? [String: Any])?["content"] as? [String: Any]
         XCTAssertEqual(content?["answer"] as? String, "native-form-answer")
+        for (request, button, action) in [("form-decline", "Decline", "decline"), ("form-cancel", "Cancel", "cancel")] {
+            try await instruct(request)
+            try await eventually("The next form did not appear") {
+                self.product.staticTexts["native-" + request].firstMatch.exists
+            }
+            try tap(product.buttons[button].firstMatch)
+            try await expectResponse("native-" + request, action: action)
+        }
+        let finalResponses = try await responses()
+        XCTAssertEqual(finalResponses.count, 6, "Duplicate or unscoped response")
 
         try await instruct("url-expire")
-        try await expectUrlCard()
+        try await expectUrlCard(expectedVisits: 2)
         let expiringState = try await state()
         let expiringUrl = try XCTUnwrap(expiringState["url"] as? String)
         try await instruct("disconnect")
@@ -104,7 +114,7 @@ final class ElicitationTests: XCTestCase {
             XCTAssertEqual(report["referrer"] as? String, "")
             XCTAssertEqual(report["privateValue"] as? String, "mobile-page-private-canary")
         }
-        print("IOS_ELICITATION_ACCEPTANCE_PASS native_input=true external_safari=true url_responses=3 form_responses=1 browser_visits=2")
+        print("IOS_ELICITATION_ACCEPTANCE_PASS native_input=true external_safari=true url_responses=3 form_responses=3 browser_visits=2")
     }
 
     private func tap(_ element: XCUIElement) throws {
@@ -149,12 +159,18 @@ final class ElicitationTests: XCTestCase {
         product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.2)
     }
 
-    private func expectUrlCard() async throws {
+    private func expectUrlCard(expectedVisits: Int = 0) async throws {
         let current = try await state()
         let expected = try XCTUnwrap(current["url"] as? String)
         let fullUrl = product.staticTexts[expected].firstMatch
         // session/load's response precedes the app's hydration commit and buffered card projection.
-        try await eventually("The complete URL card did not appear after hydration") { fullUrl.exists }
+        try await eventually("The complete URL card did not appear after hydration") {
+            let visits = try await self.state()["visits"] as? [Any]
+            guard visits?.count == expectedVisits else {
+                throw GateFailure.unmetCondition("The product opened a URL without consent.")
+            }
+            return fullUrl.exists
+        }
         XCTAssertTrue(fullUrl.label == expected, "The native card must show the full address")
         XCTAssertEqual(product.staticTexts["127.0.0.1"].firstMatch.label, "127.0.0.1")
     }
