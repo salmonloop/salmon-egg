@@ -35,7 +35,18 @@ public static class ConversationStatusPolicy
         ConversationOperationFailure? operationFailure = null)
     {
         var activityAt = Later(ResolveActivityAt(turn), Later(interaction.ActivityAtUtc, operationFailure?.OccurredAtUtc));
-        if (operationFailure is not null || interaction.HasFailure || turn?.Phase == ChatTurnPhase.Failed)
+
+        // Agent errors: operation failure or turn failed without recoverable input
+        if (operationFailure is not null || turn?.Phase == ChatTurnPhase.Failed)
+        {
+            return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Error, activityAt);
+        }
+
+        // A request the user can no longer answer normally: an AskUser/elicitation request that
+        // errored, or a permission request left with cancel as its only option. HasFailure implies
+        // HasInputRequest for the errored-request cases, so this has to precede both checks below or
+        // those rows would show the input glyph instead of the warning the failure warrants.
+        if (interaction.HasFailure)
         {
             return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Error, activityAt);
         }
@@ -45,12 +56,20 @@ public static class ConversationStatusPolicy
             return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Permission, activityAt);
         }
 
+        // A live AskUser/elicitation request, or a turn parked on the user.
         if (interaction.HasInputRequest || turn?.Phase == ChatTurnPhase.WaitingForUser)
         {
             return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Input, activityAt);
         }
 
-        if (turn is not null && turn.Phase is not (ChatTurnPhase.Completed or ChatTurnPhase.Cancelled or ChatTurnPhase.Failed))
+        // Cancelled turns go to Other (completed state, not working)
+        if (turn?.Phase == ChatTurnPhase.Cancelled)
+        {
+            return new(ConversationStatusGroup.Other, ConversationStatusIcon.Conversation, activityAt);
+        }
+
+        // Active working states
+        if (turn is not null && turn.Phase is not ChatTurnPhase.Completed)
         {
             return new(ConversationStatusGroup.Working, ConversationStatusIcon.Working, activityAt);
         }
