@@ -4,11 +4,11 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
-using SalmonEgg.Presentation.ViewModels.Navigation;
-using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.Utilities;
-using SalmonEgg.Presentation.Views.Navigation;
+using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Views.Chat;
+using SalmonEgg.Presentation.Views.Navigation;
 using Windows.ApplicationModel.Resources;
 
 namespace SalmonEgg.Presentation.Services;
