@@ -117,6 +117,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnNativeTouchProbe), true);
             AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnNativeTouchProbe), true);
             AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnNativeTouchProbe), true);
+            AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnNativeTouchProbe), true);
         }
 #endif
         _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
@@ -214,6 +215,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnNativeTouchProbe));
         RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnNativeTouchProbe));
         RemoveHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnNativeTouchProbe));
+        RemoveHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnNativeTouchProbe));
 #endif
         // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
         // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
