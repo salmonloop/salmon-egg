@@ -419,6 +419,15 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             builder.AddFilter("Uno", LogLevel.Warning);
             builder.AddFilter("Windows", LogLevel.Warning);
             builder.AddFilter("Microsoft", LogLevel.Warning);
+#if __IOS__ && DEBUG
+            // [DEBUG-ios-capture] Observe the framework's existing capture lifecycle without
+            // subscribing to pointer events, which changes UIKit's native bubbling path.
+            if (Environment.GetEnvironmentVariable("SALMONEGG_IOS_CAPTURE_TRACE") == "1")
+            {
+                builder.AddFilter("Uno.UI.Xaml.Core.PointerCapture", LogLevel.Debug);
+                builder.AddFilter("Uno.UI.Xaml.Core.InputManager", LogLevel.Trace);
+            }
+#endif
         });
 #if HAS_UNO
         global::Uno.Extensions.LogExtensionPoint.AmbientLoggerFactory = factory;
