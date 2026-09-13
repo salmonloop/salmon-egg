@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using SalmonEgg.Presentation.Core.Services;
 
@@ -11,7 +11,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Threading;
 /// </summary>
 public sealed class QueueingUiDispatcher : IUiDispatcher
 {
-    private readonly Queue<Action> _callbacks = new();
+    private readonly ConcurrentQueue<Action> _callbacks = new();
 
     public bool HasThreadAccess => false;
 
@@ -64,20 +64,19 @@ public sealed class QueueingUiDispatcher : IUiDispatcher
     /// </summary>
     public bool RunNext()
     {
-        if (_callbacks.Count == 0)
+        if (!_callbacks.TryDequeue(out var callback))
         {
             return false;
         }
 
-        _callbacks.Dequeue()();
+        callback();
         return true;
     }
 
     public void RunAll()
     {
-        while (_callbacks.Count > 0)
+        while (RunNext())
         {
-            _callbacks.Dequeue()();
         }
     }
 }

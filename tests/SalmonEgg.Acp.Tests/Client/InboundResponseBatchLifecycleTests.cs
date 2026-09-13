@@ -37,6 +37,63 @@ public sealed class InboundResponseBatchLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task SubmitCancellation_DeferredFailedWriteReplacement_PreservesSendingUntilTheReplacementSettles()
+    {
+        // Arrange
+        var replacementWrite = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writes = new List<IReadOnlyList<JsonRpcResponse>>();
+        var notifications = new List<bool>();
+        var cancelledResponse = ErrorResponse();
+        Task<bool>? cancellation = null;
+        var failures = 0;
+        InboundResponseBatch? batch = null;
+        batch = new InboundResponseBatch(1, responses =>
+        {
+            writes.Add(responses);
+            if (writes.Count == 1)
+            {
+                // Session cancellation prepares every sibling before allowing the replacement.
+                batch!.DeferSending();
+                cancellation = batch.SubmitCancellation(0, cancelledResponse);
+                return Task.FromResult(false);
+            }
+            return replacementWrite.Task;
+        }, _ => { }, new NullAcpClientLogger(), () => notifications.Add(batch!.IsSending), () => failures++);
+
+        // Act: the first write fails while its cancellation is still being prepared.
+        var completion = batch.SubmitAsync(0, ErrorResponse());
+        try
+        {
+            // Assert
+            Assert.Single(writes);
+            Assert.NotNull(cancellation);
+            Assert.True(batch.IsSending);
+            Assert.False(completion.IsCompleted);
+            Assert.False(cancellation.IsCompleted);
+            Assert.NotEmpty(notifications);
+            Assert.All(notifications, sending => Assert.True(sending));
+
+            batch.ResumeSending();
+            Assert.Equal(2, writes.Count);
+            Assert.Same(cancelledResponse, writes[1][0]);
+            Assert.True(batch.IsSending);
+            Assert.False(completion.IsCompleted);
+            Assert.False(cancellation.IsCompleted);
+            Assert.Equal(0, failures);
+            replacementWrite.TrySetResult(true);
+            Assert.True(await completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.True(await cancellation.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.False(batch.IsSending);
+            Assert.Equal(2, writes.Count);
+        }
+        finally
+        {
+            replacementWrite.TrySetResult(false);
+            batch.Abandon();
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
