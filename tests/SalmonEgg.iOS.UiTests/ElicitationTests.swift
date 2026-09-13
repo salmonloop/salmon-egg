@@ -156,7 +156,9 @@ final class ElicitationTests: XCTestCase {
         evidence.name = "Before native tap: " + text
         evidence.lifetime = .keepAlways
         add(evidence)
-        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.2)
+        // The native row's context-menu recognizer cancels very short contacts before release
+        // on this Simulator. A stationary contact below the long-press threshold still taps once.
+        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.4)
     }
 
     private func expectUrlCard(expectedVisits: Int = 0) async throws {
