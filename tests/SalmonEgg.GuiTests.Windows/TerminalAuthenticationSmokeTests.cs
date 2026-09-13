@@ -102,9 +102,17 @@ public sealed class TerminalAuthenticationSmokeTests
         {
             try
             {
-                found = app.MainWindow.FindAllDescendants().FirstOrDefault(element =>
-                    !element.Properties.IsOffscreen.ValueOrDefault && matches(element));
-                return found is not null;
+                foreach (var element in app.MainWindow.FindAllDescendants())
+                {
+                    try
+                    {
+                        if (element.Properties.IsOffscreen.ValueOrDefault || !matches(element)) continue;
+                        found = element;
+                        return true;
+                    }
+                    catch (System.Runtime.InteropServices.COMException) { }
+                }
+                return false;
             }
             catch (System.Runtime.InteropServices.COMException)
             {
@@ -181,6 +189,10 @@ public sealed class TerminalAuthenticationSmokeTests
                 app.MainWindow.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Maximized);
             var session = app.FindByAutomationId("MainNav.Session.terminal-conversation", TimeSpan.FromSeconds(30));
             app.ClickElement(session);
+            var history = "PACKAGED_AUTH_HISTORY_" + Path.GetFileName(Root);
+            FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Text
+                && element.Properties.Name.ValueOrDefault == history);
+            GuiAcceptanceDiagnostics.Record("Terminal: restored history visible");
             var input = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "InputBox"
                 && element.Properties.IsEnabled.ValueOrDefault);
             app.ClickElement(input);
