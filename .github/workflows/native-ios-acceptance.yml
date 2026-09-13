@@ -4,15 +4,27 @@ on:
   pull_request:
     paths:
       - '.github/workflows/native-ios-acceptance.yml'
+      - 'global.json'
+      - 'Directory.Build.*'
       - 'scripts/gates/run-ios-elicitation-gate.py'
+      - 'scripts/gates/ios-elicitation-reverse-verification.py'
       - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
       - 'tests/SalmonEgg.iOS.UiTests/**'
       - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
       - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
+      - 'SalmonEgg/SalmonEgg/MainPage.xaml'
+      - 'SalmonEgg/SalmonEgg/SalmonEgg.csproj'
       - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'SalmonEgg/SalmonEgg/Platforms/iOS/**'
       - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+      - 'src/SalmonEgg.Acp/Client/**'
+      - 'src/SalmonEgg.Application/Services/Chat/**'
   workflow_dispatch:
+    inputs:
+      reverse-verification:
+        description: Rebuild the mutant and restored app to prove the Safari consent gate
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,7 +39,7 @@ jobs:
     # Pair the repository's .NET 10 SDK with the published 10.0.300.3 Apple workload set.
     # Xcode 26.5 / iOS 26.5 are both installed on this serviced native host.
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification && 65 || 35 }}
     env:
       DOTNET_PROCESSOR_COUNT: 2
       DOTNET_CLI_USE_MSBUILD_SERVER: 0
@@ -86,6 +98,13 @@ jobs:
             --xcodegen "$RUNNER_TEMP/xcodegen-tools/xcodegen/bin/xcodegen" \
             --artifacts artifacts/ios-acp-acceptance
 
+      - name: Verify the consent guard with installed mutant and restored apps
+        if: github.event_name == 'workflow_dispatch' && inputs.reverse-verification
+        run: |
+          "$RUNNER_TEMP/ios-acp-tools/bin/python" scripts/gates/ios-elicitation-reverse-verification.py \
+            --app SalmonEgg/SalmonEgg/bin/Debug/net10.0-ios/iossimulator-arm64/SalmonEgg.app \
+            --xcodegen "$RUNNER_TEMP/xcodegen-tools/xcodegen/bin/xcodegen"
+
       - name: Upload acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -96,4 +115,14 @@ jobs:
             artifacts/ios-acp-acceptance/*.log
             artifacts/ios-acp-acceptance/product-logs/**
             artifacts/ios-acp-acceptance/results.xcresult
+            artifacts/ios-acp-acceptance/reverse/*.json
+            artifacts/ios-acp-acceptance/reverse/*.log
+            artifacts/ios-acp-acceptance/reverse/red/*.json
+            artifacts/ios-acp-acceptance/reverse/red/*.log
+            artifacts/ios-acp-acceptance/reverse/red/product-logs/**
+            artifacts/ios-acp-acceptance/reverse/red/results.xcresult
+            artifacts/ios-acp-acceptance/reverse/restored/*.json
+            artifacts/ios-acp-acceptance/reverse/restored/*.log
+            artifacts/ios-acp-acceptance/reverse/restored/product-logs/**
+            artifacts/ios-acp-acceptance/reverse/restored/results.xcresult
           retention-days: 7
