@@ -16776,6 +16776,7 @@ public partial class ChatViewModelTests
         var sessionListStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowSessionListCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var replayCommitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var innerChatService = new ContinuityTrackingChatService();
         innerChatService.OnListSessionsAsync = async (_, cancellationToken) =>
@@ -16825,6 +16826,14 @@ public partial class ChatViewModelTests
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         syncContext.RunAll();
 
+        fixture.ChatStore.AfterDispatch = _ =>
+        {
+            if (fixture.ChatStore.LatestState.ResolveContentSlice("conv-remote")?.Transcript.Any(
+                message => message.TextContent == "superseded before load replay") == true)
+                replayCommitted.TrySetResult();
+            return ValueTask.CompletedTask;
+        };
+
         var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
         var remoteSwitchTask = switcher.SwitchConversationAsync("conv-remote", CancellationToken.None);
         await WaitForConditionAsync(() =>
@@ -16849,6 +16858,10 @@ public partial class ChatViewModelTests
             return Task.FromResult(remoteSwitchTask.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
+        // The switch task completes foreground selection; its recovery continues independently.
+        // Flush only after the authoritative replay has entered the store that the writer consumes.
+        await AwaitWithSynchronizationContextAsync(syncContext,
+            replayCommitted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
         await fixture.FlushWorkspaceAsync();
         await WaitForConditionAsync(() =>
         {

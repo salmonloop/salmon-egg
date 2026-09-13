@@ -21,7 +21,7 @@ internal sealed class InboundResponseBatch
     private TaskCompletionSource<bool> _completion = NewCompletion();
     private int _remaining;
     private int _deferredSends;
-    private bool _sending;
+    private SendState _sendState;
     private bool _finished;
     private bool _retryable;
     private bool _sendRequested;
@@ -45,7 +45,7 @@ internal sealed class InboundResponseBatch
         {
             lock (_gate)
             {
-                return !_finished && _sending;
+                return !_finished && _sendState != SendState.Idle;
             }
         }
     }
@@ -55,7 +55,7 @@ internal sealed class InboundResponseBatch
         TaskCompletionSource<bool> completion;
         lock (_gate)
         {
-            if (_finished || _sending || (_responses[index] is not null && !_retryable))
+            if (_finished || _sendState != SendState.Idle || (_responses[index] is not null && !_retryable))
             {
                 return Task.FromResult(false);
             }
@@ -151,11 +151,11 @@ internal sealed class InboundResponseBatch
         TaskCompletionSource<bool> completion;
         lock (_gate)
         {
-            if (_finished || _sending || _deferredSends != 0 || _remaining != 0 || !_sendRequested)
+            if (_finished || _sendState == SendState.Writing || _deferredSends != 0 || _remaining != 0 || !_sendRequested)
             {
                 return;
             }
-            _sending = true;
+            _sendState = SendState.Writing;
             _retryable = false;
             _sendRequested = false;
             completion = _completion;
@@ -196,13 +196,16 @@ internal sealed class InboundResponseBatch
         bool retryCancellation;
         lock (_gate)
         {
-            _sending = false;
             if (_finished)
             {
+                _sendState = SendState.Idle;
                 return;
             }
             _finished = sent;
             retryCancellation = !sent && _sendRequested;
+            // Cancellation retains ownership while sibling cancellations are being prepared.
+            // ResumeSending can claim that retry without exposing an idle UI card between writes.
+            _sendState = retryCancellation ? SendState.RetryQueued : SendState.Idle;
             if (!sent && !retryCancellation)
             {
                 // A failed write leaves every answer retryable as the same batch. Already answered
@@ -238,4 +241,11 @@ internal sealed class InboundResponseBatch
 
     private static TaskCompletionSource<bool> NewCompletion()
         => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private enum SendState
+    {
+        Idle,
+        Writing,
+        RetryQueued
+    }
 }

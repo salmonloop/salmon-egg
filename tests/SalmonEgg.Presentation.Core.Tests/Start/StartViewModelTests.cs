@@ -199,8 +199,9 @@ public sealed class StartViewModelTests
         SynchronizationContext.SetSynchronizationContext(syncContext);
         try
         {
+            var dispatcher = new QueueingUiDispatcher();
             var preferences = CreatePreferences();
-            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>(), uiDispatcher: dispatcher);
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -208,9 +209,15 @@ public sealed class StartViewModelTests
 
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
+            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == "chat draft");
+            await WaitForConditionAsync(() => dispatcher.PendingCount > 0);
 
             var suggestion = startViewModel.Suggestions[1];
             await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
+            // The real UI serializes setters with store projections. Keep the old draft callback
+            // queued until after this newer intent, then verify it cannot overwrite the suggestion.
+            await WaitForConditionAsync(async () => await chat.GetDraftTextAsync() == suggestion.Prompt);
+            dispatcher.RunAll();
 
             Assert.False(suggestion.IsInformational);
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
@@ -2918,7 +2925,12 @@ public sealed class StartViewModelTests
 
             await WaitForConditionAsync(() => uiDispatcher.PendingCount > 0 || cleanupTask.IsCompleted);
             Assert.False(cleanupTask.IsCompleted);
-            uiDispatcher.RunAll();
+            // Store clearing may enqueue its UI projection after earlier callbacks have drained.
+            await WaitForConditionAsync(() =>
+            {
+                uiDispatcher.RunAll();
+                return cleanupTask.IsCompleted;
+            });
             await cleanupTask;
             Assert.Null((await chat.GetConnectionStateAsync()).NewSessionDraft);
             uiDispatcher.RunAll();
@@ -3475,7 +3487,7 @@ public sealed class StartViewModelTests
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ChatViewModelHarness(
                 viewModel,
-                state,
+                chatStore,
                 connectionState,
                 connectionStore,
                 conversationCatalogPresenter,
@@ -3875,7 +3887,7 @@ public sealed class StartViewModelTests
 
     private sealed class ChatViewModelHarness : IAsyncDisposable
     {
-        private readonly IState<ChatState> _state;
+        private readonly IChatStore _chatStore;
         private readonly IState<ChatConnectionState> _connectionState;
         private readonly IChatConnectionStore _connectionStore;
         private readonly IUiDispatcher _uiDispatcher;
@@ -3886,7 +3898,7 @@ public sealed class StartViewModelTests
 
         public ChatViewModelHarness(
             ChatViewModel viewModel,
-            IState<ChatState> state,
+            IChatStore chatStore,
             IState<ChatConnectionState> connectionState,
             IChatConnectionStore connectionStore,
             ConversationCatalogPresenter presenter,
@@ -3894,7 +3906,7 @@ public sealed class StartViewModelTests
             IUiDispatcher uiDispatcher)
         {
             ViewModel = viewModel;
-            _state = state;
+            _chatStore = chatStore;
             _connectionState = connectionState;
             _connectionStore = connectionStore;
             _uiDispatcher = uiDispatcher;
@@ -3915,11 +3927,14 @@ public sealed class StartViewModelTests
         public ValueTask<ChatConnectionState> GetConnectionStateAsync()
             => _connectionStore.GetCurrentStateAsync();
 
+        public async Task<string> GetDraftTextAsync()
+            => (await _chatStore.GetCurrentStateAsync()).DraftText;
+
         public async ValueTask DisposeAsync()
         {
             ViewModel.Dispose();
             await _connectionState.DisposeAsync();
-            await _state.DisposeAsync();
+            await _chatStore.State.DisposeAsync();
         }
     }
 }
