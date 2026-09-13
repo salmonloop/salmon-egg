@@ -54,7 +54,13 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                     args = @('-Mode', 'login'); env = @{ SALMONEGG_TERMINAL_GUI_METHOD = 'method-overlay' } }) }
         }
         'session/list' { $response.result = @{ sessions = @() } }
-        'session/load' { $response.result = @{ sessionId = 'packaged-terminal-session' } }
+        'session/load' {
+            $history = @{ jsonrpc = '2.0'; method = 'session/update'; params = @{
+                sessionId = 'packaged-terminal-session'; update = @{ sessionUpdate = 'agent_message_chunk';
+                    content = @{ type = 'text'; text = ('PACKAGED_AUTH_HISTORY_' + [IO.Path]::GetFileName($StateDirectory)) } } } }
+            [Console]::WriteLine(($history | ConvertTo-Json -Depth 12 -Compress))
+            $response.result = @{}
+        }
         'session/new' { $response.result = @{ sessionId = 'packaged-terminal-session' } }
         'session/prompt' {
             if (-not (Test-Path $signedIn)) {

@@ -16,14 +16,14 @@ public sealed class SystemLanguageSmokeTests
         app.ClickElement(app.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(15)));
         app.ClickElement(app.FindByAutomationId("SettingsNav.General", TimeSpan.FromSeconds(15)));
         Assert.True(app.WaitUntilOnscreen("GeneralSettings.Language", TimeSpan.FromSeconds(15)));
-        var originalChinese = app.GetVisibleTexts().Contains("选择界面语言", StringComparer.Ordinal);
+        var originalChinese = HasNativeText(app, "选择界面语言");
         var originalLabel = originalChinese ? "选择界面语言" : "UI language";
-        Assert.Contains(originalLabel, app.GetVisibleTexts());
+        Assert.True(HasNativeText(app, originalLabel));
 
         // Act: both selections use the native ComboBox and the normal language service/reload chain.
         SelectLanguage(app, originalChinese ? "English" : "Simplified Chinese");
         var explicitLabel = originalChinese ? "UI language" : "选择界面语言";
-        Assert.True(app.WaitUntil(() => app.GetVisibleTexts().Contains(explicitLabel, StringComparer.Ordinal),
+        Assert.True(app.WaitUntil(() => HasNativeText(app, explicitLabel),
             TimeSpan.FromSeconds(15)), "The explicit language did not reach the reloaded page.");
         GuiAcceptanceDiagnostics.Record("Language: explicit page reloaded");
         var explicitTag = originalChinese ? "en-US" : "zh-Hans";
@@ -32,7 +32,7 @@ public sealed class SystemLanguageSmokeTests
         SelectLanguage(app, originalChinese ? "System" : "跟随系统");
 
         // Assert: System restores the observed native language, without assuming the runner is English.
-        var systemRestored = app.WaitUntil(() => app.GetVisibleTexts().Contains(originalLabel, StringComparer.Ordinal),
+        var systemRestored = app.WaitUntil(() => HasNativeText(app, originalLabel),
             TimeSpan.FromSeconds(15));
         if (!systemRestored) app.CaptureAcceptanceFailure("system-language-not-restored");
         Assert.True(systemRestored, "Switching back to System did not restore the system-language page. Visible: "
@@ -59,5 +59,23 @@ public sealed class SystemLanguageSmokeTests
             return;
         }
         throw new InvalidOperationException("The real language option has no native selection provider.");
+    }
+
+    private static bool HasNativeText(WindowsGuiAppSession app, string name)
+    {
+        try
+        {
+            foreach (var element in app.MainWindow.FindAllDescendants())
+            {
+                try
+                {
+                    if (!element.Properties.IsOffscreen.ValueOrDefault && element.Properties.Name.ValueOrDefault == name)
+                        return true;
+                }
+                catch (System.Runtime.InteropServices.COMException) { }
+            }
+        }
+        catch (System.Runtime.InteropServices.COMException) { }
+        return false;
     }
 }
