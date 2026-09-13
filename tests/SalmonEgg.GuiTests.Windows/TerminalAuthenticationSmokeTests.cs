@@ -89,10 +89,21 @@ public sealed class TerminalAuthenticationSmokeTests
 
     private static void ClickNamedButton(WindowsGuiAppSession app, string text)
     {
-        var button = FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Button
-            && element.Properties.Name.ValueOrDefault == text);
-        Assert.True(app.WaitUntil(() => button.IsEnabled, TimeSpan.FromSeconds(10)));
-        app.ClickElement(button);
+        AutomationElement? button = null;
+        var ready = app.WaitUntil(() =>
+        {
+            try
+            {
+                // Let UIA locate the native button without materializing WebView2's changing subtree.
+                button = app.MainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(text)));
+                return button is not null && button.Properties.IsEnabled.ValueOrDefault
+                    && !button.Properties.IsOffscreen.ValueOrDefault;
+            }
+            catch (System.Runtime.InteropServices.COMException) { return false; }
+        }, TimeSpan.FromSeconds(20));
+        if (!ready) app.CaptureAcceptanceFailure("terminal-button-missing");
+        Assert.True(ready, $"The enabled native terminal button '{text}' did not appear.");
+        app.ClickElement(button!);
     }
 
     private static AutomationElement FindNativeElement(WindowsGuiAppSession app, Func<AutomationElement, bool> matches)
