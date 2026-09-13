@@ -82,9 +82,14 @@ final class ElicitationTests: XCTestCase {
         try await instruct("complete")
 
         try await instruct("form-accept")
-        let field = product.textFields["Acceptance answer"].firstMatch
+        // Uno's native TextBox exposes its named outer accessibility element as Other.
+        // Tap that actual element, then type through the system's focused editor.
+        let field = product.descendants(matching: .any)["Acceptance answer"].firstMatch
         try tap(field)
-        field.typeText("native-form-answer")
+        guard product.keyboards.firstMatch.waitForExistence(timeout: 10) else {
+            throw GateFailure.unmetCondition("The form editor did not acquire native keyboard focus")
+        }
+        product.typeText("native-form-answer")
         try tap(product.buttons["Submit"].firstMatch)
         try await expectResponse("native-form-accept", action: "accept")
         let formResponses = try await responses()
