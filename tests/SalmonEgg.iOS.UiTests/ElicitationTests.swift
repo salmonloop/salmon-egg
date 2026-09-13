@@ -153,13 +153,15 @@ final class ElicitationTests: XCTestCase {
             try self.textBounds(text) != nil
         }
         let rectangle = try XCTUnwrap(textBounds(text))
-        let evidence = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        let screenshot = XCUIScreen.main.screenshot()
+        let evidence = XCTAttachment(screenshot: screenshot)
         evidence.name = "Before native tap: " + text
         evidence.lifetime = .keepAlways
         add(evidence)
-        // Short synthesized contacts can miss UIKit release delivery on the hosted Simulator.
-        // Use one stationary touch below the context-menu long-press threshold.
-        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.4)
+        print("IOS_NATIVE_TAP label=\(text) normalizedBounds=\(rectangle) appFrame=\(product.frame) imageSize=\(screenshot.image.size) imageScale=\(screenshot.image.scale)")
+        // Use XCTest's standard contact sequence. Product pointer subscriptions must not be
+        // added to make synthesized input succeed: those can change native event bubbling.
+        product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).tap()
     }
 
     private func expectUrlCard(expectedVisits: Int = 0) async throws {
