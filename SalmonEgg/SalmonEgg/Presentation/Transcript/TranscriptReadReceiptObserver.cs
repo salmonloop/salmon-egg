@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Threading;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -209,7 +210,10 @@ internal sealed class TranscriptReadReceiptObserver : IDisposable
         {
             if (_disposed || _awaitingContentLayout || !_owner.CanReport(_container) || ResolveContentTemplateRoot(_container) is not { } root
                 || _message.PresentedSnapshot is not { } snapshot || ReferenceEquals(snapshot, _reported)) return Task.CompletedTask;
-            if (!_pendingReport.IsCompleted) return _pendingReport;
+
+            var existing = Volatile.Read(ref _pendingReport);
+            if (!existing.IsCompleted) return existing;
+
             FrameworkElement? content;
             if (_message.ShouldRenderMarkdown)
             {
@@ -229,7 +233,10 @@ internal sealed class TranscriptReadReceiptObserver : IDisposable
             if (!IsContentEndVisible(snapshot)) return Task.CompletedTask;
             var conversationId = _owner._viewModel.CurrentSessionId;
             if (conversationId is null) return Task.CompletedTask;
-            return _pendingReport = AcknowledgeAsync(conversationId, snapshot);
+
+            var newTask = AcknowledgeAsync(conversationId, snapshot);
+            var original = Interlocked.CompareExchange(ref _pendingReport, newTask, existing);
+            return ReferenceEquals(original, existing) ? newTask : original;
         }
 
         private void ObserveContent(FrameworkElement? content)
