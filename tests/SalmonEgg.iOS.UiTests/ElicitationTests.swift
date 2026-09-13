@@ -66,7 +66,8 @@ final class ElicitationTests: XCTestCase {
         try await expectResponse("native-url-open", action: "accept")
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         try await eventually("The system browser did not become foreground") { safari.state == .runningForeground }
-        try await eventually("The real Safari page did not report isolation") { try await self.reports().count == 1 }
+        // The first Safari navigation starts WebKit's content process on a freshly booted Simulator.
+        try await eventually("The real Safari page did not report isolation", timeout: 90) { try await self.reports().count == 1 }
 
         product.activate()
         try tap(product.buttons["Open again"].firstMatch)
@@ -156,8 +157,8 @@ final class ElicitationTests: XCTestCase {
         evidence.name = "Before native tap: " + text
         evidence.lifetime = .keepAlways
         add(evidence)
-        // The native row's context-menu recognizer cancels very short contacts before release
-        // on this Simulator. A stationary contact below the long-press threshold still taps once.
+        // Short synthesized contacts can miss UIKit release delivery on the hosted Simulator.
+        // Use one stationary touch below the context-menu long-press threshold.
         product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).press(forDuration: 0.4)
     }
 
@@ -212,8 +213,8 @@ final class ElicitationTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
     }
 
-    private func eventually(_ message: String, _ condition: () async throws -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(30)
+    private func eventually(_ message: String, timeout: TimeInterval = 30, _ condition: () async throws -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if try await condition() { return }
             try await Task.sleep(nanoseconds: 100_000_000)

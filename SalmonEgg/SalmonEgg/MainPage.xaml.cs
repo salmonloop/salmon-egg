@@ -111,15 +111,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             StringComparison.Ordinal);
 
         this.InitializeComponent();
-#if __IOS__ && DEBUG
-        if (Environment.GetEnvironmentVariable("SALMONEGG_NATIVE_TOUCH_PROBE") == "1")
-        {
-            AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnNativeTouchProbe), true);
-            AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnNativeTouchProbe), true);
-            AddHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnNativeTouchProbe), true);
-            AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnNativeTouchCaptureLostProbe), true);
-        }
-#endif
         _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
         _mainNavigationViewAdapter = new MainNavigationViewAdapter(NavVM);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
@@ -198,32 +189,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 #endif
     }
 
-#if __IOS__ && DEBUG
-    private void OnNativeTouchCaptureLostProbe(object sender, PointerRoutedEventArgs e)
-    {
-        BootLogDebug("[DEBUG-ios-touch] captureLost source=" + e.OriginalSource?.GetType().FullName);
-        OnNativeTouchProbe(sender, e);
-    }
-
-    private void OnNativeTouchProbe(object sender, PointerRoutedEventArgs e)
-    {
-        var point = e.GetCurrentPoint(this);
-        var source = e.OriginalSource as FrameworkElement;
-        BootLogDebug("[DEBUG-ios-touch] source=" + source?.GetType().FullName + ":" + source?.Name
-            + " position=" + point.Position + " contact=" + point.IsInContact
-            + " update=" + point.Properties.PointerUpdateKind
-            + " handled=" + e.Handled + " navEnabled=" + MainNavView.IsEnabled);
-    }
-#endif
-
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
-#if __IOS__ && DEBUG
-        RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnNativeTouchProbe));
-        RemoveHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnNativeTouchProbe));
-        RemoveHandler(UIElement.PointerCanceledEvent, new PointerEventHandler(OnNativeTouchProbe));
-        RemoveHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnNativeTouchCaptureLostProbe));
-#endif
         // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
         // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
         DetachGamepadInput();

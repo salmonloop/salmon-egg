@@ -103,7 +103,7 @@ def main(args):
         # Capture the normal launch's output, including failures before a native window exists.
         with (artifacts / "product-console.log").open("w") as log:
             product_process = subprocess.Popen(["xcrun", "simctl", "launch", "--console", simulator, bundle_id],
-                env=dict(os.environ, SIMCTL_CHILD_SALMONEGG_GUI="1", SIMCTL_CHILD_SALMONEGG_NATIVE_TOUCH_PROBE="1"),
+                env=dict(os.environ, SIMCTL_CHILD_SALMONEGG_GUI="1"),
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         installed_app = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "app"]))
         app_files = {str(path.relative_to(app)): hashlib.sha256(path.read_bytes()).hexdigest()
