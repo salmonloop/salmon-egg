@@ -62,18 +62,13 @@ public static class ConversationStatusPolicy
             return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Input, activityAt);
         }
 
-        // Cancelled turns go to Other (completed state, not working)
-        if (turn?.Phase == ChatTurnPhase.Cancelled)
-        {
-            return new(ConversationStatusGroup.Other, ConversationStatusIcon.Conversation, activityAt);
-        }
-
-        // Active working states
-        if (turn is not null && turn.Phase is not ChatTurnPhase.Completed)
+        // Active working states (excludes Completed, Cancelled, Failed)
+        if (turn is not null && turn.Phase is not (ChatTurnPhase.Completed or ChatTurnPhase.Cancelled))
         {
             return new(ConversationStatusGroup.Working, ConversationStatusIcon.Working, activityAt);
         }
 
+        // Unread messages require attention even after turn completion/cancellation
         if (attention is { HasUnread: true })
         {
             return new(ConversationStatusGroup.NeedsAttention, ConversationStatusIcon.Unread,
