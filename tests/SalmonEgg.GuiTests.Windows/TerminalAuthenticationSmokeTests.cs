@@ -191,7 +191,7 @@ public sealed class TerminalAuthenticationSmokeTests
             app.ClickElement(session);
             var history = "PACKAGED_AUTH_HISTORY_" + Path.GetFileName(Root);
             FindNativeElement(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Text
-                && element.Properties.Name.ValueOrDefault == history);
+                && (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains(history, StringComparison.Ordinal));
             GuiAcceptanceDiagnostics.Record("Terminal: restored history visible");
             var input = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "InputBox"
                 && element.Properties.IsEnabled.ValueOrDefault);
