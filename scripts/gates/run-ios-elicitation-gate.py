@@ -61,6 +61,7 @@ def main(args):
     simulator = None
     peer = None
     product_process = None
+    test_process = None
     root = None
     installed = False
     try:
@@ -69,6 +70,7 @@ def main(args):
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
         ready = artifacts / "peer-ready.json"
+        ready.unlink(missing_ok=True)
         with (artifacts / "peer.log").open("w") as peer_log:
             peer = subprocess.Popen([sys.executable, str(repo / "scripts/gates/fixtures/mobile-elicitation-peer.py"),
                 "--port", str(port), "--ready", str(ready), "--artifacts", str(artifacts)],
@@ -101,11 +103,21 @@ def main(args):
         # Capture the normal launch's output, including failures before a native window exists.
         with (artifacts / "product-console.log").open("w") as log:
             product_process = subprocess.Popen(["xcrun", "simctl", "launch", "--console", simulator, bundle_id],
-                env=dict(os.environ, SIMCTL_CHILD_SALMONEGG_GUI="1"),
+                env=dict(os.environ, SIMCTL_CHILD_SALMONEGG_GUI="1", SIMCTL_CHILD_SALMONEGG_NATIVE_TOUCH_PROBE="1"),
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        installed_app = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "app"]))
+        app_files = {str(path.relative_to(app)): hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in app.rglob("*") if path.is_file()}
+        assert app_files and all((installed_app / relative).is_file()
+            and hashlib.sha256((installed_app / relative).read_bytes()).hexdigest() == digest
+            for relative, digest in app_files.items()), "The installed app differs from this build"
+        app_hash = hashlib.sha256(json.dumps(app_files, sort_keys=True).encode()).hexdigest()
+        (artifacts / "app-files.json").write_text(json.dumps(app_files, indent=2) + "\n")
         provenance = {"head": output(["git", "-C", str(repo), "rev-parse", "HEAD"]),
                       "app": str(app), "bundleId": bundle_id, "version": info["CFBundleVersion"],
                       "binarySha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                      "appSha256": app_hash, "installedAppSha256": app_hash,
+                      "configuration": "Debug with interpreter; production startup and native views",
                       "simulator": simulator, "runtime": runtime, "deviceType": device_type,
                       "xcode": output(["xcodebuild", "-version"]), "peer": "bounded deterministic ACP fixture"}
         (artifacts / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
@@ -113,14 +125,15 @@ def main(args):
         run([args.xcodegen, "generate", "--spec", str(project / "project.yml")], cwd=project)
         env = dict(os.environ, SALMONEGG_IOS_CONTROL_URL=endpoints["control"])
         with (artifacts / "xcuitest.log").open("w") as log:
-            result = subprocess.run(["xcodebuild", "test", "-project", str(project / "SalmonEggNativeAcceptance.xcodeproj"),
+            test_process = subprocess.Popen(["xcodebuild", "test", "-project", str(project / "SalmonEggNativeAcceptance.xcodeproj"),
                 "-scheme", "SalmonEggNativeAcceptance", "-destination", "platform=iOS Simulator,id=" + simulator,
                 "-derivedDataPath", str(artifacts / "test-build"), "-resultBundlePath", str(artifacts / "results.xcresult"),
                 "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=NO", "SALMONEGG_IOS_CONTROL_URL=" + endpoints["control"]],
-                env=env, stdout=log, stderr=subprocess.STDOUT, timeout=420)
-        if result.returncode:
+                env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            test_exit = test_process.wait(timeout=420)
+        if test_exit:
             print((artifacts / "xcuitest.log").read_text(errors="replace")[-18000:])
-        assert result.returncode == 0, "The installed product XCUITest failed"
+        assert test_exit == 0, "The installed product XCUITest failed"
         log_text = (artifacts / "xcuitest.log").read_text()
         assert "IOS_ELICITATION_ACCEPTANCE_PASS" in log_text, "No completed native acceptance marker"
         state = json.loads(urllib.request.urlopen(endpoints["control"] + "/state", timeout=5).read())
@@ -136,9 +149,19 @@ def main(args):
                 assert not any(needle in data for needle in needles), "External page data reached product persistence"
         (artifacts / "acceptance.json").write_text(json.dumps({"nativeInput": True, "installedProduct": True,
             "systemSafari": True, "browserVisits": 2, "acceptWithoutContent": True,
-            "formAnswer": True, "noExternalDataPersistence": True}, indent=2) + "\n")
+            "formAnswer": True, "formResponses": 3, "noExternalDataPersistence": True}, indent=2) + "\n")
         print("iOS installed product: consent, form, Safari isolation and completion passed")
     finally:
+        if test_process is not None:
+            try:
+                os.killpg(test_process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                test_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(test_process.pid, signal.SIGKILL)
+                test_process.wait(timeout=5)
         if root is not None:
             logs = artifacts / "product-logs"
             logs.mkdir(exist_ok=True)
@@ -176,6 +199,10 @@ def main(args):
 
 
 if __name__ == "__main__":
+    def terminate(_signal, _frame):
+        raise SystemExit("iOS acceptance interrupted; cleaning owned Simulator and processes")
+
+    signal.signal(signal.SIGTERM, terminate)
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--app", type=Path, required=True)
