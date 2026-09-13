@@ -126,7 +126,7 @@ final class ElicitationTests: XCTestCase {
             throw GateFailure.unmetCondition("The native control is not interactable")
         }
         // Keep the touch down long enough for UIKit's native scroll-view touch delivery.
-        element.press(forDuration: 0.2)
+        element.press(forDuration: 0.4)
     }
 
     private func textBounds(_ text: String) throws -> CGRect? {
