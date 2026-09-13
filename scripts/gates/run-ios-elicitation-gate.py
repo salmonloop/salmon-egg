@@ -45,7 +45,7 @@ def seed(container, endpoint):
         "boundProfileId": "native-elicitation-profile", "remoteSessionId": "native-elicitation-session",
         "sessionInfo": {"title": "Consent session", "hasTitle": True, "cwd": "/acceptance"}, "messages": []}
     (root / "conversations/conversations.v1.json").write_text(json.dumps(
-        {"version": 1, "lastActiveConversationId": None, "conversations": [conversation]}))
+        {"version": 1, "lastActiveConversationId": conversation["conversationId"], "conversations": [conversation]}))
     return root
 
 
