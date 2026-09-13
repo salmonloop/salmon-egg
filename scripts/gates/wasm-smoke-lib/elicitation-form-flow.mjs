@@ -5,7 +5,6 @@ import {
   typeIntoVisibleTextField,
   waitForControlEnabledState,
   waitForLaidOutControl,
-  waitForNativeControlFocus,
   waitForSemanticText
 } from "./ui-affordances.mjs";
 
@@ -83,7 +82,7 @@ async function verifyMultiSelectForm(page, server, suffix) {
   for (const [index, checked, enabled] of [
     [0, true, false], [1, true, true], [2, true, false], [1, false, true]
   ]) {
-    await activateNativeControl(page, { labels: [options[index]], role: "input" }, "Space", options[index]);
+    await activateNativeControl(page, { labels: [options[index]], role: "input" }, options[index]);
     await waitForCheckboxState(page, options[index], checked);
     await waitForControlEnabledState(page, submitButton, enabled, "Multi-select bounds update Submit", formTimeoutMs);
     assert.equal(form.request.responses().length, 0, "Toggling a choice must not submit the form.");
@@ -124,7 +123,7 @@ async function verifyTitledMultiSelectForm(page, server, suffix) {
   assert.equal(form.request.responses().length, 0);
 
   for (const [index, checked, enabled] of [[0, false, false], [1, true, true], [2, true, true]]) {
-    await activateNativeControl(page, { labels: [labels[index]], role: "input" }, "Space", labels[index]);
+    await activateNativeControl(page, { labels: [labels[index]], role: "input" }, labels[index]);
     await waitForCheckboxState(page, labels[index], checked);
     await waitForControlEnabledState(page, submitButton, enabled, "Titled choices update Submit", formTimeoutMs);
     assert.equal(form.request.responses().length, 0, "Choosing a display label must not submit the form.");
@@ -275,7 +274,7 @@ async function activateFormAction(page, form, label) {
   await waitForControlEnabledState(page, options, true, `form ${label} enabled`, formTimeoutMs);
   const state = await waitForLaidOutControl(page, options, `form ${label} laid out`, formTimeoutMs);
   assert.equal(state.id, form.actions[label], "The action must still belong to the recorded form.");
-  await activateNativeControl(page, options, "Enter", `form ${label}`);
+  await activateNativeControl(page, options, `form ${label}`);
 }
 
 async function waitForFormTabCompletion(page, form) {
@@ -299,12 +298,12 @@ async function waitForFormTabCompletion(page, form) {
   throw new Error("The form's Cancel button did not retain Tab focus across a frame.");
 }
 
-async function activateNativeControl(page, options, key, label) {
+async function activateNativeControl(page, options, label) {
   await waitForControlEnabledState(page, options, true, `${label} enabled`, formTimeoutMs);
-  const state = await waitForLaidOutControl(page, options, `${label} laid out`, formTimeoutMs);
-  await page.locator(`#${state.id}`).focus();
-  await waitForNativeControlFocus(page, options, label, formTimeoutMs);
-  await page.keyboard.press(key);
+  await waitForLaidOutControl(page, options, `${label} laid out`, formTimeoutMs);
+  // Uno's semantic activation invokes the native Toggle/Invoke peer. Assigning DOM
+  // focus can race a preceding control's managed update and send the action elsewhere.
+  await clickVisibleControl(page, options);
 }
 
 async function verifyResponseAndDismissal(page, form, result) {
