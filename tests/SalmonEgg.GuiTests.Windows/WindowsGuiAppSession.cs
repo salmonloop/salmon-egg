@@ -1321,17 +1321,6 @@ internal sealed class WindowsGuiAppSession : IDisposable
             : string.Join(" > ", segments);
     }
 
-    internal string DescribeNativeKeyboardTarget()
-    {
-        var foreground = NativeMethods.GetForegroundWindow();
-        var thread = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
-        var info = new NativeMethods.GuiThreadInfo { Size = Marshal.SizeOf<NativeMethods.GuiThreadInfo>() };
-        var available = NativeMethods.GetGUIThreadInfo(thread, ref info);
-        return $"foreground={foreground};pid={processId};app={_application.ProcessId};thread={thread};available={available};"
-            + $"active={info.Active};focus={info.Focus};caret={info.Caret};flags={info.Flags};"
-            + $"control={NativeMethods.GetAsyncKeyState(0x11)};shift={NativeMethods.GetAsyncKeyState(0x10)};alt={NativeMethods.GetAsyncKeyState(0x12)}";
-    }
-
     public Rectangle? TryGetFocusedBoundingRectangle()
     {
         try
@@ -1852,32 +1841,6 @@ internal sealed class WindowsGuiAppSession : IDisposable
 
     private static class NativeMethods
     {
-        [DllImport("user32.dll")]
-        internal static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        internal static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-
-        [DllImport("user32.dll")]
-        internal static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
-
-        [DllImport("user32.dll")]
-        internal static extern short GetAsyncKeyState(int key);
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct GuiThreadInfo
-        {
-            public int Size;
-            public uint Flags;
-            public IntPtr Active;
-            public IntPtr Focus;
-            public IntPtr Capture;
-            public IntPtr MenuOwner;
-            public IntPtr MoveSize;
-            public IntPtr Caret;
-            public Rect CaretRect;
-        }
-
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
 

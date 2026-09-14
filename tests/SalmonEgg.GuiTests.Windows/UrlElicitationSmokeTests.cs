@@ -198,7 +198,6 @@ public sealed class UrlElicitationSmokeTests
 
         public void Instruct(string action)
         {
-            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] URL: instruct " + action);
             var temporary = ControlPath + ".tmp";
             File.WriteAllText(temporary, "{\"phase\":" + (++_phase) + ",\"action\":" + Json(action) + "}");
             File.Move(temporary, ControlPath, overwrite: true);
@@ -207,7 +206,6 @@ public sealed class UrlElicitationSmokeTests
         public void WaitForCard(WindowsGuiAppSession app, string action)
         {
             var link = FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
-            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] URL: card visible " + action);
             Assert.True(app.WaitUntil(() => !link.Properties.IsOffscreen.ValueOrDefault && link.Properties.Name.ValueOrDefault == Url, TimeSpan.FromSeconds(10)));
             Assert.Equal("127.0.0.1", FindVisible(app, element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.UrlHost").Properties.Name.ValueOrDefault);
             FindVisible(app, element => element.Properties.Name.ValueOrDefault == "native-url-" + action);
