@@ -142,8 +142,6 @@ public sealed class TerminalAuthenticationSmokeTests
         // UIA SetFocus can report logical focus before WinUI/WebView2 activates text input.
         // Use the user's pointer path once and wait for the native provider's active caret.
         var point = (pointerTarget ?? input).GetClickablePoint();
-        GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: pointer target=" + (pointerTarget?.AutomationId ?? input.AutomationId)
-            + " point=" + point + " text2=" + input.Patterns.Text2.IsSupported);
         Mouse.Click(point);
         Assert.True(app.WaitUntil(() =>
         {
@@ -224,13 +222,9 @@ public sealed class TerminalAuthenticationSmokeTests
             var input = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "InputBox"
                 && element.Properties.IsEnabled.ValueOrDefault);
             ClickTextInput(app, input);
-            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer before typing " + app.DescribeFocusedElementDetailed()
-                + " value=" + app.TryGetValue(input) + " native=" + app.DescribeNativeKeyboardTarget());
             Assert.Equal(string.Empty, app.TryGetValue(input));
             Keyboard.Type("packaged terminal authentication");
             var retained = app.WaitUntil(() => app.TryGetValue(input) == "packaged terminal authentication", TimeSpan.FromSeconds(10));
-            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer after typing " + app.DescribeFocusedElementDetailed()
-                + " value=" + app.TryGetValue(input) + " native=" + app.DescribeNativeKeyboardTarget());
             if (!retained) app.CaptureAcceptanceFailure("terminal-" + _scenario + "-composer");
             Assert.True(retained, "The actual conversation composer did not retain the typed prompt.");
             var send = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "ChatInputArea.Send"
@@ -266,7 +260,6 @@ public sealed class TerminalAuthenticationSmokeTests
                 // xterm's helper textarea is transparent; its visible viewport owns pointer input.
                 ClickTextInput(app, input, terminal);
                 GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
-                GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: keyboard target " + app.DescribeNativeKeyboardTarget());
                 Keyboard.Type("user confirmed");
                 Keyboard.Press(VirtualKeyShort.RETURN);
                 Keyboard.Release(VirtualKeyShort.RETURN);
