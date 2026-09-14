@@ -7,6 +7,7 @@ on:
       - 'global.json'
       - 'Directory.Build.*'
       - 'scripts/gates/run-android-elicitation-gate.py'
+      - 'scripts/gates/test_android_elicitation_gate.py'
       - 'scripts/gates/android-elicitation-reverse-verification.py'
       - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
       - 'SalmonEgg/SalmonEgg/SalmonEgg.csproj'
@@ -52,6 +53,9 @@ jobs:
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           global-json-file: global.json
+
+      - name: Verify native observation checks
+        run: python3 scripts/gates/test_android_elicitation_gate.py
 
       - name: Install Android toolchain and isolated peer
         run: |

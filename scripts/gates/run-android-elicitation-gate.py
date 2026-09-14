@@ -102,6 +102,18 @@ class AndroidDevice:
         return eventually("The native control is absent or disabled: " + str(label),
                           lambda: self.find(label, package, enabled=True), timeout)
 
+    def product_controls_absent(self, *labels):
+        if not self.foreground(PACKAGE):
+            return False
+        nodes = [node for node in self.tree().iter("node")
+                 if node.get("package") == PACKAGE and bounds(node)]
+        # Losing the native root or leaving the product cannot prove that consent UI retired.
+        # A disconnect can legitimately replace the conversation body with its loading state.
+        if not any(has_label(node, "Toggle sidebar") or has_label(node, "TitleBar.ToggleSidebar")
+                   for node in nodes):
+            return False
+        return not any(has_label(node, label) for node in nodes for label in labels)
+
     def tap_node(self, node):
         rectangle = bounds(node)
         assert rectangle is not None and node.get("enabled") == "true", "The native control is not interactable"
@@ -304,7 +316,7 @@ class ConsentFlow:
         self.instruct("complete", "unknown-id")
         self.device.wait("Open again")
         self.instruct("complete")
-        eventually("Completion left the URL card active", lambda: self.device.find("Open again") is None)
+        eventually("Completion left the URL card active", lambda: self.device.product_controls_absent("Open again"))
         self.instruct("complete")
 
         self.instruct("form-accept")
@@ -326,7 +338,8 @@ class ConsentFlow:
         self.instruct("url-expire")
         self.url_card("native-url-expire", expected_visits=2)
         self.instruct("disconnect")
-        eventually("Disconnect retained the private URL", lambda: self.device.find(self.state()["url"]) is None)
+        expired_url = self.state()["url"]
+        eventually("Disconnect retained the private URL", lambda: self.device.product_controls_absent(expired_url))
         self.device.capture("connection-expired")
         final = self.state()
         assert len(final["responses"]) == 6, "Duplicate or unscoped response"
