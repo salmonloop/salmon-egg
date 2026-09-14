@@ -51,8 +51,8 @@ public sealed class StructuredDiffTypesTests
             JsonSerializer.Deserialize(structuredJson, Wire.V2<ToolCallContent>()));
         Assert.Single(v2.Changes);
 
-        // The flat form is v1's, and v2 keeps it on the surface, so it binds either way.
-        Assert.IsType<DiffToolCallContent>(JsonSerializer.Deserialize(flatJson, Wire.V2<ToolCallContent>()));
+        // V2 replaced the flat payload; the shared discriminator cannot opt back into V1.
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize(flatJson, Wire.V2<ToolCallContent>()));
         Assert.IsType<DiffToolCallContent>(JsonSerializer.Deserialize(flatJson, Wire.V1<ToolCallContent>()));
     }
 
@@ -86,6 +86,54 @@ public sealed class StructuredDiffTypesTests
         var change = Assert.Single(diff.Changes);
         Assert.Equal(DiffOperationKind.Copy, change.Operation);
         Assert.Equal("/a", change.OldPath);
+    }
+
+    [Fact]
+    public void StructuredDiff_UnknownOperation_PreservesRawAndRoundTrips()
+    {
+        // The schema's trailing 'other' DiffChange branch requires only a string operation and allows
+        // additional properties; the client must keep the raw payload verbatim rather than dropping them.
+        var json = "{\"type\":\"diff\",\"changes\":[{\"operation\":\"_custom\",\"foo\":\"bar\",\"baz\":42}]}";
+
+        var parsed = JsonSerializer.Deserialize(json, Wire.V2<ToolCallContent>());
+        var diff = Assert.IsType<StructuredDiff>(parsed);
+        var change = Assert.Single(diff.Changes);
+        Assert.Equal("_custom", change.Operation);
+
+        var roundTripped = JsonSerializer.Serialize(parsed, Wire.V2<ToolCallContent>());
+        Assert.Equal(json, roundTripped);
+    }
+
+    [Fact]
+    public void StructuredDiff_KnownOperationMissingRequiredPath_IsSkippedButKeepsValidSiblings()
+    {
+        // add/delete/modify require path; move/copy require both oldPath and path. An entry missing a
+        // required path is invalid and skipped (x-deserialize-skip-invalid-items), keeping valid siblings.
+        var parsed = JsonSerializer.Deserialize(
+            "{\"type\":\"diff\",\"changes\":[{\"operation\":\"modify\"},{\"operation\":\"move\",\"path\":\"/b\"},{\"operation\":\"add\",\"path\":\"/c\"}]}",
+            Wire.V2<ToolCallContent>());
+
+        var diff = Assert.IsType<StructuredDiff>(parsed);
+        var change = Assert.Single(diff.Changes);
+        Assert.Equal(DiffOperationKind.Add, change.Operation);
+        Assert.Equal("/c", change.Path);
+    }
+
+    [Fact]
+    public void StructuredDiff_BadPatch_RestoresNull()
+    {
+        // Diff.patch is default-on-error: a patch that is not a valid object (or misses required
+        // format/text) restores to null rather than a defaulted DiffPatch.
+        var json = "{\"type\":\"diff\",\"changes\":[{\"operation\":\"add\",\"path\":\"/a\"}],\"patch\":42}";
+
+        var parsed = JsonSerializer.Deserialize(json, Wire.V2<ToolCallContent>());
+        var diff = Assert.IsType<StructuredDiff>(parsed);
+        Assert.Null(diff.Patch);
+
+        var missingField = JsonSerializer.Deserialize(
+            "{\"type\":\"diff\",\"changes\":[{\"operation\":\"add\",\"path\":\"/a\"}],\"patch\":{\"format\":\"git_patch\"}}",
+            Wire.V2<ToolCallContent>());
+        Assert.Null(Assert.IsType<StructuredDiff>(missingField).Patch);
     }
 
     [Fact]

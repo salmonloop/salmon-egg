@@ -907,6 +907,11 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            if (ProtocolVersion != AcpProtocolVersion.V1)
+            {
+                throw new AcpException(JsonRpcErrorCode.MethodNotFound,
+                    "ACP v2 replaces session/set_mode with session/set_config_option using an Agent-provided configId.");
+            }
 
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
