@@ -122,8 +122,11 @@ final class ElicitationTests: XCTestCase {
         let expiringState = try await state()
         let expiringUrl = try XCTUnwrap(expiringState["url"] as? String)
         try await instruct("disconnect")
-        try await eventually("A disconnected request retained its URL") {
-            !self.product.staticTexts[expiringUrl].firstMatch.exists
+        try await eventually("The live product did not retire the disconnected request") {
+            guard self.product.state == .runningForeground,
+                  self.product.descendants(matching: .any)["Toggle sidebar"].firstMatch.exists else { return false }
+            return !self.product.staticTexts[expiringUrl].firstMatch.exists
+                && !self.product.buttons["Open in browser"].firstMatch.exists
         }
         for report in try await reports() {
             XCTAssertEqual(report["openerNull"] as? Bool, true)
