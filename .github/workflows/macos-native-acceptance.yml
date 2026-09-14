@@ -11,6 +11,7 @@ on:
       - 'scripts/gates/macos-elicitation-consent-smoke.py'
       - 'scripts/gates/macos-elicitation-reverse-verification.py'
       - 'scripts/gates/macos-native-ui.swift'
+      - 'scripts/gates/test_macos_native_button.py'
       - 'scripts/gates/fixtures/native-elicitation-peer.py'
       - 'src/SalmonEgg.Infrastructure.Desktop/Services/DesktopElicitationUriLauncher.cs'
       - 'src/SalmonEgg.Infrastructure.Desktop/Services/PlatformShellService.cs'
@@ -41,6 +42,8 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
+      - name: Verify native observation readiness contracts
+        run: python3 scripts/gates/test_macos_native_button.py
       - name: Exercise native Cocoa input with the selected Xcode
         timeout-minutes: 3
         run: python3 scripts/gates/run-macos-desktop-input-probe.py
