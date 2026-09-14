@@ -209,13 +209,18 @@ public sealed class TerminalAuthenticationSmokeTests
             app.ClickElement(input);
             Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.ValueOrDefault, TimeSpan.FromSeconds(10)),
                 "The restored conversation input did not acquire native keyboard focus.");
+            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer before typing " + app.DescribeFocusedElementDetailed()
+                + " value=" + app.TryGetValue(input) + " native=" + app.DescribeNativeKeyboardTarget());
             Keyboard.Press(VirtualKeyShort.CONTROL);
             Keyboard.Press(VirtualKeyShort.KEY_A);
             Keyboard.Release(VirtualKeyShort.KEY_A);
             Keyboard.Release(VirtualKeyShort.CONTROL);
             Keyboard.Type("packaged terminal authentication");
-            Assert.True(app.WaitUntil(() => app.TryGetValue(input) == "packaged terminal authentication", TimeSpan.FromSeconds(10)),
-                "The actual conversation composer did not retain the typed prompt.");
+            var retained = app.WaitUntil(() => app.TryGetValue(input) == "packaged terminal authentication", TimeSpan.FromSeconds(10));
+            GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer after typing " + app.DescribeFocusedElementDetailed()
+                + " value=" + app.TryGetValue(input) + " native=" + app.DescribeNativeKeyboardTarget());
+            if (!retained) app.CaptureAcceptanceFailure("terminal-" + _scenario + "-composer");
+            Assert.True(retained, "The actual conversation composer did not retain the typed prompt.");
             var send = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "ChatInputArea.Send"
                 && element.Properties.IsEnabled.ValueOrDefault);
             app.ClickElement(send);
@@ -250,6 +255,7 @@ public sealed class TerminalAuthenticationSmokeTests
                 Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.Value, TimeSpan.FromSeconds(10)),
                     "The real terminal input did not acquire native keyboard focus.");
                 GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
+                GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: keyboard target " + app.DescribeNativeKeyboardTarget());
                 Keyboard.Type("user confirmed");
                 Keyboard.Press(VirtualKeyShort.RETURN);
                 Keyboard.Release(VirtualKeyShort.RETURN);
@@ -272,7 +278,9 @@ public sealed class TerminalAuthenticationSmokeTests
             Assert.False(data.GetProperty("inputRedirected").GetBoolean());
             Assert.False(data.GetProperty("outputRedirected").GetBoolean());
             Assert.Equal("method-overlay", data.GetProperty("methodEnvironment").GetString());
-            Assert.True(app.WaitUntil(() => Exited(data.GetProperty("processId").GetInt32()), TimeSpan.FromSeconds(15)));
+            var exited = app.WaitUntil(() => Exited(data.GetProperty("processId").GetInt32()), TimeSpan.FromSeconds(15));
+            if (!exited) app.CaptureAcceptanceFailure("terminal-" + _scenario + "-not-exited");
+            Assert.True(exited, "The native sign-in process did not exit after input or cancellation.");
             if (data.GetProperty("descendantId").ValueKind == JsonValueKind.Number)
                 Assert.True(app.WaitUntil(() => Exited(data.GetProperty("descendantId").GetInt32()), TimeSpan.FromSeconds(15)));
         }
