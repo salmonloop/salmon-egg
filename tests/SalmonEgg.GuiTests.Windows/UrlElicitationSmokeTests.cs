@@ -24,6 +24,10 @@ public sealed class UrlElicitationSmokeTests
             app.ClickElement(app.FindByAutomationId("MainNav.Session.native-elicitation-conversation", TimeSpan.FromSeconds(30)));
             Assert.True(app.WaitUntil(() => fixture.Rows().Any(row => row.TryGetProperty("method", out var method)
                 && method.GetString() == "session/load"), TimeSpan.FromSeconds(30)));
+            FindVisible(app, element => element.Properties.ControlType.ValueOrDefault == ControlType.Text
+                && (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains(fixture.History, StringComparison.Ordinal));
+            Assert.True(app.WaitUntilEnabled("InputBox", TimeSpan.FromSeconds(10)),
+                "The restored conversation did not finish before URL consent started.");
             var initialize = Assert.Single(fixture.Rows(), row => row.TryGetProperty("method", out var method)
                 && method.GetString() == "initialize");
             Assert.Equal(JsonValueKind.Object, initialize.GetProperty("capabilities").GetProperty("elicitation").GetProperty("url").ValueKind);
@@ -164,7 +168,8 @@ public sealed class UrlElicitationSmokeTests
             Url = $"http://127.0.0.1:{port}/authorize?token={_urlToken}";
             var scenario = Path.Combine(Root, "scenario.json");
             File.WriteAllText(scenario, "{\"url\":" + Json(Url) + ",\"log\":" + Json(PeerLog)
-                + ",\"control\":" + Json(ControlPath) + ",\"cwd\":" + Json(project) + "}");
+                + ",\"control\":" + Json(ControlPath) + ",\"cwd\":" + Json(project)
+                + ",\"replayHistory\":" + Json(History) + "}");
             File.WriteAllText(Path.Combine(Root, "config", "servers", "native-elicitation-profile.yaml"),
                 "schema_version: 5\nid: native-elicitation-profile\nname: Native Elicitation Fixture\ntransport: stdio\n"
                 + "stdio_command: " + Quote(python) + "\nstdio_arguments:\n  - " + Quote(peer) + "\n  - " + Quote(scenario)
@@ -185,6 +190,7 @@ public sealed class UrlElicitationSmokeTests
 
         public string Root { get; }
         public string Url { get; }
+        public string History => "PACKAGED_URL_HISTORY_" + Path.GetFileName(Root);
         public string PeerLog => Path.Combine(Root, "peer.jsonl");
         private string ControlPath => Path.Combine(Root, "control.json");
         public ConcurrentQueue<string> Visits { get; } = new();

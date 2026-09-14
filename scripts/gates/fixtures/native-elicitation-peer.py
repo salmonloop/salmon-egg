@@ -49,6 +49,10 @@ def main():
                       "agentCapabilities": {"loadSession": True, "sessionCapabilities": {"list": {}}}}})
             elif method in ("session/new", "session/load"):
                 record({"method": method, "sessionId": session_id})
+                if method == "session/load" and scenario.get("replayHistory"):
+                    send({"method": "session/update", "params": {"sessionId": session_id,
+                          "update": {"sessionUpdate": "agent_message_chunk",
+                          "content": {"type": "text", "text": scenario["replayHistory"]}}}})
                 send({"id": message["id"], "result": {"sessionId": session_id}})
             elif method == "session/list":
                 send({"id": message["id"], "result": {"sessions": [{"sessionId": session_id,

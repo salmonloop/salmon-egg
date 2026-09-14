@@ -137,6 +137,19 @@ public sealed class TerminalAuthenticationSmokeTests
         return found!;
     }
 
+    private static void ClickTextInput(WindowsGuiAppSession app, AutomationElement input)
+    {
+        // UIA SetFocus can report logical focus before WinUI/WebView2 activates text input.
+        // Use the user's pointer path once and wait for the native provider's active caret.
+        Mouse.Click(input.GetClickablePoint());
+        Assert.True(app.WaitUntil(() =>
+        {
+            if (!input.Properties.HasKeyboardFocus.ValueOrDefault || !input.Patterns.Text2.IsSupported) return false;
+            _ = input.Patterns.Text2.Pattern.GetCaretRange(out var active);
+            return active;
+        }, TimeSpan.FromSeconds(10)), "The native text input did not activate its keyboard caret after one pointer click.");
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly string? _oldRoot;
@@ -206,15 +219,10 @@ public sealed class TerminalAuthenticationSmokeTests
             GuiAcceptanceDiagnostics.Record("Terminal: restored history visible");
             var input = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "InputBox"
                 && element.Properties.IsEnabled.ValueOrDefault);
-            app.ClickElement(input);
-            Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.ValueOrDefault, TimeSpan.FromSeconds(10)),
-                "The restored conversation input did not acquire native keyboard focus.");
+            ClickTextInput(app, input);
             GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer before typing " + app.DescribeFocusedElementDetailed()
                 + " value=" + app.TryGetValue(input) + " native=" + app.DescribeNativeKeyboardTarget());
-            Keyboard.Press(VirtualKeyShort.CONTROL);
-            Keyboard.Press(VirtualKeyShort.KEY_A);
-            Keyboard.Release(VirtualKeyShort.KEY_A);
-            Keyboard.Release(VirtualKeyShort.CONTROL);
+            Assert.Equal(string.Empty, app.TryGetValue(input));
             Keyboard.Type("packaged terminal authentication");
             var retained = app.WaitUntil(() => app.TryGetValue(input) == "packaged terminal authentication", TimeSpan.FromSeconds(10));
             GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: composer after typing " + app.DescribeFocusedElementDetailed()
@@ -251,9 +259,7 @@ public sealed class TerminalAuthenticationSmokeTests
                     && element.Properties.Name.ValueOrDefault == "Terminal input"
                     && element.Properties.ClassName.ValueOrDefault == "xterm-helper-textarea"
                     && element.Properties.IsEnabled.ValueOrDefault);
-                input.Focus();
-                Assert.True(app.WaitUntil(() => input.Properties.HasKeyboardFocus.Value, TimeSpan.FromSeconds(10)),
-                    "The real terminal input did not acquire native keyboard focus.");
+                ClickTextInput(app, input);
                 GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
                 GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: keyboard target " + app.DescribeNativeKeyboardTarget());
                 Keyboard.Type("user confirmed");
