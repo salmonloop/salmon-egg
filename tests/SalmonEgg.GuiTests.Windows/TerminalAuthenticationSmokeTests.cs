@@ -77,7 +77,7 @@ public sealed class TerminalAuthenticationSmokeTests
         {
             Assert.True(app.WaitUntil(() => File.Exists(fixture.LoginPath), TimeSpan.FromSeconds(20)));
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(10)));
-            ClickNamedButton(app, "Cancel");
+            ClickNamedButton(app, "Cancel", "ChatAuth.TerminalDialog");
         }
 
         // Assert
@@ -87,15 +87,22 @@ public sealed class TerminalAuthenticationSmokeTests
         Assert.False(File.Exists(Path.Combine(fixture.Root, "signed-in")));
     }
 
-    private static void ClickNamedButton(WindowsGuiAppSession app, string text)
+    private static void ClickNamedButton(WindowsGuiAppSession app, string text, string? dialogId = null)
     {
         AutomationElement? button = null;
         var ready = app.WaitUntil(() =>
         {
             try
             {
-                // Let UIA locate the native button without materializing WebView2's changing subtree.
-                button = app.MainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(text)));
+                // Query the active dialog's native template button directly. Traversing the whole
+                // main window can enter WebView2's continually changing terminal subtree first.
+                var scope = dialogId is null ? app.MainWindow
+                    : app.MainWindow.FindFirstDescendant(cf => cf.ByAutomationId(dialogId));
+                if (scope is null) return false;
+                button = dialogId is null
+                    ? scope.FindFirstDescendant(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(text)))
+                    : scope.FindFirstDescendant(cf => cf.ByAutomationId("CloseButton"));
+                if (button is not null && button.Properties.Name.ValueOrDefault != text) return false;
                 return button is not null && button.Properties.IsEnabled.ValueOrDefault
                     && !button.Properties.IsOffscreen.ValueOrDefault;
             }
