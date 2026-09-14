@@ -164,6 +164,21 @@ final class ElicitationTests: XCTestCase {
     }
 
     private func tapVisibleText(_ text: String) async throws {
+        // Prefer the native accessibility element: an element tap goes through UIKit's own
+        // hit-test and cannot land on uncommitted layout whitespace. This is the closest
+        // public path to a real user tap on the rendered row. Only when UIKit hides the
+        // element (Uno container peers can hide descendants) fall back to screen text bounds.
+        let element = product.descendants(matching: .any)[text].firstMatch
+        if element.waitForExistence(timeout: 5) {
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
+            if XCTWaiter.wait(for: [ready], timeout: 5) == .completed {
+                print("IOS_NATIVE_TAP label=\(text) path=accessibilityElement type=\(element.elementType.rawValue) frame=\(element.frame)")
+                element.tap()
+                return
+            }
+            print("IOS_NATIVE_TAP label=\(text) path=accessibilityElementExistsButNotHittable frame=\(element.frame)")
+        }
+
         try await eventually("The visible native label is absent or ambiguous: " + text) {
             try self.textBounds(text) != nil
         }
@@ -173,7 +188,7 @@ final class ElicitationTests: XCTestCase {
         evidence.name = "Before native tap: " + text
         evidence.lifetime = .keepAlways
         add(evidence)
-        print("IOS_NATIVE_TAP label=\(text) normalizedBounds=\(rectangle) appFrame=\(product.frame) imageSize=\(screenshot.image.size) imageScale=\(screenshot.image.scale)")
+        print("IOS_NATIVE_TAP label=\(text) path=visionBounds normalizedBounds=\(rectangle) appFrame=\(product.frame) imageSize=\(screenshot.image.size) imageScale=\(screenshot.image.scale)")
         // Use XCTest's standard contact sequence. Product pointer subscriptions must not be
         // added to make synthesized input succeed: those can change native event bubbling.
         product.coordinate(withNormalizedOffset: CGVector(dx: rectangle.midX, dy: rectangle.midY)).tap()
