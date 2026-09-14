@@ -30,6 +30,12 @@ workflows and JSON-RPC batches share the existing client owners. Experimental ne
 separate from the stable default. The modeled v2 contracts are marked
 `[Experimental("SEACP002")]`; see [ACP v2 draft surface](#acp-v2-draft-surface-seacp002).
 
+V2 connections reject the removed `session/set_mode` method before transport delivery; hosts
+must use the Agent-provided configuration option instead. Structured diff content uses the same
+contract through direct DTO and enclosing-message entry points: `changes` is required, invalid
+entries are skipped, optional malformed patch/metadata fields recover as specified, and unknown
+operations retain their raw payload. V1 flat diff behavior and the stable default are preserved.
+
 ## Capability support boundaries
 
 The presence of a wire type does not advertise a capability or supply its host implementation.

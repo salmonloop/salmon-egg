@@ -11,6 +11,32 @@ public sealed class AcpSessionConfigurationTests
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
     private const string InitialOptions = """[{"configId":"model","name":"Model","type":"select","currentValue":"fast","options":[{"value":"fast","name":"Fast"}]},{"configId":"reasoning","name":"Reasoning","type":"boolean","currentValue":false}]""";
 
+    [Theory]
+    [InlineData(AcpProtocolVersion.V1)]
+    [InlineData(AcpProtocolVersion.V2)]
+    public async Task SetSessionMode_NegotiatedVersion_SendsLegacyMethodOnlyOnV1(int version)
+    {
+        // Arrange: an opted-in client may still negotiate V1; the connection owns the decision.
+        using var peer = await ConfigurationPeer.CreateAsync(version: version, explicitOptIn: true);
+        var request = new SessionSetModeParams("one", "plan");
+
+        // Act / Assert
+        if (version == AcpProtocolVersion.V2)
+        {
+            var error = await Assert.ThrowsAsync<AcpException>(() => peer.Client.SetSessionModeAsync(request, TestToken));
+            Assert.Equal(JsonRpcErrorCode.MethodNotFound, error.ErrorCode);
+            Assert.Contains("session/set_config_option", error.Message, StringComparison.Ordinal);
+            Assert.Null(peer.LastSetMode);
+        }
+        else
+        {
+            await peer.Client.SetSessionModeAsync(request, TestToken);
+            Assert.Equal("session/set_mode", peer.LastSetMode!.Method);
+            Assert.Equal("one", peer.LastSetMode.Params!.Value.GetProperty("sessionId").GetString());
+            Assert.Equal("plan", peer.LastSetMode.Params.Value.GetProperty("modeId").GetString());
+        }
+    }
+
     [Fact]
     public async Task CreateSession_ConfigurationIsCommittedBeforeAsyncStorageAndLaterUpdates()
     {
@@ -344,6 +370,7 @@ public sealed class AcpSessionConfigurationTests
         internal AcpClient Client { get; }
         internal List<string> Errors { get; } = [];
         internal JsonRpcRequest? LastSet { get; private set; }
+        internal JsonRpcRequest? LastSetMode { get; private set; }
         internal JsonRpcRequest? LastResume { get; private set; }
         internal JsonRpcRequest? InitializeRequest { get; private set; }
         internal Action<JsonRpcRequest>? OnSet { get; set; }
@@ -426,6 +453,10 @@ public sealed class AcpSessionConfigurationTests
                 case "session/set_config_option":
                     LastSet = request;
                     OnSet?.Invoke(request);
+                    break;
+                case "session/set_mode":
+                    LastSetMode = request;
+                    Reply(request, "{}");
                     break;
             }
             return Task.FromResult(true);

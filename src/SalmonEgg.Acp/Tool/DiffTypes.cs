@@ -66,6 +66,7 @@ namespace SalmonEgg.Acp.Tool
     /// be consistent with it. Clients must handle the patch being omitted.
     /// </remarks>
     [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
+    [JsonConverter(typeof(DiffPatchJsonConverter))]
     public sealed record DiffPatch
     {
         /// <summary>
@@ -98,6 +99,7 @@ namespace SalmonEgg.Acp.Tool
     /// </para>
     /// </remarks>
     [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
+    [JsonConverter(typeof(DiffChangeJsonConverter))]
     public sealed record DiffChange
     {
         /// <summary>
@@ -129,6 +131,20 @@ namespace SalmonEgg.Acp.Tool
         /// </summary>
         [JsonPropertyName("mimeType")]
         public string? MimeType { get; init; }
+
+        /// <summary>Extension metadata supplied by the Agent for this change.</summary>
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; init; }
+
+        /// <summary>
+        /// The complete raw payload of a change whose <c>operation</c> is not one of the known values.
+        /// The schema's trailing <c>other</c> branch requires only a string <c>operation</c> and allows
+        /// additional properties, so the client preserves the whole object verbatim instead of dropping
+        /// unknown fields (AGENTS.md: forward-compatible raw preservation, same pattern as
+        /// <see cref="CustomToolCallContent"/>). Empty for known operations and hand-built instances.
+        /// </summary>
+        [JsonIgnore]
+        public JsonElement RawPayload { get; init; }
     }
 
     /// <summary>
@@ -140,6 +156,7 @@ namespace SalmonEgg.Acp.Tool
     /// correct for v1 connections; the two are separate variants rather than one type with dual meaning.
     /// </remarks>
     [Experimental(AcpDraftProtocol.DiagnosticId, Message = AcpDraftProtocol.Message, UrlFormat = AcpDraftProtocol.UrlFormat)]
+    [JsonConverter(typeof(StructuredDiffJsonConverter))]
     public sealed record StructuredDiff : ToolCallContent
     {
         private readonly List<DiffChange> _changes = new();
@@ -169,6 +186,49 @@ namespace SalmonEgg.Acp.Tool
         public DiffPatch? Patch { get; init; }
     }
 
+    internal sealed class DiffChangeJsonConverter : JsonConverter<DiffChange>
+    {
+        public override DiffChange Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            return StructuredDiffWireFormat.ReadChange(document.RootElement)
+                ?? throw new JsonException("Diff change is missing a required operation or path.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, DiffChange value, JsonSerializerOptions options)
+            => StructuredDiffWireFormat.WriteChange(writer, value);
+    }
+
+    internal sealed class DiffPatchJsonConverter : JsonConverter<DiffPatch>
+    {
+        public override DiffPatch Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            return StructuredDiffWireFormat.ReadPatch(document.RootElement)
+                ?? throw new JsonException("Diff patch requires string format and text fields.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, DiffPatch value, JsonSerializerOptions options)
+            => StructuredDiffWireFormat.WritePatch(writer, value);
+    }
+
+    internal sealed class StructuredDiffJsonConverter : JsonConverter<StructuredDiff>
+    {
+        public override StructuredDiff Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            if (!StructuredDiffWireFormat.IsStructured(document.RootElement))
+            {
+                throw new JsonException("Structured diff content requires an array 'changes'.");
+            }
+
+            return StructuredDiffWireFormat.Read(document.RootElement);
+        }
+
+        public override void Write(Utf8JsonWriter writer, StructuredDiff value, JsonSerializerOptions options)
+            => StructuredDiffWireFormat.Write(writer, value, options);
+    }
+
     /// <summary>
     /// Reads and writes <see cref="StructuredDiff"/>, whose <c>type</c> discriminator is
     /// <c>diff</c> - the same value v1 uses for its flat diff shape.
@@ -176,8 +236,8 @@ namespace SalmonEgg.Acp.Tool
     /// <remarks>
     /// <para>
     /// The two diff shapes share a discriminator, so they are told apart by structure: a <c>changes</c>
-    /// array means the v2 form. Reading stays tolerant and version-agnostic, because a parser must keep
-    /// accepting whatever the peer sends.
+    /// array means the v2 form. The parent converter selects this contract only for v2; on v1 it
+    /// preserves the structured payload as custom content without interpreting it.
     /// </para>
     /// <para>
     /// Writing is fail-closed on the negotiated version: the structured form does not exist in v1, so
@@ -191,7 +251,8 @@ namespace SalmonEgg.Acp.Tool
             "ACP structured tool call diff content is only available in protocolVersion 2.";
 
         internal static bool IsStructured(JsonElement root) =>
-            root.TryGetProperty("changes", out var changes)
+            root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("changes", out var changes)
                 && changes.ValueKind == JsonValueKind.Array;
 
         internal static StructuredDiff Read(JsonElement root)
@@ -204,43 +265,100 @@ namespace SalmonEgg.Acp.Tool
                 {
                     // changes is marked x-deserialize-skip-invalid-items: drop an element this SDK cannot
                     // read rather than losing the whole diff along with the valid changes beside it.
-                    if (element.ValueKind != JsonValueKind.Object)
+                    if (ReadChange(element) is not { } change)
                     {
                         continue;
                     }
 
-                    changes.Add(ReadChange(element));
+                    changes.Add(change);
                 }
             }
 
             return new StructuredDiff
             {
                 Changes = changes,
-                Patch = ReadPatch(root),
-                Meta = Protocol.AcpMetaJson.Read(root)
+                Patch = root.TryGetProperty("patch", out var patch) ? ReadPatch(patch) : null,
+                Meta = Protocol.AcpMetaJson.ReadOrDefault(root)
             };
         }
 
-        private static DiffChange ReadChange(JsonElement element) => new()
+        internal static DiffChange? ReadChange(JsonElement element)
         {
-            Operation = ReadString(element, "operation") ?? string.Empty,
-            Path = ReadString(element, "path") ?? string.Empty,
-            OldPath = ReadString(element, "oldPath"),
-            FileType = ReadString(element, "fileType"),
-            MimeType = ReadString(element, "mimeType")
-        };
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
 
-        private static DiffPatch? ReadPatch(JsonElement root)
+            var operation = ReadString(element, "operation");
+            if (operation is null)
+            {
+                // Every DiffChange branch requires a string operation; without one the item is invalid.
+                return null;
+            }
+
+            if (!IsKnownOperation(operation))
+            {
+                // Unknown operation: the "other" branch keeps the raw payload with its extra fields.
+                return new DiffChange
+                {
+                    Operation = operation,
+                    RawPayload = element.Clone(),
+                    FileType = ReadString(element, "fileType"),
+                    MimeType = ReadString(element, "mimeType"),
+                    Meta = Protocol.AcpMetaJson.ReadOrDefault(element)
+                };
+            }
+
+            var path = ReadString(element, "path");
+            if (path is null)
+            {
+                // add/delete/modify require path; move/copy require both oldPath and path.
+                return null;
+            }
+
+            if (operation is DiffOperationKind.Move or DiffOperationKind.Copy
+                && ReadString(element, "oldPath") is null)
+            {
+                return null;
+            }
+
+            return new DiffChange
+            {
+                Operation = operation,
+                Path = path,
+                OldPath = ReadString(element, "oldPath"),
+                FileType = ReadString(element, "fileType"),
+                MimeType = ReadString(element, "mimeType"),
+                Meta = Protocol.AcpMetaJson.ReadOrDefault(element)
+            };
+        }
+
+        private static bool IsKnownOperation(string operation) =>
+            operation is DiffOperationKind.Add
+                or DiffOperationKind.Delete
+                or DiffOperationKind.Modify
+                or DiffOperationKind.Move
+                or DiffOperationKind.Copy;
+
+        internal static DiffPatch? ReadPatch(JsonElement patch)
         {
-            if (!root.TryGetProperty("patch", out var patch) || patch.ValueKind != JsonValueKind.Object)
+            if (patch.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            // DiffPatch.required=[format,text]; a patch that fails to bind is default-on-error -> null.
+            var format = ReadString(patch, "format");
+            var text = ReadString(patch, "text");
+            if (format is null || text is null)
             {
                 return null;
             }
 
             return new DiffPatch
             {
-                Format = ReadString(patch, "format") ?? string.Empty,
-                Text = ReadString(patch, "text") ?? string.Empty
+                Format = format,
+                Text = text
             };
         }
 
@@ -248,6 +366,45 @@ namespace SalmonEgg.Acp.Tool
             element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+
+        internal static void WriteChange(Utf8JsonWriter writer, DiffChange change)
+        {
+            if (change.RawPayload.ValueKind == JsonValueKind.Object)
+            {
+                // Unknown operation preserved on read: write the raw payload back verbatim.
+                writer.WriteRawValue(change.RawPayload.GetRawText());
+                return;
+            }
+
+            writer.WriteStartObject();
+            writer.WriteString("operation", change.Operation);
+            writer.WriteString("path", change.Path);
+            if (change.OldPath is not null)
+            {
+                writer.WriteString("oldPath", change.OldPath);
+            }
+
+            if (change.FileType is not null)
+            {
+                writer.WriteString("fileType", change.FileType);
+            }
+
+            if (change.MimeType is not null)
+            {
+                writer.WriteString("mimeType", change.MimeType);
+            }
+
+            Protocol.AcpMetaJson.Write(writer, change.Meta);
+            writer.WriteEndObject();
+        }
+
+        internal static void WritePatch(Utf8JsonWriter writer, DiffPatch patch)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("format", patch.Format);
+            writer.WriteString("text", patch.Text);
+            writer.WriteEndObject();
+        }
 
         internal static void Write(Utf8JsonWriter writer, StructuredDiff value, JsonSerializerOptions options)
         {
@@ -264,25 +421,7 @@ namespace SalmonEgg.Acp.Tool
             writer.WriteStartArray();
             foreach (var change in value.Changes)
             {
-                writer.WriteStartObject();
-                writer.WriteString("operation", change.Operation);
-                writer.WriteString("path", change.Path);
-                if (change.OldPath is not null)
-                {
-                    writer.WriteString("oldPath", change.OldPath);
-                }
-
-                if (change.FileType is not null)
-                {
-                    writer.WriteString("fileType", change.FileType);
-                }
-
-                if (change.MimeType is not null)
-                {
-                    writer.WriteString("mimeType", change.MimeType);
-                }
-
-                writer.WriteEndObject();
+                WriteChange(writer, change);
             }
 
             writer.WriteEndArray();
@@ -290,10 +429,7 @@ namespace SalmonEgg.Acp.Tool
             if (value.Patch is { } patch)
             {
                 writer.WritePropertyName("patch");
-                writer.WriteStartObject();
-                writer.WriteString("format", patch.Format);
-                writer.WriteString("text", patch.Text);
-                writer.WriteEndObject();
+                WritePatch(writer, patch);
             }
 
             Protocol.AcpMetaJson.Write(writer, value.Meta);

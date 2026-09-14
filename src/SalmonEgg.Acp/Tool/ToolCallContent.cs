@@ -198,6 +198,10 @@ namespace SalmonEgg.Acp.Tool
                     => AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2
                         ? StructuredDiffWireFormat.Read(root)
                         : new CustomToolCallContent("diff", root.Clone()) { Meta = AcpMetaJson.Read(root) },
+                // v2 schema requires a 'changes' array on every diff. A v2 'diff' without one (or with
+                // a wrong-typed one) is not the flat v1 shape and must not be read as if it were.
+                "diff" when AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2
+                    => throw new JsonException("ACP v2 tool call diff content requires an array 'changes'."),
                 "diff" => ReadDiff(root, options),
                 "terminal" => ReadTerminal(root, options),
                 // Unknown or missing discriminator: keep the raw payload for forward passthrough and let the Agent
@@ -229,6 +233,12 @@ namespace SalmonEgg.Acp.Tool
                     StructuredDiffWireFormat.Write(writer, structuredDiff, options);
                     break;
                 case DiffToolCallContent diff:
+                    if (AcpWireFormat.NegotiatedVersion(options) >= AcpProtocolVersion.V2)
+                    {
+                        throw new JsonException(
+                            "ACP v2 replaced the flat diff payload with the structured 'changes' form.");
+                    }
+
                     writer.WriteStartObject();
                     writer.WriteString("type", "diff");
                     writer.WriteString("path", diff.Path);

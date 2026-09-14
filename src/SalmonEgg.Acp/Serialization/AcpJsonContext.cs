@@ -84,6 +84,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(StructuredDiff))]
 [JsonSerializable(typeof(ToolCallContentChunkUpdate))]
 [JsonSerializable(typeof(DiffChange))]
+[JsonSerializable(typeof(List<DiffChange>))]
 [JsonSerializable(typeof(DiffPatch))]
 [JsonSerializable(typeof(SessionLoadParams))]
 [JsonSerializable(typeof(SessionLoadResponse))]
