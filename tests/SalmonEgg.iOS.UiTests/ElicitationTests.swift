@@ -141,8 +141,8 @@ final class ElicitationTests: XCTestCase {
         guard XCTWaiter.wait(for: [ready], timeout: 30) == .completed else {
             throw GateFailure.unmetCondition("The native control is not interactable")
         }
-        // Keep the touch down long enough for UIKit's native scroll-view touch delivery.
-        element.press(forDuration: 0.4)
+        // Use XCTest's normal user tap after the native element is enabled and hittable.
+        element.tap()
     }
 
     private func textBounds(_ text: String) throws -> CGRect? {

@@ -128,11 +128,18 @@ def main(args):
         project = repo / "tests/SalmonEgg.iOS.UiTests"
         run([args.xcodegen, "generate", "--spec", str(project / "project.yml")], cwd=project)
         env = dict(os.environ, SALMONEGG_IOS_CONTROL_URL=endpoints["control"])
+        test_arguments = ["-project", str(project / "SalmonEggNativeAcceptance.xcodeproj"),
+            "-scheme", "SalmonEggNativeAcceptance", "-destination", "platform=iOS Simulator,id=" + simulator,
+            "-derivedDataPath", str(artifacts / "test-build"), "-parallel-testing-enabled", "NO",
+            "CODE_SIGNING_ALLOWED=NO", "SALMONEGG_IOS_CONTROL_URL=" + endpoints["control"]]
+        # Compile the XCTest runner before starting the native interaction budget. The previous
+        # combined command spent that budget compiling, then killed a test still entering text.
+        with (artifacts / "xcuitest-build.log").open("w") as log:
+            run(["xcodebuild", "build-for-testing", *test_arguments], cwd=project, env=env,
+                timeout=180, stdout=log, stderr=subprocess.STDOUT)
         with (artifacts / "xcuitest.log").open("w") as log:
-            test_process = subprocess.Popen(["xcodebuild", "test", "-project", str(project / "SalmonEggNativeAcceptance.xcodeproj"),
-                "-scheme", "SalmonEggNativeAcceptance", "-destination", "platform=iOS Simulator,id=" + simulator,
-                "-derivedDataPath", str(artifacts / "test-build"), "-resultBundlePath", str(artifacts / "results.xcresult"),
-                "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=NO", "SALMONEGG_IOS_CONTROL_URL=" + endpoints["control"]],
+            test_process = subprocess.Popen(["xcodebuild", "test-without-building", *test_arguments,
+                "-resultBundlePath", str(artifacts / "results.xcresult")],
                 env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             test_exit = test_process.wait(timeout=420)
         if test_exit:
