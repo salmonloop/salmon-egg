@@ -30,8 +30,12 @@ class ConsentCleanupObservationTests(unittest.TestCase):
         return ET.tostring(root)
 
     def test_missing_or_wrong_native_surface_is_not_cleanup(self):
+        unrelated = ET.Element("hierarchy")
+        ET.SubElement(unrelated, "node", package=gate.PACKAGE, bounds="[0,0][200,30]",
+                      **{"content-desc": "Unrelated screen"})
         for xml, foreground in [
             ("<hierarchy />", True),
+            (ET.tostring(unrelated), True),
             (self.snapshot(package=gate.CHROME), True),
             (self.snapshot(title_bounds="[0,0][0,0]"), True),
             (self.snapshot(), False),
