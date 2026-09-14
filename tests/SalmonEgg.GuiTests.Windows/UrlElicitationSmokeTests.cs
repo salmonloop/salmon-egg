@@ -66,6 +66,9 @@ public sealed class UrlElicitationSmokeTests
                 try
                 {
                     var snapshot = app.MainWindow.FindAllDescendants();
+                    if (!snapshot.Any(element =>
+                        element.Properties.AutomationId.ValueOrDefault == "TitleBar.ToggleSidebar"
+                        && !element.Properties.IsOffscreen.ValueOrDefault)) return false;
                     var link = snapshot.FirstOrDefault(element => element.Properties.AutomationId.ValueOrDefault == "Elicitation.FullUrl");
                     var open = snapshot.FirstOrDefault(element => element.Properties.Name.ValueOrDefault == "Open in browser");
                     return (link is null || link.Properties.IsOffscreen.ValueOrDefault || string.IsNullOrEmpty(link.Properties.Name.ValueOrDefault))
