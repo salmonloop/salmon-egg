@@ -148,7 +148,10 @@ namespace SalmonEgg.Acp.Client
         // connection and each side then serves that version's surface, so the contract is connection
         // state - not a per-call argument and not ambient state. Starts on the stable surface because
         // that is what an un-negotiated client may legitimately write (the initialize request itself).
-        private AcpWireFormat _wire = AcpWireFormat.For(AcpProtocolVersion.V1);
+        // Volatile: the write happens on the caller thread inside InitializeAsync while the receive
+        // loop reads the contract on the transport thread; without a barrier the loop could
+        // deserialize the first post-initialize messages with the stale pre-negotiation contract.
+        private volatile AcpWireFormat _wire = AcpWireFormat.For(AcpProtocolVersion.V1);
 
         // Projection rather than a second field: a copy could drift from the contract actually in use,
         // and the two disagreeing is exactly the class of defect this refactor exists to remove.
