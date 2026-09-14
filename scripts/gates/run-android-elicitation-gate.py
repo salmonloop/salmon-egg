@@ -98,6 +98,16 @@ class AndroidDevice:
                 return node
         return None
 
+    def input_matches(self, label, expected, focused=False):
+        field = self.find(label, enabled=True, editable=True)
+        if field is None:
+            return False
+        editors = [node for node in field.iter("node")
+                   if node.get("package") == PACKAGE and node.get("class", "").endswith("EditText")
+                   and bounds(node) and node.get("enabled") == "true"]
+        return len(editors) == 1 and editors[0].get("text") == expected \
+            and (not focused or editors[0].get("focused") == "true")
+
     def wait(self, label, package=PACKAGE, timeout=30):
         return eventually("The native control is absent or disabled: " + str(label),
                           lambda: self.find(label, package, enabled=True), timeout)
@@ -324,8 +334,16 @@ class ConsentFlow:
         field = eventually("The accessible form input is absent", lambda:
             self.device.find("Acceptance answer", enabled=True, editable=True))
         self.device.tap_node(field)
+        eventually("The native form editor did not acquire focus", lambda:
+            self.device.input_matches("Acceptance answer", "", focused=True))
         self.device.text("shell", "input", "text", "native-form-answer")
+        # adb completion only confirms injection. Wait for the actual editor's full value before
+        # moving native focus; otherwise the final key can race the Tab and be sent elsewhere.
+        eventually("The native form editor did not receive the complete input", lambda:
+            self.device.input_matches("Acceptance answer", "native-form-answer", focused=True))
         self.device.text("shell", "input", "keyevent", "KEYCODE_TAB")
+        eventually("The form value changed when leaving the native editor", lambda:
+            self.device.input_matches("Acceptance answer", "native-form-answer"))
         self.device.capture("form-answer")
         self.device.tap("Submit")
         assert self.response("native-form-accept", "accept").get("content") == {"answer": "native-form-answer"}

@@ -56,5 +56,29 @@ class ConsentCleanupObservationTests(unittest.TestCase):
         device.foreground.assert_called_once_with(gate.PACKAGE)
 
 
+class NativeFormInputTests(unittest.TestCase):
+    def device(self, value, focused=True, label="Acceptance answer"):
+        root = ET.Element("hierarchy")
+        field = ET.SubElement(root, "node", package=gate.PACKAGE, bounds="[0,0][200,60]",
+                              enabled="true", **{"content-desc": label, "class": "android.view.ViewGroup"})
+        ET.SubElement(field, "node", package=gate.PACKAGE, bounds="[0,20][200,60]",
+                      enabled="true", focused=str(focused).lower(), text=value,
+                      **{"class": "android.widget.EditText"})
+        device = gate.AndroidDevice("emulator-test", Path("unused"))
+        device.tree = Mock(return_value=root)
+        return device
+
+    def test_partial_input_is_not_committed(self):
+        self.assertFalse(self.device("native-form-answe").input_matches("Acceptance answer", "native-form-answer", focused=True))
+
+    def test_complete_value_requires_the_requested_editor_and_focus(self):
+        self.assertTrue(self.device("native-form-answer").input_matches("Acceptance answer", "native-form-answer", focused=True))
+        self.assertFalse(self.device("native-form-answer", focused=False).input_matches("Acceptance answer", "native-form-answer", focused=True))
+        self.assertFalse(self.device("native-form-answer", label="Different field").input_matches("Acceptance answer", "native-form-answer"))
+
+    def test_value_remains_verifiable_after_focus_moves(self):
+        self.assertTrue(self.device("native-form-answer", focused=False).input_matches("Acceptance answer", "native-form-answer"))
+
+
 if __name__ == "__main__":
     unittest.main()
