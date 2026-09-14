@@ -115,14 +115,17 @@ jobs:
             artifacts/ios-acp-acceptance/*.log
             artifacts/ios-acp-acceptance/product-logs/**
             artifacts/ios-acp-acceptance/results.xcresult
+            artifacts/ios-acp-acceptance/test-attachments/**
             artifacts/ios-acp-acceptance/reverse/*.json
             artifacts/ios-acp-acceptance/reverse/*.log
             artifacts/ios-acp-acceptance/reverse/red/*.json
             artifacts/ios-acp-acceptance/reverse/red/*.log
             artifacts/ios-acp-acceptance/reverse/red/product-logs/**
             artifacts/ios-acp-acceptance/reverse/red/results.xcresult
+            artifacts/ios-acp-acceptance/reverse/red/test-attachments/**
             artifacts/ios-acp-acceptance/reverse/restored/*.json
             artifacts/ios-acp-acceptance/reverse/restored/*.log
             artifacts/ios-acp-acceptance/reverse/restored/product-logs/**
             artifacts/ios-acp-acceptance/reverse/restored/results.xcresult
+            artifacts/ios-acp-acceptance/reverse/restored/test-attachments/**
           retention-days: 7
