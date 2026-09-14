@@ -44,10 +44,10 @@ hosts must enable optional capabilities only after implementing their interactio
 
 | Surface | Current behavior | Remaining work |
 | --- | --- | --- |
-| Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. | Hosts must implement interactive login before opting into `ClientCapabilities.Auth.Terminal`. The Windows PTY host is implemented, but SalmonEgg does not advertise it until packaged-application acceptance completes; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
+| Agent authentication | Only an absent discriminator or the exact `agent` type can reach `authenticate`. Unsupported strings round-trip without being selected; non-string discriminators are rejected. Interactive Windows WinUI stdio connections advertise terminal authentication and use a separate ConPTY after user consent. | Other hosts need their own interactive login and trustworthy process-exit acceptance before opting in; see [#147](https://github.com/salmonloop/salmon-egg/issues/147). SalmonEgg credential injection binds a stored value to an explicit transport destination independently of the ACP `authenticate` request. |
 | Request cancellation | The SDK sends `$/cancel_request`, recognizes `-32800`, and retains the original request ID until its terminal response or disconnection. Transports preserve caller cancellation; each cancellation notification has a two-second send budget. A terminal response received first wins. | Peer cancellation is best effort. `session/cancel` remains a separate session operation. [#148](https://github.com/salmonloop/salmon-egg/issues/148) still requires the deployed stdio-to-WebSocket bridge acceptance gate. |
 | Form elicitation | SalmonEgg's capability defaults advertise form mode. Hosts handle `ElicitationRequested` and return a typed accept, decline, or cancel response. | The host owns the form UI and must preserve the request's scope and connection ownership. |
-| URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM and Linux desktop through its platform capability service. Linux uses the existing system opener after explicit consent. | The Linux product gate exercises its real card, stdio peer, native pointer input and isolated external browser. Other native platforms and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
+| URL elicitation | The SDK owns consent-response availability, connection lifetime, and completion in `ElicitationRequestEventArgs.State`. URL mode stays off in SDK defaults; SalmonEgg enables it on WASM, Linux/macOS desktop and Windows WinUI through the platform capability service. Native hosts use the system browser after explicit consent. | Product gates exercise real cards, protocol peers, native pointer input and isolated external browsers; Windows uses the current installed MSIX. Other native platforms and independent real-Agent interoperability remain open in [#154](https://github.com/salmonloop/salmon-egg/issues/154). [#146](https://github.com/salmonloop/salmon-egg/issues/146) tracks the complete elicitation delivery. |
 | ACP v2 | Explicit opt-in enables the staged lifecycle while ordinary initialization continues to reject V2. The existing application event stream carries complete entity views without a draft-type dependency. | V2 remains an upstream draft. The official Rust echo Agent is interoperable; LLM Agent/platform acceptance must be reported separately in [#149](https://github.com/salmonloop/salmon-egg/issues/149). |
 
 Internal v2 batch validation follows the upstream schema at
@@ -71,12 +71,12 @@ interoperability with a public v2 Agent. The separate pinned official Rust Agent
 Terminal methods append their arguments to the invocation used by the active stdio connection and
 override its effective environment. SalmonEgg asks for consent before starting a separate PTY,
 reclaims that process tree on cancellation, and reconnects through its existing connection owner
-only after a normal zero exit. Terminal methods never reach `authenticate`. Product capability
-advertisement remains disabled, including on Windows, until the packaged application's consent,
-terminal interaction, exit, reconnect, retry and cancellation paths pass the GUI gate. The dedicated
-Windows process gate opts in explicitly to validate ConPTY independently of product rollout. Other
-platforms also need trustworthy process exit and cleanup semantics. The process gate and remaining
-GUI prerequisites are described in the repository's `BUILD_GUIDE.md`.
+only after a normal zero exit. Terminal methods never reach `authenticate`. Interactive Windows
+WinUI stdio connections advertise the capability; the installed MSIX gate verifies consent,
+terminal input, exit, reconnect, retry and cancellation. The dedicated Windows process gate also
+validates ConPTY independently. Other platforms remain disabled until their process exit,
+cleanup and installed-product interaction are verified. Commands and platform prerequisites are
+described in the repository's `BUILD_GUIDE.md`.
 
 V2 wire coverage includes `configId`/`groupId`, required `messageId` values, text/custom command
 inputs, and v1-only session fields and MCP variants. Unknown extension fields are preserved;

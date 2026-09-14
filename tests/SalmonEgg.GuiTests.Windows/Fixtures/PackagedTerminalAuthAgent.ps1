@@ -33,7 +33,11 @@ if ($Mode -eq 'login') {
     if ($behavior -eq 'cancel') {
         while ($true) { [Console]::WriteLine('terminal cancellation output'); Start-Sleep -Milliseconds 100 }
     }
-    if ([Console]::ReadLine() -ne 'user confirmed') { exit 92 }
+    $inputLine = [Console]::ReadLine()
+    $inputPath = Join-Path $StateDirectory 'login-input.json'
+    [IO.File]::WriteAllText(($inputPath + '.tmp'), (@{ input = $inputLine } | ConvertTo-Json -Compress))
+    [IO.File]::Move(($inputPath + '.tmp'), $inputPath)
+    if ($inputLine -ne 'user confirmed') { exit 92 }
     [Console]::WriteLine('PACKAGED_TERMINAL_CONFIRMED')
     if ($behavior -eq 'failure') { exit 23 }
     [IO.File]::WriteAllText($signedIn, 'normal-zero-exit')
