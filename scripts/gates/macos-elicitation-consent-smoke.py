@@ -143,6 +143,7 @@ def main():
             with (output / 'native-pointer.log').open('a') as log:
                 log.write(attempt.stdout + attempt.stderr)
             assert attempt.returncode == 0, attempt.stderr
+            subprocess.run(['screencapture', '-x', str(output / ('after-' + action + '.png'))], check=True, timeout=5)
 
         def replies(action):
             return [x for x in seed.read_json_lines(peer_log) if x.get('id') == 'native-url-' + action]

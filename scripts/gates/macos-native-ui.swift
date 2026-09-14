@@ -28,6 +28,11 @@ func isFrontmost(_ pid: pid_t) -> Bool {
 }
 
 func click(_ point: CGPoint) {
+    // Posting permission belongs to the helper which sends the input, not another probe.
+    guard CGPreflightPostEventAccess() else {
+        fputs("Native pointer helper has no CGEvent posting permission.\n", stderr)
+        exit(10)
+    }
     let source = CGEventSource(stateID: .hidSystemState)
     for type in [CGEventType.mouseMoved, .leftMouseDown, .leftMouseUp] {
         let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
@@ -166,7 +171,7 @@ if arguments[1] == "pointer", arguments.count == 6, let pid = Int32(arguments[2]
     let point = CGPoint(x: position.x + localX, y: position.y + size.height - height + localY)
     let titlebarPoint = CGPoint(x: position.x + size.width / 2, y: position.y + (size.height - height) / 2)
     guard activate(pid, titlebarPoint) else { exit(9) }
-    print("CGEvent target pid=\(pid) x=\(point.x) y=\(point.y) nativeWindow=\(position) size=\(size) contentHeight=\(height)")
+    print("CGEvent target pid=\(pid) x=\(point.x) y=\(point.y) nativeWindow=\(position) size=\(size) contentHeight=\(height) postingAccess=1")
     click(point)
     print("Native system window bounds and read-only product sample used for CGEvent pointer")
     exit(0)
