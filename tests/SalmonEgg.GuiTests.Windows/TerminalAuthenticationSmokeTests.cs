@@ -137,14 +137,18 @@ public sealed class TerminalAuthenticationSmokeTests
         return found!;
     }
 
-    private static void ClickTextInput(WindowsGuiAppSession app, AutomationElement input)
+    private static void ClickTextInput(WindowsGuiAppSession app, AutomationElement input, AutomationElement? pointerTarget = null)
     {
         // UIA SetFocus can report logical focus before WinUI/WebView2 activates text input.
         // Use the user's pointer path once and wait for the native provider's active caret.
-        Mouse.Click(input.GetClickablePoint());
+        var point = (pointerTarget ?? input).GetClickablePoint();
+        GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: pointer target=" + (pointerTarget?.AutomationId ?? input.AutomationId)
+            + " point=" + point + " text2=" + input.Patterns.Text2.IsSupported);
+        Mouse.Click(point);
         Assert.True(app.WaitUntil(() =>
         {
-            if (!input.Properties.HasKeyboardFocus.ValueOrDefault || !input.Patterns.Text2.IsSupported) return false;
+            if (!input.Properties.HasKeyboardFocus.ValueOrDefault) return false;
+            if (!input.Patterns.Text2.IsSupported) return true;
             _ = input.Patterns.Text2.Pattern.GetCaretRange(out var active);
             return active;
         }, TimeSpan.FromSeconds(10)), "The native text input did not activate its keyboard caret after one pointer click.");
@@ -248,7 +252,7 @@ public sealed class TerminalAuthenticationSmokeTests
             Assert.True(app.WaitUntil(() => File.Exists(LoginPath), TimeSpan.FromSeconds(20)));
             GuiAcceptanceDiagnostics.Record("Terminal: PTY process observed");
             Assert.True(app.WaitUntilOnscreen("ChatAuth.TerminalDialog", TimeSpan.FromSeconds(15)));
-            FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "BottomPanel.TerminalWebView"
+            var terminal = FindNativeElement(app, element => element.Properties.AutomationId.ValueOrDefault == "BottomPanel.TerminalWebView"
                 && (element.Properties.Name.ValueOrDefault ?? string.Empty).Contains("PACKAGED_TERMINAL_READY", StringComparison.Ordinal));
             GuiAcceptanceDiagnostics.Record("Terminal: PTY ready output observed");
             try
@@ -259,7 +263,8 @@ public sealed class TerminalAuthenticationSmokeTests
                     && element.Properties.Name.ValueOrDefault == "Terminal input"
                     && element.Properties.ClassName.ValueOrDefault == "xterm-helper-textarea"
                     && element.Properties.IsEnabled.ValueOrDefault);
-                ClickTextInput(app, input);
+                // xterm's helper textarea is transparent; its visible viewport owns pointer input.
+                ClickTextInput(app, input, terminal);
                 GuiAcceptanceDiagnostics.Record("Terminal: native focus " + app.DescribeFocusedElement());
                 GuiAcceptanceDiagnostics.Record("[DEBUG-win205] Terminal: keyboard target " + app.DescribeNativeKeyboardTarget());
                 Keyboard.Type("user confirmed");
@@ -274,6 +279,11 @@ public sealed class TerminalAuthenticationSmokeTests
                 if (!string.IsNullOrWhiteSpace(artifacts))
                     app.CaptureMainWindowToFile(Path.Combine(artifacts, "terminal-" + _scenario + "-input.png"));
             }
+            var inputPath = Path.Combine(Root, "login-input.json");
+            Assert.True(app.WaitUntil(() => File.Exists(inputPath), TimeSpan.FromSeconds(10)),
+                "The ConPTY sign-in process did not receive the native keyboard input.");
+            using var observation = JsonDocument.Parse(File.ReadAllText(inputPath));
+            Assert.Equal("user confirmed", observation.RootElement.GetProperty("input").GetString());
         }
 
         public void AssertLoginExited(WindowsGuiAppSession app)
@@ -300,7 +310,7 @@ public sealed class TerminalAuthenticationSmokeTests
             {
                 var evidence = Path.Combine(artifacts, "terminal-" + _scenario);
                 Directory.CreateDirectory(evidence);
-                foreach (var file in new[] { "requests.jsonl", "login.json", "boot.log" })
+                foreach (var file in new[] { "requests.jsonl", "login.json", "login-input.json", "boot.log" })
                 {
                     var source = Path.Combine(Root, file);
                     if (File.Exists(source)) File.Copy(source, Path.Combine(evidence, file), overwrite: true);
