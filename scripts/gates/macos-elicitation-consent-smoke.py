@@ -23,6 +23,32 @@ def module(path):
     return value
 
 
+class StableNativeButtonSample:
+    """Count fresh product observations, never repeated reads of one log entry."""
+
+    def __init__(self, action):
+        self.pattern = re.compile(rf'button seq=(\d+) action={re.escape(action)} enabled=(True|False) x=(\d+) y=(\d+) width=(\d+) height=(\d+) rootHeight=(\d+) scale=([0-9.]+)')
+        self.sequence = -1
+        self.previous = None
+        self.count = 0
+
+    def observe(self, text):
+        found = self.pattern.search(text.split('NativeElicitationProbe sample')[-1])
+        if not found:
+            return None
+        sequence = int(found.group(1))
+        if sequence <= self.sequence:
+            return None
+        self.sequence = sequence
+        if found.group(2) != 'True':
+            self.previous, self.count = None, 0
+            return None
+        values = found.groups()[2:]
+        self.count = self.count + 1 if values == self.previous else 1
+        self.previous = values
+        return values if self.count >= 3 else None
+
+
 def main():
     if sys.platform != "darwin":
         raise SystemExit("macOS native URL acceptance requires macOS.")
@@ -119,25 +145,15 @@ def main():
         def click(title):
             action = {'Decline': 'decline', 'Cancel': 'cancel', 'Open in browser': 'submit',
                       'Open again': 'reopen', 'Close notice': 'dismiss'}[title]
-            previous, count = None, 0
+            sample = StableNativeButtonSample(action)
 
-            def locate():
-                nonlocal previous, count
-                text = stdout.read_text().split('NativeElicitationProbe sample')[-1]
-                found = re.search(rf'button seq=\d+ action={action} enabled=True x=(\d+) y=(\d+) width=(\d+) height=(\d+) rootHeight=(\d+) scale=([0-9.]+)', text)
-                if not found:
-                    return None
-                values = found.groups()
-                count = count + 1 if values == previous else 1
-                previous = values
-                return values if count >= 3 else None
-
-            x, y, width, height, root_height, scale = map(float, wait(locate, 'No stable enabled native button'))
             permission = subprocess.run([str(ax_tool), 'allow-local-network', 'python-fixture'], capture_output=True, text=True, timeout=10)
             with (output / 'system-permission.log').open('a') as log:
                 log.write(permission.stdout + permission.stderr)
             assert permission.returncode == 0, 'Could not handle the matching temporary fixture permission prompt'
             subprocess.run(['screencapture', '-x', str(output / ('before-' + action + '.png'))], check=True, timeout=5)
+            x, y, width, height, root_height, scale = map(float, wait(
+                lambda: sample.observe(stdout.read_text()), 'No fresh stable enabled native button'))
             attempt = subprocess.run([str(ax_tool), 'pointer', str(app.pid), str((x + width / 2) / scale),
                                       str((y + height / 2) / scale), str(root_height / scale)], capture_output=True, text=True, timeout=10)
             with (output / 'native-pointer.log').open('a') as log:
