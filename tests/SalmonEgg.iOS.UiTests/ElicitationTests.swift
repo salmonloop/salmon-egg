@@ -39,7 +39,7 @@ final class ElicitationTests: XCTestCase {
             let sidebar = product.buttons["Toggle sidebar"]
             if sidebar.waitForExistence(timeout: 10) && sidebar.isHittable { sidebar.tap() }
         }
-        try await tapVisibleText("Consent session")
+        try await tapVisibleText("Consent session", automationId: "MainNav.Session.native-elicitation-conversation")
         try await eventually("The authoritative session was not loaded") { try await self.state()["loaded"] as? Bool == true }
         let initialState = try await state()
         let capabilities = try XCTUnwrap(initialState["capabilities"] as? [String: Any])
@@ -166,12 +166,9 @@ final class ElicitationTests: XCTestCase {
         return CGRect(x: rectangle.minX, y: 1 - rectangle.maxY, width: rectangle.width, height: rectangle.height)
     }
 
-    private func tapVisibleText(_ text: String) async throws {
-        // Prefer the native accessibility element: an element tap goes through UIKit's own
-        // hit-test and cannot land on uncommitted layout whitespace. This is the closest
-        // public path to a real user tap on the rendered row. Only when UIKit hides the
-        // element (Uno container peers can hide descendants) fall back to screen text bounds.
-        let element = product.descendants(matching: .any)[text].firstMatch
+    private func tapVisibleText(_ text: String, automationId: String? = nil) async throws {
+        // Prefer the app-owned semantic ID without assuming a UIKit accessibility element type.
+        let element = product.descendants(matching: .any)[automationId ?? text].firstMatch
         if element.waitForExistence(timeout: 5) {
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true AND hittable == true"), object: element)
             if XCTWaiter.wait(for: [ready], timeout: 5) == .completed {
@@ -182,6 +179,7 @@ final class ElicitationTests: XCTestCase {
             print("IOS_NATIVE_TAP label=\(text) path=accessibilityElementExistsButNotHittable frame=\(element.frame)")
         }
 
+        print("IOS_NATIVE_HIERARCHY_BEFORE_VISION\n" + product.debugDescription)
         try await eventually("The visible native label is absent or ambiguous: " + text) {
             try self.textBounds(text) != nil
         }

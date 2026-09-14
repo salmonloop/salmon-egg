@@ -173,6 +173,16 @@ def main(args):
             except subprocess.TimeoutExpired:
                 os.killpg(test_process.pid, signal.SIGKILL)
                 test_process.wait(timeout=5)
+        results = artifacts / "results.xcresult"
+        if results.exists():
+            # Keep native screenshots and the recorded accessibility tree readable without Xcode.
+            with (artifacts / "attachments-export.log").open("w") as log:
+                try:
+                    subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", str(results),
+                        "--output-path", str(artifacts / "test-attachments")],
+                        stdout=log, stderr=subprocess.STDOUT, timeout=45, check=False)
+                except subprocess.TimeoutExpired:
+                    print("[ios-gate] attachment export timed out", flush=True)
         if root is not None:
             logs = artifacts / "product-logs"
             logs.mkdir(exist_ok=True)
