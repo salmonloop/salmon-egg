@@ -381,6 +381,9 @@ namespace SalmonEgg.Acp.Mcp
 
     internal sealed class McpServerJsonConverter : JsonConverter<McpServer>
     {
+        internal const string SseV1OnlyMessage =
+            "ACP MCP server transport sse is only available in protocolVersion 1.";
+
         public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
@@ -413,6 +416,16 @@ namespace SalmonEgg.Acp.Mcp
                     writer.WriteEndObject();
                     break;
                 case SseMcpServer sse:
+                    // V2 removed the sse transport, so an authored SseMcpServer has no wire form there.
+                    // The read side already routes an inbound "sse" payload to CustomMcpServer passthrough
+                    // on V2; this is the write half of that same fork. Only the typed contract is refused -
+                    // a CustomMcpServer carrying type "sse" still round-trips verbatim, because narrowing
+                    // passthrough would tighten what the protocol deliberately leaves open.
+                    if (AcpWireFormat.NegotiatedVersion(options) != AcpProtocolVersion.V1)
+                    {
+                        throw new JsonException(SseV1OnlyMessage);
+                    }
+
                     writer.WriteStartObject();
                     writer.WriteString("type", "sse");
                     writer.WriteString("name", sse.Name);
