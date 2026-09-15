@@ -217,6 +217,24 @@ public sealed class V2WireContractTests
         Assert.Equal(json, JsonSerializer.Serialize(server, Wire.V2<McpServer>()));
     }
 
+    [Fact]
+    public void McpServerV2_TypedSse_RefusesToSerializeAtEveryRoot()
+    {
+        // Arrange
+        var sse = new SseMcpServer("events", "https://example.test/events");
+        var setup = new SessionNewParams { Cwd = "/tmp", McpServers = [sse] };
+
+        // Act
+        var direct = Assert.Throws<JsonException>(() => JsonSerializer.Serialize<McpServer>(sse, Wire.V2<McpServer>()));
+        var nested = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(setup, Wire.V2<SessionNewParams>()));
+        using var stable = JsonDocument.Parse(JsonSerializer.Serialize<McpServer>(sse, Wire.V1<McpServer>()));
+
+        // Assert
+        Assert.Contains(McpServerJsonConverter.SseV1OnlyMessage, direct.Message);
+        Assert.Contains(McpServerJsonConverter.SseV1OnlyMessage, nested.Message);
+        Assert.Equal("sse", stable.RootElement.GetProperty("type").GetString());
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(",\"type\":null")]
