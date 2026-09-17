@@ -76,16 +76,27 @@ internal static class AcpSetupRuntimePathProbeDriver
             var row = wizard.Agents.Single(candidate => candidate.AgentId == agentId);
             wizard.SelectedAgent = row;
             await wizard.GoNextCommand.ExecuteAsync(null).WaitAsync(token).ConfigureAwait(true);
-            if (!row.IsMissing || !wizard.IsOnAgentSelection || wizard.IsBusy)
+            var list = (ListView)page.FindName("AcpSetupAgentsList");
+            list.ScrollIntoView(row);
+            // This gate's preconditions are read from the rendered wizard: the selection step's
+            // panel is the visible step surface, the row wears its missing verdict, and the busy
+            // affordance is idle. The view-model flags behind those surfaces are not consulted.
+            // Scrolling happens first because a virtualized row renders nothing while off-screen.
+            await WaitForAsync(() => Find<StackPanel>(shellRoot, element => element.Name == "AgentSelectionPanel"
+                && IsVisible(element)), token).ConfigureAwait(true);
+            await WaitForAsync(() => Find<FontIcon>(shellRoot, element =>
+                AutomationProperties.GetAutomationId(element) == "AcpSetup.Agents.Missing" && IsVisible(element)),
+                token).ConfigureAwait(true);
+            if (Find<Button>(shellRoot, element =>
+                    AutomationProperties.GetAutomationId(element) == "AcpSetup.CancelOperation") is { } cancel
+                && IsVisible(cancel))
             {
-                throw new InvalidOperationException("The real runtime probe did not establish a missing agent.");
+                throw new InvalidOperationException("The wizard kept its busy affordance visible.");
             }
 
             logger.LogInformation(
                 "AcpSetupPathProbe missing pid={ProcessId} agent={AgentId} command={Command} availability={Availability}",
                 Environment.ProcessId, row.AgentId, row.ProbeCommand, row.Availability);
-            var list = (ListView)page.FindName("AcpSetupAgentsList");
-            list.ScrollIntoView(row);
             var container = await WaitForAsync(
                 () => list.ContainerFromItem(row) as ListViewItem, token).ConfigureAwait(true);
             var expander = await WaitForAsync(
@@ -130,6 +141,9 @@ internal static class AcpSetupRuntimePathProbeDriver
                         ? null
                         : FocusManager.GetFocusedElement(targetInput.XamlRoot);
                     var ownsFocus = ReferenceEquals(focusOwner, targetInput);
+                    // Documented exemption: every keystroke here came from XTest, so "the TextBox
+                    // holds text" is trivially true on its own. binding=True is the only proof that
+                    // the TwoWay binding carried each keystroke into the model — why this gate exists.
                     var bindingMatches = targetInput.Text == row.CustomCommand;
                     samples++;
                     logger.LogInformation(

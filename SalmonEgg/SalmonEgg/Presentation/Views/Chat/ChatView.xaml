@@ -524,6 +524,7 @@
                                                            FontWeight="SemiBold"
                                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
                                                 <TextBlock Text="{x:Bind Prompt, Mode=OneWay}"
+                                                           AutomationProperties.AutomationId="Elicitation.Prompt"
                                                            AutomationProperties.Name="{x:Bind Prompt, Mode=OneWay}"
                                                            TextWrapping="WrapWholeWords"
                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -610,18 +611,26 @@
 
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                                                         Spacing="{StaticResource ChatElicitationActionSpacing}">
+                                                <!-- Actionable affordances carry the view's Elicitation.* ids so
+                                                     native probes locate what a user sees rather than
+                                                     matching command object references. -->
                                                 <Button x:Uid="ChatViewElicitationCancelButton"
+                                                        AutomationProperties.AutomationId="Elicitation.CancelButton"
                                                         Command="{x:Bind CancelCommand, Mode=OneWay}"/>
                                                 <Button x:Uid="ChatViewElicitationDeclineButton"
+                                                        AutomationProperties.AutomationId="Elicitation.DeclineButton"
                                                         Command="{x:Bind DeclineCommand, Mode=OneWay}"/>
                                                 <Button Content="{x:Bind SubmitText, Mode=OneWay}"
+                                                        AutomationProperties.AutomationId="Elicitation.SubmitButton"
                                                         AutomationProperties.Name="{x:Bind SubmitText, Mode=OneWay}"
                                                         Command="{x:Bind SubmitCommand, Mode=OneWay}"
                                                         Style="{StaticResource AccentButtonStyle}"/>
                                                 <Button x:Uid="ChatViewElicitationReopenButton"
+                                                        AutomationProperties.AutomationId="Elicitation.ReopenButton"
                                                         Visibility="{x:Bind ShowReopen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                         Command="{x:Bind ReopenCommand, Mode=OneWay}"/>
                                                 <Button x:Uid="ChatViewElicitationDismissButton"
+                                                        AutomationProperties.AutomationId="Elicitation.DismissButton"
                                                         Visibility="{x:Bind IsAwaitingCompletion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                         Command="{x:Bind DismissCommand, Mode=OneWay}"/>
                                             </StackPanel>
