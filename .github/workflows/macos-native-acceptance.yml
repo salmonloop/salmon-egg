@@ -13,19 +13,16 @@ on:
       - 'scripts/gates/macos-native-ui.swift'
       - 'scripts/gates/test_macos_native_button.py'
       - 'scripts/gates/fixtures/native-elicitation-peer.py'
-      - 'src/SalmonEgg.Infrastructure.Desktop/Services/DesktopElicitationUriLauncher.cs'
-      - 'src/SalmonEgg.Infrastructure.Desktop/Services/PlatformShellService.cs'
-      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
-      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
-      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'SalmonEgg/SalmonEgg/Presentation/Diagnostics/NativeElicitationProbeDriver.cs'
+  schedule:
+    - cron: "0 2 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: macos-native-acceptance-${{ github.ref }}
-  cancel-in-progress: true
+  group: macos-native-acceptance-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   native-desktop:

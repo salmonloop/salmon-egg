@@ -4,21 +4,14 @@ on:
   pull_request:
     paths:
       - '.github/workflows/native-ios-acceptance.yml'
-      - 'global.json'
-      - 'Directory.Build.*'
       - 'scripts/gates/run-ios-elicitation-gate.py'
       - 'scripts/gates/ios-elicitation-reverse-verification.py'
       - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
       - 'tests/SalmonEgg.iOS.UiTests/**'
-      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
-      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
-      - 'SalmonEgg/SalmonEgg/MainPage.xaml'
-      - 'SalmonEgg/SalmonEgg/SalmonEgg.csproj'
-      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'SalmonEgg/SalmonEgg/Platforms/iOS/**'
-      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
-      - 'src/SalmonEgg.Acp/Client/**'
-      - 'src/SalmonEgg.Application/Services/Chat/**'
+      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       reverse-verification:
@@ -30,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-acp-acceptance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ios-acp-acceptance-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   installed-ios:
