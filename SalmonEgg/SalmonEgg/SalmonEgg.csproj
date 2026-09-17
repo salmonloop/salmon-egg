@@ -6,7 +6,7 @@
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <PlatformTarget></PlatformTarget>
     <!-- Override Uno's net10 default to the latest patched Windows compatibility stack. -->
-    <WindowsCompatibilityVersion>10.0.10</WindowsCompatibilityVersion>
+    <WindowsCompatibilityVersion>10.0.12</WindowsCompatibilityVersion>
     <!-- Reduce hash-mismatch startup failures caused by stale browser/service-worker caches. -->
     <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
     <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
