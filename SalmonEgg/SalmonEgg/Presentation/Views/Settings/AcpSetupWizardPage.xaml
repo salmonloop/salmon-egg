@@ -86,6 +86,7 @@
                                                               Glyph="&#xE711;"
                                                               x:Uid="AcpSetup_StatusMissing"
                                                               FontSize="14"
+                                                              AutomationProperties.AutomationId="AcpSetup.Agents.Missing"
                                                               Visibility="{x:Bind IsMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <ProgressRing IsActive="{x:Bind IsChecking, Mode=OneWay}" Width="16" Height="16"/>
                                                 </StackPanel>

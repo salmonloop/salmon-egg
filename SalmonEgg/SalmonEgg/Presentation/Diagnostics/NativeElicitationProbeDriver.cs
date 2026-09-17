@@ -73,8 +73,39 @@ internal static class NativeElicitationProbeDriver
     private static void Observe(ChatView view, ILogger logger, int sequence)
     {
         var request = view.ViewModel.PendingElicitationRequest;
+        var host = Find<Border>(view, static element => AutomationProperties.GetAutomationId(element) == "ElicitationHost"
+            && IsVisible(element));
+        // Stage is what the card displays, not what the view model stores; the request is consulted
+        // only to confirm that the displayed URL fields still match their binding source.
+        var stage = host is null ? "none" : ObserveStage(host);
+        var reopen = FindVisibleButton(host, "Elicitation.ReopenButton");
+        var dismiss = FindVisibleButton(host, "Elicitation.DismissButton");
+        var fullUrl = host is null ? null : Find<TextBlock>(host,
+            static element => AutomationProperties.GetAutomationId(element) == "Elicitation.FullUrl" && IsVisible(element));
+        var hostname = host is null ? null : Find<TextBlock>(host,
+            static element => AutomationProperties.GetAutomationId(element) == "Elicitation.UrlHost" && IsVisible(element));
+        logger.LogInformation(
+            "NativeElicitationProbe sample pid={ProcessId} seq={Sequence} stage={Stage} visible={Visible} url={UrlMatches} host={HostMatches} completed={Completed}",
+            Environment.ProcessId, sequence, stage, host is not null,
+            request is not null && fullUrl?.Text == request.FullUrl && request.FullUrl.Length > 0,
+            request is not null && hostname?.Text == request.UrlHost && request.UrlHost.Length > 0,
+            // Completion is the card's own visible contract: the dismiss affordance stays once
+            // consent is accepted while the reopen affordance is withdrawn once completed.
+            dismiss is not null && reopen is null);
         // Only fixed fixture labels may enter diagnostics. Never print the URL, prompt or form values.
-        var stage = request?.Prompt switch
+        if (host is null || request is null || stage == "none") return;
+        ObserveButton(host, "Elicitation.CancelButton", "cancel", sequence, logger);
+        ObserveButton(host, "Elicitation.DeclineButton", "decline", sequence, logger);
+        ObserveButton(host, "Elicitation.SubmitButton", "submit", sequence, logger);
+        ObserveButton(host, "Elicitation.ReopenButton", "reopen", sequence, logger);
+        ObserveButton(host, "Elicitation.DismissButton", "dismiss", sequence, logger);
+    }
+
+    // Fixed fixture prompts are the stage roster the external drivers map their clicks against.
+    private static string ObserveStage(DependencyObject host)
+    {
+        return Find<TextBlock>(host, static element =>
+                AutomationProperties.GetAutomationId(element) == "Elicitation.Prompt" && IsVisible(element))?.Text switch
         {
             "native-url-decline" => "decline",
             "native-url-cancel" => "cancel",
@@ -82,31 +113,18 @@ internal static class NativeElicitationProbeDriver
             "native-url-expire" => "expire",
             _ => "none"
         };
-        var host = Find<Border>(view, static element => AutomationProperties.GetAutomationId(element) == "ElicitationHost"
-            && IsVisible(element));
-        var fullUrl = host is null ? null : Find<TextBlock>(host,
-            static element => AutomationProperties.GetAutomationId(element) == "Elicitation.FullUrl" && IsVisible(element));
-        var hostname = host is null ? null : Find<TextBlock>(host,
-            static element => AutomationProperties.GetAutomationId(element) == "Elicitation.UrlHost" && IsVisible(element));
-        logger.LogInformation(
-            "NativeElicitationProbe sample pid={ProcessId} seq={Sequence} stage={Stage} visible={Visible} url={UrlMatches} host={HostMatches} completed={Completed} error={Error}",
-            Environment.ProcessId, sequence, stage, host is not null,
-            request is not null && fullUrl?.Text == request.FullUrl && request.FullUrl.Length > 0,
-            request is not null && hostname?.Text == request.UrlHost && request.UrlHost.Length > 0,
-            request?.IsCompleted ?? false, request?.HasError ?? false);
-        if (host is null || request is null || stage == "none") return;
-        ObserveButton(host, request.CancelCommand, "cancel", sequence, logger);
-        ObserveButton(host, request.DeclineCommand, "decline", sequence, logger);
-        ObserveButton(host, request.SubmitCommand, "submit", sequence, logger);
-        ObserveButton(host, request.ReopenCommand, "reopen", sequence, logger);
-        ObserveButton(host, request.DismissCommand, "dismiss", sequence, logger);
     }
 
-    private static void ObserveButton(DependencyObject host, System.Windows.Input.ICommand command, string action,
-        int sequence, ILogger logger)
+    private static Button? FindVisibleButton(DependencyObject? host, string automationId)
     {
-        if (Find<Button>(host, element => ReferenceEquals(element.Command, command) && IsVisible(element)) is not { } button)
-            return;
+        return host is null
+            ? null
+            : Find<Button>(host, element => AutomationProperties.GetAutomationId(element) == automationId && IsVisible(element));
+    }
+
+    private static void ObserveButton(DependencyObject host, string automationId, string action, int sequence, ILogger logger)
+    {
+        if (FindVisibleButton(host, automationId) is not { } button) return;
         var bounds = button.TransformToVisual(null).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
         var scale = button.XamlRoot!.RasterizationScale;
         logger.LogInformation(
