@@ -159,6 +159,7 @@
 
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.26100.0'">
     <PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" />
+    <PackageReference Include="Uno.CommunityToolkit.WinUI.UI" />
     <PackageReference Include="Uno.Extensions.Reactive.WinUI" />
     <PackageReference Include="Uno.WinUI.Lottie" />
   </ItemGroup>
