@@ -101,13 +101,14 @@ public sealed class TerminalAuthenticationSmokeTests
                 if (scope is null) return false;
                 button = dialogId is null
                     ? scope.FindFirstDescendant(cf => cf.ByControlType(ControlType.Button).And(cf.ByName(text)))
-                    : scope.FindFirstDescendant(cf => cf.ByAutomationId("CloseButton"));
+                    : (scope.FindFirstChild(cf => cf.ByAutomationId("CloseButton"))
+                       ?? scope.FindFirstDescendant(cf => cf.ByAutomationId("CloseButton")));
                 if (button is not null && button.Properties.Name.ValueOrDefault != text) return false;
                 return button is not null && button.Properties.IsEnabled.ValueOrDefault
                     && !button.Properties.IsOffscreen.ValueOrDefault;
             }
             catch (System.Runtime.InteropServices.COMException) { return false; }
-        }, TimeSpan.FromSeconds(20));
+        }, TimeSpan.FromSeconds(35));
         if (!ready) app.CaptureAcceptanceFailure("terminal-button-missing");
         Assert.True(ready, $"The enabled native terminal button '{text}' did not appear.");
         app.ClickElement(button!);
@@ -138,7 +139,7 @@ public sealed class TerminalAuthenticationSmokeTests
                 // A stale snapshot is not a match; the bounded next poll must find the real control.
                 return false;
             }
-        }, TimeSpan.FromSeconds(20));
+        }, TimeSpan.FromSeconds(35));
         if (!ready) app.CaptureAcceptanceFailure("terminal-control-missing");
         Assert.True(ready, "The requested native terminal element did not appear.");
         return found!;

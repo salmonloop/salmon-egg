@@ -31,7 +31,7 @@ if ($Mode -eq 'login') {
     [IO.File]::WriteAllText((Join-Path $StateDirectory 'login.json'), ($observed | ConvertTo-Json -Compress))
     [Console]::WriteLine('PACKAGED_TERMINAL_READY')
     if ($behavior -eq 'cancel') {
-        while ($true) { [Console]::WriteLine('terminal cancellation output'); Start-Sleep -Milliseconds 100 }
+        while ($true) { [Console]::WriteLine('terminal cancellation output'); Start-Sleep -Milliseconds 250 }
     }
     $inputLine = [Console]::ReadLine()
     $inputPath = Join-Path $StateDirectory 'login-input.json'
