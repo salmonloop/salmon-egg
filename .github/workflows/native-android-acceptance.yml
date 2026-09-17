@@ -4,21 +4,14 @@ on:
   pull_request:
     paths:
       - '.github/workflows/native-android-acceptance.yml'
-      - 'global.json'
-      - 'Directory.Build.*'
       - 'scripts/gates/run-android-elicitation-gate.py'
       - 'scripts/gates/test_android_elicitation_gate.py'
       - 'scripts/gates/android-elicitation-reverse-verification.py'
       - 'scripts/gates/fixtures/mobile-elicitation-peer.py'
-      - 'SalmonEgg/SalmonEgg/SalmonEgg.csproj'
-      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
       - 'SalmonEgg/SalmonEgg/Platforms/Android/**'
-      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
-      - 'SalmonEgg/SalmonEgg/MainPage.xaml'
-      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
-      - 'src/SalmonEgg.Acp/Client/**'
-      - 'src/SalmonEgg.Application/Services/Chat/**'
-      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
+      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       reverse-verification:
@@ -30,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-acp-acceptance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: android-acp-acceptance-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   installed-android:

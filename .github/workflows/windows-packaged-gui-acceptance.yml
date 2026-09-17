@@ -18,24 +18,19 @@ on:
       - 'scripts/gates/windows-desktop-probe/**'
       - 'tests/SalmonEgg.GuiTests.Windows/**'
       - '.tools/run-winui3-msix.ps1'
-      - 'src/SalmonEgg.Infrastructure/Services/PlatformCapabilityService.cs'
-      - 'src/SalmonEgg.Infrastructure.Desktop/Services/TerminalAuthenticationSessionFactory*'
-      - 'src/SalmonEgg.Presentation.Core/ViewModels/Chat/Elicitation/**'
-      - 'SalmonEgg/SalmonEgg/DependencyInjection.cs'
       - 'SalmonEgg/SalmonEgg/Controls/XtermTerminalView*'
       - 'SalmonEgg/SalmonEgg/Assets/Terminal/**'
-      - 'SalmonEgg/SalmonEgg/Platforms/NativeElicitationUriLauncher.cs'
-      - 'SalmonEgg/SalmonEgg/Presentation/Services/UnoAppLanguageService.cs'
-      - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/ChatView.xaml'
       - 'SalmonEgg/SalmonEgg/Presentation/Views/Chat/TerminalAuthenticationDialog*'
       - 'SalmonEgg/SalmonEgg/Presentation/Services/TerminalAuthenticationInteraction.cs'
+  schedule:
+    - cron: "0 2 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-packaged-gui-${{ github.ref }}
-  cancel-in-progress: true
+  group: windows-packaged-gui-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   packaged-gui:
