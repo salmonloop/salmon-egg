@@ -41,7 +41,8 @@ public partial class ChatViewModelTests
         fixture.ViewModel.CurrentPrompt = "prompt";
 
         // Act
-        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null));
+        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null))
+            .WaitAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(cancelled ? ChatTurnPhase.Cancelled : ChatTurnPhase.Failed, observedPhase);
@@ -121,7 +122,7 @@ public partial class ChatViewModelTests
             await WaitForPromptOperationConditionAsync(dispatcher, () => cancelStarted.Task.IsCompleted);
             if (replaceBeforeCancellationCompletes) panels.StoreAskUserRequest("conv-1", replacement);
             release.TrySetResult();
-            await AwaitPromptOperationTaskAsync(dispatcher, cancel);
+            await AwaitPromptOperationTaskAsync(dispatcher, cancel).WaitAsync(TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Same(replaceBeforeCancellationCompletes ? replacement : null, panels.GetPendingAskUserRequest("conv-1"));
@@ -475,7 +476,8 @@ public partial class ChatViewModelTests
         await SelectPromptOperationConversationAsync(fixture, dispatcher, service.Object, "conv-1", "profile-1", "connection-1");
         fixture.ViewModel.CurrentPrompt = "recover prompt";
 
-        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null));
+        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null))
+            .WaitAsync(TestContext.Current.CancellationToken);
 
         var state = await fixture.GetStateAsync();
         Assert.True(state.ResolveTurn("conv-1")?.FailureMessage is null,
@@ -498,7 +500,8 @@ public partial class ChatViewModelTests
         await SelectPromptOperationConversationAsync(fixture, dispatcher, service.Object, "conv-1", "profile-1", "connection-1");
         fixture.ViewModel.CurrentPrompt = "prompt";
 
-        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null));
+        await AwaitPromptOperationTaskAsync(dispatcher, fixture.ViewModel.SendPromptCommand.ExecuteAsync(null))
+            .WaitAsync(TestContext.Current.CancellationToken);
 
         var turn = (await fixture.GetStateAsync()).ResolveTurn("conv-1");
         Assert.NotNull(turn);
