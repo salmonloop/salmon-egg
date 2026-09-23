@@ -36,13 +36,13 @@ public sealed class SkiaDesktopGuiSeedWriterTests
             Assert.Equal(2, conversations.Length);
 
             var conversation = Assert.Single(
-                conversations.Where(item =>
-                    item.GetProperty("conversationId").GetString()
-                        == SkiaDesktopGuiSeedWriter.ConversationId));
+                conversations,
+                item => item.GetProperty("conversationId").GetString()
+                    == SkiaDesktopGuiSeedWriter.ConversationId);
             var plainConversation = Assert.Single(
-                conversations.Where(item =>
-                    item.GetProperty("conversationId").GetString()
-                        == SkiaDesktopGuiSeedWriter.PlainConversationId));
+                conversations,
+                item => item.GetProperty("conversationId").GetString()
+                    == SkiaDesktopGuiSeedWriter.PlainConversationId);
             var plainMessage = Assert.Single(plainConversation.GetProperty("messages").EnumerateArray());
             Assert.Equal(
                 "text",
