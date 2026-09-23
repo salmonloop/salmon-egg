@@ -187,6 +187,11 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(CustomMcpServer))]
 [JsonSerializable(typeof(McpHttpHeader))]
 [JsonSerializable(typeof(McpEnvVariable))]
+// The derived McpServer records carry their own converter, so the generator no longer walks their
+// properties and these two List<> infos must be declared explicitly: they are public members of the
+// shipped context (AcpJsonContext.ListMcpHttpHeader / ListMcpEnvVariable).
+[JsonSerializable(typeof(List<McpHttpHeader>))]
+[JsonSerializable(typeof(List<McpEnvVariable>))]
 [JsonSerializable(typeof(ContentBlock))]
 [JsonSerializable(typeof(TextContentBlock))]
 [JsonSerializable(typeof(ImageContentBlock))]
