@@ -779,6 +779,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // sampling remain owned by the independent probe; the page only exposes the live shell root.
         NumberBoxThemeProbeDriver.TryStart(App.ServiceProvider, this);
 
+        // Diagnostics-only Markdown ThemeListener lifecycle probe. The seeded mixed conversation
+        // owns its content; the probe only exercises load, theme, reactivation, unload and reload.
+        MarkdownThemeProbeDriver.TryStart(App.ServiceProvider, this);
+
         // The opt-in setup probe owns navigation and sampling; the shell only supplies its live root.
         AcpSetupRuntimePathProbeDriver.TryStart(App.ServiceProvider, this);
 
