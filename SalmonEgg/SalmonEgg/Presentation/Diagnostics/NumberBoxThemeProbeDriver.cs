@@ -47,6 +47,11 @@ internal static class NumberBoxThemeProbeDriver
     private const double MinimumContrastRatio = 4.5;
 #if DEBUG && __UNO_SKIA__
     private static int _started;
+    private static readonly TaskCompletionSource s_completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completes when the probe run finishes, succeeded or faulted; lets sibling probes
+    /// that drive navigation wait instead of racing this one for the content frame.</summary>
+    internal static Task Completion => s_completion.Task;
 #endif
 
     public static void TryStart(IServiceProvider services, DependencyObject shellRoot)
@@ -90,6 +95,7 @@ internal static class NumberBoxThemeProbeDriver
                 $"NumberBoxThemeProbe: complete samples={result.CompletedSamples}"
                 + $" valueUnchanged={result.ValueUnchanged} passed={result.Passed}"
                 + $" reason={result.FailureReason}");
+            s_completion.TrySetResult();
         }
     }
 
@@ -369,6 +375,11 @@ internal static class NumberBoxThemeProbeDriver
     /// reason. A bare <c>null</c> cannot distinguish an empty Skia frame from an off-viewport rect,
     /// a translucent offscreen composition or an ambiguous cluster, so every exit reports its cause.
     /// </summary>
+    // Uno0001: the analyzer's not-implemented listing marks the whole RenderTargetBitmap surface,
+    // yet the Skia runtime demonstrably renders and reports real pixels here (the probe's inliers
+    // capture and passing contrast samples are real pixels), so the listing is stale for this
+    // target. Silence it for this capture method rather than weakening the sampler.
+#pragma warning disable Uno0001
     private static async Task<BackgroundCapture> TryCaptureRenderedBackgroundAsync(
         Border borderElement,
         ScrollViewer? scrollHost)
@@ -441,6 +452,7 @@ internal static class NumberBoxThemeProbeDriver
                 bounds.Y * scaleY,
                 bounds.Width * scaleX,
                 bounds.Height * scaleY));
+#pragma warning restore Uno0001
     }
 
     /// <summary>

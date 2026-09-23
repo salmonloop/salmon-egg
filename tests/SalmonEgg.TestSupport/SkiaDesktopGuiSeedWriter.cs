@@ -15,6 +15,7 @@ public static class SkiaDesktopGuiSeedWriter
     public const string ToolCallId = "skia-tool-call-1";
     public const string ToolCallTitle = "Read config";
     public const string ProjectId = "project-1";
+    public const string PlainConversationId = "skia-plain-session-02";
 
     public static SeedPaths WriteMixedTranscriptSeed(string appDataRoot)
     {
@@ -110,6 +111,30 @@ public static class SkiaDesktopGuiSeedWriter
                             imageData = "AAA=",
                             imageMimeType = "image/png",
                             isOutgoing = false
+                        }
+                    }
+                },
+                // A plain-text sibling conversation in the same project so the markdown lifecycle
+                // probe can switch the authoritative selection away and back without synthesizing
+                // conversations at runtime. No markdown rows: switching to it must unload the
+                // seeded MarkdownTextPresenter, switching back must re-materialize a new one.
+                new
+                {
+                    conversationId = PlainConversationId,
+                    displayName = "Skia Plain Transcript 02",
+                    createdAt = timestamp.AddMinutes(1),
+                    lastUpdatedAt = timestamp.AddMinutes(1),
+                    lastAccessedAt = timestamp.AddMinutes(1),
+                    cwd = projectRootPath,
+                    messages = new object[]
+                    {
+                        new
+                        {
+                            id = "skia-plain-user-1",
+                            timestamp = timestamp.AddMinutes(1),
+                            contentType = "text",
+                            textContent = "Plain sibling conversation without markdown.",
+                            isOutgoing = true
                         }
                     }
                 }

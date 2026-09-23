@@ -18,6 +18,7 @@ WINDOW_CREATED_TIMEOUT_SECONDS=120
 TRANSCRIPT_SEED_CONVERSATION_ID="skia-mixed-session-01"
 TRANSCRIPT_SEED_MARKER="SKIA_MD_MARKER_7f3a"
 NUMBERBOX_PROBE_COMPLETE_MARKER="NumberBoxThemeProbe: complete"
+MARKDOWN_PROBE_COMPLETE_MARKER="MarkdownThemeProbe: complete"
 
 DOTNET_BIN="${DOTNET_BIN:-$(command -v dotnet || true)}"
 GIT_BIN="${GIT_BIN:-$(command -v git || true)}"
@@ -185,10 +186,10 @@ case "${OS_NAME}" in
     if [ -z "${SMOKE_DISPLAY}" ]; then
       start_xvfb "${XVFB_BIN}"
     fi
-    LAUNCH_COMMAND=(env DISPLAY="${SMOKE_DISPLAY}" SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
+    LAUNCH_COMMAND=(env DISPLAY="${SMOKE_DISPLAY}" SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_MARKDOWN_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
     ;;
   Darwin)
-    LAUNCH_COMMAND=(env SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
+    LAUNCH_COMMAND=(env SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_MARKDOWN_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
     ;;
   *)
     echo "Skia Desktop GUI smoke supports Linux and macOS. Use scripts/gates/run-gui-smoke-gates.ps1 for Windows WinUI/FlaUI." >&2
@@ -263,6 +264,7 @@ deadline=$((SECONDS + 60))
 shell_ready=0
 transcript_ready=0
 numberbox_probe_complete=0
+markdown_probe_complete=0
 while [ "${SECONDS}" -lt "${deadline}" ]; do
   if ! kill -0 "${APP_PID}" 2>/dev/null; then
     cat "${STDOUT_LOG}" >&2
@@ -287,11 +289,17 @@ while [ "${SECONDS}" -lt "${deadline}" ]; do
       && grep -Fq "${NUMBERBOX_PROBE_COMPLETE_MARKER}" "${BOOT_LOG}"; then
       numberbox_probe_complete=1
     fi
+
+    if [ "${markdown_probe_complete}" -eq 0 ] \
+      && grep -Fq "${MARKDOWN_PROBE_COMPLETE_MARKER}" "${BOOT_LOG}"; then
+      markdown_probe_complete=1
+    fi
   fi
 
   if [ "${shell_ready}" -eq 1 ] \
     && [ "${transcript_ready}" -eq 1 ] \
-    && [ "${numberbox_probe_complete}" -eq 1 ]; then
+    && [ "${numberbox_probe_complete}" -eq 1 ] \
+    && [ "${markdown_probe_complete}" -eq 1 ]; then
     break
   fi
 
@@ -322,6 +330,23 @@ if [ "${numberbox_probe_complete}" -ne 1 ]; then
     cat "${BOOT_LOG}" >&2
   fi
   echo "Skia Desktop GUI smoke did not complete the focused NumberBox theme probe." >&2
+  exit 1
+fi
+
+if [ "${markdown_probe_complete}" -ne 1 ]; then
+  cat "${STDOUT_LOG}" >&2
+  if [ -f "${BOOT_LOG}" ]; then
+    cat "${BOOT_LOG}" >&2
+  fi
+  echo "Skia Desktop GUI smoke did not complete the Markdown ThemeListener lifecycle probe." >&2
+  exit 1
+fi
+
+# The probe logs its complete line even when a lifecycle step failed; a bare marker grep would
+# pass on "passed=False". Require the passing verdict on the complete line itself.
+if ! grep -F "MarkdownThemeProbe: complete" "${BOOT_LOG}" | grep -Fq "passed=True"; then
+  cat "${BOOT_LOG}" >&2
+  echo "Skia Desktop GUI smoke markdown lifecycle probe completed without a passing verdict." >&2
   exit 1
 fi
 

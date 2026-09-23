@@ -32,10 +32,21 @@ public sealed class SkiaDesktopGuiSeedWriterTests
                 SkiaDesktopGuiSeedWriter.ConversationId,
                 rootElement.GetProperty("lastActiveConversationId").GetString());
 
-            var conversation = Assert.Single(rootElement.GetProperty("conversations").EnumerateArray());
+            var conversations = rootElement.GetProperty("conversations").EnumerateArray().ToArray();
+            Assert.Equal(2, conversations.Length);
+
+            var conversation = Assert.Single(
+                conversations.Where(item =>
+                    item.GetProperty("conversationId").GetString()
+                        == SkiaDesktopGuiSeedWriter.ConversationId));
+            var plainConversation = Assert.Single(
+                conversations.Where(item =>
+                    item.GetProperty("conversationId").GetString()
+                        == SkiaDesktopGuiSeedWriter.PlainConversationId));
+            var plainMessage = Assert.Single(plainConversation.GetProperty("messages").EnumerateArray());
             Assert.Equal(
-                SkiaDesktopGuiSeedWriter.ConversationId,
-                conversation.GetProperty("conversationId").GetString());
+                "text",
+                plainMessage.GetProperty("contentType").GetString());
 
             var contentTypes = conversation.GetProperty("messages")
                 .EnumerateArray()
