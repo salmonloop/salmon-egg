@@ -240,6 +240,26 @@ public sealed class V2WireContractTests
         Assert.Equal("events", stableSetup.RootElement.GetProperty("mcpServers")[0].GetProperty("name").GetString());
     }
 
+    [Fact]
+    public void McpServerV2_DeclaredDerivedRoots_RouteThroughTheVersionGatedConverter()
+    {
+        // Arrange
+        var sse = new SseMcpServer("events", "https://example.test/events");
+        var stdio = new StdioMcpServer { Name = "tools", Command = "tool" };
+
+        // Act
+        var gated = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(sse, Wire.V2<SseMcpServer>()));
+        using var v1Root = JsonDocument.Parse(JsonSerializer.Serialize(sse, Wire.V1<SseMcpServer>()));
+        using var v2StdioRoot = JsonDocument.Parse(JsonSerializer.Serialize(stdio, Wire.V2<StdioMcpServer>()));
+
+        // Assert
+        Assert.Contains(McpServerJsonConverter.SseV1OnlyMessage, gated.Message);
+        Assert.Equal("sse", v1Root.RootElement.GetProperty("type").GetString());
+        // The discriminator must survive at every declared root too, or a derived-root payload
+        // could not round-trip through the v2 read path (which rejects a type-less object).
+        Assert.Equal("stdio", v2StdioRoot.RootElement.GetProperty("type").GetString());
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(",\"type\":null")]

@@ -34,6 +34,11 @@ namespace SalmonEgg.Acp.Mcp
     /// Configuration for a stdio MCP server.
     /// Communicates with the server over standard input/output.
     /// </summary>
+    // The base [JsonConverter] only applies when a contract is *declared* as McpServer, so a derived
+    // declared root (AcpJsonContext lists one per transport) would otherwise serialize raw properties
+    // with no "type" discriminator and no v1/v2 gate. Repeating the converter on each derived record
+    // closes that bypass: every root routes through the same polymorphic writer.
+    [JsonConverter(typeof(McpServerJsonConverter))]
     public sealed record StdioMcpServer : McpServer
     {
         /// <summary>
@@ -85,6 +90,11 @@ namespace SalmonEgg.Acp.Mcp
     /// Configuration for an HTTP MCP server.
     /// Communicates with the server over HTTP requests.
     /// </summary>
+    // The base [JsonConverter] only applies when a contract is *declared* as McpServer, so a derived
+    // declared root (AcpJsonContext lists one per transport) would otherwise serialize raw properties
+    // with no "type" discriminator and no v1/v2 gate. Repeating the converter on each derived record
+    // closes that bypass: every root routes through the same polymorphic writer.
+    [JsonConverter(typeof(McpServerJsonConverter))]
     public sealed record HttpMcpServer : McpServer
     {
         /// <summary>
@@ -124,6 +134,11 @@ namespace SalmonEgg.Acp.Mcp
     /// Configuration for an SSE (Server-Sent Events) MCP server.
     /// Communicates with the server over an SSE stream.
     /// </summary>
+    // The base [JsonConverter] only applies when a contract is *declared* as McpServer, so a derived
+    // declared root (AcpJsonContext lists one per transport) would otherwise serialize raw properties
+    // with no "type" discriminator and no v1/v2 gate. Repeating the converter on each derived record
+    // closes that bypass: every root routes through the same polymorphic writer.
+    [JsonConverter(typeof(McpServerJsonConverter))]
     public sealed record SseMcpServer : McpServer
     {
         /// <summary>
@@ -165,6 +180,11 @@ namespace SalmonEgg.Acp.Mcp
     /// stdio/http/sse): the spec requires a receiver to "preserve the raw payload" for a transport it does not
     /// recognize, leaving it to the Agent rather than the client to accept or reject it.
     /// </summary>
+    // The base [JsonConverter] only applies when a contract is *declared* as McpServer, so a derived
+    // declared root (AcpJsonContext lists one per transport) would otherwise serialize raw properties
+    // with no "type" discriminator and no v1/v2 gate. Repeating the converter on each derived record
+    // closes that bypass: every root routes through the same polymorphic writer.
+    [JsonConverter(typeof(McpServerJsonConverter))]
     public sealed record CustomMcpServer : McpServer
     {
         /// <summary>
@@ -383,6 +403,11 @@ namespace SalmonEgg.Acp.Mcp
     {
         internal const string SseV1OnlyMessage =
             "ACP MCP server transport sse is only available in protocolVersion 1.";
+
+        // The generated context validates a converter against its declared root with an exact-type
+        // CanConvert check; derived records reuse this converter for their own roots, so any type in
+        // the McpServer family is accepted and dispatch still happens on the runtime value in Write.
+        public override bool CanConvert(Type typeToConvert) => typeof(McpServer).IsAssignableFrom(typeToConvert);
 
         public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
