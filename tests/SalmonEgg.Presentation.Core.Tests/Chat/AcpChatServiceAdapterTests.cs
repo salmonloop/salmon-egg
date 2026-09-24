@@ -104,6 +104,79 @@ public sealed class AcpChatServiceAdapterTests
     }
 
     [Fact]
+    public async Task DrainResyncAsync_WhenDisposed_WaitsForAcceptedRecoveryAndRejectsNewRequests()
+    {
+        // Arrange
+        var adapter = BuildAdapter(new FakeChatService(), new ImmediateUiDispatcher());
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        adapter.ResyncRequired += _ =>
+        {
+            calls++;
+            return release.Task;
+        };
+        var recovery = adapter.RequestResyncAsync("remote");
+
+        // Act
+        adapter.Dispose();
+        var drain = adapter.DrainResyncAsync();
+
+        // Assert
+        try
+        {
+            Assert.False(drain.IsCompleted);
+            Assert.False(await adapter.RequestResyncAsync("other"));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+        await drain.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        Assert.True(await recovery);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact(Timeout = 15000)]
+    public async Task RequestResyncAsync_WhenRetiredDuringHandlerEntry_DoesNotHoldResourceLockAcrossCallback()
+    {
+        // Arrange
+        using var handlerEntered = new ManualResetEventSlim();
+        using var retirementCompleted = new ManualResetEventSlim();
+        var adapter = BuildAdapter(new FakeChatService(), new ImmediateUiDispatcher());
+        adapter.ResyncRequired += _ =>
+        {
+            handlerEntered.Set();
+            Assert.True(retirementCompleted.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
+                "Retirement must remain able to cancel a recovery while its handler enters the host.");
+            return Task.CompletedTask;
+        };
+
+        // Act
+        var recovery = Task.Run(() => adapter.RequestResyncAsync("remote"), TestContext.Current.CancellationToken);
+        var retirement = Task.Run(() =>
+        {
+            Assert.True(handlerEntered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            adapter.Dispose();
+            retirementCompleted.Set();
+        }, TestContext.Current.CancellationToken);
+        try
+        {
+            await Task.WhenAll(recovery, retirement).WaitAsync(TimeSpan.FromSeconds(7), TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.True(await recovery);
+            await adapter.DrainResyncAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.False(await adapter.RequestResyncAsync("late"));
+        }
+        finally
+        {
+            retirementCompleted.Set();
+            adapter.Dispose();
+            await Task.WhenAll(recovery, retirement).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
     public void SessionUpdateReceived_BufferOverflow_TriggersResyncRequired()
     {
         // Arrange
@@ -140,6 +213,66 @@ public sealed class AcpChatServiceAdapterTests
 
         Assert.True(adapter.TryMarkHydrated(attemptId));
         Assert.Equal(2, updates.Count);
+    }
+
+    [Fact]
+    public async Task BufferedSessionUpdateReceived_AfterHydrationScopeCompletes_KeepsQueuedReplayOriginAndPublishesOnce()
+    {
+        // Arrange
+        var dispatcher = new QueueingUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, dispatcher);
+        var received = new List<BufferedSessionUpdate>();
+        var raw = new List<SessionUpdateEventArgs>();
+        adapter.BufferedSessionUpdateReceived += received.Add;
+        adapter.SessionUpdateReceived += (_, update) => raw.Add(update);
+        adapter.ReleaseUnscopedBufferedUpdates();
+        var attempt = adapter.BeginHydrationBufferingScope("a");
+        var replay = new SessionUpdateEventArgs("a", new AgentMessageUpdate(new TextContentBlock("History")));
+
+        // Act
+        inner.RaiseSessionUpdate(replay);
+        adapter.TryMarkHydrated(attempt);
+        while (dispatcher.RunNext()) { }
+        await adapter.WaitForBufferedUpdatesDrainedAsync(attempt, TestContext.Current.CancellationToken);
+        var live = new SessionUpdateEventArgs("a", new AgentMessageUpdate(new TextContentBlock("Live")));
+        inner.RaiseSessionUpdate(live);
+        while (dispatcher.RunNext()) { }
+
+        // Assert
+        Assert.Collection(received,
+            update => { Assert.Same(replay, update.Update); Assert.True(update.IsReplay); },
+            update => { Assert.Same(live, update.Update); Assert.False(update.IsReplay); });
+        Assert.Equal(2, raw.Count);
+    }
+
+    [Fact]
+    public void BufferedSessionUpdateReceived_WhileAnotherSessionReplays_PreservesConcurrentLiveOrigin()
+    {
+        // Arrange
+        var dispatcher = new QueueingUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, dispatcher);
+        var received = new List<BufferedSessionUpdate>();
+        adapter.BufferedSessionUpdateReceived += received.Add;
+        adapter.ReleaseUnscopedBufferedUpdates();
+        var attempt = adapter.BeginHydrationBufferingScope("a");
+
+        // Act
+        inner.RaiseSessionUpdate(new("a", new AgentMessageUpdate(new TextContentBlock("History A"))));
+        inner.RaiseSessionUpdate(new("b", new AgentMessageUpdate(new TextContentBlock("Live B"))));
+        while (dispatcher.RunNext()) { }
+        Assert.False(Assert.Single(received).IsReplay);
+        Assert.Equal("b", received[0].Update.SessionId);
+        adapter.TryMarkHydrated(attempt);
+        inner.RaiseSessionUpdate(new("a", new AgentMessageUpdate(new TextContentBlock("New A after load"))));
+        while (dispatcher.RunNext()) { }
+
+        // Assert
+        Assert.Collection(received,
+            update => Assert.False(update.IsReplay),
+            update => Assert.True(update.IsReplay),
+            update => Assert.False(update.IsReplay));
     }
 
     [Fact]

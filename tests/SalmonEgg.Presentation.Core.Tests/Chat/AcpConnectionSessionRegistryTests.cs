@@ -11,6 +11,71 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class AcpConnectionSessionRegistryTests
 {
     [Fact]
+    public void TryAcquireUsage_BeforeEviction_PreventsRetirementUntilLastLeaseReleases()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var session = CreateSession("profile") with { ConnectionInstanceId = "connection" };
+        registry.Upsert(session);
+        Assert.True(registry.TryAcquireUsage(session.EventSource, out var foreground));
+        Assert.True(registry.TryAcquireUsage(session.EventSource, out var prompt));
+
+        Assert.False(registry.TryEvict(session));
+        foreground!.Dispose();
+        Assert.False(registry.TryEvict(session));
+        prompt!.Dispose();
+        prompt.Dispose();
+
+        Assert.True(registry.TryEvict(session));
+        Assert.False(registry.TryGetByProfile("profile", out _));
+    }
+
+    [Fact]
+    public void TryEvict_BeforeUsageAdmission_RejectsNewWorkOnRetiredSource()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var session = CreateSession("profile") with { ConnectionInstanceId = "connection" };
+        registry.Upsert(session);
+
+        Assert.True(registry.TryEvict(session));
+
+        Assert.False(registry.TryAcquireUsage(session.EventSource, out var lease));
+        Assert.Null(lease);
+    }
+
+    [Fact]
+    public void Upsert_WhilePublishingRegistration_HoldsResourceUntilSubscriberTakesOwnership()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var session = CreateSession("profile") with { ConnectionInstanceId = "connection" };
+        IDisposable? lease = null;
+        registry.ConnectionRegistered += registered =>
+        {
+            Assert.False(registry.TryEvict(registered));
+            Assert.True(registry.TryAcquireUsage(registered.EventSource, out lease));
+        };
+
+        registry.Upsert(session);
+
+        Assert.False(registry.TryEvict(session));
+        lease!.Dispose();
+        Assert.True(registry.TryEvict(session));
+    }
+
+    [Fact]
+    public void RemoveByProfile_WithActiveUsage_ExplicitDisconnectStillRetiresConnection()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var session = CreateSession("profile") with { ConnectionInstanceId = "connection" };
+        registry.Upsert(session);
+        Assert.True(registry.TryAcquireUsage(session.EventSource, out var lease));
+
+        Assert.True(registry.RemoveByProfile("profile"));
+
+        lease!.Dispose();
+        Assert.False(registry.TryAcquireUsage(session.EventSource, out _));
+    }
+
+    [Fact]
     public void Upsert_WhenProfileIsNew_IndexesSessionByProfileAndService()
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();
@@ -144,6 +209,77 @@ public sealed class AcpConnectionSessionRegistryTests
         Assert.Same(session.Service, stored.Service);
         Assert.True(registry.TryGetProfileId(session.Service, out var profileId));
         Assert.Equal("profile-a", profileId);
+    }
+
+    [Fact]
+    public void Upsert_WhenConnectionChanges_RetiresExactOldIdentityBeforeRegisteringNewIdentity()
+    {
+        // Arrange
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var oldSession = CreateSession("profile") with { ConnectionInstanceId = "old" };
+        var newSession = CreateSession("profile") with { ConnectionInstanceId = "new" };
+        registry.Upsert(oldSession);
+        var events = new List<string>();
+        registry.ConnectionRetired += (session, reason) =>
+        {
+            Assert.True(oldSession.EventSource.Matches(session));
+            Assert.Equal(AcpConnectionRetirementReason.Replaced, reason);
+            Assert.False(registry.TryGetProfileId(oldSession.Service, out _));
+            events.Add("retired");
+        };
+        registry.ConnectionRegistered += session =>
+        {
+            Assert.True(newSession.EventSource.Matches(session));
+            events.Add("registered");
+        };
+
+        // Act
+        registry.Upsert(newSession);
+
+        // Assert
+        Assert.Equal(new[] { "retired", "registered" }, events);
+    }
+
+    [Fact]
+    public void Upsert_WhenExistingConnectionIsRefreshed_DoesNotRetireIt()
+    {
+        // Arrange
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var session = CreateSession("profile") with { ConnectionInstanceId = "connection" };
+        registry.Upsert(session);
+        var retired = 0;
+        registry.ConnectionRetired += (_, _) => retired++;
+
+        // Act
+        registry.Upsert(session with { LastUsedUtc = DateTime.UtcNow });
+
+        // Assert
+        Assert.Equal(0, retired);
+        Assert.True(registry.TryGetProfileId(session.Service, out _));
+    }
+
+    [Fact]
+    public void RemoveWhere_WhenShuttingDown_PublishesEveryDetachedIdentityAndReasonOnce()
+    {
+        // Arrange
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(CreateSession("a"));
+        registry.Upsert(CreateSession("b"));
+        var retired = new List<string>();
+        registry.ConnectionRetired += (session, reason) =>
+        {
+            Assert.Empty(registry.GetSnapshot());
+            Assert.Equal(AcpConnectionRetirementReason.Shutdown, reason);
+            retired.Add(session.ProfileId);
+        };
+
+        // Act
+        var removed = registry.RemoveWhere(static _ => true, AcpConnectionRetirementReason.Shutdown);
+        registry.RemoveWhere(static _ => true, AcpConnectionRetirementReason.Shutdown);
+
+        // Assert
+        Assert.Equal(2, removed.Count);
+        Assert.Equal(new[] { "a", "b" }, retired.OrderBy(static value => value));
     }
 
     private static AcpConnectionSession CreateSession(string profileId, AcpChatServiceAdapter? service = null)

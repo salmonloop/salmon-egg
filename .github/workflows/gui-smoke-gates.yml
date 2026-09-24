@@ -66,10 +66,59 @@ jobs:
             libfontconfig1 \
             libgtk-3-0 \
             libx11-6 \
-            libxtst6
+            libxtst6 \
+            openbox \
+            xdotool \
+            x11-utils \
+            ffmpeg
 
       - name: Run Skia Desktop GUI smoke
         run: ./scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
+
+      - name: Verify native session status navigation
+        timeout-minutes: 5
+        env:
+          SALMONEGG_NAV_MASK_SKIP_BUILD: "1"
+          SALMONEGG_NAV_MASK_GROUPING: "Status"
+          SALMONEGG_NAV_MASK_SESSIONS: "3"
+          SALMONEGG_NAV_INTERACTION_PROBE: "1"
+          SALMONEGG_NAV_MASK_PERSIST_DIR: ${{ runner.temp }}/session-status-navigation
+          DOTNET_PROCESSOR_COUNT: "2"
+          DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+          MSBUILDDISABLENODEREUSE: "1"
+        run: |
+          timeout --signal=TERM --kill-after=10s 240s \
+            bash scripts/gates/run-skia-nav-mask-probe.sh Debug
+
+      - name: Upload session status navigation evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: session-status-navigation
+          path: ${{ runner.temp }}/session-status-navigation
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Verify visible reply read receipts
+        timeout-minutes: 4
+        env:
+          SALMONEGG_READ_RECEIPT_RESULT_DIR: ${{ runner.temp }}/reply-read-receipts
+          DOTNET_PROCESSOR_COUNT: "2"
+          DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+          MSBUILDDISABLENODEREUSE: "1"
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s \
+            python3 scripts/gates/skia-read-receipt-image-smoke.py \
+              --artifacts "${SALMONEGG_READ_RECEIPT_RESULT_DIR}"
+
+      - name: Upload read receipt evidence
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: reply-read-receipts
+          path: ${{ runner.temp }}/reply-read-receipts
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify ACP setup path editing with native keyboard input
         timeout-minutes: 3

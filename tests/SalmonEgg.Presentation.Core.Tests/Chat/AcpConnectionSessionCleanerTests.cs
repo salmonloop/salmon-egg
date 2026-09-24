@@ -15,6 +15,53 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
 public sealed class AcpConnectionSessionCleanerTests
 {
+    [Fact(Timeout = 15000)]
+    public async Task CleanupStaleAsync_WhenCandidateBecomesBusyBeforeRetirement_RechecksLatestDependency()
+    {
+        // Arrange
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var service = CreateChatService(isConnected: true, isInitialized: true);
+        var session = new AcpConnectionSession("profile", WrapAdapter(service.Object), CreateInitializeResponse("profile"),
+            CreateReuseKey("profile"), "connection");
+        registry.Upsert(session);
+        var cleaner = CreateCleaner(registry, Mock.Of<ILogger<AcpConnectionSessionCleaner>>(), new AcpConnectionEvictionOptions
+        {
+            EnablePolicyEviction = true,
+            MaxWarmProfiles = 0
+        });
+        var recheckStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRecheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var busy = false;
+        var cleanup = cleaner.CleanupStaleAsync(null, cancellationToken: TestContext.Current.CancellationToken,
+            retainBeforeEvictionAsync: async (_, token) =>
+            {
+                recheckStarted.TrySetResult();
+                await allowRecheck.Task.WaitAsync(token);
+                return busy;
+            });
+        try
+        {
+            await recheckStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            // Act
+            busy = true;
+            allowRecheck.TrySetResult();
+            var result = await cleanup.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.Equal(0, result.RemovedCount);
+            Assert.True(registry.TryGetByProfile("profile", out var retained));
+            Assert.True(session.EventSource.Matches(retained));
+            service.Verify(chat => chat.DisconnectAsync(), Times.Never);
+        }
+        finally
+        {
+            allowRecheck.TrySetResult();
+            await cleanup.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            session.Service.Dispose();
+        }
+    }
+
     [Fact]
     public async Task CleanupStaleAsync_RemovesInvalidSessions_AndKeepsActiveService()
     {
@@ -545,9 +592,9 @@ public sealed class AcpConnectionSessionCleanerTests
 
         public int RemovedProfileCount { get; private set; }
 
-        public bool RemoveByProfile(string profileId)
+        public bool RemoveByProfile(string profileId, AcpConnectionRetirementReason reason = AcpConnectionRetirementReason.Disconnected)
         {
-            var removed = _inner.RemoveByProfile(profileId);
+            var removed = _inner.RemoveByProfile(profileId, reason);
             if (removed)
             {
                 RemovedProfileCount++;
@@ -563,14 +610,37 @@ public sealed class AcpConnectionSessionCleanerTests
         public bool TryGetProfileId(IChatService service, out string profileId)
             => _inner.TryGetProfileId(service, out profileId);
 
+        public bool TryAcquireUsage(AcpSessionEventSource source, out IDisposable? lease)
+            => _inner.TryAcquireUsage(source, out lease);
+
+        public bool TryEvict(AcpConnectionSession expectedSession)
+        {
+            var removed = _inner.TryEvict(expectedSession);
+            if (removed)
+            {
+                RemovedProfileCount++;
+                _cancellationSource.Cancel();
+            }
+            return removed;
+        }
+
         public AcpConnectionSession? Upsert(AcpConnectionSession session)
             => _inner.Upsert(session);
 
-        public bool RemoveByService(IChatService service, out string profileId)
-            => _inner.RemoveByService(service, out profileId);
+        public bool RemoveByService(IChatService service, out string profileId, AcpConnectionRetirementReason reason = AcpConnectionRetirementReason.Disconnected)
+        {
+            var removed = _inner.RemoveByService(service, out profileId, reason);
+            if (removed)
+            {
+                RemovedProfileCount++;
+                _cancellationSource.Cancel();
+            }
 
-        public IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate)
-            => _inner.RemoveWhere(predicate);
+            return removed;
+        }
+
+        public IReadOnlyList<AcpConnectionSession> RemoveWhere(Func<AcpConnectionSession, bool> predicate, AcpConnectionRetirementReason reason = AcpConnectionRetirementReason.Disconnected)
+            => _inner.RemoveWhere(predicate, reason);
 
         public bool Touch(string profileId, DateTime? usedAtUtc = null)
             => _inner.Touch(profileId, usedAtUtc);

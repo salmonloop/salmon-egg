@@ -23,7 +23,6 @@ using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
-using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
@@ -32,6 +31,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
     private const int VisibleSessionsPerProjectLimit = 20;
     private const int PinnedMenuItemCount = 3;
+    private static readonly ConversationStatusGroup[] StatusGroupOrder =
+        [ConversationStatusGroup.NeedsAttention, ConversationStatusGroup.Working, ConversationStatusGroup.Other];
 
     public event EventHandler? TreeRebuilt;
 
@@ -57,9 +58,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private static readonly TimeSpan RelativeTimeRefreshInterval = TimeSpan.FromSeconds(30);
 
     private readonly Dictionary<string, SessionNavItemViewModel> _sessionIndex = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SessionNavItemViewModel> _sessionVms = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectIndex = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectNavItemViewModel> _projectVms = new(StringComparer.Ordinal);
+    private readonly Dictionary<ConversationStatusGroup, StatusGroupNavItemViewModel> _statusGroupVms = new();
+    private readonly Dictionary<ConversationStatusGroup, int> _statusGroupVisibleLimits = new();
+    // Applied membership includes paginated rows so a temporary interaction hold keeps counts and
+    // visible rows in the same projection. The catalog remains authoritative after the hold ends.
+    private readonly Dictionary<string, ConversationStatusGroup> _appliedStatusMembership = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConversationCatalogDisplayItem> _conversationCatalogIndex = new(StringComparer.Ordinal);
+    private string _appliedGrouping;
+    private string? _focusedConversationId;
+    private bool _transitionsFrozen;
+    private bool _isDisposed;
     private string? _pendingProjectIdForNewSession;
     private long _pendingProjectIntentVersion;
     private int _rebuildPending;
@@ -94,6 +105,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public MainNavItemViewModel? ProjectedControlSelectedItem => _projection.ControlSelectedItem;
 
     public bool CanAddProject => _ui.CanPickFolder;
+
+    public bool IsStatusGrouping => _appliedGrouping == AppSettingValueCatalog.StatusConversationGrouping;
 
     public string? PendingProjectIdForNewSession
     {
@@ -184,6 +197,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
+        _appliedGrouping = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(projectPreferences.SidebarConversationGrouping);
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _shell = shell ?? NoOpPlatformShellService.Instance;
@@ -223,9 +237,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         Items.Add(AddProjectItem);
 
         // Show a lightweight placeholder until conversations are restored.
-        var placeholderProject = CreateUnclassifiedProject();
-        placeholderProject.Children.Add(CreateLoadingPlaceholder());
-        Items.Add(placeholderProject);
+        if (IsStatusGrouping)
+        {
+            foreach (var group in StatusGroupOrder)
+            {
+                Items.Add(GetOrCreateStatusGroup(group));
+            }
+
+            _statusGroupVms[ConversationStatusGroup.Other].Children.Add(CreateLoadingPlaceholder());
+        }
+        else
+        {
+            var placeholderProject = CreateUnclassifiedProject();
+            placeholderProject.Children.Add(CreateLoadingPlaceholder());
+            Items.Add(placeholderProject);
+        }
 
         ApplySelectionProjection();
 
@@ -236,6 +262,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged += _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.NavigationRemoteDirectoryIds).CollectionChanged += _projectsChangedHandler;
+        _projectPreferences.PropertyChanged += OnProjectPreferencesPropertyChanged;
 
         _relativeTimeTimer = new Timer(
             _ => _uiDispatcher.Enqueue(RefreshRelativeTimes),
@@ -263,8 +290,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         SessionsLabelItem.UpdateTitle(Localize("Nav_Sessions", "Sessions"));
 
         var unclassifiedTitle = Localize("Nav_Unclassified", "Unclassified");
-        foreach (var project in Items
-                     .OfType<ProjectNavItemViewModel>()
+        foreach (var project in _projectVms.Values
                      .Where(project => string.Equals(
                          project.ProjectId,
                          UnclassifiedProjectId,
@@ -273,21 +299,34 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             project.Title = unclassifiedTitle;
         }
 
+        foreach (var group in _statusGroupVms.Values)
+        {
+            group.Title = GetStatusGroupTitle(group.Group);
+        }
+
         var moreTitleFormat = Localize("Nav_MoreSessionsFormat", "Show more (+{0})");
         foreach (var moreItem in Items
-                     .OfType<ProjectNavItemViewModel>()
-                     .SelectMany(project => project.Children.OfType<MoreSessionsNavItemViewModel>()))
+                     .SelectMany(group => group.Children.OfType<MoreSessionsNavItemViewModel>()))
         {
             moreItem.UpdateTitleFormat(moreTitleFormat);
         }
 
         var loadingTitle = Localize("Nav_LoadingSessions", "Loading...");
         foreach (var placeholder in Items
-                     .OfType<ProjectNavItemViewModel>()
-                     .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+                     .SelectMany(group => group.Children.OfType<SessionNavItemViewModel>())
                      .Where(session => session.IsPlaceholder))
         {
             placeholder.Title = loadingTitle;
+        }
+
+        foreach (var session in _sessionVms.Values)
+        {
+            if (_conversationCatalogIndex.TryGetValue(session.SessionId, out var catalogItem))
+            {
+                UpdateSessionPresentation(session, catalogItem);
+            }
+
+            session.RefreshLocalizedText();
         }
 
         RefreshRelativeTimes();
@@ -295,6 +334,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public void Dispose()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
         if (_languageService is not null)
         {
             _languageService.LanguageChanged -= OnLanguageChanged;
@@ -307,17 +352,37 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged -= _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged -= _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.NavigationRemoteDirectoryIds).CollectionChanged -= _projectsChangedHandler;
+        _projectPreferences.PropertyChanged -= OnProjectPreferencesPropertyChanged;
         _relativeTimeTimer.Dispose();
 
-        var itemsToDispose = Items.Concat(FooterItems).ToArray();
+        var itemsToDispose = Items.Concat(FooterItems).Concat(GetCachedGroups()).Distinct().ToArray();
+        foreach (var group in GetCachedGroups())
+        {
+            foreach (var child in group.Children.ToArray())
+            {
+                RemoveGroupChild(group, child);
+            }
+        }
+
         Items.Clear();
         FooterItems.Clear();
         _projectVms.Clear();
+        _statusGroupVms.Clear();
 
         foreach (var item in itemsToDispose)
         {
             DisposeItem(item);
         }
+
+        foreach (var session in _sessionVms.Values)
+        {
+            session.Dispose();
+        }
+
+        _sessionVms.Clear();
+        _sessionIndex.Clear();
+        _projectIndex.Clear();
+        _appliedStatusMembership.Clear();
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -327,9 +392,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void DisposeItem(object? item)
     {
-        if (item is ProjectNavItemViewModel projectVm)
+        if (item is ProjectNavItemViewModel or StatusGroupNavItemViewModel)
         {
-            UnwatchNavTreeStructure(projectVm);
+            UnwatchNavTreeStructure((MainNavItemViewModel)item);
         }
 
         if (item is IDisposable disposable)
@@ -338,11 +403,19 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private void WatchNavTreeStructure(ProjectNavItemViewModel projectVm)
-        => projectVm.Children.CollectionChanged += OnNavTreeStructureChanged;
+    private void WatchNavTreeStructure(MainNavItemViewModel group)
+        => group.Children.CollectionChanged += OnNavTreeStructureChanged;
 
-    private void UnwatchNavTreeStructure(ProjectNavItemViewModel projectVm)
-        => projectVm.Children.CollectionChanged -= OnNavTreeStructureChanged;
+    private void UnwatchNavTreeStructure(MainNavItemViewModel group)
+        => group.Children.CollectionChanged -= OnNavTreeStructureChanged;
+
+    private void OnProjectPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(INavigationProjectPreferences.SidebarConversationGrouping))
+        {
+            RebuildTree();
+        }
+    }
 
     // Any add/move/remove changes which container renders which row, so the control's own selection
     // visual can end up attached to a row that now shows a different session. Record that the menu
@@ -385,13 +458,42 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             || e.PropertyName == nameof(IShellNavigationRuntimeState.IsSessionActivationInProgress)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.PendingShellContent))
         {
-            ApplySelectionProjection();
+            if (IsStatusGrouping)
+            {
+                RebuildTree();
+            }
+            else
+            {
+                ApplySelectionProjection();
+            }
         }
     }
 
     public void RefreshSelectionProjection()
     {
         ApplySelectionProjection();
+    }
+
+    public void SetTransitionsFrozen(bool frozen)
+    {
+        if (_isDisposed || _transitionsFrozen == frozen)
+        {
+            return;
+        }
+
+        _transitionsFrozen = frozen;
+        if (!frozen)
+        {
+            RebuildTree();
+        }
+    }
+
+    public void SetFocusedConversationId(string? conversationId)
+    {
+        var focusedId = string.IsNullOrWhiteSpace(conversationId) ? null : conversationId;
+        if (_isDisposed || string.Equals(_focusedConversationId, focusedId, StringComparison.Ordinal)) return;
+        _focusedConversationId = focusedId;
+        RebuildTree();
     }
 
     public string? TryGetProjectIdForSession(string sessionId)
@@ -403,7 +505,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
         return _sessionIndex.TryGetValue(sessionId, out var sessionItem)
             ? sessionItem.ProjectId
-            : null;
+            : _conversationCatalogPresenter.Snapshot.FirstOrDefault(item => item.ConversationId == sessionId) is { } item
+                ? ResolveEffectiveProjectId(item)
+                : null;
     }
 
     public async Task PrepareStartForProjectAsync(string projectId)
@@ -644,6 +748,18 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
+    public Task ShowMoreSessionsForStatusGroupAsync(ConversationStatusGroup group)
+    {
+        if (!_isDisposed && _statusGroupVms.ContainsKey(group))
+        {
+            var current = _statusGroupVisibleLimits.GetValueOrDefault(group, VisibleSessionsPerProjectLimit);
+            _statusGroupVisibleLimits[group] = current + VisibleSessionsPerProjectLimit;
+            RebuildTree();
+        }
+
+        return Task.CompletedTask;
+    }
+
     private SessionNavItemViewModel CreateLoadingPlaceholder()
     {
         return new SessionNavItemViewModel(
@@ -781,6 +897,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public void RebuildTree()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         Interlocked.Exchange(ref _rebuildPending, 1);
         ScheduleRebuildTreeProcessing();
     }
@@ -797,6 +918,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ProcessRebuildTreeRequests()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
         try
         {
             Interlocked.Exchange(ref _rebuildPending, 0);
@@ -816,7 +942,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         try
         {
-            var itemIndex = EnsurePinnedMenuItems();
+            EnsurePinnedMenuItems();
 
             // Build the new indexes in local scope first, then swap atomically.
             // Clearing _sessionIndex/_projectIndex upfront would create a window
@@ -825,11 +951,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             // pushed through the binding causes NavigationView to lose its
             // IsChildSelected ancestor visual during display-mode transitions.
             var newSessionIndex = new Dictionary<string, SessionNavItemViewModel>(StringComparer.Ordinal);
-            var newProjectIndex = new Dictionary<string, ProjectNavItemViewModel>(StringComparer.Ordinal);
-
             var projects = GetProjectDefinitions();
-            var sessionsByProject = GetSessionsByProject(projects);
-            var removedItemsToDispose = new List<MainNavItemViewModel>();
+            var sessions = GetConversationCatalogSnapshot();
+            ApplyGroupingPreference();
 #if DEBUG
             var debugSelectedSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection);
             if (debugSelectedSessionId is not null)
@@ -846,74 +970,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
 #endif
 
-            foreach (var (projectDef, isSystem) in projects)
-            {
-                var projectId = projectDef.ProjectId!;
-                if (!_projectVms.TryGetValue(projectId, out var projectVm))
-                {
-                    projectVm = new ProjectNavItemViewModel(projectDef, isSystem, PrepareStartForProjectAsync, _navigationState, _uiDispatcher)
-                    {
-                        IsExpanded = true
-                    };
-                    WatchNavTreeStructure(projectVm);
-                    _projectVms[projectId] = projectVm;
-                }
-                else
-                {
-                    // Update existing VM properties if they changed
-                    projectVm.Title = projectDef.Name ?? string.Empty;
-                }
-
-                newProjectIndex[projectId] = projectVm;
-
-                // Ensure the project VM is at the correct position in the Items collection
-                if (itemIndex < Items.Count)
-                {
-                    if (!ReferenceEquals(Items[itemIndex], projectVm))
-                    {
-                        // If it's elsewhere, remove it first (should be rare)
-                        int existingIndex = Items.IndexOf(projectVm);
-                        if (existingIndex != -1)
-                        {
-                            // Note: We don't dispose projectVm here because it's still being used (moved)
-                            Items.RemoveAt(existingIndex);
-                        }
-
-                        Items.Insert(itemIndex, projectVm);
-                    }
-                }
-                else
-                {
-                    Items.Add(projectVm);
-                }
-
-                SyncSessions(projectVm, sessionsByProject.TryGetValue(projectId, out var s) ? s : new List<ConversationCatalogDisplayItem>(), newSessionIndex);
-                itemIndex++;
-            }
-
-            // Remove orphans
-            while (Items.Count > itemIndex)
-            {
-                var removedItem = Items[Items.Count - 1];
-                Items.RemoveAt(Items.Count - 1);
-                removedItemsToDispose.Add(removedItem);
-            }
-
-            // Cleanup _projectVms for projects that no longer exist
-            var currentProjectIds = new HashSet<string>(projects.Select(p => p.Project.ProjectId!), StringComparer.Ordinal);
-            var toRemove = _projectVms.Keys.Where(id => !currentProjectIds.Contains(id)).ToList();
-            foreach (var id in toRemove)
-            {
-                if (_projectVms.TryGetValue(id, out var vm))
-                {
-                    if (!removedItemsToDispose.Contains(vm))
-                    {
-                        removedItemsToDispose.Add(vm);
-                    }
-                }
-
-                _projectVms.Remove(id);
-            }
+            var newProjectIndex = SynchronizeProjectDefinitions(projects);
+            var desiredGroups = IsStatusGrouping
+                ? SyncStatusGroups(sessions, newSessionIndex)
+                : SyncProjectGroups(projects, sessions, newSessionIndex);
+            SyncRootGroups(desiredGroups);
+            RemoveRetiredNavigationItems(newProjectIndex);
 
             // Atomic swap: replace shared indexes only after the new tree is fully built.
             _sessionIndex.Clear();
@@ -928,11 +990,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 _projectIndex[kvp.Key] = kvp.Value;
             }
 
-            foreach (var item in removedItemsToDispose)
-            {
-                DisposeItem(item);
-            }
-
             NormalizeSelectionAfterRebuild();
 
             // Notify that tree has been rebuilt
@@ -941,6 +998,191 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Navigation tree rebuild failed and was swallowed to keep the shell stable.");
+        }
+    }
+
+    private Dictionary<string, ProjectNavItemViewModel> SynchronizeProjectDefinitions(
+        IReadOnlyList<(ProjectDefinition Project, bool IsSystem)> projects)
+    {
+        var index = new Dictionary<string, ProjectNavItemViewModel>(StringComparer.Ordinal);
+        foreach (var (definition, isSystem) in projects)
+        {
+            if (!_projectVms.TryGetValue(definition.ProjectId, out var item))
+            {
+                item = new ProjectNavItemViewModel(definition, isSystem, PrepareStartForProjectAsync, _navigationState, _uiDispatcher);
+                WatchNavTreeStructure(item);
+                _projectVms.Add(definition.ProjectId, item);
+            }
+            else
+            {
+                item.Title = definition.Name;
+            }
+
+            index.Add(definition.ProjectId, item);
+        }
+
+        return index;
+    }
+
+    private void RemoveRetiredNavigationItems(IReadOnlyDictionary<string, ProjectNavItemViewModel> projects)
+    {
+        foreach (var id in _sessionVms.Keys.Where(id => !_conversationCatalogIndex.ContainsKey(id)).ToArray())
+        {
+            var row = _sessionVms[id];
+            DetachSessionFromOtherGroups(row, target: null);
+            row.Dispose();
+            _sessionVms.Remove(id);
+        }
+
+        foreach (var id in _projectVms.Keys.Where(id => !projects.ContainsKey(id)).ToArray())
+        {
+            var item = _projectVms[id];
+            foreach (var child in item.Children.ToArray())
+            {
+                RemoveGroupChild(item, child);
+            }
+
+            DisposeItem(item);
+            _projectVms.Remove(id);
+        }
+    }
+
+    private void ApplyGroupingPreference()
+    {
+        var requested = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(_projectPreferences.SidebarConversationGrouping);
+        if (_transitionsFrozen || string.Equals(requested, _appliedGrouping, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        foreach (var group in GetCachedGroups())
+        {
+            foreach (var child in group.Children.ToArray())
+            {
+                RemoveGroupChild(group, child);
+            }
+        }
+
+        // A new status-mode visit initializes from explicit preferences. Reusing a previous native
+        // compact/flyout projection here would overwrite the user's remembered expanded layout.
+        foreach (var group in _statusGroupVms.Values)
+        {
+            Items.Remove(group);
+            DisposeItem(group);
+        }
+
+        _statusGroupVms.Clear();
+        _appliedGrouping = requested;
+        _appliedStatusMembership.Clear();
+        OnPropertyChanged(nameof(IsStatusGrouping));
+    }
+
+    private List<MainNavItemViewModel> SyncProjectGroups(
+        List<(ProjectDefinition Project, bool IsSystem)> projects,
+        IReadOnlyList<ConversationCatalogDisplayItem> sessions,
+        Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
+    {
+        var sessionsByProject = sessions
+            .GroupBy(ResolveEffectiveProjectId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(GetNavigationSortTimestamp)
+                .ThenByDescending(session => session.CatalogUpdatedAt).ToList(), StringComparer.Ordinal);
+        var groups = new List<MainNavItemViewModel>(projects.Count);
+        foreach (var (project, _) in projects)
+        {
+            var group = _projectVms[project.ProjectId];
+            groups.Add(group);
+            SyncSessions(group, sessionsByProject.GetValueOrDefault(project.ProjectId) ?? [], targetSessionIndex);
+        }
+
+        return groups;
+    }
+
+    private List<MainNavItemViewModel> SyncStatusGroups(
+        IReadOnlyList<ConversationCatalogDisplayItem> sessions,
+        Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
+    {
+        var preserveMembership = ShouldPreserveRenderedSessionOrder();
+        foreach (var session in sessions)
+        {
+            if (!_appliedStatusMembership.ContainsKey(session.ConversationId)
+                || !preserveMembership && !string.Equals(session.ConversationId, _focusedConversationId, StringComparison.Ordinal))
+            {
+                _appliedStatusMembership[session.ConversationId] = session.StatusGroup;
+            }
+        }
+
+        foreach (var id in _appliedStatusMembership.Keys.Where(id => !_conversationCatalogIndex.ContainsKey(id)).ToArray())
+        {
+            _appliedStatusMembership.Remove(id);
+        }
+
+        var groups = new List<MainNavItemViewModel>(StatusGroupOrder.Length);
+        foreach (var status in StatusGroupOrder)
+        {
+            var group = GetOrCreateStatusGroup(status);
+            var members = sessions.Where(session => _appliedStatusMembership[session.ConversationId] == status)
+                .OrderByDescending(session => session.ActivityAt ?? GetNavigationSortTimestamp(session))
+                .ThenBy(session => session.ConversationId, StringComparer.Ordinal)
+                .ToList();
+            SyncSessions(group, members, targetSessionIndex);
+            group.Count = members.Count;
+            groups.Add(group);
+        }
+
+        return groups;
+    }
+
+    private StatusGroupNavItemViewModel GetOrCreateStatusGroup(ConversationStatusGroup group)
+    {
+        if (!_statusGroupVms.TryGetValue(group, out var item))
+        {
+            item = new StatusGroupNavItemViewModel(
+                group,
+                GetStatusGroupTitle(group),
+                _projectPreferences.GetStatusGroupExpanded(group),
+                _projectPreferences.SetStatusGroupExpanded,
+                _navigationState,
+                _uiDispatcher);
+            WatchNavTreeStructure(item);
+            _statusGroupVms.Add(group, item);
+        }
+
+        return item;
+    }
+
+    private string GetStatusGroupTitle(ConversationStatusGroup group) => group switch
+    {
+        ConversationStatusGroup.NeedsAttention => Localize("Nav_StatusNeedsAttention", "Needs attention"),
+        ConversationStatusGroup.Working => Localize("Nav_StatusWorkingGroup", "Working"),
+        _ => Localize("Nav_StatusOther", "Other conversations")
+    };
+
+    private IEnumerable<MainNavItemViewModel> GetCachedGroups()
+        => _projectVms.Values.Cast<MainNavItemViewModel>().Concat(_statusGroupVms.Values);
+
+    private void SyncRootGroups(IReadOnlyList<MainNavItemViewModel> desiredGroups)
+    {
+        for (var i = Items.Count - 1; i >= PinnedMenuItemCount; i--)
+        {
+            if (!desiredGroups.Contains(Items[i]))
+            {
+                Items.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < desiredGroups.Count; i++)
+        {
+            var targetIndex = i + PinnedMenuItemCount;
+            var group = desiredGroups[i];
+            var currentIndex = Items.IndexOf(group);
+            if (currentIndex < 0)
+            {
+                Items.Insert(targetIndex, group);
+            }
+            else if (currentIndex != targetIndex)
+            {
+                Items.Move(currentIndex, targetIndex);
+            }
         }
     }
 
@@ -974,10 +1216,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         Items.Insert(index, item);
     }
 
-    private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogDisplayItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
+    private void SyncSessions(MainNavItemViewModel group, List<ConversationCatalogDisplayItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
     {
-        var children = projectVm.Children;
-        var top = BuildVisibleSessionsForProject(sessions);
+        var children = group.Children;
+        var limit = group is StatusGroupNavItemViewModel statusGroup
+            ? _statusGroupVisibleLimits.GetValueOrDefault(statusGroup.Group, VisibleSessionsPerProjectLimit)
+            : VisibleSessionsPerProjectLimit;
+        var top = BuildVisibleSessionsForGroup(sessions, group, limit);
         // While the pane is unsettled, hold already-rendered rows in place instead of applying a
         // fresh recency order. Reordering a rendered row makes Uno's ItemsRepeater recycle its
         // container (Move is decomposed into Remove+Add); the recycle pool keeps the selected flag
@@ -989,129 +1234,146 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 .Where(session => !session.IsPlaceholder)
                 .Select(session => session.SessionId)
                 .ToList(),
-            ShouldPreserveRenderedSessionOrder(),
+            ShouldPreserveRenderedSessionOrder(group),
             static session => session.ConversationId);
         var remainingCount = Math.Max(0, sessions.Count - top.Count);
+        var visibleIds = top.Select(session => session.ConversationId).ToHashSet(StringComparer.Ordinal);
+        foreach (var previous in children.OfType<SessionNavItemViewModel>().Where(row => !row.IsPlaceholder).ToArray())
+        {
+            if (!visibleIds.Contains(previous.SessionId)) RemoveGroupChild(group, previous);
+        }
 
         int childIndex = 0;
         foreach (var session in top)
         {
-            var title = string.IsNullOrWhiteSpace(session.DisplayName)
-                ? SessionNamePolicy.CreateDefault(session.ConversationId)
-                : session.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt, _localizer);
-
-            SessionNavItemViewModel? sessionVm = null;
-
-            if (childIndex < children.Count && children[childIndex] is SessionNavItemViewModel existingSvm && !existingSvm.IsPlaceholder)
+            var sessionVm = GetOrCreateSession(session);
+            DetachSessionFromOtherGroups(sessionVm, group);
+            var existingIndex = children.IndexOf(sessionVm);
+            if (existingIndex < 0)
             {
-                if (string.Equals(existingSvm.SessionId, session.ConversationId, StringComparison.Ordinal))
-                {
-                    sessionVm = existingSvm;
-                    sessionVm.Title = title;
-                    sessionVm.RemoteSessionId = session.RemoteSessionId;
-                    sessionVm.RelativeTimeText = relative;
-                    sessionVm.HasUnreadAttention = session.HasUnreadAttention;
-                }
+                children.Insert(childIndex, sessionVm);
             }
-
-            if (sessionVm == null)
+            else if (existingIndex != childIndex)
             {
-                // Look for it elsewhere in children to avoid full re-creation if it moved.
-                sessionVm = children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.ConversationId, StringComparison.Ordinal));
-                if (sessionVm != null)
-                {
-                    // The session already owns a realized NavigationViewItem container. Relocate it
-                    // with a single Move (not Remove+Insert): NavigationView translates the existing
-                    // container and carries its native selection visual with it. Remove+Insert instead
-                    // recycles a container for a different data item and can strand the selected gray
-                    // mask on the vacated slot, so several sessions end up masked at once.
-                    var existingIndex = children.IndexOf(sessionVm);
-                    if (existingIndex != childIndex)
-                    {
-                        children.Move(existingIndex, childIndex);
-                    }
-
-                    sessionVm.Title = title;
-                    sessionVm.RemoteSessionId = session.RemoteSessionId;
-                    sessionVm.RelativeTimeText = relative;
-                    sessionVm.HasUnreadAttention = session.HasUnreadAttention;
-                }
-                else
-                {
-                    sessionVm = new SessionNavItemViewModel(
-                            sessionId: session.ConversationId,
-                            remoteSessionId: session.RemoteSessionId,
-                            projectId: projectVm.ProjectId,
-                            title: title,
-                            relativeTimeText: relative,
-                            ui: _ui,
-                            shell: _shell,
-                            chatSessionCatalog: _chatSessionCatalogActions,
-                            navigationState: _navigationState,
-                            uiDispatcher: _uiDispatcher,
-                localizer: _localizer);
-                    sessionVm.HasUnreadAttention = session.HasUnreadAttention;
-                    children.Insert(childIndex, sessionVm);
-                }
+                // The order policy above owns the safe time to converge; Move itself does not
+                // prevent Uno's repeater from recycling a container.
+                children.Move(existingIndex, childIndex);
             }
 
             targetSessionIndex[session.ConversationId] = sessionVm;
             childIndex++;
         }
 
-        // Handle "More" item
+        SyncMoreSessions(group, remainingCount, childIndex);
         if (remainingCount > 0)
         {
-            if (childIndex < children.Count && children[childIndex] is MoreSessionsNavItemViewModel existingMore)
-            {
-                existingMore.Count = remainingCount;
-            }
-            else
-            {
-                // Remove any existing More item if it's at the wrong place
-                var oldMore = children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
-                if (oldMore != null)
-                {
-                    children.Remove(oldMore);
-                    DisposeItem(oldMore);
-                }
-
-                var showMore = new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(projectVm.ProjectId));
-                children.Insert(
-                    childIndex,
-                    new MoreSessionsNavItemViewModel(
-                        projectVm.ProjectId,
-                        remainingCount,
-                        showMore,
-                        _navigationState,
-                        _uiDispatcher,
-                        Localize("Nav_MoreSessionsFormat", "Show more (+{0})")));
-            }
             childIndex++;
-        }
-        else
-        {
-            var oldMore = children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
-            if (oldMore != null)
-            {
-                children.Remove(oldMore);
-                DisposeItem(oldMore);
-            }
         }
 
         // Add loading placeholder if needed
-        if (IsConversationListLoading && childIndex == 0 && projectVm.ProjectId == UnclassifiedProjectId)
+        if (IsConversationListLoading && childIndex == 0 && group is
+            (ProjectNavItemViewModel { ProjectId: UnclassifiedProjectId }
+             or StatusGroupNavItemViewModel { Group: ConversationStatusGroup.Other }))
         {
-            children.Add(CreateLoadingPlaceholder());
+            if (children.FirstOrDefault() is not SessionNavItemViewModel { IsPlaceholder: true })
+            {
+                children.Insert(0, CreateLoadingPlaceholder());
+            }
+
             childIndex++;
         }
 
         while (children.Count > childIndex)
         {
-            var item = children[children.Count - 1];
-            children.RemoveAt(children.Count - 1);
-            DisposeItem(item);
+            RemoveGroupChild(group, children[^1]);
+        }
+    }
+
+    private void SyncMoreSessions(MainNavItemViewModel group, int remainingCount, int index)
+    {
+        var existing = group.Children.OfType<MoreSessionsNavItemViewModel>().FirstOrDefault();
+        if (remainingCount == 0)
+        {
+            if (existing is not null)
+            {
+                RemoveGroupChild(group, existing);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            existing = group is StatusGroupNavItemViewModel status
+                ? new MoreSessionsNavItemViewModel(
+                    status.Group, remainingCount,
+                    new AsyncRelayCommand(() => ShowMoreSessionsForStatusGroupAsync(status.Group)),
+                    _navigationState, _uiDispatcher, Localize("Nav_MoreSessionsFormat", "Show more (+{0})"))
+                : new MoreSessionsNavItemViewModel(
+                    ((ProjectNavItemViewModel)group).ProjectId, remainingCount,
+                    new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(((ProjectNavItemViewModel)group).ProjectId)),
+                    _navigationState, _uiDispatcher, Localize("Nav_MoreSessionsFormat", "Show more (+{0})"));
+            group.Children.Insert(index, existing);
+        }
+        else
+        {
+            existing.Count = remainingCount;
+            var previousIndex = group.Children.IndexOf(existing);
+            if (previousIndex != index)
+            {
+                group.Children.Move(previousIndex, index);
+            }
+        }
+    }
+
+    private SessionNavItemViewModel GetOrCreateSession(ConversationCatalogDisplayItem session)
+    {
+        if (!_sessionVms.TryGetValue(session.ConversationId, out var item))
+        {
+            item = new SessionNavItemViewModel(
+                session.ConversationId, session.RemoteSessionId, ResolveEffectiveProjectId(session),
+                string.Empty, string.Empty, _ui, _shell, _chatSessionCatalogActions,
+                _navigationState, _uiDispatcher, _localizer);
+            _sessionVms.Add(session.ConversationId, item);
+        }
+
+        UpdateSessionPresentation(item, session);
+        return item;
+    }
+
+    private void UpdateSessionPresentation(SessionNavItemViewModel item, ConversationCatalogDisplayItem session)
+    {
+        item.Title = string.IsNullOrWhiteSpace(session.DisplayName)
+            ? SessionNamePolicy.CreateDefault(session.ConversationId)
+            : session.DisplayName.Trim();
+        item.RemoteSessionId = session.RemoteSessionId;
+        item.RelativeTimeText = NavTimeFormatter.ToRelativeText(GetDisplayedSessionTimestamp(session), _localizer);
+        item.HasUnreadAttention = session.HasUnreadAttention;
+        item.StatusIcon = session.StatusIcon;
+        var projectId = ResolveEffectiveProjectId(session);
+        var projectName = _projectVms.TryGetValue(projectId, out var project)
+            ? project.Title
+            : Localize("Nav_Unclassified", "Unclassified");
+        item.UpdateProject(projectId, projectName, IsStatusGrouping);
+    }
+
+    private void DetachSessionFromOtherGroups(SessionNavItemViewModel row, MainNavItemViewModel? target)
+    {
+        foreach (var group in GetCachedGroups())
+        {
+            if (!ReferenceEquals(group, target))
+            {
+                group.Children.Remove(row);
+            }
+        }
+    }
+
+    private void RemoveGroupChild(MainNavItemViewModel group, MainNavItemViewModel child)
+    {
+        group.Children.Remove(child);
+        if (child is not SessionNavItemViewModel { IsPlaceholder: false })
+        {
+            DisposeItem(child);
         }
     }
 
@@ -1125,14 +1387,28 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     /// the conversation catalog is still loading and therefore still churning the sort key. Both are
     /// navigation-owned state; nothing here reads or writes the control's own selection.
     /// </remarks>
-    private bool ShouldPreserveRenderedSessionOrder()
-        => IsConversationListLoading
+    private bool ShouldPreserveRenderedSessionOrder(MainNavItemViewModel? group = null)
+        => _transitionsFrozen
+           || IsConversationListLoading
            || _shellRuntimeState.IsSessionActivationInProgress
-           || ResolveActiveSessionActivationProjectionSessionId() is not null;
+           || ResolveActiveSessionActivationProjectionSessionId() is not null
+           || group is not null && group.Children.OfType<SessionNavItemViewModel>()
+               .Any(row => string.Equals(row.SessionId, _focusedConversationId, StringComparison.Ordinal));
 
-    private List<ConversationCatalogDisplayItem> BuildVisibleSessionsForProject(List<ConversationCatalogDisplayItem> sessions)
+    private List<ConversationCatalogDisplayItem> BuildVisibleSessionsForGroup(
+        List<ConversationCatalogDisplayItem> sessions,
+        MainNavItemViewModel group,
+        int limit)
     {
-        var visible = sessions.Take(VisibleSessionsPerProjectLimit).ToList();
+        var visible = sessions.Take(limit).ToList();
+        if (ShouldPreserveRenderedSessionOrder(group))
+        {
+            foreach (var row in group.Children.OfType<SessionNavItemViewModel>().Where(row => !row.IsPlaceholder))
+            {
+                EnsureRequiredVisibleSession(sessions, visible, row.SessionId);
+            }
+        }
+
         EnsureRequiredVisibleSession(
             sessions,
             visible,
@@ -1212,20 +1488,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
 
         return projects;
-    }
-
-    private Dictionary<string, List<ConversationCatalogDisplayItem>> GetSessionsByProject(List<(ProjectDefinition Project, bool IsSystem)> projects)
-    {
-        var sessions = GetConversationCatalogSnapshot();
-
-        return sessions
-            .GroupBy(session => ResolveEffectiveProjectId(session), StringComparer.Ordinal)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(GetNavigationSortTimestamp)
-                    .ThenByDescending(s => s.CatalogUpdatedAt)
-                    .ToList(),
-                StringComparer.Ordinal);
     }
 
     private void NormalizeSelectionAfterRebuild()
@@ -1366,6 +1628,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return false;
         }
 
+        if (IsStatusGrouping)
+        {
+            return true;
+        }
+
         var projectId = ResolveEffectiveProjectId(selected);
         return _projectIndex.ContainsKey(projectId)
             || GetProjectDefinitions().Any(
@@ -1394,7 +1661,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 return;
             }
 
-            var timestamp = session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt;
+            var timestamp = GetDisplayedSessionTimestamp(session);
             var relative = NavTimeFormatter.ToRelativeText(timestamp, _localizer);
             if (!string.Equals(sessionItem.RelativeTimeText, relative, StringComparison.Ordinal))
             {
@@ -1421,6 +1688,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState, _uiDispatcher) { IsExpanded = true };
         WatchNavTreeStructure(vm);
         _projectIndex[vm.ProjectId] = vm;
+        _projectVms[vm.ProjectId] = vm;
         return vm;
     }
 
@@ -1442,25 +1710,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             sessions = sessions.Take(limit.Value).ToList();
         }
 
-        return sessions.Select(s =>
-        {
-            var title = string.IsNullOrWhiteSpace(s.DisplayName) ? SessionNamePolicy.CreateDefault(s.ConversationId) : s.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(s.CatalogUpdatedAt == default ? s.CreatedAt : s.CatalogUpdatedAt, _localizer);
-            var vm = new SessionNavItemViewModel(
-                sessionId: s.ConversationId,
-                remoteSessionId: s.RemoteSessionId,
-                projectId: projectId,
-                title: title,
-                relativeTimeText: relative,
-                ui: _ui,
-                shell: _shell,
-                chatSessionCatalog: _chatSessionCatalogActions,
-                navigationState: _navigationState,
-                uiDispatcher: _uiDispatcher,
-                localizer: _localizer);
-            vm.HasUnreadAttention = s.HasUnreadAttention;
-            return vm;
-        }).ToList();
+        return sessions.Select(GetOrCreateSession).ToList();
     }
 
     private bool IsConversationListLoading => _conversationCatalogPresenter.IsConversationListLoading;
@@ -1481,6 +1731,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         // LastAccessedAt is still meaningful for restore/recency flows, but should not reorder
         // the left nav when the conversation content itself has not changed.
         => item.CatalogUpdatedAt == default ? item.CreatedAt : item.CatalogUpdatedAt;
+
+    private DateTime GetDisplayedSessionTimestamp(ConversationCatalogDisplayItem item)
+        => IsStatusGrouping ? item.ActivityAt ?? GetNavigationSortTimestamp(item) : GetNavigationSortTimestamp(item);
 
     private string ResolveEffectiveProjectId(ConversationCatalogDisplayItem item)
         => ResolveProjectAffinity(item).EffectiveProjectId;

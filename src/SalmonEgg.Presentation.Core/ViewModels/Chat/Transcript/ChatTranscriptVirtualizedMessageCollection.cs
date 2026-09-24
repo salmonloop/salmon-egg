@@ -345,6 +345,10 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                 _cache[entry.Key] = newItem;
                 RaiseReplace(entry.Key, oldItem, newItem);
             }
+            else
+            {
+                entry.Value.UpdatePresentedSnapshot(newTranscript[entry.Key]);
+            }
         }
     }
 
@@ -374,6 +378,10 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                     var newItem = CreateItem(index);
                     _cache[index] = newItem;
                     RaiseReplace(index, cachedItem, newItem);
+                }
+                else
+                {
+                    cachedItem.UpdatePresentedSnapshot(newTranscript[index]);
                 }
 
                 continue;
