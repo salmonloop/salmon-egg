@@ -8,6 +8,31 @@ Salmon Egg 是一款依托 ACP 协议打造的桌面端智能体客户端。
 
 你可以连接本地或远程 ACP 服务，新建和恢复会话，查看完整对话记录与工具调用反馈，并在需要时直接在应用内完成终端相关工作流。针对日常使用场景，应用还提供语音输入、个性化设置与诊断支持。
 
+## 获取应用
+
+<a href="https://apps.microsoft.com/detail/9N80RL31LJF6"><picture><source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/zh-cn%20dark.svg"><img alt="从 Microsoft Store 获取" src="https://get.microsoft.com/images/zh-cn%20light.svg"></picture></a>
+
+Salmon Egg 已在 Microsoft Store 上架，免费下载。商店页面的正式信息：
+
+| 项目 | 内容 |
+|---|---|
+| 商品名 | Salmon Egg |
+| 发布者 | Salmon Egg |
+| 类别 | 实用程序与工具 |
+| 价格 | 免费下载 |
+| 平台 | Windows 桌面（x64）|
+| 系统要求 | Windows 10 版本 19041.0 或更高 |
+| 首次发布 | 2026-08-04 |
+| 商品 ID | `9N80RL31LJF6` |
+
+![主页与快捷启动](docs/images/store/01-home-quick-launch.png)
+
+![发现会话](docs/images/store/02-discover-sessions.png)
+
+![对话与工具调用](docs/images/store/03-conversation-tool-calls.png)
+
+以上截图取自商店页面。应用内「设置 → 关于」提供生成式人工智能内容问题的举报入口。
+
 ## 适用场景
 
 - 在 Windows 桌面上稳定使用 ACP 智能体能力

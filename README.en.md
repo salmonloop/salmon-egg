@@ -8,6 +8,31 @@ It brings conversational AI, local tools, terminal workflows, and remote agent s
 
 With Salmon Egg, you can connect to local or remote ACP services, create and resume sessions, review conversation history and tool-call results, and handle terminal-driven workflows directly inside the app. For day-to-day use, the app also includes voice input, personalized settings, and diagnostics support.
 
+## Get the App
+
+<a href="https://apps.microsoft.com/detail/9N80RL31LJF6"><picture><source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/en-us%20dark.svg"><img alt="Get it from the Microsoft Store" src="https://get.microsoft.com/images/en-us%20light.svg"></picture></a>
+
+Salmon Egg is available on the Microsoft Store as a free download. Official listing details:
+
+| Field | Value |
+|---|---|
+| Product name | Salmon Egg |
+| Publisher | Salmon Egg |
+| Category | Utilities & tools |
+| Price | Free |
+| Platform | Windows desktop (x64) |
+| System requirements | Windows 10 version 19041.0 or later |
+| First published | 2026-08-04 |
+| Product ID | `9N80RL31LJF6` |
+
+![Home and Quick Launch](docs/images/store/01-home-quick-launch.png)
+
+![Discover sessions](docs/images/store/02-discover-sessions.png)
+
+![Conversation and tool calls](docs/images/store/03-conversation-tool-calls.png)
+
+Screenshots come from the store listing. In the app, **Settings → About** provides the reporting path for generative AI content issues.
+
 ## What It Is For
 
 - Using ACP-powered agents reliably on the Windows desktop
