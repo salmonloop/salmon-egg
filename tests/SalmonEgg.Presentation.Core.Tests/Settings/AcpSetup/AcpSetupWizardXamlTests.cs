@@ -24,13 +24,13 @@ public sealed class AcpSetupWizardXamlTests
             "{x:Bind ViewModel.IsAdapterToolchainInstallable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
             adapter.Attribute("Visibility")?.Value);
 
-        var row = FindByName(document, "InstallAgentToolchainInlineButton");
-        Assert.Equal("AcpSetup_InstallToolchain", AttributeByLocalName(row, "Uid"));
-        Assert.Equal("AcpSetup.Agents.InstallToolchain", row.Attribute("AutomationProperties.AutomationId")?.Value);
+        var runtime = FindByName(document, "AcpSetupInstallRuntimeToolchainButton");
+        Assert.Equal("AcpSetup_InstallToolchain", AttributeByLocalName(runtime, "Uid"));
+        Assert.Equal("AcpSetup.Runtime.InstallToolchain", runtime.Attribute("AutomationProperties.AutomationId")?.Value);
         Assert.Equal(
-            "{x:Bind CanInstallToolchainHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
-            row.Attribute("Visibility")?.Value);
-        Assert.Equal("OnInstallAgentToolchainRowClick", row.Attribute("Click")?.Value);
+            "{x:Bind ViewModel.SelectedAgent.CanInstallToolchainHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            runtime.Attribute("Visibility")?.Value);
+        Assert.Equal("OnInstallAgentToolchainRowClick", runtime.Attribute("Click")?.Value);
 
         foreach (var resourceFile in new[]
                  {

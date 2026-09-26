@@ -75,17 +75,16 @@ internal static class AcpSetupRuntimePathProbeDriver
             var agentId = Environment.GetEnvironmentVariable("SALMONEGG_ACP_SETUP_PATH_AGENT") ?? "qwen-code";
             var row = wizard.Agents.Single(candidate => candidate.AgentId == agentId);
             wizard.SelectedAgent = row;
+            // Selecting a missing-runtime agent advances to the component step, whose runtime section now
+            // owns the path editor. The selection step no longer carries it.
             await wizard.GoNextCommand.ExecuteAsync(null).WaitAsync(token).ConfigureAwait(true);
-            var list = (ListView)page.FindName("AcpSetupAgentsList");
-            list.ScrollIntoView(row);
-            // This gate's preconditions are read from the rendered wizard: the selection step's
-            // panel is the visible step surface, the row wears its missing verdict, and the busy
-            // affordance is idle. The view-model flags behind those surfaces are not consulted.
-            // Scrolling happens first because a virtualized row renders nothing while off-screen.
-            await WaitForAsync(() => Find<StackPanel>(shellRoot, element => element.Name == "AgentSelectionPanel"
+            // This gate's preconditions are read from the rendered wizard: the component step's panel is
+            // the visible step surface, the runtime wears its missing verdict, and the busy affordance is
+            // idle. The view-model flags behind those surfaces are not consulted.
+            await WaitForAsync(() => Find<StackPanel>(shellRoot, element => element.Name == "ComponentSetupPanel"
                 && IsVisible(element)), token).ConfigureAwait(true);
-            await WaitForAsync(() => Find<FontIcon>(shellRoot, element =>
-                AutomationProperties.GetAutomationId(element) == "AcpSetup.Agents.Missing" && IsVisible(element)),
+            await WaitForAsync(() => Find<InfoBar>(shellRoot, element =>
+                AutomationProperties.GetAutomationId(element) == "AcpSetup.Runtime.MissingBar" && IsVisible(element)),
                 token).ConfigureAwait(true);
             if (Find<Button>(shellRoot, element =>
                     AutomationProperties.GetAutomationId(element) == "AcpSetup.CancelOperation") is { } cancel
@@ -97,10 +96,11 @@ internal static class AcpSetupRuntimePathProbeDriver
             logger.LogInformation(
                 "AcpSetupPathProbe missing pid={ProcessId} agent={AgentId} command={Command} availability={Availability}",
                 Environment.ProcessId, row.AgentId, row.ProbeCommand, row.Availability);
-            var container = await WaitForAsync(
-                () => list.ContainerFromItem(row) as ListViewItem, token).ConfigureAwait(true);
+            // The runtime path editor is a page-level element on the component step, not a virtualized list
+            // row, so it is found on the shell root directly rather than through a container.
             var expander = await WaitForAsync(
-                () => Find<Expander>(container, element => element.Name == "AgentProbeDiagnosticsExpander"), token).ConfigureAwait(true);
+                () => Find<Expander>(shellRoot, element => element.Name == "AcpSetupRuntimePathExpander"
+                    && IsVisible(element)), token).ConfigureAwait(true);
             var peer = FrameworkElementAutomationPeer.CreatePeerForElement(expander);
             if (peer?.GetPattern(PatternInterface.ExpandCollapse) is not IExpandCollapseProvider expansion)
             {
@@ -109,11 +109,11 @@ internal static class AcpSetupRuntimePathProbeDriver
 
             expansion.Expand();
             input = await WaitForAsync(
-                () => Find<TextBox>(container, element =>
-                    AutomationProperties.GetAutomationId(element) == "AcpSetup.Agents.CustomCommand"), token).ConfigureAwait(true);
+                () => Find<TextBox>(shellRoot, element =>
+                    AutomationProperties.GetAutomationId(element) == "AcpSetup.Runtime.CustomCommand"), token).ConfigureAwait(true);
             var verify = await WaitForAsync(
-                () => Find<Button>(container, element =>
-                    AutomationProperties.GetAutomationId(element) == "AcpSetup.Agents.VerifyCustomCommand"), token).ConfigureAwait(true);
+                () => Find<Button>(shellRoot, element =>
+                    AutomationProperties.GetAutomationId(element) == "AcpSetup.Runtime.VerifyCustomCommand"), token).ConfigureAwait(true);
             input.StartBringIntoView();
             await WaitForAsync(() => IsVisible(input) ? input : null, token).ConfigureAwait(true);
             if (!input.Focus(FocusState.Keyboard))

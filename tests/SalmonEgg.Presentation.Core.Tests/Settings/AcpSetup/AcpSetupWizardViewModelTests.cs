@@ -544,7 +544,7 @@ public sealed class AcpSetupWizardViewModelTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task AgentSelection_MissingRuntime_DoesNotAdvanceToAdapterDetection(bool hasToolchain)
+    public async Task AgentSelection_MissingRuntime_AdvancesToComponentSetupWhereTheRuntimeInstalls(bool hasToolchain)
     {
         // Arrange
         var probe = new StubExecutableProbe();
@@ -561,9 +561,13 @@ public sealed class AcpSetupWizardViewModelTests
         // Act
         await wizard.GoNextCommand.ExecuteAsync(null);
 
-        // Assert
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
-        Assert.Null(wizard.AdapterProbe);
+        // Assert: selecting a missing-runtime agent no longer holds the walk on step 1. The component
+        // step is where the runtime is installed, so the wizard advances there and CanAdvanceFromComponentSetup
+        // is what keeps a still-missing runtime from moving on.
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+        Assert.True(wizard.SelectedAgent.IsMissing);
+        Assert.Equal(!hasToolchain, wizard.SelectedAgent.IsToolchainMissing);
+        Assert.Equal(hasToolchain, wizard.SelectedAgent.CanInstallHere);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
     }
 
@@ -584,7 +588,7 @@ public sealed class AcpSetupWizardViewModelTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task AgentSelection_WithoutInitialDetection_ChecksRuntimeAndToolchainBeforeAdvancing(bool hasToolchain)
+    public async Task AgentSelection_WithoutInitialDetection_ChecksRuntimeThenAdvancesToComponentSetup(bool hasToolchain)
     {
         // Arrange
         var probe = new StubExecutableProbe();
@@ -599,12 +603,13 @@ public sealed class AcpSetupWizardViewModelTests
         // Act
         await wizard.GoNextCommand.ExecuteAsync(null);
 
-        // Assert
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        // Assert: entering the wizard without a sweep still probes the runtime on advance, but a missing
+        // runtime no longer blocks step 1 — it advances to the component step, whose own gate holds until
+        // the runtime is installed there.
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
         Assert.True(wizard.SelectedAgent.IsMissing);
         Assert.Equal(!hasToolchain, wizard.SelectedAgent.IsToolchainMissing);
         Assert.Equal(hasToolchain, wizard.SelectedAgent.CanInstallHere);
-        Assert.Null(wizard.AdapterProbe);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
         Assert.False(wizard.TestCommand.CanExecute(null));
     }
