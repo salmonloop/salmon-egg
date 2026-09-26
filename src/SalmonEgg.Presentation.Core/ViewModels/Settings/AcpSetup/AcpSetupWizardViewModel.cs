@@ -679,6 +679,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                         row.RuntimeToolchain = toolchain;
                         OnPropertyChanged(nameof(StepPositionText));
                         ReportInstallFailure(install);
+                        RequestAdapterReprobeAfterRuntimeChange();
                     })
                     .ConfigureAwait(false);
             },
@@ -715,6 +716,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
                     row.RuntimeToolchain = toolchain;
                     ReportToolchainInstallFailure(install);
+                    RequestAdapterReprobeAfterRuntimeChange();
                 }).ConfigureAwait(false);
             },
             CancellationToken.None);
@@ -972,7 +974,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     private bool CanGoNext() => !IsBusy && Step switch
     {
-        AcpSetupWizardStep.AgentSelection => SelectedAgent is { IsChecking: false } && !IsRuntimeInstallRequired,
+        // Selecting an agent is all this step gates. A missing runtime does not block leaving it: the
+        // runtime is installed on the component step alongside the adapter, and CanAdvanceFromComponentSetup
+        // is where a still-missing runtime holds the walk.
+        AcpSetupWizardStep.AgentSelection => SelectedAgent is { IsChecking: false },
         AcpSetupWizardStep.ComponentSetup => CanAdvanceFromComponentSetup(),
         AcpSetupWizardStep.Parameters => true,
         AcpSetupWizardStep.Test => IsTestSuccessful,
@@ -1016,14 +1021,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 row.Runtime = runtime;
                 OnPropertyChanged(nameof(StepPositionText));
 
-                // PrepareComponentSetup resolves the adapter, and whether an absent runtime blocks the walk
-                // is a fact about that adapter. Preparing first is what lets the gate below see it.
+                // PrepareComponentSetup resolves the adapter. A missing runtime no longer stops the walk
+                // here — the component step owns installing it — so this proceeds to that step, where the
+                // runtime section offers the install and CanAdvanceFromComponentSetup holds the line until
+                // it succeeds.
                 PrepareComponentSetup();
-                if (IsRuntimeInstallRequired)
-                {
-                    return;
-                }
-
                 adapter = SelectedAdapter;
                 if (adapter is not null)
                 {
@@ -1700,6 +1702,25 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         }
 
         _ = DetectAdapterCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>
+    /// After a runtime or its toolchain is installed on the component step, re-probes the adapter so its
+    /// own verdict reflects the toolchain that install may have just provided.
+    /// </summary>
+    /// <remarks>
+    /// The adapter was probed on entry to the step, when the toolchain could still have been absent — an
+    /// npx adapter probed then reads its package manager missing and stays that way. Installing the runtime
+    /// toolchain is exactly what supplies that manager, so the adapter's stale "missing toolchain" verdict
+    /// would otherwise keep its install refused. Deferred through the same flag a selection change uses,
+    /// because this runs inside the install operation while the wizard is still busy.
+    /// </remarks>
+    private void RequestAdapterReprobeAfterRuntimeChange()
+    {
+        if (IsOnComponentSetup && SelectedAdapter is not null)
+        {
+            _adapterProbeRequested = true;
+        }
     }
 
     private bool CanRunOperation() => !IsBusy;

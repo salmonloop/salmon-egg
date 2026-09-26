@@ -780,6 +780,30 @@
   <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
     <value>重新检测</value>
   </data>
+  <data name="AcpSetup_RuntimeSectionTitle.Text" xml:space="preserve">
+    <value>Agent 运行时</value>
+  </data>
+  <data name="AcpSetup_AdapterSectionTitle.Text" xml:space="preserve">
+    <value>ACP 适配器</value>
+  </data>
+  <data name="AcpSetup_RuntimeReadyBar.Title" xml:space="preserve">
+    <value>运行时已就绪</value>
+  </data>
+  <data name="AcpSetup_RuntimeReadyBar.Message" xml:space="preserve">
+    <value>已在本机找到 Agent 运行时，可以进入下一步。</value>
+  </data>
+  <data name="AcpSetup_RuntimeMissingBar.Title" xml:space="preserve">
+    <value>未找到 Agent 运行时</value>
+  </data>
+  <data name="AcpSetup_RuntimeMissingBar.Message" xml:space="preserve">
+    <value>在下方安装 Agent 运行时，或填入已有安装的路径，然后继续。</value>
+  </data>
+  <data name="AcpSetup_RuntimeUndeterminedBar.Title" xml:space="preserve">
+    <value>无法确认运行时是否已安装</value>
+  </data>
+  <data name="AcpSetup_RuntimeUndeterminedBar.Message" xml:space="preserve">
+    <value>检测没能得出结论，不代表运行时不存在。可以继续，由连接测试来验证。</value>
+  </data>
   <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
     <value>检查组件</value>
   </data>

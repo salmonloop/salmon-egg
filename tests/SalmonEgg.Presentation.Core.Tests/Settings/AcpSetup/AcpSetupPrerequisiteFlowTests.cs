@@ -41,11 +41,13 @@ public sealed class AcpSetupPrerequisiteFlowTests
         var row = Assert.Single(wizard.Agents);
         wizard.SelectedAgent = row;
 
-        // Act / Assert: each next action is offered only after its prerequisite is verified.
+        // Act / Assert: selecting a missing-runtime agent advances to the component step, where the
+        // runtime is installed. Each next action is offered only after its prerequisite is verified.
         await wizard.GoNextCommand.ExecuteAsync(null);
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
         Assert.True(row.CanInstallToolchainHere);
         Assert.False(row.CanInstallHere);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
         row.RequestInstall();
         Assert.Empty(operations);
 
@@ -55,30 +57,29 @@ public sealed class AcpSetupPrerequisiteFlowTests
         Assert.False(row.CanInstallToolchainHere);
         Assert.True(row.CanInstallHere);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
-        Assert.Null(wizard.AdapterProbe);
 
         row.RequestInstall();
         Assert.False(wizard.IsBusy);
         Assert.True(row.IsInstalled);
-        Assert.True(wizard.GoNextCommand.CanExecute(null));
         Assert.Equal(new[] { "Node.js", agent.Runtime.Id }, operations);
-        Assert.Null(wizard.AdapterProbe);
 
-        await wizard.GoNextCommand.ExecuteAsync(null);
+        // With the runtime present, the adapter section of the same step decides whether it is done.
         if (separateAdapter)
         {
-            Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
             Assert.True(wizard.IsAdapterMissing);
             Assert.False(wizard.GoNextCommand.CanExecute(null));
             await wizard.InstallAdapterCommand.ExecuteAsync(null);
             Assert.True(wizard.IsAdapterInstalled);
             Assert.Equal(new[] { "Node.js", agent.Runtime.Id, adapter.Component.Id }, operations);
+            Assert.True(wizard.GoNextCommand.CanExecute(null));
             await wizard.GoNextCommand.ExecuteAsync(null);
         }
         else
         {
             Assert.True(wizard.IsAdapterBuiltIn);
             Assert.Equal(new[] { "Node.js", agent.Runtime.Id }, operations);
+            Assert.True(wizard.GoNextCommand.CanExecute(null));
+            await wizard.GoNextCommand.ExecuteAsync(null);
         }
 
         Assert.Equal(AcpSetupWizardStep.Test, wizard.Step);
@@ -92,7 +93,7 @@ public sealed class AcpSetupPrerequisiteFlowTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task InstallAgent_UnverifiedInstall_KeepsAdapterStepBlocked(bool installerSucceeded)
+    public async Task InstallAgent_UnverifiedInstall_KeepsComponentStepBlocked(bool installerSucceeded)
     {
         // Arrange
         var probe = new StubExecutableProbe();
@@ -102,8 +103,10 @@ public sealed class AcpSetupPrerequisiteFlowTests
         var wizard = CreateWizard(probe, installer);
         wizard.SelectedAgent = Assert.Single(wizard.Agents);
         await wizard.GoNextCommand.ExecuteAsync(null);
+        // The missing runtime lands on the component step, where its install lives.
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
 
-        // Act
+        // Act: the install leaves the runtime unverified (the probe still reports it absent).
         wizard.SelectedAgent.RequestInstall();
         await wizard.GoNextCommand.ExecuteAsync(null);
 
@@ -111,8 +114,7 @@ public sealed class AcpSetupPrerequisiteFlowTests
         Assert.Single(installer.InstalledComponentIds);
         Assert.True(wizard.SelectedAgent.IsMissing);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
-        Assert.Null(wizard.AdapterProbe);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
     }
 
     [Fact]
@@ -245,7 +247,7 @@ public sealed class AcpSetupPrerequisiteFlowTests
     }
 
     [Fact]
-    public async Task GoNext_AgentDisappearedSinceDetection_StaysAtItsInstallAction()
+    public async Task GoNext_AgentDisappearedSinceDetection_AdvancesToItsComponentInstall()
     {
         // Arrange
         var probe = new StubExecutableProbe();
@@ -259,12 +261,12 @@ public sealed class AcpSetupPrerequisiteFlowTests
         // Act
         await wizard.GoNextCommand.ExecuteAsync(null);
 
-        // Assert
+        // Assert: the runtime is installed on the component step, so a runtime that vanished since the
+        // sweep advances there and its install waits, rather than blocking the selection step.
         Assert.True(wizard.SelectedAgent.IsMissing);
         Assert.True(wizard.SelectedAgent.CanInstallHere);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
-        Assert.Null(wizard.AdapterProbe);
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
     }
 
     [Fact]
@@ -429,7 +431,7 @@ public sealed class AcpSetupPrerequisiteFlowTests
     }
 
     [Fact]
-    public async Task GoNext_BundledAdapterWithMissingCustomRuntime_RemainsOnSelection()
+    public async Task GoNext_BundledAdapterWithMissingCustomRuntime_BlocksAtComponentStep()
     {
         // Arrange
         var probe = new StubExecutableProbe();
@@ -443,16 +445,15 @@ public sealed class AcpSetupPrerequisiteFlowTests
         await wizard.DetectAgentsCommand.ExecuteAsync(null);
         Assert.True(row.IsMissing);
         Assert.Contains(row.CustomCommand, probe.ProbedCommands);
-        probe.ProbedCommands.Clear();
 
         // Act
         await wizard.GoNextCommand.ExecuteAsync(null);
 
-        // Assert: a bundled default must not override the user's explicit runtime choice.
+        // Assert: a bundled default must not override the user's explicit runtime choice. The walk
+        // reaches the component step, but the runtime section holds Next until the chosen path resolves.
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+        Assert.True(row.IsMissing);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
-        Assert.Null(wizard.AdapterProbe);
-        Assert.Empty(probe.ProbedCommands);
     }
 
     /// <summary>
@@ -460,24 +461,25 @@ public sealed class AcpSetupPrerequisiteFlowTests
     /// </summary>
     /// <remarks>
     /// CanExecute is only re-read when something raises the change notification, so a gate reading a fact
-    /// nobody announces keeps showing the verdict it was last told. The custom-path box shares the
-    /// selection step with Next and writes on every keystroke, outside any operation whose completion
+    /// nobody announces keeps showing the verdict it was last told. The runtime path box shares the
+    /// component step with Next and writes on every keystroke, outside any operation whose completion
     /// would re-notify — so a Next left grey here has nothing to correct it, and the user faces a path the
     /// wizard would accept beside a button saying it would not. Asserting through CanExecuteChanged rather
     /// than a bare CanExecute call is the difference that matters: reading the property directly recomputes
     /// it and would pass no matter what the view had been told.
     /// </remarks>
     [Fact]
-    public async Task GoNext_CustomPathSuppliedForAMissingRuntime_ReOffersTheWalk()
+    public async Task ComponentStep_CustomPathSuppliedForAMissingRuntime_ReOffersTheWalk()
     {
-        // Arrange: nothing on PATH, so the probe positively reports the runtime absent and Next is withheld.
+        // Arrange: nothing on PATH, so the probe positively reports the runtime absent. Selecting the
+        // agent advances to the component step, where the runtime section holds Next until it resolves.
         var wizard = CreateWizard(
             new StubExecutableProbe(),
             agents: [AcpSetupWizardFixtures.Agent(adapters: AcpSetupWizardFixtures.BuiltInAdapter())]);
         var row = Assert.Single(wizard.Agents);
         wizard.SelectedAgent = row;
         await wizard.GoNextCommand.ExecuteAsync(null);
-        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
         Assert.True(row.IsMissing);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
 
