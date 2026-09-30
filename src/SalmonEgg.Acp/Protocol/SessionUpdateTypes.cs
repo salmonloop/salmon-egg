@@ -745,6 +745,23 @@ namespace SalmonEgg.Acp.Protocol
         public string? ToolCallId { get; init; }
 
         /// <summary>
+        /// Programmatic name of the invoked tool, such as <c>read_file</c> (optional).
+        /// </summary>
+        /// <remarks>
+        /// Stabilized in ACP v1 and v2 by the Tool Call Name RFD. The spelling is opaque: ACP assigns no
+        /// behavioral or authorization semantics to it, and the name may be reused by many calls, so it
+        /// identifies the tool rather than the invocation (<see cref="ToolCallId"/> does that) and is
+        /// distinct from the human-readable <see cref="Title"/>.
+        /// <para>
+        /// Null and absent both mean "no name reported"; neither the v1 nor the v2 update semantics
+        /// require a client to distinguish them, and nothing in this SDK merges the field into
+        /// accumulated state, so presence is deliberately not tracked here.
+        /// </para>
+        /// </remarks>
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        /// <summary>
         /// Tool call kind.
         /// </summary>
         [JsonPropertyName("kind")]
@@ -804,6 +821,16 @@ namespace SalmonEgg.Acp.Protocol
         /// <param name="locations">List of file locations.</param>
         /// <param name="rawInput">Raw input parameters.</param>
         /// <param name="rawOutput">Raw output result.</param>
+        /// <remarks>
+        /// <see cref="Name"/> is deliberately not a parameter: adding one would change this published
+        /// constructor's signature, which is binary-breaking for the shipped package even though an
+        /// optional parameter looks source-compatible. Set it through the init-only property.
+        /// </remarks>
+        /// <remarks>
+        /// <see cref="Name"/> is deliberately not a parameter: adding one would change this published
+        /// constructor's signature, which is binary-breaking for the shipped package even though an
+        /// optional parameter looks source-compatible. Set it through the init-only property.
+        /// </remarks>
         public ToolCallUpdate(
             string? toolCallId = null,
             ToolCallKind? kind = null,
@@ -892,6 +919,24 @@ namespace SalmonEgg.Acp.Protocol
         /// </summary>
         [JsonPropertyName("toolCallId")]
         public string? ToolCallId { get; init; }
+
+        /// <summary>
+        /// Programmatic name of the invoked tool, such as <c>read_file</c> (optional).
+        /// </summary>
+        /// <remarks>
+        /// Stabilized in ACP v1 and v2 by the Tool Call Name RFD, on the same upsert shape both versions
+        /// share. The spelling is opaque: ACP assigns no behavioral or authorization semantics to it, and
+        /// the name may be reused by many calls, so it identifies the tool rather than the invocation
+        /// (<see cref="ToolCallId"/> does that) and is distinct from the human-readable <see cref="Title"/>.
+        /// <para>
+        /// Null and absent both mean "no name reported". The versions differ on what an explicit null
+        /// means to a consumer that merges updates — v2 reads it as "clear the name", v1 cannot clear a
+        /// previously reported one — but neither difference is observable here, because this SDK does not
+        /// merge the field into accumulated state. Track presence only at such a merge point.
+        /// </para>
+        /// </remarks>
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
 
         /// <summary>
         /// Tool call kind.
