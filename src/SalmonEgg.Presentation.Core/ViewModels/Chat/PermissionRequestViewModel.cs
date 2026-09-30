@@ -25,6 +25,15 @@ public partial class PermissionRequestViewModel : ObservableObject
     public string ToolCallJson { get; set; } = string.Empty;
     internal string? ToolCallId { get; set; }
     internal string? RequestTitle { get; set; }
+
+    /// <summary>
+    /// The agent's programmatic name for the tool being authorized (for example run_command).
+    /// Null when the agent reported none; the field is optional in both ACP versions.
+    /// </summary>
+    public string? ToolCallName { get; set; }
+
+    public bool HasToolCallName => !string.IsNullOrWhiteSpace(ToolCallName);
+
     internal ConversationBindingSlice? Binding { get; set; }
     internal Task? BindingCancellationTask { get; set; }
     internal bool BindingCancellationAttempted { get; set; }
@@ -45,6 +54,7 @@ public partial class PermissionRequestViewModel : ObservableObject
     {
         if (bindingChanged) BindingCancellationAttempted = true;
         ToolCallId = null;
+        ToolCallName = null;
         Title = title;
         Description = description;
         if (_showsCancellationRetry)

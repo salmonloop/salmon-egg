@@ -457,10 +457,22 @@
                 Visibility="{x:Bind HasPendingPermissionRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                 x:Uid="ToolCallPillPermissionInfoBar">
                 <InfoBar.Content>
-                    <ItemsControl
-                        ItemsSource="{x:Bind PermissionOptions, Mode=OneWay}"
-                        ItemTemplate="{StaticResource PermissionOptionTemplate}"
-                        Margin="0,4,0,0" />
+                    <StackPanel>
+                        <!-- Secondary label inside the approval: which tool the user is authorizing.
+                             Opaque and unlocalized by design, so rendered verbatim with no resource.
+                             The pill header cannot carry it reliably - an agent asks for permission
+                             before it reports the tool call, so the row may not exist yet. -->
+                        <TextBlock
+                            Text="{x:Bind PendingPermissionRequest.ToolCallName, Mode=OneWay}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextTrimming="CharacterEllipsis"
+                            Visibility="{x:Bind HasPermissionToolName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        <ItemsControl
+                            ItemsSource="{x:Bind PermissionOptions, Mode=OneWay}"
+                            ItemTemplate="{StaticResource PermissionOptionTemplate}"
+                            Margin="0,4,0,0" />
+                    </StackPanel>
                 </InfoBar.Content>
             </InfoBar>
         </StackPanel>

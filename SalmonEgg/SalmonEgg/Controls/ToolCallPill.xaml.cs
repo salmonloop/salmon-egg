@@ -208,6 +208,8 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     public bool HasPendingPermissionRequest => PendingPermissionRequest != null;
 
+    public bool HasPermissionToolName => PendingPermissionRequest?.HasToolCallName == true;
+
     public IReadOnlyList<PermissionOptionViewModel> PermissionOptions
     {
         get
@@ -260,6 +262,7 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
         NotifyDisplayChanged();
         OnPropertyChanged(nameof(HasPendingPermissionRequest));
         OnPropertyChanged(nameof(PermissionOptions));
+        OnPropertyChanged(nameof(HasPermissionToolName));
         DataContextChanged += ToolCallPill_DataContextChanged;
         Loaded += ToolCallPill_Loaded;
     }
@@ -289,6 +292,7 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
         {
             pill.OnPropertyChanged(nameof(HasPendingPermissionRequest));
             pill.OnPropertyChanged(nameof(PermissionOptions));
+            pill.OnPropertyChanged(nameof(HasPermissionToolName));
         }
     }
 

@@ -47,6 +47,40 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task PermissionRequest_CarriesTheAgentsProgrammaticToolName()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+
+        peer.Request("permission", "remote-1", "tool-1", toolName: "run_command");
+        await dispatcher.RunUntilIdleAsync();
+
+        // Approving "Run tests" without knowing it is run_command is the gap the RFD closes: the
+        // title is human copy and two different tools can produce it.
+        var request = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+        Assert.Equal("run_command", request.ToolCallName);
+        Assert.True(request.HasToolCallName);
+    }
+
+    [Fact]
+    public async Task PermissionRequest_WithoutAToolName_LeavesTheLabelUnset()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var peer = await PermissionUiPeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, peer);
+
+        peer.Request("permission", "remote-1", "tool-1");
+        await dispatcher.RunUntilIdleAsync();
+
+        var request = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
+        Assert.Null(request.ToolCallName);
+        Assert.False(request.HasToolCallName);
+    }
+
+    [Fact]
     public async Task PermissionRequest_OldCommandAfterConnectionReplacement_CannotAnswerReusedId()
     {
         // Arrange
@@ -747,8 +781,15 @@ public partial class ChatViewModelTests
 
         public Task<bool> DisconnectClientAsync() => _client.DisconnectAsync();
 
-        public void Request(string id, string sessionId, string toolCallId)
-            => Receive($$$"""{"jsonrpc":"2.0","id":"{{{id}}}","method":"session/request_permission","params":{"sessionId":"{{{sessionId}}}","toolCall":{"toolCallId":"{{{toolCallId}}}","title":"Run tests"},"options":[{"optionId":"allow","name":"Allow once","kind":"allow_once"}]}}""");
+        public void Request(string id, string sessionId, string toolCallId, string? toolName = null)
+        {
+            // ACP carries the programmatic tool name on the same ToolCallUpdate the permission request
+            // already carries, so the only difference between a named and an unnamed request is this.
+            var nameJson = toolName is null ? string.Empty : "\"name\":\"" + toolName + "\",";
+            Receive("{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"method\":\"session/request_permission\",\"params\":{"
+                + "\"sessionId\":\"" + sessionId + "\",\"toolCall\":{\"toolCallId\":\"" + toolCallId + "\"," + nameJson
+                + "\"title\":\"Run tests\"},\"options\":[{\"optionId\":\"allow\",\"name\":\"Allow once\",\"kind\":\"allow_once\"}]}}");
+        }
 
         public void CancelPermission(string id)
             => Receive($$$"""{"jsonrpc":"2.0","method":"$/cancel_request","params":{"requestId":"{{{id}}}"}}""");
