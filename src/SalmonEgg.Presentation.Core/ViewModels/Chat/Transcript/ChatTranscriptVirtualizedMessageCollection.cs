@@ -434,6 +434,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                && string.Equals(oldSnapshot.AudioMimeType ?? string.Empty, newSnapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ProtocolMessageId, newSnapshot.ProtocolMessageId, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallId, newSnapshot.ToolCallId, StringComparison.Ordinal)
+               && string.Equals(oldSnapshot.ToolCallName, newSnapshot.ToolCallName, StringComparison.Ordinal)
                && oldSnapshot.ToolCallKind == newSnapshot.ToolCallKind
                && oldSnapshot.ToolCallStatus == newSnapshot.ToolCallStatus
                && string.Equals(oldSnapshot.ToolCallJson, newSnapshot.ToolCallJson, StringComparison.Ordinal)

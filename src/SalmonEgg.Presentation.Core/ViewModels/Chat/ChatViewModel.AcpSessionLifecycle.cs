@@ -2685,6 +2685,7 @@ public partial class ChatViewModel
             Title = toolCall.Title ?? string.Empty,
             TextContent = ResolveToolCallOutput(toolCall.RawOutput, toolCall.Content, string.Empty),
             ToolCallId = toolCall.ToolCallId,
+            ToolCallName = toolCall.Name,
             ToolCallKind = ToolCallContentSnapshots.FormatKind(toolCall.Kind),
             ToolCallStatus = ToolCallContentSnapshots.FormatStatus(toolCall.Status),
             ToolCallJson = ResolveToolCallPayload(toolCall.RawInput, toolCall.Content),
@@ -2739,6 +2740,10 @@ public partial class ChatViewModel
                 AudioMimeType = existing.AudioMimeType,
                 ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
+                // v1 cannot clear a reported name, so an absent-or-null patch keeps what the first
+                // report established. v2 reads an explicit null as a clear; that divergence becomes
+                // observable only once a v2 connection is served.
+                ToolCallName = toolCallStatusUpdate.Name ?? existing.ToolCallName,
                 ToolCallKind = toolCallStatusUpdate.Kind is null
                     ? existing.ToolCallKind
                     : ToolCallContentSnapshots.FormatKind(toolCallStatusUpdate.Kind),
@@ -2773,6 +2778,7 @@ public partial class ChatViewModel
             Title = toolCallStatusUpdate.Title ?? string.Empty,
             TextContent = ResolveToolCallOutput(toolCallStatusUpdate.RawOutput, toolCallStatusUpdate.Content, string.Empty),
             ToolCallId = toolCallStatusUpdate.ToolCallId,
+            ToolCallName = toolCallStatusUpdate.Name,
             ToolCallKind = ToolCallContentSnapshots.FormatKind(toolCallStatusUpdate.Kind),
             ToolCallStatus = ToolCallContentSnapshots.FormatStatus(toolCallStatusUpdate.Status),
             ToolCallJson = ResolveToolCallPayload(toolCallStatusUpdate.RawInput, toolCallStatusUpdate.Content),
@@ -2930,6 +2936,7 @@ public partial class ChatViewModel
                 AudioMimeType = existing.AudioMimeType,
                 ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
+                ToolCallName = existing.ToolCallName,
                 ToolCallKind = existing.ToolCallKind,
                 ToolCallStatus = SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled.ToString(),
                 ToolCallJson = existing.ToolCallJson,

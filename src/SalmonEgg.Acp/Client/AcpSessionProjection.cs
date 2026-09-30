@@ -143,6 +143,7 @@ internal sealed class AcpSessionProjection
         {
             writer.WriteStartObject();
             writer.WriteString("toolCallId", toolCallId);
+            writer.WriteString("name", state.Name);
             writer.WriteString("title", state.Title);
             writer.WriteString("kind", state.Kind?.Value);
             writer.WriteString("status", state.Status?.Value);
@@ -215,6 +216,7 @@ internal sealed class AcpSessionProjection
     private void ApplyTool(ToolCallStatusUpdate update, JsonElement payload)
     {
         var tool = GetTool(update.ToolCallId!);
+        if (payload.TryGetProperty("name", out _)) tool.Name = update.Name;
         if (payload.TryGetProperty("title", out _)) tool.Title = update.Title;
         if (payload.TryGetProperty("kind", out _)) tool.Kind = update.Kind;
         if (payload.TryGetProperty("status", out _)) tool.Status = update.Status;
@@ -334,6 +336,7 @@ internal sealed class AcpSessionProjection
 
     private sealed class ToolState(string id)
     {
+        internal string? Name { get; set; }
         internal string? Title { get; set; }
         internal ToolCallKind? Kind { get; set; }
         internal ToolCallStatus? Status { get; set; }
@@ -344,7 +347,7 @@ internal sealed class AcpSessionProjection
         internal JsonElement? Meta { get; set; }
         internal Dictionary<string, JsonElement> ExtensionData { get; } = new(StringComparer.Ordinal);
         internal AcpToolCallSnapshot Snapshot()
-            => new(id, Title, Kind, Status, Content.ToImmutableArray(), Locations.ToImmutableArray(), RawInput, RawOutput,
+            => new(id, Name, Title, Kind, Status, Content.ToImmutableArray(), Locations.ToImmutableArray(), RawInput, RawOutput,
                 Meta, ExtensionData.ToImmutableDictionary(StringComparer.Ordinal));
     }
 

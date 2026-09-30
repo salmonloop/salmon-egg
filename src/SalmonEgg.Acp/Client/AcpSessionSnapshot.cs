@@ -139,6 +139,7 @@ public sealed class AcpToolCallSnapshot
 
     internal AcpToolCallSnapshot(
         string toolCallId,
+        string? name,
         string? title,
         ToolCallKind? kind,
         ToolCallStatus? status,
@@ -150,6 +151,7 @@ public sealed class AcpToolCallSnapshot
         ImmutableDictionary<string, JsonElement> extensionData)
     {
         ToolCallId = toolCallId;
+        Name = name;
         Title = title;
         Kind = kind;
         Status = status;
@@ -163,6 +165,8 @@ public sealed class AcpToolCallSnapshot
 
     /// <summary>The tool call id supplied by the Agent.</summary>
     public string ToolCallId { get; }
+    /// <summary>The latest programmatic tool name, or null when unknown or cleared.</summary>
+    public string? Name { get; }
     /// <summary>The latest title, or null when unknown or cleared.</summary>
     public string? Title { get; }
     /// <summary>The latest kind, preserving unknown protocol values.</summary>

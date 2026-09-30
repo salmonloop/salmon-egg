@@ -1329,6 +1329,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             AudioMimeType = source.AudioMimeType,
             ProtocolMessageId = source.ProtocolMessageId,
             ToolCallId = source.ToolCallId,
+            ToolCallName = source.ToolCallName,
             ToolCallKind = source.ToolCallKind,
             ToolCallStatus = source.ToolCallStatus,
             ToolCallJson = source.ToolCallJson,

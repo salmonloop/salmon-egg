@@ -225,6 +225,13 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string? ToolCallId { get; set; }
 
         /// <summary>
+        /// Programmatic name of the invoked tool reported by the agent (for example read_file).
+        /// Distinct from <see cref="Title"/>, which is human-readable copy for one invocation.
+        /// Null when the agent reported none; the field is optional in both ACP versions.
+        /// </summary>
+        public string? ToolCallName { get; set; }
+
+        /// <summary>
         /// Open ACP tool-call kind wire value (for example read, execute).
         /// </summary>
         public string? ToolCallKind { get; set; }

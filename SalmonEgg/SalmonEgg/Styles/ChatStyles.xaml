@@ -180,6 +180,7 @@
                                            CopyCommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}"
                                            ReportCommand="{x:Bind ReportContentCommand}"
                                            ToolTitle="{x:Bind Title, Mode=OneWay}"
+                                           ToolName="{x:Bind ToolCallName, Mode=OneWay}"
                                            ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
                                            Status="{x:Bind ToolCallStatus, Mode=OneWay}"
                                            IsInProgress="{x:Bind IsToolCallInProgress, Mode=OneWay}"
