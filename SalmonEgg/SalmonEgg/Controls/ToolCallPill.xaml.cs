@@ -32,6 +32,18 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
             typeof(ToolCallPill),
             new PropertyMetadata(null, OnDisplayInputChanged));
 
+    /// <summary>
+    /// The agent's programmatic name for the invoked tool (for example read_file). Shown as a
+    /// secondary label under the title, per the ACP Tool Call Name RFD's guidance to keep
+    /// <see cref="ToolTitle"/> primary. Optional: agents may omit it.
+    /// </summary>
+    public static readonly DependencyProperty ToolNameProperty =
+        DependencyProperty.Register(
+            nameof(ToolName),
+            typeof(string),
+            typeof(ToolCallPill),
+            new PropertyMetadata(string.Empty, OnDisplayInputChanged));
+
     public static readonly DependencyProperty StatusProperty =
         DependencyProperty.Register(nameof(Status), typeof(ToolCallStatus?), typeof(ToolCallPill), new PropertyMetadata(null, OnDisplayInputChanged));
 
@@ -100,6 +112,12 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     {
         get => (ToolCallKind?)GetValue(ToolKindProperty);
         set => SetValue(ToolKindProperty, value);
+    }
+
+    public string ToolName
+    {
+        get => (string)GetValue(ToolNameProperty);
+        set => SetValue(ToolNameProperty, value);
     }
 
     public ToolCallStatus? Status
@@ -184,6 +202,8 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
 
+    public bool HasToolName => !string.IsNullOrWhiteSpace(ToolName);
+
     public bool HasDisplayItems => DetailItems?.Count > 0;
 
     public bool HasPendingPermissionRequest => PendingPermissionRequest != null;
@@ -211,8 +231,20 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     {
         get
         {
-            var name = DisplayToolName;
-            return HasSummary ? $"{name}, {Summary}" : name;
+            // The programmatic tool name is part of what the row says, so a screen reader has to reach
+            // it too: it is the only place the user learns read_file and grep are different tools.
+            var parts = new List<string>(3) { DisplayToolName };
+            if (HasToolName)
+            {
+                parts.Add(ToolName);
+            }
+
+            if (HasSummary)
+            {
+                parts.Add(Summary);
+            }
+
+            return string.Join(", ", parts);
         }
     }
 
@@ -282,6 +314,7 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     private void NotifyDisplayChanged()
     {
         OnPropertyChanged(nameof(DisplayToolName));
+        OnPropertyChanged(nameof(HasToolName));
         OnPropertyChanged(nameof(HasSummary));
         OnPropertyChanged(nameof(HasDisplayItems));
         OnPropertyChanged(nameof(HasRawInput));

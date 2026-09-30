@@ -129,6 +129,7 @@ public sealed class OutgoingUserMessageProjector
             AudioMimeType = snapshot.AudioMimeType,
             ProtocolMessageId = snapshot.ProtocolMessageId,
             ToolCallId = snapshot.ToolCallId,
+            ToolCallName = snapshot.ToolCallName,
             ToolCallKind = snapshot.ToolCallKind,
             ToolCallStatus = snapshot.ToolCallStatus,
             ToolCallJson = snapshot.ToolCallJson,

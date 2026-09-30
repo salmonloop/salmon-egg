@@ -2653,6 +2653,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             && string.Equals(viewModel.AudioData ?? string.Empty, snapshot.AudioData ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.AudioMimeType ?? string.Empty, snapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallId, snapshot.ToolCallId, StringComparison.Ordinal)
+            && string.Equals(viewModel.ToolCallName, snapshot.ToolCallName, StringComparison.Ordinal)
             && viewModel.ToolCallKind == ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind)
             && viewModel.ToolCallStatus == ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus)
             && string.Equals(viewModel.ToolCallJson, snapshot.ToolCallJson, StringComparison.Ordinal)
@@ -2697,6 +2698,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             AudioMimeType = snapshot.AudioMimeType,
             ProtocolMessageId = snapshot.ProtocolMessageId,
             ToolCallId = snapshot.ToolCallId,
+            ToolCallName = snapshot.ToolCallName,
             ToolCallKind = snapshot.ToolCallKind,
             ToolCallStatus = snapshot.ToolCallStatus,
             ToolCallJson = snapshot.ToolCallJson,

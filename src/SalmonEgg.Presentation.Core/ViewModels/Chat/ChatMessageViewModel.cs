@@ -71,6 +71,14 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
         private string? _toolCallId;
 
+        /// <summary>
+        /// The agent's programmatic name for the invoked tool (for example read_file). Rendered as a
+        /// secondary label under the title; null when the agent reported none.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
+        private string? _toolCallName;
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
         private SalmonEgg.Acp.Tool.ToolCallKind? _toolCallKind;
@@ -439,6 +447,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 AudioData = snapshot.AudioData ?? string.Empty;
                 AudioMimeType = snapshot.AudioMimeType ?? string.Empty;
                 ToolCallId = snapshot.ToolCallId;
+                ToolCallName = snapshot.ToolCallName;
                 ToolCallKind = ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind);
                 ToolCallStatus = ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus);
                 ToolCallJson = snapshot.ToolCallJson;

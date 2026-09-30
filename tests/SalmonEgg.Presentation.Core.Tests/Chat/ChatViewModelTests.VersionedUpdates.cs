@@ -363,4 +363,42 @@ public partial class ChatViewModelTests
         }
         public void Dispose() => Service.Dispose();
     }
+
+    [Fact]
+    public async Task VersionedUpdates_ToolCallName_ReachesTheTranscriptAndSurvivesLaterPatches()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+
+        peer.Update("""{"sessionUpdate":"tool_call_update","toolCallId":"t","name":"read_file","title":"Reading config","status":"in_progress"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+        var tool = Assert.Single((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")!.Value.Transcript);
+        Assert.Equal("read_file", tool.ToolCallName);
+        Assert.Equal("Reading config", tool.Title);
+
+        // A patch that omits the name means "no change" in both v1 and v2, so the label must survive
+        // the stream of later updates instead of blinking out on every status change.
+        peer.Update("""{"sessionUpdate":"tool_call_update","toolCallId":"t","status":"completed"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+        Assert.Equal("read_file", Assert.Single((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")!.Value.Transcript).ToolCallName);
+    }
+
+    [Fact]
+    public async Task VersionedUpdates_ToolCallWithoutAName_LeavesTheLabelUnset()
+    {
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+
+        peer.Update("""{"sessionUpdate":"tool_call_update","toolCallId":"t","title":"Reading config","status":"completed"}""");
+        await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+        Assert.Null(Assert.Single((await fixture.ChatStore.GetCurrentStateAsync()).ResolveContentSlice("conv-1")!.Value.Transcript).ToolCallName);
+    }
 }
