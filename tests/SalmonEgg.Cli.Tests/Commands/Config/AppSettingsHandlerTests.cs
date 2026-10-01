@@ -47,6 +47,10 @@ public sealed class AppSettingsHandlerTests
         Assert.Equal(CliExitCodes.Success, exitCode);
         Assert.Contains("theme: System", fixture.Output.Lines, StringComparer.Ordinal);
         Assert.Contains("cache_retention_days: 7", fixture.Output.Lines, StringComparer.Ordinal);
+        Assert.Contains(
+            $"{AppSettingValueCatalog.SidebarConversationGroupingKey}: {AppSettingValueCatalog.DefaultSidebarConversationGrouping}",
+            fixture.Output.Lines,
+            StringComparer.Ordinal);
     }
 
     [Fact]
@@ -63,6 +67,65 @@ public sealed class AppSettingsHandlerTests
         // 其余字段保持默认：单字段更新不得顺带改写别的设置。
         Assert.True(reloaded.IsAnimationEnabled);
         Assert.Equal(7, reloaded.CacheRetentionDays);
+    }
+
+    [Theory]
+    [InlineData(AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(AppSettingValueCatalog.StatusConversationGrouping)]
+    public async Task SetAsync_ValidSidebarGrouping_PersistsAndPreservesExpansionPreferences(string grouping)
+    {
+        // Arrange
+        using var fixture = new SettingsFixture();
+        fixture.SeedAppYaml(
+            """
+            schema_version: 3
+            theme: Dark
+            sidebar_attention_group_expanded: false
+            sidebar_working_group_expanded: false
+            sidebar_other_group_expanded: true
+            """);
+
+        // Act
+        var exitCode = await fixture.Handler.SetAsync(
+            AppSettingValueCatalog.SidebarConversationGroupingKey,
+            grouping,
+            TestContext.Current.CancellationToken);
+        var reloaded = await fixture.AppSettings.LoadAsync();
+
+        // Assert
+        Assert.Equal(CliExitCodes.Success, exitCode);
+        Assert.Equal(grouping, reloaded.SidebarConversationGrouping);
+        Assert.Equal("Dark", reloaded.Theme);
+        Assert.False(reloaded.SidebarAttentionGroupExpanded);
+        Assert.False(reloaded.SidebarWorkingGroupExpanded);
+        Assert.True(reloaded.SidebarOtherGroupExpanded);
+    }
+
+    [Theory]
+    [InlineData("Unknown")]
+    [InlineData("status")]
+    public async Task SetAsync_InvalidSidebarGrouping_RejectsWithoutChangingExistingFile(string grouping)
+    {
+        // Arrange
+        using var fixture = new SettingsFixture();
+        const string originalYaml = """
+            schema_version: 3
+            sidebar_conversation_grouping: Status
+            """;
+        fixture.SeedAppYaml(originalYaml);
+
+        // Act
+        var exitCode = await fixture.Handler.SetAsync(
+            AppSettingValueCatalog.SidebarConversationGroupingKey,
+            grouping,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(CliExitCodes.Usage, exitCode);
+        var error = Assert.Single(fixture.Output.Errors);
+        Assert.Contains(AppSettingValueCatalog.ProjectConversationGrouping, error, StringComparison.Ordinal);
+        Assert.Contains(AppSettingValueCatalog.StatusConversationGrouping, error, StringComparison.Ordinal);
+        Assert.Equal(originalYaml, await File.ReadAllTextAsync(fixture.AppYamlPath, TestContext.Current.CancellationToken));
     }
 
     [Fact]

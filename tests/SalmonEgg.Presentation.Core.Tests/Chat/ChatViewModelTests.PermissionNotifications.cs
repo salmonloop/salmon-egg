@@ -189,9 +189,9 @@ public partial class ChatViewModelTests
             // Act: replace on the UI thread before pumping the already queued old notification.
             RegisterInteractionService(fixture, currentPeer.Service);
             RunPermissionUiAction(dispatcher, () => fixture.ViewModel.ReplaceChatService(currentPeer.Service));
-            Assert.Null(oldPrompt.UnsubscribeRequestChanges);
             currentPeer.Request("permission", "remote-1", "new-tool");
             await dispatcher.RunUntilIdleAsync();
+            Assert.Null(oldPrompt.UnsubscribeRequestChanges);
             var currentPrompt = Assert.IsType<PermissionRequestViewModel>(fixture.ViewModel.PendingPermissionRequest);
             oldPeer.ResponseSend = null;
             Assert.True(await request.TryRespondAsync("cancelled"));

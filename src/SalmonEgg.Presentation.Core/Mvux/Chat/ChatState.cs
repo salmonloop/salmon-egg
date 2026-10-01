@@ -9,7 +9,7 @@ public record ChatState(
     IImmutableDictionary<string, ConversationContentSlice>? ConversationContents = null,
     IImmutableDictionary<string, ConversationSessionStateSlice>? ConversationSessionStates = null,
     IImmutableDictionary<string, ConversationRuntimeSlice>? RuntimeStates = null,
-    ActiveTurnState? ActiveTurn = null,
+    IImmutableDictionary<string, ActiveTurnState>? Turns = null,
     long Generation = 0,
     string? AgentProfileId = null,
     string? AgentName = null,
@@ -26,11 +26,28 @@ public record ChatState(
     bool ShowPlanPanel = false,
     string DraftText = "",
     long DraftRevision = 0,
-    bool IsHydrating = false)
+    bool IsHydrating = false,
+    IImmutableDictionary<string, ConversationOperationFailure>? OperationFailures = null)
 {
     public static ChatState Empty { get; } = new();
 
     public ConversationBindingSlice? Binding => ResolveBinding(HydratedConversationId);
+
+    public ActiveTurnState? ActiveTurn => ResolveTurn(HydratedConversationId);
+
+    public ConversationOperationFailure? ResolveOperationFailure(string? conversationId)
+        => conversationId is not null && OperationFailures?.TryGetValue(conversationId, out var failure) == true
+            ? failure : null;
+
+    public ActiveTurnState? ResolveTurn(string? conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || Turns is null)
+        {
+            return null;
+        }
+
+        return Turns.TryGetValue(conversationId, out var turn) ? turn : null;
+    }
 
     public ConversationBindingSlice? ResolveBinding(string? conversationId)
     {

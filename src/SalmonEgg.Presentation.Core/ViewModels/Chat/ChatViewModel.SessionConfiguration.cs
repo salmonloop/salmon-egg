@@ -12,7 +12,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private InteractionRequestSource? _configurationSource;
+    private AcpSessionEventSource? _configurationSource;
     private ConversationBindingSlice? _configurationBinding;
 
     public string SessionSettingsText => Localize("SessionConfig_Title", "Session settings");
@@ -36,7 +36,7 @@ public partial class ChatViewModel
         var state = _chatStore.ReadCommittedState();
         var binding = state?.ResolveBinding(CurrentSessionId);
         var source = _chatService is { } service
-            ? CaptureInteractionSource(service, _foregroundChatServiceGeneration)
+            ? ResolveRegisteredOrCurrentEventSource(service)
             : null;
         if (binding != _configurationBinding || source != _configurationSource)
         {
@@ -60,10 +60,10 @@ public partial class ChatViewModel
             {
                 row = projectedRow;
                 ConfigOptions.Add(row);
-                if (source is not null && binding is not null)
+                if (source is { } capturedSource && binding is not null)
                 {
-                    row.BindEditor(option => ApplySessionConfigurationAsync(option, source, binding),
-                        () => IsConfigurationCurrent(row, source, binding), _localizer, _uiDispatcher,
+                    row.BindEditor(option => ApplySessionConfigurationAsync(option, capturedSource, binding),
+                        () => IsConfigurationCurrent(row, capturedSource, binding), _localizer, _uiDispatcher,
                         ConvergeSessionConfigurationOrder);
                 }
             }
@@ -91,7 +91,7 @@ public partial class ChatViewModel
         }
     }
 
-    private bool IsConfigurationCurrent(ConfigOptionViewModel row, InteractionRequestSource source, ConversationBindingSlice binding)
+    private bool IsConfigurationCurrent(ConfigOptionViewModel row, AcpSessionEventSource source, ConversationBindingSlice binding)
     {
         var state = _chatStore.ReadCommittedState();
         if (state is null || state.IsHydrating || IsRemoteHydrationPending
@@ -106,7 +106,7 @@ public partial class ChatViewModel
     }
 
     private async Task<ConfigOptionApplyOutcome> ApplySessionConfigurationAsync(
-        ConfigOptionViewModel row, InteractionRequestSource source, ConversationBindingSlice binding)
+        ConfigOptionViewModel row, AcpSessionEventSource source, ConversationBindingSlice binding)
     {
         if (!IsConfigurationCurrent(row, source, binding) || !IsConfigurationValueAllowed(row)
             || string.IsNullOrWhiteSpace(binding.RemoteSessionId)

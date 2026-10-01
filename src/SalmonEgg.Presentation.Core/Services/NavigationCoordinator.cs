@@ -729,6 +729,15 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 return;
             }
 
+            // A synchronous local restore may finish before SwitchConversationAsync returns.
+            // Publishing selection must not send that same activation backwards from Hydrated.
+            if (_runtimeState.ActiveSessionActivation is { } current
+                && current.Version == request.Version && current.Matches(request.SessionId)
+                && current.Phase > phase)
+            {
+                return;
+            }
+
             _runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 request.SessionId,
                 request.ProjectId,

@@ -11,6 +11,24 @@ namespace SalmonEgg.Presentation.Core.Tests.Services;
 public sealed class ChatStateProjectorTests
 {
     [Fact]
+    public void Apply_WhenConversationsHaveFailures_ProjectsOnlyRequestedConversationFailure()
+    {
+        // Arrange
+        var a = new ConversationOperationFailure("a", "Failure A");
+        var b = new ConversationOperationFailure("b", "Failure B");
+        var state = ChatState.Empty with
+        {
+            OperationFailures = ImmutableDictionary<string, ConversationOperationFailure>.Empty.Add("a", a).Add("b", b)
+        };
+        var projector = new ChatStateProjector();
+
+        // Act / Assert
+        Assert.Same(a, projector.Apply(state, ChatConnectionState.Empty, "a", null).OperationFailure);
+        Assert.Same(b, projector.Apply(state, ChatConnectionState.Empty, "b", null).OperationFailure);
+        Assert.Null(projector.Apply(state, ChatConnectionState.Empty, null, null).OperationFailure);
+    }
+
+    [Fact]
     public async Task Apply_ChatOwnerComesFromBindingProfile()
     {
         var binding = new ConversationRemoteBindingState("conv-1", "remote-1", "profile-binding");
@@ -112,7 +130,9 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
@@ -134,13 +154,14 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector(localizer);
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState(
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.ToolRunning,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                ToolTitle: "read_file")
+                ToolTitle: "read_file"))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
@@ -159,7 +180,9 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", phase, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", phase, DateTime.UtcNow, DateTime.UtcNow))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
@@ -174,7 +197,9 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Thinking, DateTime.UtcNow, DateTime.UtcNow))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-2", null);
@@ -191,7 +216,9 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector();
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Cancelled, DateTime.UtcNow, DateTime.UtcNow)
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add(
+                "conv-1", new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.Cancelled, DateTime.UtcNow, DateTime.UtcNow))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);
@@ -212,13 +239,14 @@ public sealed class ChatStateProjectorTests
         var projector = new ChatStateProjector(localizer);
         var storeState = ChatState.Empty with
         {
-            ActiveTurn = new ActiveTurnState(
+            HydratedConversationId = "conv-1",
+            Turns = ImmutableDictionary<string, ActiveTurnState>.Empty.Add("conv-1", new ActiveTurnState(
                 "conv-1",
                 "turn-1",
                 ChatTurnPhase.Failed,
                 DateTime.UtcNow,
                 DateTime.UtcNow,
-                FailureMessage: "provider failed")
+                FailureMessage: "provider failed"))
         };
 
         var projection = projector.Apply(storeState, ChatConnectionState.Empty, "conv-1", null);

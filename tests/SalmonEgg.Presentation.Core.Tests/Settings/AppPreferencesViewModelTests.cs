@@ -350,6 +350,124 @@ public class AppPreferencesViewModelTests
         Assert.Equal("/remote/alpha", directory.RemotePath);
     }
 
+    [Theory]
+    [InlineData(AppSettingValueCatalog.ProjectConversationGrouping, AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(AppSettingValueCatalog.StatusConversationGrouping, AppSettingValueCatalog.StatusConversationGrouping)]
+    [InlineData("future-mode", AppSettingValueCatalog.ProjectConversationGrouping)]
+    public async Task LoadAsync_SidebarPreferences_ProjectsCanonicalValuesWithoutSaving(string storedGrouping, string expected)
+    {
+        // Arrange
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            SidebarConversationGrouping = storedGrouping,
+            SidebarAttentionGroupExpanded = false,
+            SidebarWorkingGroupExpanded = false,
+            SidebarOtherGroupExpanded = true
+        });
+        var vm = CreateViewModel(settingsService);
+
+        // Act
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, vm.SidebarConversationGrouping);
+        Assert.Equal(expected, vm.SelectedSidebarConversationGroupingOption?.Value);
+        Assert.Equal(
+            AppSettingValueCatalog.SidebarConversationGroupingValues,
+            vm.SidebarConversationGroupingOptions.Select(option => option.Value));
+        Assert.False(vm.SidebarAttentionGroupExpanded);
+        Assert.False(vm.SidebarWorkingGroupExpanded);
+        Assert.True(vm.SidebarOtherGroupExpanded);
+        Assert.Null(settingsService.LastSaved);
+    }
+
+    [Fact]
+    public async Task SelectedSidebarConversationGroupingOption_Changes_PersistsWithoutReload()
+    {
+        // Arrange
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var uiRuntime = new Mock<IUiRuntimeService>();
+        var vm = CreateViewModel(settingsService, uiRuntime: uiRuntime.Object);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        var saved = new TaskCompletionSource<AppSettings>(TaskCreationOptions.RunContinuationsAsynchronously);
+        settingsService.Saved += (_, args) => saved.TrySetResult(args.Settings);
+
+        // Act
+        vm.SelectedSidebarConversationGroupingOption = vm.SidebarConversationGroupingOptions.Single(
+            option => option.Value == AppSettingValueCatalog.StatusConversationGrouping);
+        var snapshot = await saved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AppSettingValueCatalog.StatusConversationGrouping, vm.SidebarConversationGrouping);
+        Assert.Equal(AppSettingValueCatalog.StatusConversationGrouping, snapshot.SidebarConversationGrouping);
+        uiRuntime.Verify(runtime => runtime.ReloadShell(), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("attention")]
+    [InlineData("working")]
+    [InlineData("other")]
+    public async Task SidebarGroupExpansionPreference_Changes_PersistsExplicitChoice(string group)
+    {
+        // Arrange
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        var saved = new TaskCompletionSource<AppSettings>(TaskCreationOptions.RunContinuationsAsynchronously);
+        settingsService.Saved += (_, args) => saved.TrySetResult(args.Settings);
+
+        // Act
+        switch (group)
+        {
+            case "attention":
+                vm.SidebarAttentionGroupExpanded = !vm.SidebarAttentionGroupExpanded;
+                break;
+            case "working":
+                vm.SidebarWorkingGroupExpanded = !vm.SidebarWorkingGroupExpanded;
+                break;
+            case "other":
+                vm.SidebarOtherGroupExpanded = !vm.SidebarOtherGroupExpanded;
+                break;
+        }
+
+        var snapshot = await saved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(vm.SidebarAttentionGroupExpanded, snapshot.SidebarAttentionGroupExpanded);
+        Assert.Equal(vm.SidebarWorkingGroupExpanded, snapshot.SidebarWorkingGroupExpanded);
+        Assert.Equal(vm.SidebarOtherGroupExpanded, snapshot.SidebarOtherGroupExpanded);
+    }
+
+    [Fact]
+    public async Task ResetToDefaults_WithSidebarPreferences_RestoresPersistedDefaults()
+    {
+        // Arrange
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            SidebarConversationGrouping = AppSettingValueCatalog.StatusConversationGrouping,
+            SidebarAttentionGroupExpanded = false,
+            SidebarWorkingGroupExpanded = false,
+            SidebarOtherGroupExpanded = true,
+            LastSelectedProjectId = "project-1"
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        var saved = new TaskCompletionSource<AppSettings>(TaskCreationOptions.RunContinuationsAsynchronously);
+        settingsService.Saved += (_, args) => saved.TrySetResult(args.Settings);
+
+        // Act
+        vm.ResetToDefaults();
+        var snapshot = await saved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarConversationGrouping, snapshot.SidebarConversationGrouping);
+        Assert.Equal(snapshot.SidebarConversationGrouping, vm.SelectedSidebarConversationGroupingOption?.Value);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded, snapshot.SidebarAttentionGroupExpanded);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded, snapshot.SidebarWorkingGroupExpanded);
+        Assert.Equal(AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded, snapshot.SidebarOtherGroupExpanded);
+        Assert.Equal("project-1", snapshot.LastSelectedProjectId);
+    }
+
     [Fact]
     public async Task ScheduleSave_PersistsNormalizedAgentRemoteDirectories()
     {
@@ -557,20 +675,20 @@ public class AppPreferencesViewModelTests
     private static AppPreferencesViewModel CreateViewModel(
         FakeAppSettingsService settingsService,
         ISystemNotificationService? notifications = null,
-        IUiInteractionService? ui = null)
+        IUiInteractionService? ui = null,
+        IUiRuntimeService? uiRuntime = null)
     {
         var startupService = new Mock<IAppStartupService>();
         startupService.SetupGet(s => s.IsSupported).Returns(false);
         var languageService = new Mock<IAppLanguageService>();
         var capabilities = new Mock<IPlatformCapabilityService>();
-        var uiRuntime = new Mock<IUiRuntimeService>();
         var logger = new Mock<ILogger<AppPreferencesViewModel>>();
         return new AppPreferencesViewModel(
             settingsService,
             startupService.Object,
             languageService.Object,
             capabilities.Object,
-            uiRuntime.Object,
+            uiRuntime ?? Mock.Of<IUiRuntimeService>(),
             ui ?? Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,

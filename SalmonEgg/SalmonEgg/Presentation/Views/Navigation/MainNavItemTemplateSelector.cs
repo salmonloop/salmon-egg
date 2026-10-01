@@ -12,6 +12,7 @@ public sealed class MainNavItemTemplateSelector : DataTemplateSelector
     public DataTemplate? LabelTemplate { get; set; }
     public DataTemplate? AddProjectTemplate { get; set; }
     public DataTemplate? ProjectTemplate { get; set; }
+    public DataTemplate? StatusGroupTemplate { get; set; }
     public DataTemplate? SessionTemplate { get; set; }
     public DataTemplate? MoreTemplate { get; set; }
 
@@ -25,6 +26,7 @@ public sealed class MainNavItemTemplateSelector : DataTemplateSelector
             SessionsLabelNavItemViewModel => LabelTemplate!,
             AddProjectNavItemViewModel => AddProjectTemplate!,
             ProjectNavItemViewModel => ProjectTemplate!,
+            StatusGroupNavItemViewModel => StatusGroupTemplate!,
             SessionNavItemViewModel => SessionTemplate!,
             MoreSessionsNavItemViewModel => MoreTemplate!,
             _ => StartTemplate!

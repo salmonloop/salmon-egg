@@ -2,20 +2,84 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Elicitation;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Panels;
 
+public readonly record struct ConversationInteractionSummary(
+    bool HasPermissionRequest,
+    bool HasInputRequest,
+    bool HasFailure,
+    DateTime? ActivityAtUtc = null);
+
 public sealed class ChatConversationPanelStateCoordinator
 {
+    private readonly IUiDispatcher? _dispatcher;
+    private readonly IAcpConnectionSessionRegistry? _sessionRegistry;
+    private readonly Dictionary<object, IDisposable> _requestUsageLeases = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, ObservableCollection<TerminalPanelSessionViewModel>> _terminalSessionsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedTerminalIdByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AskUserRequestViewModel> _pendingAskUserRequestsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ElicitationRequestViewModel> _pendingElicitationRequestsByConversation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<PermissionRequestViewModel>> _pendingPermissionRequestsByConversation = new(StringComparer.Ordinal);
     private readonly List<PermissionRequestViewModel> _unboundPermissionCancellations = [];
+
+    public ChatConversationPanelStateCoordinator(IUiDispatcher? dispatcher = null, IAcpConnectionSessionRegistry? sessionRegistry = null)
+    {
+        _dispatcher = dispatcher;
+        _sessionRegistry = sessionRegistry;
+    }
+
+    public event Action<string>? Changed;
+
+    public ConversationInteractionSummary GetSummary(string conversationId)
+    {
+        _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var permissions);
+        var permission = false;
+        var askUser = GetPendingAskUserRequest(conversationId);
+        var elicitation = GetPendingElicitationRequest(conversationId);
+        var hasElicitation = elicitation is { IsCompleted: false }
+            && (elicitation.CanRespond || elicitation.CanCancel || elicitation.IsSubmitting || elicitation.IsAwaitingCompletion);
+        DateTime? activityAt = askUser?.ActivityAtUtc;
+        if (hasElicitation && (activityAt is null || elicitation!.ActivityAtUtc > activityAt.Value))
+            activityAt = elicitation!.ActivityAtUtc;
+        if (permissions is not null)
+        {
+            foreach (var request in permissions)
+            {
+                if (!request.IsAvailable) continue;
+                permission = true;
+                if (activityAt is null || request.ActivityAtUtc > activityAt.Value) activityAt = request.ActivityAtUtc;
+            }
+        }
+        return new(
+            permission,
+            askUser is not null || hasElicitation,
+            askUser?.HasError == true || elicitation?.HasError == true
+                || permissions?.Any(static request => request.IsAvailable && request.IsCancellationOnly) == true,
+            activityAt);
+    }
+
+    public async ValueTask<IReadOnlyList<AcpSessionEventSource>> GetPendingConnectionSourcesAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_dispatcher is null || _dispatcher.HasThreadAccess)
+        {
+            return GetPendingConnectionSources();
+        }
+
+        IReadOnlyList<AcpSessionEventSource> sources = Array.Empty<AcpSessionEventSource>();
+        await _dispatcher.EnqueueAsync(() => sources = GetPendingConnectionSources()).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return sources;
+    }
 
     public ChatConversationPanelSelection SyncConversation(string? conversationId)
     {
@@ -53,21 +117,42 @@ public sealed class ChatConversationPanelStateCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
         ArgumentNullException.ThrowIfNull(request);
+        if (!TryHoldRequestUsage(request, request.Source)) return;
+        if (_pendingAskUserRequestsByConversation.TryGetValue(conversationId, out var previous))
+        {
+            previous.PropertyChanged -= OnRequestPropertyChanged;
+            if (!ReferenceEquals(previous, request)) ReleaseRequestUsage(previous);
+        }
+
         _pendingAskUserRequestsByConversation[conversationId] = request;
+        request.PropertyChanged += OnRequestPropertyChanged;
+        NotifyChanged(conversationId);
     }
 
-    public void RemoveAskUserRequest(string conversationId)
+    public void RemoveAskUserRequest(string conversationId, AskUserRequestViewModel? expectedRequest = null)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             return;
         }
 
-        _pendingAskUserRequestsByConversation.Remove(conversationId);
+        if (_pendingAskUserRequestsByConversation.TryGetValue(conversationId, out var request)
+            && (expectedRequest is null || ReferenceEquals(request, expectedRequest)))
+        {
+            _pendingAskUserRequestsByConversation.Remove(conversationId);
+            request.PropertyChanged -= OnRequestPropertyChanged;
+            ReleaseRequestUsage(request);
+            NotifyChanged(conversationId);
+        }
     }
 
     public void ClearAskUserRequests()
-        => _pendingAskUserRequestsByConversation.Clear();
+    {
+        foreach (var conversationId in _pendingAskUserRequestsByConversation.Keys.ToArray())
+        {
+            RemoveAskUserRequest(conversationId);
+        }
+    }
 
     public ElicitationRequestViewModel? GetPendingElicitationRequest(string? conversationId)
     {
@@ -86,13 +171,25 @@ public sealed class ChatConversationPanelStateCoordinator
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
         ArgumentNullException.ThrowIfNull(request);
         var existing = GetPendingElicitationRequest(conversationId);
+        if (existing is not null && !existing.IsAwaitingCompletion) return false;
+        if (!TryHoldRequestUsage(request, request.Source)) return false;
         if (existing is { IsAwaitingCompletion: true })
         {
+            existing.PropertyChanged -= OnRequestPropertyChanged;
+            ReleaseRequestUsage(existing);
             existing.Dispose();
             _pendingElicitationRequestsByConversation.Remove(conversationId);
         }
 
-        return _pendingElicitationRequestsByConversation.TryAdd(conversationId, request);
+        if (!_pendingElicitationRequestsByConversation.TryAdd(conversationId, request))
+        {
+            ReleaseRequestUsage(request);
+            return false;
+        }
+
+        request.PropertyChanged += OnRequestPropertyChanged;
+        NotifyChanged(conversationId);
+        return true;
     }
 
     internal IReadOnlyList<ElicitationRequestViewModel> GetElicitationRequests()
@@ -108,18 +205,20 @@ public sealed class ChatConversationPanelStateCoordinator
             return false;
         }
 
+        _pendingElicitationRequestsByConversation.Remove(conversationId);
+        request.PropertyChanged -= OnRequestPropertyChanged;
+        ReleaseRequestUsage(request);
         request.Dispose();
-        return _pendingElicitationRequestsByConversation.Remove(conversationId);
+        NotifyChanged(conversationId);
+        return true;
     }
 
     public void ClearElicitationRequests()
     {
-        foreach (var request in _pendingElicitationRequestsByConversation.Values)
+        foreach (var (conversationId, request) in _pendingElicitationRequestsByConversation.ToArray())
         {
-            request.Dispose();
+            RemoveElicitationRequest(conversationId, request);
         }
-
-        _pendingElicitationRequestsByConversation.Clear();
     }
 
     public PermissionRequestViewModel? GetPendingPermissionRequest(string? conversationId, string? toolCallId = null)
@@ -153,6 +252,7 @@ public sealed class ChatConversationPanelStateCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
         ArgumentNullException.ThrowIfNull(request);
+        if (!TryHoldRequestUsage(request, request.Source)) return;
         if (!_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests))
         {
             requests = [];
@@ -163,13 +263,18 @@ public sealed class ChatConversationPanelStateCoordinator
         // own tool card. Invalidated SDK identities cannot keep an obsolete prompt in front.
         RemoveUnavailablePermissionRequests(requests);
         requests.Add(request);
+        request.PropertyChanged += OnRequestPropertyChanged;
+        NotifyChanged(conversationId);
     }
 
     public bool RemovePermissionRequest(string conversationId, PermissionRequestViewModel request)
     {
         if (!_pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
             || !requests.Remove(request)) return false;
+        request.PropertyChanged -= OnRequestPropertyChanged;
+        ReleaseRequestUsage(request);
         request.DetachRequest();
+        NotifyChanged(conversationId);
         return true;
     }
 
@@ -187,6 +292,7 @@ public sealed class ChatConversationPanelStateCoordinator
     internal void StoreUnboundPermissionCancellation(PermissionRequestViewModel request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!TryHoldRequestUsage(request, request.Source)) return;
         RemoveUnavailablePermissionRequests(_unboundPermissionCancellations);
         _unboundPermissionCancellations.Add(request);
     }
@@ -194,6 +300,7 @@ public sealed class ChatConversationPanelStateCoordinator
     internal bool RemoveUnboundPermissionCancellation(PermissionRequestViewModel request)
     {
         if (!_unboundPermissionCancellations.Remove(request)) return false;
+        ReleaseRequestUsage(request);
         request.DetachRequest();
         return true;
     }
@@ -201,6 +308,11 @@ public sealed class ChatConversationPanelStateCoordinator
     internal bool ContainsPermissionRequest(string? conversationId, PermissionRequestViewModel request)
         => conversationId is null ? _unboundPermissionCancellations.Contains(request)
             : _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests) && requests.Contains(request);
+
+    internal IReadOnlyList<PermissionRequestViewModel> GetPendingPermissionRequests(string conversationId, AcpSessionEventSource source)
+        => _pendingPermissionRequestsByConversation.TryGetValue(conversationId, out var requests)
+            ? requests.Where(request => request.IsAvailable && request.Source is { } owner && owner.Matches(source)).ToArray()
+            : Array.Empty<PermissionRequestViewModel>();
 
     internal IReadOnlyList<(string ConversationId, PermissionRequestViewModel Request)> GetObsoletePermissionRequests(
         IImmutableDictionary<string, ConversationBindingSlice>? bindings)
@@ -223,13 +335,72 @@ public sealed class ChatConversationPanelStateCoordinator
 
     public void ClearPermissionRequests()
     {
-        foreach (var requests in _pendingPermissionRequestsByConversation.Values)
+        foreach (var conversationId in _pendingPermissionRequestsByConversation.Keys.ToArray())
         {
-            foreach (var request in requests) request.DetachRequest();
+            var requests = _pendingPermissionRequestsByConversation[conversationId];
+            foreach (var request in requests)
+            {
+                request.PropertyChanged -= OnRequestPropertyChanged;
+                ReleaseRequestUsage(request);
+                request.DetachRequest();
+            }
+
+            _pendingPermissionRequestsByConversation.Remove(conversationId);
+            NotifyChanged(conversationId);
         }
-        _pendingPermissionRequestsByConversation.Clear();
-        foreach (var request in _unboundPermissionCancellations) request.DetachRequest();
+        foreach (var request in _unboundPermissionCancellations)
+        {
+            ReleaseRequestUsage(request);
+            request.DetachRequest();
+        }
         _unboundPermissionCancellations.Clear();
+    }
+
+    internal void NotifyPermissionRequestChanged(string? conversationId, PermissionRequestViewModel request)
+    {
+        if (!request.IsAvailable) ReleaseRequestUsage(request);
+        if (conversationId is not null && ContainsPermissionRequest(conversationId, request))
+        {
+            NotifyChanged(conversationId);
+        }
+    }
+
+    internal void RetireConnection(AcpSessionEventSource source)
+    {
+        foreach (var (conversationId, request) in _pendingAskUserRequestsByConversation.ToArray())
+        {
+            if (request.Source is { } owner && owner.Matches(source))
+            {
+                RemoveAskUserRequest(conversationId, request);
+            }
+        }
+
+        foreach (var (conversationId, request) in _pendingElicitationRequestsByConversation.ToArray())
+        {
+            if (request.Source is { } owner && owner.Matches(source))
+            {
+                RemoveElicitationRequest(conversationId, request);
+            }
+        }
+
+        foreach (var (conversationId, requests) in _pendingPermissionRequestsByConversation.ToArray())
+        {
+            foreach (var request in requests.ToArray())
+            {
+                if (request.Source is { } owner && owner.Matches(source))
+                {
+                    RemovePermissionRequest(conversationId, request);
+                }
+            }
+        }
+
+        foreach (var request in _unboundPermissionCancellations.ToArray())
+        {
+            if (request.Source is { } owner && owner.Matches(source))
+            {
+                RemoveUnboundPermissionCancellation(request);
+            }
+        }
     }
 
     internal void ReprojectPermissionLocalizedText(
@@ -296,27 +467,118 @@ public sealed class ChatConversationPanelStateCoordinator
 
         _terminalSessionsByConversation.Remove(conversationId);
         _selectedTerminalIdByConversation.Remove(conversationId);
-        _pendingAskUserRequestsByConversation.Remove(conversationId);
+        RemoveAskUserRequest(conversationId);
         if (_pendingElicitationRequestsByConversation.Remove(conversationId, out var request))
         {
+            request.PropertyChanged -= OnRequestPropertyChanged;
+            ReleaseRequestUsage(request);
             request.Dispose();
         }
         if (_pendingPermissionRequestsByConversation.Remove(conversationId, out var permissions))
         {
-            foreach (var permission in permissions) permission.DetachRequest();
+            foreach (var permission in permissions)
+            {
+                permission.PropertyChanged -= OnRequestPropertyChanged;
+                ReleaseRequestUsage(permission);
+                permission.DetachRequest();
+            }
         }
+
+        NotifyChanged(conversationId);
 
         return isCurrentConversation ? EmptySelection() : NoUiChange();
     }
 
-    private static void RemoveUnavailablePermissionRequests(List<PermissionRequestViewModel> requests)
+    private void RemoveUnavailablePermissionRequests(List<PermissionRequestViewModel> requests)
     {
         for (var index = requests.Count - 1; index >= 0; index--)
         {
             if (requests[index].IsAvailable) continue;
+            requests[index].PropertyChanged -= OnRequestPropertyChanged;
+            ReleaseRequestUsage(requests[index]);
             requests[index].DetachRequest();
             requests.RemoveAt(index);
         }
+    }
+
+    private IReadOnlyList<AcpSessionEventSource> GetPendingConnectionSources()
+    {
+        var sources = new HashSet<AcpSessionEventSource>();
+        foreach (var request in _pendingPermissionRequestsByConversation.Values.SelectMany(static requests => requests))
+        {
+            if (request.IsAvailable && request.Source is { } source)
+            {
+                sources.Add(source);
+            }
+        }
+
+        foreach (var request in _pendingAskUserRequestsByConversation.Values)
+        {
+            if (request.Source is { } source)
+            {
+                sources.Add(source);
+            }
+        }
+
+        foreach (var request in _pendingElicitationRequestsByConversation.Values)
+        {
+            if (!request.IsCompleted && (request.CanRespond || request.CanCancel || request.IsSubmitting || request.IsAwaitingCompletion)
+                && request.Source is { } source)
+            {
+                sources.Add(source);
+            }
+        }
+
+        return sources.ToArray();
+    }
+
+    private void OnRequestPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (sender is ElicitationRequestViewModel { IsCompleted: true } completed) ReleaseRequestUsage(completed);
+        if (args.PropertyName is not ("HasError" or "CanRespond" or "CanCancel" or "IsSubmitting"
+            or "IsAwaitingCompletion" or "IsCompleted" or "Description"))
+        {
+            return;
+        }
+
+        foreach (var (conversationId, request) in _pendingAskUserRequestsByConversation)
+        {
+            if (ReferenceEquals(sender, request)) NotifyChanged(conversationId);
+        }
+
+        foreach (var (conversationId, request) in _pendingElicitationRequestsByConversation)
+        {
+            if (ReferenceEquals(sender, request)) NotifyChanged(conversationId);
+        }
+
+        foreach (var (conversationId, requests) in _pendingPermissionRequestsByConversation)
+        {
+            if (requests.Any(request => ReferenceEquals(sender, request))) NotifyChanged(conversationId);
+        }
+    }
+
+    private void NotifyChanged(string conversationId)
+    {
+        if (_dispatcher is not null && !_dispatcher.HasThreadAccess)
+        {
+            _dispatcher.Enqueue(() => Changed?.Invoke(conversationId));
+            return;
+        }
+
+        Changed?.Invoke(conversationId);
+    }
+
+    private bool TryHoldRequestUsage(object request, AcpSessionEventSource? source)
+    {
+        if (_requestUsageLeases.ContainsKey(request) || _sessionRegistry is null || source?.ProfileId is null) return true;
+        if (!_sessionRegistry.TryAcquireUsage(source.Value, out var lease)) return false;
+        _requestUsageLeases.Add(request, lease!);
+        return true;
+    }
+
+    private void ReleaseRequestUsage(object request)
+    {
+        if (_requestUsageLeases.Remove(request, out var lease)) lease.Dispose();
     }
 
     private TerminalPanelSessionViewModel? ResolveSelectedTerminal(

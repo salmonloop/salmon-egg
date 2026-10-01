@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using SalmonEgg.Domain.Models.Conversation;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
@@ -16,7 +17,11 @@ public sealed record ConversationAttentionSlice(
     bool HasUnread,
     int UnreadVersion,
     DateTime? LastAttentionAtUtc,
-    ConversationAttentionSource? LastAttentionSource);
+    ConversationAttentionSource? LastAttentionSource,
+    string? ProfileId = null,
+    string? RemoteSessionId = null,
+    ConversationMessageSnapshot? Content = null,
+    string? ContentConnectionInstanceId = null);
 
 public sealed record ConversationAttentionState(
     IImmutableDictionary<string, ConversationAttentionSlice> Conversations)

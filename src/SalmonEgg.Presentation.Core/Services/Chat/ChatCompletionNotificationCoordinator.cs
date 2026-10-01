@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Localization;
@@ -28,7 +29,7 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
     private IDisposable? _stateSubscription;
     private bool _disposed;
     private bool _hasObservedState;
-    private ActiveTurnState? _previousTurn;
+    private IImmutableDictionary<string, ActiveTurnState>? _previousTurns;
 
     public ChatCompletionNotificationCoordinator(
         IChatStore chatStore,
@@ -57,11 +58,12 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
             return;
         }
 
-        ActiveTurnState? previousTurn;
+        IImmutableDictionary<string, ActiveTurnState>? previousTurns;
         lock (_sync)
         {
-            previousTurn = _previousTurn;
-            _previousTurn = state.ActiveTurn;
+            if (_disposed) return;
+            previousTurns = _previousTurns;
+            _previousTurns = state.Turns;
             if (!_hasObservedState)
             {
                 _hasObservedState = true;
@@ -69,9 +71,8 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
             }
         }
 
-        var currentTurn = state.ActiveTurn;
-        if (currentTurn is null
-            || !ChatCompletionNotificationPolicy.IsCompletedTransition(previousTurn, currentTurn)
+        if (state.Turns is null
+            || ReferenceEquals(previousTurns, state.Turns)
             || _visibilityState.IsActive
             || !_notificationSettings.SystemNotificationsEnabled
             || !_notificationService.IsSupported)
@@ -79,12 +80,30 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
             return;
         }
 
-        var completedTurn = currentTurn;
+        foreach (var (conversationId, turn) in state.Turns)
+        {
+            ActiveTurnState? previousTurn = null;
+            previousTurns?.TryGetValue(conversationId, out previousTurn);
+            if (ChatCompletionNotificationPolicy.IsCompletedTransition(previousTurn, turn))
+            {
+                await ShowCompletionNotificationAsync(turn, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task ShowCompletionNotificationAsync(ActiveTurnState completedTurn, CancellationToken cancellationToken)
+    {
+        if (_visibilityState.IsActive
+            || !_notificationSettings.SystemNotificationsEnabled
+            || !_notificationService.IsSupported)
+        {
+            return;
+        }
 
         var notificationId = BuildNotificationId(completedTurn);
         lock (_sync)
         {
-            if (!_notifiedTurnIds.Add(notificationId))
+            if (_disposed || cancellationToken.IsCancellationRequested || !_notifiedTurnIds.Add(notificationId))
             {
                 return;
             }
@@ -167,6 +186,9 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
             }
 
             _disposed = true;
+            _previousTurns = null;
+            _notifiedTurnIds.Clear();
+            _notifiedTurnOrder.Clear();
         }
 
         _stateSubscription?.Dispose();

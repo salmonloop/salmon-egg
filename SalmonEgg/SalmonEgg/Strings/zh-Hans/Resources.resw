@@ -12,6 +12,21 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="Appearance_SidebarGroupingLabel.Text" xml:space="preserve">
+    <value>侧栏会话分组</value>
+  </data>
+  <data name="Appearance_SidebarGroupingDescription.Text" xml:space="preserve">
+    <value>按项目整理，或按状态关注会话进度。</value>
+  </data>
+  <data name="Appearance_SidebarGrouping.AutomationProperties.Name" xml:space="preserve">
+    <value>侧栏会话分组</value>
+  </data>
+  <data name="Appearance_SidebarGroupingProject.Content" xml:space="preserve">
+    <value>按项目</value>
+  </data>
+  <data name="Appearance_SidebarGroupingStatus.Content" xml:space="preserve">
+    <value>按状态</value>
+  </data>
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>外观</value>
   </data>

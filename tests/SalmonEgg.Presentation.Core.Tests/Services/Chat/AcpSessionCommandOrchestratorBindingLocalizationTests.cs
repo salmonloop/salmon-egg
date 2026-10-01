@@ -49,6 +49,7 @@ public sealed class AcpSessionCommandOrchestratorBindingLocalizationTests
 
         var sink = new Mock<IAcpChatCoordinatorSink>(MockBehavior.Strict);
         sink.SetupGet(s => s.CurrentChatService).Returns(chatService.Object);
+        sink.SetupGet(s => s.ConnectionInstanceId).Returns("connection-1");
         sink.SetupGet(s => s.IsSessionActive).Returns(true);
         sink.SetupGet(s => s.CurrentSessionId).Returns("local-1");
         sink.SetupGet(s => s.SelectedProfileId).Returns("profile-1");
@@ -111,6 +112,7 @@ public sealed class AcpSessionCommandOrchestratorBindingLocalizationTests
 
         var sink = new Mock<IAcpChatCoordinatorSink>(MockBehavior.Strict);
         sink.SetupGet(s => s.CurrentChatService).Returns(chatService.Object);
+        sink.SetupGet(s => s.ConnectionInstanceId).Returns("connection-1");
         sink.SetupGet(s => s.IsSessionActive).Returns(true);
         sink.SetupGet(s => s.CurrentSessionId).Returns("local-1");
         sink.SetupGet(s => s.SelectedProfileId).Returns("profile-1");
@@ -158,6 +160,7 @@ public sealed class AcpSessionCommandOrchestratorBindingLocalizationTests
 
         var sink = new Mock<IAcpChatCoordinatorSink>(MockBehavior.Strict);
         sink.SetupGet(s => s.CurrentChatService).Returns(chatService.Object);
+        sink.SetupGet(s => s.ConnectionInstanceId).Returns("connection-1");
         sink.SetupGet(s => s.IsSessionActive).Returns(false);
         sink.SetupGet(s => s.CurrentSessionId).Returns((string?)null);
 

@@ -68,6 +68,56 @@ public class ChatStoreTests
         Assert.NotNull(currentState);
         Assert.Null(currentState.ActiveTurn);
         Assert.Equal("conv-1", currentState.HydratedConversationId);
+        Assert.Equal("turn-1", currentState.ResolveTurn("initial")!.TurnId);
+    }
+
+    [Fact]
+    public async Task TurnOnlyMutations_PublishReactiveStateWithoutSchedulingWorkspaceWrites()
+    {
+        // Arrange
+        await using var state = State.Value(new object(), () => ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            Generation = 7
+        });
+        var writer = new FakeWorkspaceWriter();
+        var store = new ChatStore(state, writer);
+        var observedPhases = new Dictionary<ChatTurnPhase, TaskCompletionSource<ChatState>>
+        {
+            [ChatTurnPhase.WaitingForAgent] = new(TaskCreationOptions.RunContinuationsAsynchronously),
+            [ChatTurnPhase.Responding] = new(TaskCreationOptions.RunContinuationsAsynchronously),
+            [ChatTurnPhase.Completed] = new(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        state.ForEach((current, _) =>
+        {
+            if (current?.ActiveTurn is { } turn && observedPhases.TryGetValue(turn.Phase, out var observed))
+            {
+                observed.TrySetResult(current);
+            }
+
+            return ValueTask.CompletedTask;
+        }, out var subscription);
+        using var stateSubscription = subscription;
+
+        // Act
+        await store.Dispatch(new BeginTurnAction("conv-1", "turn-1", ChatTurnPhase.WaitingForAgent));
+        var running = await observedPhases[ChatTurnPhase.WaitingForAgent].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await store.Dispatch(new SetTurnBindingAction("conv-1", "turn-1", "profile-1", "remote-1", "connection-1"));
+        await store.Dispatch(new AdvanceTurnPhaseAction("conv-1", "turn-1", ChatTurnPhase.Responding, ConnectionInstanceId: "connection-1"));
+        var responding = await observedPhases[ChatTurnPhase.Responding].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await store.Dispatch(new CompleteTurnAction("conv-1", "turn-1", "end_turn", true, "connection-1"));
+        var completed = await observedPhases[ChatTurnPhase.Completed].Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await store.Dispatch(new ClearTerminalTurnAction("conv-1"));
+
+        // Assert
+        Assert.Equal(7, running.Generation);
+        Assert.Equal(7, responding.Generation);
+        Assert.Equal(7, completed.Generation);
+        Assert.Equal("connection-1", responding.ActiveTurn!.ConnectionInstanceId);
+        Assert.Equal("end_turn", completed.ActiveTurn!.StopReason);
+        Assert.True(completed.ActiveTurn.HasStopReason);
+        Assert.Null((await store.GetCurrentStateAsync()).ActiveTurn);
+        Assert.Equal(0, writer.EnqueueCount);
     }
 
     [Fact]

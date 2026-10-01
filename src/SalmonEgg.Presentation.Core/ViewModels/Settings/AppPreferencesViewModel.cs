@@ -47,6 +47,19 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
     private string _backdrop = "System";
 
     [ObservableProperty]
+    private string _sidebarConversationGrouping = AppSettingValueCatalog.DefaultSidebarConversationGrouping;
+
+    // These are explicit user preferences; native IsExpanded transitions must not bind here.
+    [ObservableProperty]
+    private bool _sidebarAttentionGroupExpanded = AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded;
+
+    [ObservableProperty]
+    private bool _sidebarWorkingGroupExpanded = AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded;
+
+    [ObservableProperty]
+    private bool _sidebarOtherGroupExpanded = AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded;
+
+    [ObservableProperty]
     private bool _launchOnStartup;
 
     [ObservableProperty]
@@ -122,6 +135,7 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
     public ObservableCollection<AppLanguageOptionViewModel> LanguageOptions { get; } = CreateLanguageOptions();
     public ObservableCollection<SettingsOptionViewModel> ThemeOptions { get; } = CreateThemeOptions();
     public ObservableCollection<SettingsOptionViewModel> BackdropOptions { get; } = CreateBackdropOptions();
+    public ObservableCollection<SettingsOptionViewModel> SidebarConversationGroupingOptions { get; } = CreateSidebarConversationGroupingOptions();
     public event EventHandler? ShortcutConfigurationChanged;
 
     [ObservableProperty]
@@ -132,6 +146,9 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
 
     [ObservableProperty]
     private SettingsOptionViewModel? _selectedBackdropOption;
+
+    [ObservableProperty]
+    private SettingsOptionViewModel? _selectedSidebarConversationGroupingOption;
 
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
 
@@ -182,6 +199,10 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
         SelectedLanguageOption = ResolveLanguageOption(Language);
         SelectedThemeOption = ResolveSettingsOption(ThemeOptions, Theme, "System");
         SelectedBackdropOption = ResolveSettingsOption(BackdropOptions, Backdrop, "System");
+        SelectedSidebarConversationGroupingOption = ResolveSettingsOption(
+            SidebarConversationGroupingOptions,
+            SidebarConversationGrouping,
+            AppSettingValueCatalog.DefaultSidebarConversationGrouping);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -274,6 +295,10 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
                 Theme = settings.Theme;
                 IsAnimationEnabled = settings.IsAnimationEnabled;
                 Backdrop = settings.Backdrop;
+                SidebarAttentionGroupExpanded = settings.SidebarAttentionGroupExpanded;
+                SidebarWorkingGroupExpanded = settings.SidebarWorkingGroupExpanded;
+                SidebarOtherGroupExpanded = settings.SidebarOtherGroupExpanded;
+                SidebarConversationGrouping = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(settings.SidebarConversationGrouping);
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
                 SystemNotificationsEnabled = settings.SystemNotificationsEnabled;
@@ -453,6 +478,29 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
 
         ScheduleSave();
     }
+    partial void OnSidebarConversationGroupingChanged(string value)
+    {
+        var normalized = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(value);
+        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        {
+            SidebarConversationGrouping = normalized;
+            return;
+        }
+
+        var option = ResolveSettingsOption(
+            SidebarConversationGroupingOptions,
+            normalized,
+            AppSettingValueCatalog.DefaultSidebarConversationGrouping);
+        if (!ReferenceEquals(SelectedSidebarConversationGroupingOption, option))
+        {
+            SelectedSidebarConversationGroupingOption = option;
+        }
+
+        ScheduleSave();
+    }
+    partial void OnSidebarAttentionGroupExpandedChanged(bool value) => ScheduleSave();
+    partial void OnSidebarWorkingGroupExpandedChanged(bool value) => ScheduleSave();
+    partial void OnSidebarOtherGroupExpandedChanged(bool value) => ScheduleSave();
     partial void OnLaunchOnStartupChanged(bool value)
     {
         if (_suppressSave)
@@ -533,6 +581,13 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
         if (value is not null && !string.Equals(Backdrop, value.Value, StringComparison.Ordinal))
         {
             Backdrop = value.Value;
+        }
+    }
+    partial void OnSelectedSidebarConversationGroupingOptionChanged(SettingsOptionViewModel? value)
+    {
+        if (value is not null && !string.Equals(SidebarConversationGrouping, value.Value, StringComparison.Ordinal))
+        {
+            SidebarConversationGrouping = value.Value;
         }
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
@@ -718,6 +773,10 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
             Theme = "System";
             IsAnimationEnabled = true;
             Backdrop = "System";
+            SidebarAttentionGroupExpanded = AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded;
+            SidebarWorkingGroupExpanded = AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded;
+            SidebarOtherGroupExpanded = AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded;
+            SidebarConversationGrouping = AppSettingValueCatalog.DefaultSidebarConversationGrouping;
             LaunchOnStartup = false;
             MinimizeToTray = true;
             SystemNotificationsEnabled = false;
@@ -802,6 +861,10 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
             Theme = Theme,
             IsAnimationEnabled = IsAnimationEnabled,
             Backdrop = Backdrop,
+            SidebarConversationGrouping = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(SidebarConversationGrouping),
+            SidebarAttentionGroupExpanded = SidebarAttentionGroupExpanded,
+            SidebarWorkingGroupExpanded = SidebarWorkingGroupExpanded,
+            SidebarOtherGroupExpanded = SidebarOtherGroupExpanded,
             LaunchOnStartup = LaunchOnStartup,
             MinimizeToTray = MinimizeToTray,
             SystemNotificationsEnabled = SystemNotificationsEnabled,
@@ -1186,6 +1249,13 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
             "Solid" => "Appearance_BackdropSolid.Content",
             _ => "Appearance_BackdropSystem.Content"
         });
+
+    private static ObservableCollection<SettingsOptionViewModel> CreateSidebarConversationGroupingOptions() =>
+        new(AppSettingValueCatalog.SidebarConversationGroupingValues.Select(value => new SettingsOptionViewModel(
+            value,
+            value == AppSettingValueCatalog.StatusConversationGrouping
+                ? "Appearance_SidebarGroupingStatus.Content"
+                : "Appearance_SidebarGroupingProject.Content")));
 
     private AppLanguageOptionViewModel ResolveLanguageOption(string? tag)
     {

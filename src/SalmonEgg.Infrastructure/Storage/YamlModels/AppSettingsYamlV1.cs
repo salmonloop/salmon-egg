@@ -28,6 +28,14 @@ internal sealed class AppSettingsYamlV1
     // Appearance
     public string Backdrop { get; set; } = "System";
 
+    public string SidebarConversationGrouping { get; set; } = AppSettingValueCatalog.DefaultSidebarConversationGrouping;
+
+    public bool SidebarAttentionGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarAttentionGroupExpanded;
+
+    public bool SidebarWorkingGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarWorkingGroupExpanded;
+
+    public bool SidebarOtherGroupExpanded { get; set; } = AppSettingValueCatalog.DefaultSidebarOtherGroupExpanded;
+
     // Data & Storage / Privacy
     public bool SaveLocalHistory { get; set; } = true;
 

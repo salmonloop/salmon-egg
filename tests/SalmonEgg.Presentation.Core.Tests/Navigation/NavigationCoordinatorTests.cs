@@ -838,6 +838,61 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_SwitcherCompletesCurrentHydrationBeforeReturning_DoesNotRegressToSelected()
+    {
+        // Arrange
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new ImmediateSynchronizationContext());
+        try
+        {
+            var selection = new ShellSelectionStateStore();
+            var runtime = new ShellNavigationRuntimeStateStore
+            {
+                CurrentShellContent = ShellNavigationContent.Chat,
+                CommittedSessionId = "previous-session"
+            };
+            SessionActivationSnapshot? completed = null;
+            var phases = new List<SessionActivationPhase>();
+            runtime.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(runtime.ActiveSessionActivation)
+                    && runtime.ActiveSessionActivation is { } activation)
+                {
+                    phases.Add(activation.Phase);
+                }
+            };
+            var switcher = new RecordingConversationSessionSwitcher((sessionId, _) =>
+            {
+                var inFlight = Assert.IsType<SessionActivationSnapshot>(runtime.ActiveSessionActivation);
+                Assert.Equal(sessionId, inFlight.SessionId);
+                completed = inFlight with { Phase = SessionActivationPhase.Hydrated, Reason = "LocalRestoreCompleted" };
+                runtime.ActiveSessionActivation = completed;
+                runtime.IsSessionActivationInProgress = false;
+                return Task.FromResult(true);
+            });
+            var coordinator = CreateCoordinator(selection, switcher, CreatePreferencesWithProject(), CreateShellNavigationService().Object, runtime);
+
+            // Act
+            var activated = await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            // Assert
+            Assert.True(activated);
+            Assert.Same(completed, runtime.ActiveSessionActivation);
+            Assert.Equal(SessionActivationPhase.Hydrated, runtime.ActiveSessionActivation?.Phase);
+            Assert.False(runtime.IsSessionActivationInProgress);
+            Assert.Equal("session-1", runtime.CommittedSessionId);
+            Assert.Equal(new NavigationSelectionState.Session("session-1"), selection.CurrentSelection);
+            var completedIndex = phases.IndexOf(SessionActivationPhase.Hydrated);
+            Assert.True(completedIndex >= 0);
+            Assert.DoesNotContain(SessionActivationPhase.Selected, phases.Skip(completedIndex + 1));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_WhenHydratedTerminalStateExists_SameSessionStartsFreshActivation()
     {
         var originalContext = SynchronizationContext.Current;

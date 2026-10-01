@@ -34,6 +34,8 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
     private readonly PointerEventHandler _messagesListHandledPointerWheelChangedHandler;
     private ITranscriptViewportHost? _transcriptViewportHost;
+    private TranscriptReadReceiptObserver? _readReceiptObserver;
+    private readonly SalmonEgg.Presentation.Services.AppActivationSignalSource _activationSignalSource;
 #if WINDOWS
     private Microsoft.UI.Xaml.Controls.TitleBar? _nativeTitleBarControl;
 #endif
@@ -41,6 +43,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     public MiniChatView()
     {
         ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
+        _activationSignalSource = App.ServiceProvider.GetRequiredService<SalmonEgg.Presentation.Services.AppActivationSignalSource>();
         _messagesListHandledKeyDownHandler = OnMessagesListKeyDown;
         _messagesListHandledPointerPressedHandler = OnMessagesListPointerPressed;
         _messagesListHandledPointerWheelChangedHandler = OnMessagesListPointerWheelChanged;
@@ -114,6 +117,10 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     {
         DisposeTranscriptViewportHost();
         var messagesList = MessagesList;
+        if (messagesList is not null)
+        {
+            _readReceiptObserver = new TranscriptReadReceiptObserver(messagesList, ViewModel, _activationSignalSource);
+        }
         _transcriptViewportHost = messagesList is null
             ? null
             : new ListViewTranscriptViewportHost(messagesList);
@@ -296,6 +303,8 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
     private void DisposeTranscriptViewportHost()
     {
+        _readReceiptObserver?.Dispose();
+        _readReceiptObserver = null;
         _nativeScrollScheduler.Clear();
         if (_transcriptViewportHost is null)
         {
@@ -309,6 +318,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
     private void OnMessagesListViewportChanged(object? sender, EventArgs e)
     {
+        _readReceiptObserver?.ReportVisible();
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnViewportChanged(
             CreateViewportViewState(),

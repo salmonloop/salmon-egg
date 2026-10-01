@@ -54,7 +54,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private readonly ConversationOperationFailureState _conversationOperationFailureState = new();
+    private ConversationOperationFailure? _projectedOperationFailure;
+    private ConversationOperationFailure? _unscopedOperationFailure;
 
     /// <summary>Raised after authoritative transcript projection is applied for the active session.</summary>
     public event EventHandler? TranscriptContentChanged;
@@ -138,7 +139,14 @@ public partial class ChatViewModel
     {
         get
         {
-            return _conversationOperationFailureState.ResolveVisibleMessage(CurrentSessionId);
+            var failure = string.IsNullOrWhiteSpace(CurrentSessionId)
+                ? _unscopedOperationFailure
+                : _projectedOperationFailure?.ConversationId == CurrentSessionId ? _projectedOperationFailure : null;
+            if (failure is null) return null;
+            if (string.IsNullOrWhiteSpace(failure.ResourceKey)) return failure.Message;
+            return !failure.FormatArgs.IsDefaultOrEmpty
+                ? FormatLocalize(failure.ResourceKey, failure.Fallback ?? failure.Message, failure.FormatArgs.ToArray())
+                : Localize(failure.ResourceKey, failure.Fallback ?? failure.Message);
         }
     }
 
@@ -152,59 +160,10 @@ public partial class ChatViewModel
     }
 
     private void PublishConversationOperationFailure(string? conversationId, string message)
-        => PublishConversationOperationFailureCore(conversationId, message, resourceKey: null, fallback: null, formatArgs: null);
-
-    private void PublishConversationOperationFailure(
-        string? conversationId,
-        string resourceKey,
-        string fallback,
-        params object[] formatArgs)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fallback);
-
-        var message = formatArgs is { Length: > 0 }
-            ? FormatLocalize(resourceKey, fallback, formatArgs)
-            : Localize(resourceKey, fallback);
-        PublishConversationOperationFailureCore(
-            conversationId,
-            message,
-            resourceKey.Trim(),
-            fallback,
-            formatArgs is { Length: > 0 } ? formatArgs : null);
-    }
-
-    private void PublishConversationOperationFailureCore(
-        string? conversationId,
-        string message,
-        string? resourceKey,
-        string? fallback,
-        object[]? formatArgs)
-    {
-        if (!_conversationOperationFailureState.Publish(
-                conversationId,
-                message,
-                CurrentSessionId,
-                resourceKey,
-                fallback,
-                formatArgs))
-        {
-            return;
-        }
-
-        NotifyConversationOperationFailureProjectionChanged();
-    }
+        => _ = ObserveOperationFailurePublicationAsync(PublishConversationOperationFailureAsync(conversationId, message));
 
     private Task PublishConversationOperationFailureAsync(string? conversationId, string message)
-    {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            PublishConversationOperationFailure(conversationId, message);
-            return Task.CompletedTask;
-        }
-
-        return _uiDispatcher.EnqueueAsync(() => PublishConversationOperationFailure(conversationId, message));
-    }
+        => PublishConversationOperationFailureCoreAsync(new(conversationId, message));
 
     private Task PublishConversationOperationFailureAsync(
         string? conversationId,
@@ -212,50 +171,46 @@ public partial class ChatViewModel
         string fallback,
         params object[] formatArgs)
     {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            PublishConversationOperationFailure(conversationId, resourceKey, fallback, formatArgs);
-            return Task.CompletedTask;
-        }
-
-        return _uiDispatcher.EnqueueAsync(
-            () => PublishConversationOperationFailure(conversationId, resourceKey, fallback, formatArgs));
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallback);
+        var message = formatArgs.Length > 0
+            ? FormatLocalize(resourceKey, fallback, formatArgs)
+            : Localize(resourceKey, fallback);
+        return PublishConversationOperationFailureCoreAsync(new(conversationId, message,
+            resourceKey, fallback, formatArgs.ToImmutableArray()));
     }
 
-    private void ReprojectConversationOperationFailureMessage()
+    private async Task PublishConversationOperationFailureCoreAsync(ConversationOperationFailure failure)
     {
-        if (!_conversationOperationFailureState.TryGetHeldFailure(out var failure)
-            || string.IsNullOrWhiteSpace(failure.ResourceKey))
+        if (string.IsNullOrWhiteSpace(failure.ConversationId))
         {
+            await PostToUiAsync(() =>
+            {
+                _unscopedOperationFailure = failure;
+                NotifyConversationOperationFailureProjectionChanged();
+            }).ConfigureAwait(false);
             return;
         }
 
-        var reprojected = failure.FormatArgs is { Length: > 0 }
-            ? FormatLocalize(
-                failure.ResourceKey,
-                failure.Fallback ?? failure.Message,
-                failure.FormatArgs)
-            : Localize(
-                failure.ResourceKey,
-                failure.Fallback ?? failure.Message);
+        await _chatStore.Dispatch(new SetConversationOperationFailureAction(failure)).ConfigureAwait(false);
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+    }
 
-        if (string.Equals(failure.Message, reprojected, StringComparison.Ordinal))
+    private void ReprojectConversationOperationFailureMessage() => NotifyConversationOperationFailureProjectionChanged();
+
+    private async Task ObserveOperationFailurePublicationAsync(Task publication)
+    {
+        try
         {
-            return;
+            await publication.ConfigureAwait(false);
         }
-
-        if (!_conversationOperationFailureState.Publish(
-                failure.ConversationId,
-                reprojected,
-                CurrentSessionId,
-                failure.ResourceKey,
-                failure.Fallback,
-                failure.FormatArgs))
+        catch (OperationCanceledException) when (_disposed || _disposeCts.IsCancellationRequested)
         {
-            return;
         }
-
-        NotifyConversationOperationFailureProjectionChanged();
+        catch (Exception error)
+        {
+            Logger.LogWarning(error, "Could not publish conversation operation failure state.");
+        }
     }
 
     private ConversationFailurePublicationContext CaptureFailurePublicationContext(
@@ -344,24 +299,25 @@ public partial class ChatViewModel
     }
 
     private void ClearConversationOperationFailure(string? conversationId)
-    {
-        if (!_conversationOperationFailureState.Clear(conversationId))
-        {
-            return;
-        }
-
-        NotifyConversationOperationFailureProjectionChanged();
-    }
+        => _ = ObserveOperationFailurePublicationAsync(ClearConversationOperationFailureAsync(conversationId));
 
     private void QueueClearConversationOperationFailure(string? conversationId)
+        => ClearConversationOperationFailure(conversationId);
+
+    private async Task ClearConversationOperationFailureAsync(string? conversationId)
     {
-        if (_uiDispatcher.HasThreadAccess)
+        if (string.IsNullOrWhiteSpace(conversationId))
         {
-            ClearConversationOperationFailure(conversationId);
+            await PostToUiAsync(() =>
+            {
+                _unscopedOperationFailure = null;
+                NotifyConversationOperationFailureProjectionChanged();
+            }).ConfigureAwait(false);
             return;
         }
 
-        _uiDispatcher.Enqueue(() => ClearConversationOperationFailure(conversationId));
+        await _chatStore.Dispatch(new ClearConversationOperationFailureAction(conversationId)).ConfigureAwait(false);
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
     }
 
     private void NotifyConversationOperationFailureProjectionChanged()
@@ -534,6 +490,7 @@ public partial class ChatViewModel
         if (!string.Equals(_selectedProfileIdFromStore, selectedProfileId, StringComparison.Ordinal))
         {
             _selectedProfileIdFromStore = selectedProfileId;
+            RefreshUnregisteredChatServiceSource();
             NotifyComposerProjectionChanged();
         }
 
@@ -661,6 +618,12 @@ public partial class ChatViewModel
 
     private void ApplyConversationStatusProjection(ChatUiProjection projection)
     {
+        if (!Equals(_projectedOperationFailure, projection.OperationFailure))
+        {
+            _projectedOperationFailure = projection.OperationFailure;
+            NotifyConversationOperationFailureProjectionChanged();
+        }
+
         IsHydrating = projection.IsHydrating;
         IsSessionActive = projection.IsSessionActive;
         IsPromptInFlight = projection.IsPromptInFlight;
@@ -688,6 +651,7 @@ public partial class ChatViewModel
         {
             _connectionInstanceId = projection.ConnectionInstanceId;
             OnPropertyChanged(nameof(ConnectionInstanceId));
+            RefreshUnregisteredChatServiceSource();
         }
 
         if (!string.Equals(_foregroundTransportProfileIdFromStore, projection.ForegroundTransportProfileId, StringComparison.Ordinal))
@@ -837,86 +801,8 @@ public partial class ChatViewModel
 }
 
 
-internal sealed record ConversationOperationFailure(
-    string? ConversationId,
-    string Message,
-    string? ResourceKey = null,
-    string? Fallback = null,
-    object[]? FormatArgs = null);
-
 internal readonly record struct ConversationFailurePublicationContext(
     string ConversationId,
     long? ActivationVersion,
     string? OperationOwner,
     long? ExpectedShellSnapshotVersion);
-
-internal sealed class ConversationOperationFailureState
-{
-    private ConversationOperationFailure? _failure;
-
-    public bool Publish(
-        string? conversationId,
-        string message,
-        string? currentConversationId,
-        string? resourceKey = null,
-        string? fallback = null,
-        object[]? formatArgs = null)
-    {
-        var incomingOwnerMatchesCurrent = OwnerMatches(conversationId, currentConversationId);
-        if (!incomingOwnerMatchesCurrent
-            && _failure is { } existingFailure
-            && OwnerMatches(existingFailure.ConversationId, currentConversationId))
-        {
-            return false;
-        }
-
-        _failure = new ConversationOperationFailure(
-            conversationId,
-            message,
-            resourceKey,
-            fallback,
-            formatArgs);
-        return true;
-    }
-
-    public bool TryGetHeldFailure(out ConversationOperationFailure failure)
-    {
-        if (_failure is { } held)
-        {
-            failure = held;
-            return true;
-        }
-
-        failure = default!;
-        return false;
-    }
-
-    public bool Clear(string? conversationId)
-    {
-        if (_failure is not { } failure
-            || !string.Equals(failure.ConversationId, conversationId, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        _failure = null;
-        return true;
-    }
-
-    public string? ResolveVisibleMessage(string? currentConversationId)
-    {
-        if (_failure is not { } failure)
-        {
-            return null;
-        }
-
-        return OwnerMatches(failure.ConversationId, currentConversationId)
-            ? failure.Message
-            : null;
-    }
-
-    private static bool OwnerMatches(string? ownerConversationId, string? currentConversationId)
-        => string.IsNullOrWhiteSpace(ownerConversationId)
-            ? string.IsNullOrWhiteSpace(currentConversationId)
-            : string.Equals(ownerConversationId, currentConversationId, StringComparison.Ordinal);
-}

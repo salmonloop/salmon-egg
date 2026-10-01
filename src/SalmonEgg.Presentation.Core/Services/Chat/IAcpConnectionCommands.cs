@@ -52,6 +52,8 @@ public readonly record struct AcpConnectionContext(
 /// </summary>
 public interface IAcpConnectionCommands
 {
+    Task ReevaluatePoolAsync(IChatService? activeService, CancellationToken cancellationToken = default);
+
     Task<AcpTransportApplyResult> ConnectToProfileAsync(
         ServerConfiguration profile,
         IAcpTransportConfiguration transportConfiguration,
