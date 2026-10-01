@@ -89,6 +89,41 @@ public sealed class AcpDraftPermissionTests
         Assert.Single(peer.Responses);
     }
 
+    // v2 moved the tool call off the permission request onto a subject union, so the v1 extraction
+    // never sees it. Without this the approval label is blank on every v2 request - the one case where
+    // naming the tool matters most, because the title is the only other thing on screen.
+    [Fact]
+    public async Task PermissionRequest_ToolSubject_CarriesTheProgrammaticToolName()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+
+        // Act
+        peer.Request("{\"sessionId\":\"one\",\"title\":\"Run tests?\","
+            + "\"subject\":{\"type\":\"tool_call\",\"toolCall\":{\"toolCallId\":\"tool\",\"name\":\"run_command\",\"title\":\"subject title\"}},"
+            + Options + "}");
+        var request = Assert.Single(peer.Requests);
+
+        // Assert
+        Assert.Equal("run_command", request.ToolCallName);
+    }
+
+    [Fact]
+    public async Task PermissionRequest_WithoutAToolSubject_LeavesTheToolNameUnset()
+    {
+        // Arrange
+        using var peer = await PermissionPeer.CreateAsync();
+
+        // Act
+        peer.Request("{\"sessionId\":\"one\",\"title\":\"Run tests?\","
+            + "\"subject\":{\"type\":\"command\",\"command\":\"cargo test\",\"cwd\":\"/work\"},"
+            + Options + "}");
+        var request = Assert.Single(peer.Requests);
+
+        // Assert
+        Assert.Null(request.ToolCallName);
+    }
+
     [Fact]
     public async Task PermissionRequest_ToolSubject_DoesNotOverwriteToolProjectionOrPromptText()
     {

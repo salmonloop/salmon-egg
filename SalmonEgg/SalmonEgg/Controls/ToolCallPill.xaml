@@ -343,17 +343,6 @@
                                 Text="{x:Bind ToolName, Mode=OneWay}"
                                 Style="{StaticResource CaptionTextBlockStyle}"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                TextTrimming="CharacterEllipsis"
-                                MaxLines="1"
-                                Visibility="{x:Bind HasToolName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                            <!-- Secondary label: the agent's programmatic tool name. Opaque and
-                                 unlocalized by design, so it is rendered verbatim with no resource. -->
-                            <TextBlock
-                                Text="{x:Bind ToolName, Mode=OneWay}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                 TextTrimming="CharacterEllipsis"
                                 MaxLines="1"
                                 Visibility="{x:Bind HasToolName, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />

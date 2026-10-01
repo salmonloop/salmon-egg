@@ -2930,7 +2930,8 @@ namespace SalmonEgg.Acp.Client
                 {
                     DraftRequest = snapshot,
                     Title = snapshot.Title,
-                    Description = snapshot.Description
+                    Description = snapshot.Description,
+                    ToolCallName = ReadDraftSubjectToolCallName(snapshot)
                 };
                 pending.PermissionEvent = eventArgs;
             }
@@ -2944,6 +2945,15 @@ namespace SalmonEgg.Acp.Client
 
             PublishPermissionRequest(pending, eventArgs);
         }
+
+        // v2 moved the tool call off the request and onto a subject union, so the permission event
+        // args cannot extract it the way the v1 path does. Pull the tool_call variant's name here,
+        // where the draft snapshot is in hand, instead of leaving the label blank on every v2
+        // approval - which is exactly the case the name exists to disambiguate.
+        private static string? ReadDraftSubjectToolCallName(AcpPermissionRequestSnapshot snapshot)
+            => snapshot.Subject is ToolCallPermissionSubject { ToolCall: { Name: { } name } }
+                ? name
+                : null;
 
         private void PublishPermissionRequest(PendingInboundRequest pending, PermissionRequestEventArgs eventArgs)
         {

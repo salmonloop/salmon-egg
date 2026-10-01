@@ -36,6 +36,7 @@ internal static class SessionProjectionWireContract
             RequireId(info, "toolCallId", static value => value is ToolCallStatusUpdate patch
                 ? patch.ToolCallId : ((ToolCallUpdate)value).ToolCallId);
             Property(info, "title").CustomConverter = new DefaultableStringJsonConverter();
+            Property(info, "name").CustomConverter = new DefaultableStringJsonConverter();
             Property(info, "kind").CustomConverter = new DefaultableNullableJsonConverter<ToolCallKind>();
             Property(info, "status").CustomConverter = new DefaultableNullableJsonConverter<ToolCallStatus>();
             Property(info, "content").CustomConverter = new DefaultableListJsonConverter<ToolCallContent>();

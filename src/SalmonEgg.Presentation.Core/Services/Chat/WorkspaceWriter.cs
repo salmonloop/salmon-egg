@@ -645,6 +645,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(left.AudioMimeType, right.AudioMimeType, StringComparison.Ordinal)
             && string.Equals(left.ProtocolMessageId, right.ProtocolMessageId, StringComparison.Ordinal)
             && string.Equals(left.ToolCallId, right.ToolCallId, StringComparison.Ordinal)
+            && string.Equals(left.ToolCallName, right.ToolCallName, StringComparison.Ordinal)
             && left.ToolCallKind == right.ToolCallKind
             && left.ToolCallStatus == right.ToolCallStatus
             && string.Equals(left.ToolCallJson, right.ToolCallJson, StringComparison.Ordinal)

@@ -68,6 +68,22 @@ public sealed class ToolCallNameTests
         Assert.Equal("grep", replayed.RootElement.GetProperty("update").GetProperty("name").GetString());
     }
 
+    // v2 grants default-on-error to its optional patch fields, and every sibling on these shapes
+    // carries the converter. Without one for name, a peer sending a non-string would drop the whole
+    // update - status, title and all - where the identical payload with a bad "title" recovers to
+    // null and renders fine. Scoped to v2 because that is the only surface the recovery contract
+    // applies to; v1 has no such grant and stays strict on purpose.
+    [Theory]
+    [InlineData("tool_call_update")]
+    public void V2NonStringName_DefaultsInsteadOfDroppingTheWholeUpdate(string discriminator)
+    {
+        var update = Parse(AcpProtocolVersion.V2,
+            $"{{\"sessionUpdate\":\"{discriminator}\",\"toolCallId\":\"tc-1\",\"name\":123,\"status\":\"completed\"}}");
+
+        Assert.IsType<ToolCallStatusUpdate>(update);
+        Assert.Null(((ToolCallStatusUpdate)update!).Name);
+    }
+
     [Fact]
     public void ToolCallUpdate_WithoutAName_ReadsAsAbsentRatherThanEmpty()
     {
