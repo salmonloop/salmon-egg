@@ -90,6 +90,45 @@ public sealed class AcpSetupPrerequisiteFlowTests
         Assert.Equal("/test/bin/" + adapter.LaunchTemplate.Command, saved.StdioCommand);
     }
 
+    /// <summary>
+    /// The adapter is probed on entry to the component step, which is before the runtime's toolchain
+    /// necessarily exists. Installing that toolchain is what supplies the package manager the adapter
+    /// needs, so the adapter has to be probed again - otherwise its stale "no package manager" verdict
+    /// keeps its own install refused on a machine that now has everything it asked for.
+    /// </summary>
+    [Fact]
+    public async Task ComponentSetup_InstallingTheRuntimeToolchain_ReprobesTheAdapter()
+    {
+        // Arrange: no package manager on PATH, so both the runtime and its toolchain read as absent.
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        var toolchainInstaller = new StubToolchainInstaller(_ =>
+            probe.SetExecutable("npm", "/test/bin/npm"));
+        var agent = AcpSetupWizardFixtures.Agent(adapters: AcpSetupWizardFixtures.ExecutableAdapter());
+        var wizard = AcpSetupWizardFixtures.CreateWizard(
+            new StubAgentCatalog(agent), probe, new StubComponentInstaller(),
+            new StubConnectivityTester(StubConnectivityTester.SuccessfulHandshake()),
+            new RecordingConfigurationService(), toolchainInstaller: toolchainInstaller);
+        var row = Assert.Single(wizard.Agents);
+        wizard.SelectedAgent = row;
+
+        // Act: reach the component step, whose adapter probe runs while npm is still absent.
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+        Assert.True(wizard.IsAdapterToolchainMissing);
+        Assert.False(wizard.InstallAdapterCommand.CanExecute(null));
+
+        // Act: install the runtime toolchain from the step that owns the runtime.
+        row.RequestToolchainInstall();
+        if (wizard.DetectAdapterCommand.ExecutionTask is { } reprobe)
+        {
+            await reprobe;
+        }
+
+        // Assert: the adapter's install is offered rather than refused, because its verdict was re-read
+        // against the machine the toolchain install just changed.
+        Assert.False(wizard.IsAdapterToolchainMissing);
+        Assert.True(wizard.InstallAdapterCommand.CanExecute(null));
+    }
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
