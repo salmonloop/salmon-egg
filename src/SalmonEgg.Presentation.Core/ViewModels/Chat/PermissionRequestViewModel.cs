@@ -26,11 +26,12 @@ public partial class PermissionRequestViewModel : ObservableObject
     internal string? ToolCallId { get; set; }
     internal string? RequestTitle { get; set; }
 
-    /// <summary>
-    /// The agent's programmatic name for the tool being authorized (for example run_command).
-    /// Null when the agent reported none; the field is optional in both ACP versions.
-    /// </summary>
-    public string? ToolCallName { get; set; }
+    // Observable, not a plain property: the pill binds both this and HasToolCallName, and the
+    // cancellation-retry path clears the name on an already-projected instance. Without a change
+    // notification the InfoBar would keep showing a tool the card no longer offers.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasToolCallName))]
+    private string? _toolCallName;
 
     public bool HasToolCallName => !string.IsNullOrWhiteSpace(ToolCallName);
 

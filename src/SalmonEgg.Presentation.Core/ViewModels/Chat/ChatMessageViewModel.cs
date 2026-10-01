@@ -76,7 +76,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         /// secondary label under the title; null when the agent reported none.
         /// </summary>
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
         private string? _toolCallName;
 
         [ObservableProperty]

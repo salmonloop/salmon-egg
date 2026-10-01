@@ -826,11 +826,6 @@ namespace SalmonEgg.Acp.Protocol
         /// constructor's signature, which is binary-breaking for the shipped package even though an
         /// optional parameter looks source-compatible. Set it through the init-only property.
         /// </remarks>
-        /// <remarks>
-        /// <see cref="Name"/> is deliberately not a parameter: adding one would change this published
-        /// constructor's signature, which is binary-breaking for the shipped package even though an
-        /// optional parameter looks source-compatible. Set it through the init-only property.
-        /// </remarks>
         public ToolCallUpdate(
             string? toolCallId = null,
             ToolCallKind? kind = null,

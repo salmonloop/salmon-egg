@@ -363,6 +363,7 @@ namespace SalmonEgg.Acp.Client
             SessionId = sessionId;
             ToolCall = toolCall;
             Title = ReadToolCallTitle(toolCall);
+            ToolCallName = ReadToolCallName(toolCall);
             Options = options;
             Respond = respond;
         }
@@ -421,6 +422,9 @@ namespace SalmonEgg.Acp.Client
 
         /// <summary>The permission title supplied by the peer, or null when the protocol omits it.</summary>
         public string? Title { get; init; }
+
+        /// <summary>The agent's programmatic name for the tool being authorized, or null when unknown.</summary>
+        public string? ToolCallName { get; init; }
 
         /// <summary>The optional explanation supplied by the peer.</summary>
         public string? Description { get; init; }
@@ -538,6 +542,17 @@ namespace SalmonEgg.Acp.Client
                 ToolCallUpdate update => update.Title,
                 JsonElement { ValueKind: JsonValueKind.Object } value when value.TryGetProperty("title", out var title)
                     && title.ValueKind == JsonValueKind.String => title.GetString(),
+                _ => null
+            };
+
+        // ACP v1 requires the tool call on every permission request, and v2 carries it on the
+        // subject's tool_call variant, so the programmatic name rides the same payload as the title.
+        private static string? ReadToolCallName(object? toolCall)
+            => toolCall switch
+            {
+                ToolCallUpdate update => update.Name,
+                JsonElement { ValueKind: JsonValueKind.Object } value when value.TryGetProperty("name", out var name)
+                    && name.ValueKind == JsonValueKind.String => name.GetString(),
                 _ => null
             };
     }

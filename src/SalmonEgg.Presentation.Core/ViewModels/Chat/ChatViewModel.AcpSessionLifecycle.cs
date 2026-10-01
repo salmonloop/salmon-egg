@@ -2130,7 +2130,7 @@ public partial class ChatViewModel
             },
             () => PostToUiAsync(() => RemovePermissionRequestProjection(conversationId, viewModel!)));
         viewModel.ToolCallId = TryResolvePermissionToolCallId(request.ToolCall);
-        viewModel.ToolCallName = TryResolvePermissionToolCallName(request.ToolCall);
+        viewModel.ToolCallName = request.ToolCallName;
         viewModel.RequestTitle = request.Title;
         viewModel.Title = string.IsNullOrWhiteSpace(viewModel.RequestTitle)
             ? ResolveLocalizerText("Permission_DefaultTitle", "Permission required") : viewModel.RequestTitle;
@@ -2340,28 +2340,6 @@ public partial class ChatViewModel
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// The agent's programmatic name for the tool it wants permission to run. ACP carries it on the
-    /// same <c>ToolCallUpdate</c> the permission request already carries - v1's request has a required
-    /// <c>toolCall</c>, and v2's permission subject has a <c>tool_call</c> variant of the same shape -
-    /// so no permission-specific field is involved.
-    /// </summary>
-    private static string? TryResolvePermissionToolCallName(object? toolCall)
-    {
-        if (toolCall is JsonElement element)
-        {
-            return element.ValueKind == JsonValueKind.Object
-                && element.TryGetProperty("name", out var property)
-                && property.ValueKind == JsonValueKind.String
-                    ? property.GetString()
-                    : null;
-        }
-
-        return toolCall is ToolCallUpdate update && !string.IsNullOrWhiteSpace(update.Name)
-            ? update.Name
-            : null;
     }
 
     private static string? TryGetToolCallId(JsonElement element)
