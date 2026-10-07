@@ -181,7 +181,9 @@ def main(args):
             test_process = subprocess.Popen(["xcodebuild", "test-without-building", *test_arguments,
                 "-resultBundlePath", str(artifacts / "results.xcresult")],
                 env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-            test_exit = test_process.wait(timeout=420)
+            # Measured end to end: ~240 s on Xcode 26.5, ~460 s on Xcode 26.6 (runner launch,
+            # the test itself and the result bundle are each slower there).
+            test_exit = test_process.wait(timeout=600)
         if test_exit:
             print((artifacts / "xcuitest.log").read_text(errors="replace")[-18000:])
         assert test_exit == 0, "The installed product XCUITest failed"
@@ -211,14 +213,18 @@ def main(args):
             except Exception as error:  # Evidence is best-effort; never mask the gate's own failure.
                 print(f"[ios-gate] hang diagnostics failed: {error!r}", flush=True)
         if test_process is not None:
+            # macOS answers EPERM, not ESRCH, when the group is left with only zombies.
             try:
                 os.killpg(test_process.pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
             try:
                 test_process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                os.killpg(test_process.pid, signal.SIGKILL)
+                try:
+                    os.killpg(test_process.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
                 test_process.wait(timeout=5)
         results = artifacts / "results.xcresult"
         if results.exists():

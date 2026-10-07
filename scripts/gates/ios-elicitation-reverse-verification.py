@@ -18,9 +18,10 @@ def run(command, root, log_path, timeout):
             return process.wait(timeout=timeout)
         finally:
             # The child gate handles SIGTERM by deleting its own Simulator and reaping its peer.
+            # macOS answers EPERM, not ESRCH, when the group is left with only zombies.
             try:
                 os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
             try:
                 process.wait(timeout=120)
@@ -28,7 +29,7 @@ def run(command, root, log_path, timeout):
                 pass
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
             process.wait(timeout=5)
 
@@ -53,7 +54,7 @@ def main(args):
     try:
         source.write_bytes(mutant)
         assert run(build, root, output / "mutant-build.log", 600) == 0, "The mutated app did not build"
-        red_exit = run([*gate, str(output / "red")], root, output / "red.log", 900)
+        red_exit = run([*gate, str(output / "red")], root, output / "red.log", 1200)
         assert red_exit != 0 and "The product opened a URL without consent." in (output / "red.log").read_text(), \
             "The installed mutant was not rejected for its actual unconsented Safari visit"
         red = json.loads((output / "red/peer-state.json").read_text())
@@ -62,7 +63,7 @@ def main(args):
         source.write_bytes(original)
         assert source.read_bytes() == original
         assert run(build, root, output / "restored-build.log", 600) == 0, "The restored app did not rebuild"
-    assert run([*gate, str(output / "restored")], root, output / "restored.log", 900) == 0
+    assert run([*gate, str(output / "restored")], root, output / "restored.log", 1200) == 0
     baseline = json.loads((output.parent / "provenance.json").read_text())
     red = json.loads((output / "red/provenance.json").read_text())
     restored = json.loads((output / "restored/provenance.json").read_text())
