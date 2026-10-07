@@ -317,12 +317,14 @@ public sealed class WasmStartupAssetsTests
         Assert.True(
             gate.IndexOf("Verify iOS .NET SDK", StringComparison.Ordinal)
             < gate.IndexOf("Install iOS workload", StringComparison.Ordinal));
-        Assert.Contains("runs-on: xcode-27", gate, StringComparison.Ordinal);
-        Assert.Contains("os.path.realpath(\"/Applications/Xcode_27.0.app/Contents/Developer\")", gate, StringComparison.Ordinal);
+        Assert.Contains("runs-on: macos-26", gate, StringComparison.Ordinal);
+        // The band's newest workload set requires Xcode 27; the pinned set keeps the job on the GA image.
+        Assert.Contains("dotnet workload install ios --version 10.0.401 ", gate, StringComparison.Ordinal);
+        Assert.Contains("os.path.realpath(\"/Applications/Xcode_26.6.app/Contents/Developer\")", gate, StringComparison.Ordinal);
         Assert.Contains("sudo xcode-select --switch \"${xcode_developer_dir}\"", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("xcode-select --switch /Applications/Xcode_", gate, StringComparison.Ordinal);
         Assert.Contains("xcodebuild -version", gate, StringComparison.Ordinal);
-        Assert.Contains("27.0*)", gate, StringComparison.Ordinal);
+        Assert.Contains("26.6*)", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk macosx --show-sdk-path", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk iphonesimulator --show-sdk-path", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk macosx --find actool", gate, StringComparison.Ordinal);

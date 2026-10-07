@@ -356,9 +356,9 @@ jobs:
     name: iOS Simulator
     # Heavy mobile build fast-gated out of standard PRs; runs on push, schedule, and workflow_dispatch.
     if: github.event_name != 'pull_request'
-    # The stable Apple workload pinned in global.json requires Xcode 27.
-    # The matching hosted image is currently a public preview: actions/runner-images#14404.
-    runs-on: xcode-27
+    # Pin the 10.0.401 workload set: its Apple workload (26.5.10318) requires Xcode 26.6, which this GA
+    # image carries. The band's later 10.0.401.1 set moves to Xcode 27, whose hosted image is a preview.
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -379,7 +379,7 @@ jobs:
           xcode_developer_dir="$(python3 - <<'PY'
           import os
 
-          print(os.path.realpath("/Applications/Xcode_27.0.app/Contents/Developer"))
+          print(os.path.realpath("/Applications/Xcode_26.6.app/Contents/Developer"))
           PY
           )"
           if [ ! -d "${xcode_developer_dir}" ]; then
@@ -391,8 +391,8 @@ jobs:
           xcodebuild -version
           xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
           case "${xcode_version}" in
-            27.0*) ;;
-            *) echo "Expected Xcode 27.0.x, got ${xcode_version}." >&2; exit 1 ;;
+            26.6*) ;;
+            *) echo "Expected Xcode 26.6.x, got ${xcode_version}." >&2; exit 1 ;;
           esac
           xcrun --sdk macosx --show-sdk-path
           xcrun --sdk iphonesimulator --show-sdk-path
@@ -413,7 +413,8 @@ jobs:
           echo ".NET SDK ${dotnet_version}"
 
       - name: Install iOS workload
-        run: dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
+        # https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode26.5-10318
+        run: dotnet workload install ios --version 10.0.401 --disable-parallel --no-http-cache
 
       - name: Report iOS workload
         run: |
