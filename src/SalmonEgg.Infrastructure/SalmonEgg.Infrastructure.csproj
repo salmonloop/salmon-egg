@@ -15,7 +15,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="System.Reactive" Version="7.0.0" />
-    <PackageReference Include="Websocket.Client" Version="5.5.0" />
+    <PackageReference Include="Websocket.Client" Version="5.5.1" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <PackageReference Include="OpenTelemetry" Version="1.19.1" />
     <PackageReference Include="OpenTelemetry.Api" Version="1.19.1" />
