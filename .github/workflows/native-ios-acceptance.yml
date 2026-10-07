@@ -109,6 +109,7 @@ jobs:
             artifacts/ios-acp-acceptance/product-logs/**
             artifacts/ios-acp-acceptance/results.xcresult
             artifacts/ios-acp-acceptance/test-attachments/**
+            artifacts/ios-acp-acceptance/hang-diagnostics/**
             artifacts/ios-acp-acceptance/reverse/*.json
             artifacts/ios-acp-acceptance/reverse/*.log
             artifacts/ios-acp-acceptance/reverse/red/*.json
