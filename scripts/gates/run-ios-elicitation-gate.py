@@ -99,7 +99,11 @@ def main(args):
         with (artifacts / "simulator-boot.log").open("w") as boot_log:
             run(["xcrun", "simctl", "bootstatus", simulator, "-b"], timeout=300,
                 stdout=boot_log, stderr=subprocess.STDOUT)
-        run(["open", "-a", "Simulator", "--args", "-CurrentDeviceUDID", simulator])
+        # Open the selected Xcode's Simulator by path: runner images do not always register it with
+        # LaunchServices (the xcode-27 image answers "Unable to find application named 'Simulator'").
+        simulator_app = Path(output(["xcode-select", "-p"])) / "Applications/Simulator.app"
+        assert simulator_app.is_dir(), f"Simulator.app is missing from the selected Xcode: {simulator_app}"
+        run(["open", "-a", str(simulator_app), "--args", "-CurrentDeviceUDID", simulator])
         run(["xcrun", "simctl", "install", simulator, str(app)])
         installed = True
         container = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "data"]))
