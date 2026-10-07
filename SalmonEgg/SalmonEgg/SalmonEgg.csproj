@@ -302,6 +302,13 @@
     <UseDefaultPublishRuntimeIdentifier>false</UseDefaultPublishRuntimeIdentifier>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <!-- Uno.Sdk still defaults iOS to 14.2, but the Xcode 27 Apple workload (Microsoft.iOS.Sdk 27.0)
+         rejects anything below 15.0. iOS 15 supports the same devices as iOS 14.
+         https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode27.0-10722 -->
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <!--
       Render the browser head with Skia, matching desktop. The legacy WebAssembly DOM backend stopped
