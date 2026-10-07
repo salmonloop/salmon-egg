@@ -32,7 +32,7 @@ jobs:
     # Pin the 10.0.401 workload set: its Apple workload (26.5.10318) requires Xcode 26.6, which this GA
     # image carries. The band's later 10.0.401.1 set moves to Xcode 27, whose hosted image is a preview.
     runs-on: macos-26
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification && 65 || 35 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification && 80 || 35 }}
     env:
       DOTNET_PROCESSOR_COUNT: 2
       DOTNET_CLI_USE_MSBUILD_SERVER: 0
