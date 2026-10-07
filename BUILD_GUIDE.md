@@ -227,7 +227,7 @@ run.bat
 > 证书复用：`.tools/run-winui3-msix.ps1` 现在会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
 > 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 > 工具链锁定：Windows SDK 10.0.26100.0，signtool 来自 SDK 10.0.22621.0。
-> Workload manifest：CI 应与 `global.json` 中的 .NET SDK feature band 保持一致；当前仓库锁定 10.0.401，并使用 `rollForward: latestPatch`。所有 GHA 均使用 `setup-dotnet` 的 `global-json-file` 读取同一锁定文件。`global.json` 不设 `sdk.workloadVersion`：该字段会让 MSBuild 在未装 workload 的 runner 上直接解析失败，且与 `--skip-manifest-update` 互斥；workload 清单随 SDK feature band 走。iOS 编译与安装门禁共用 Xcode 27.0 和官方 `xcode-27` runner（runner 镜像仍为 public preview），对应 [Apple workload 发布说明](https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode27.0-10722)。
+> Workload manifest：CI 应与 `global.json` 中的 .NET SDK feature band 保持一致；当前仓库锁定 10.0.401，并使用 `rollForward: latestPatch`。所有 GHA 均使用 `setup-dotnet` 的 `global-json-file` 读取同一锁定文件。`global.json` 不设 `sdk.workloadVersion`：该字段会让 MSBuild 在未装 workload 的 runner 上直接解析失败，且与 `--skip-manifest-update` 互斥；workload 清单随 SDK feature band 走。iOS 编译与安装门禁在 `dotnet workload install ios` 上显式钉 workload set `10.0.401`（Apple workload 26.5.10318），共用 `macos-26` runner 上的 Xcode 26.6，对应 [Apple workload 发布说明](https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode26.5-10318)。同 band 更新的 `10.0.401.1` 会切到要求 Xcode 27 的 27.0 workload，其托管镜像仍是 public preview，iOS 27 模拟器上安装与启动均不稳定，因此暂不跟进。
 > 验证口径：`dotnet build -f net10.0-windows10.0.26100.0` 不是本仓库的权威 WinUI 3 / MSIX 门禁；Windows 原生包请以 `build.bat msix` 或 `.tools/run-winui3-msix.ps1 -SkipInstall` 为准。`dotnet build` 主要用于 Core/Skia/Desktop/Wasm 验证。
 
 #### Linux Headless Desktop

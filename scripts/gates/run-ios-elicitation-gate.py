@@ -139,7 +139,7 @@ def main(args):
         assert simulator_app is not None, ("The selected Xcode has no simulator host app: "
             + ", ".join(f"{path.parent}={sorted(p.name for p in path.parent.glob('*.app'))}" for path in candidates))
         run(["open", "-a", str(simulator_app), "--args", "-CurrentDeviceUDID", simulator])
-        # The Debug interpreter bundle already took ~130 s to install on macos-26; the Xcode 27 host is slower.
+        # The Debug interpreter bundle took ~130 s to install on macos-26 and over 5 min on the Xcode 27 host.
         run(["xcrun", "simctl", "install", simulator, str(app)], timeout=600)
         installed = True
         container = Path(output(["xcrun", "simctl", "get_app_container", simulator, bundle_id, "data"]))

@@ -29,9 +29,9 @@ concurrency:
 jobs:
   installed-ios:
     name: iOS Installed ACP UI
-    # The stable Apple workload pinned in global.json requires Xcode 27.
-    # The matching hosted image is currently a public preview: actions/runner-images#14404.
-    runs-on: xcode-27
+    # Pin the 10.0.401 workload set: its Apple workload (26.5.10318) requires Xcode 26.6, which this GA
+    # image carries. The band's later 10.0.401.1 set moves to Xcode 27, whose hosted image is a preview.
+    runs-on: macos-26
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification && 65 || 35 }}
     env:
       DOTNET_PROCESSOR_COUNT: 2
@@ -50,7 +50,7 @@ jobs:
 
       - name: Select matching Apple toolchain
         run: |
-          xcode_developer_dir="$(python3 -c 'import os; print(os.path.realpath("/Applications/Xcode_27.0.app/Contents/Developer"))')"
+          xcode_developer_dir="$(python3 -c 'import os; print(os.path.realpath("/Applications/Xcode_26.6.app/Contents/Developer"))')"
           test -d "$xcode_developer_dir"
           sudo xcode-select --switch "$xcode_developer_dir"
           xcodebuild -version
@@ -58,8 +58,8 @@ jobs:
           uname -m
           xcrun --sdk iphonesimulator --show-sdk-path
           xcrun --sdk macosx --find actool
-          # https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode27.0-10722
-          dotnet workload install ios --disable-parallel --no-http-cache
+          # https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode26.5-10318
+          dotnet workload install ios --version 10.0.401 --disable-parallel --no-http-cache
           dotnet workload list
           # Wait for CoreSimulatorService before actool / xcodebuild (runner-images #12777).
           xcrun simctl list runtimes
