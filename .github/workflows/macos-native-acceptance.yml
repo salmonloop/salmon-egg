@@ -36,7 +36,7 @@ jobs:
       UseSharedCompilation: 'false'
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Verify native observation readiness contracts
@@ -45,7 +45,7 @@ jobs:
         timeout-minutes: 3
         run: python3 scripts/gates/run-macos-desktop-input-probe.py
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
       - name: Build the current native macOS application
@@ -62,7 +62,7 @@ jobs:
         run: python3 scripts/gates/macos-elicitation-reverse-verification.py
       - name: Upload native desktop evidence
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-native-desktop-input
           path: |

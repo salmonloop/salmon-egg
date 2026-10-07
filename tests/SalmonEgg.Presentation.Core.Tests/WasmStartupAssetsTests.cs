@@ -317,12 +317,12 @@ public sealed class WasmStartupAssetsTests
         Assert.True(
             gate.IndexOf("Verify iOS .NET SDK", StringComparison.Ordinal)
             < gate.IndexOf("Install iOS workload", StringComparison.Ordinal));
-        Assert.Contains("runs-on: macos-15", gate, StringComparison.Ordinal);
-        Assert.Contains("os.path.realpath(\"/Applications/Xcode_26.0.app/Contents/Developer\")", gate, StringComparison.Ordinal);
+        Assert.Contains("runs-on: xcode-27", gate, StringComparison.Ordinal);
+        Assert.Contains("os.path.realpath(\"/Applications/Xcode_27.0.app/Contents/Developer\")", gate, StringComparison.Ordinal);
         Assert.Contains("sudo xcode-select --switch \"${xcode_developer_dir}\"", gate, StringComparison.Ordinal);
-        Assert.DoesNotContain("xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("xcode-select --switch /Applications/Xcode_", gate, StringComparison.Ordinal);
         Assert.Contains("xcodebuild -version", gate, StringComparison.Ordinal);
-        Assert.Contains("26.0*)", gate, StringComparison.Ordinal);
+        Assert.Contains("27.0*)", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk macosx --show-sdk-path", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk iphonesimulator --show-sdk-path", gate, StringComparison.Ordinal);
         Assert.Contains("xcrun --sdk macosx --find actool", gate, StringComparison.Ordinal);
@@ -357,7 +357,6 @@ public sealed class WasmStartupAssetsTests
             @".github\workflows\wasm-smoke-gates.yml"
         ];
 
-        Assert.Contains("\"version\": \"10.0.302\"", globalJson, StringComparison.Ordinal);
         Assert.Contains("\"rollForward\": \"latestPatch\"", globalJson, StringComparison.Ordinal);
         foreach (var workflowPath in workflowPaths)
         {

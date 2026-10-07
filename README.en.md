@@ -51,7 +51,7 @@ Screenshots come from the store listing. In the app, **Settings → About** prov
 ## Tech Stack
 
 - Uno Platform 6.7+ (repo pin: `Uno.Sdk` 6.7.30)
-- .NET 10 (repo pin: SDK 10.0.302, with 10.0.3xx patch roll-forward)
+- .NET 10 (repo pin: SDK 10.0.401, with 10.0.4xx patch roll-forward)
 - WinUI 3 on Windows
 - Clean Architecture + MVVM
 
@@ -78,8 +78,8 @@ For environment requirements and detailed build steps, start with [BUILD_GUIDE.m
 
 ### Requirements
 
-- .NET SDK **10.0.302** or a compatible **10.0.3xx** patch (see `global.json`)
-- Windows 10 1809+ / Windows 11 for WinUI 3 and MSIX validation; on Windows prefer Visual Studio **18.8+**
+- .NET SDK **10.0.401** or a compatible **10.0.4xx** patch (see `global.json`)
+- Windows 10 1809+ / Windows 11 for WinUI 3 and MSIX validation; on Windows prefer Visual Studio **18.9.3+**
 - Or an equivalent command-line toolchain (Linux/macOS can build Desktop / WASM)
 
 ### Common Commands

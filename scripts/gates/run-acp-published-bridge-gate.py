@@ -33,7 +33,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     bridge_path = shutil.which(args.bridge)
     if bridge_path is None:
-        raise SystemExit("Install acpremote==1.9.0 in an isolated environment before running this gate.")
+        raise SystemExit("Install the acpremote version pinned in .github/workflows/ci-core.yml in an isolated environment before running this gate.")
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
