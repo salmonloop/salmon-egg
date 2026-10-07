@@ -37,12 +37,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -61,7 +61,7 @@ jobs:
         run: scripts/gates/run-release-artifact-contract-gate.sh wasm publish/wasm
 
       - name: Upload WebAssembly artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wasm-build
           path: publish/wasm
@@ -72,12 +72,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -223,7 +223,7 @@ jobs:
             (Join-Path $wixObjDir "Harvest.wixobj")
 
       - name: Upload Desktop artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-windows-build
           path: publish/desktop-windows
@@ -260,23 +260,24 @@ jobs:
             [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
           }
       - name: Upload Windows Skia MSI artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-windows-skia-msi
           path: artifacts/installer/*.msi
 
   package-windows-msix:
     name: Package Windows MSIX
-    runs-on: windows-latest
+    # Match the .NET 10.0.4xx SDK with the Visual Studio 2026 XAML/MSIX toolchain.
+    runs-on: windows-2025-vs2026
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -391,7 +392,7 @@ jobs:
           ./scripts/gates/run-msix-package-contract-gate.ps1 -Package $package.FullName
 
       - name: Upload Windows MSIX artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-windows-msix
           path: artifacts/msix/**/*.msix
@@ -414,12 +415,12 @@ jobs:
       MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -549,7 +550,7 @@ jobs:
         run: scripts/gates/run-macos-pkg-artifact-gate.sh "$PKG_PATH"
 
       - name: Upload macOS installer package artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-macos-pkg
           path: |
@@ -558,14 +559,14 @@ jobs:
           if-no-files-found: error
 
       - name: Upload macOS bundle artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-macos-bundle
           path: publish/macos-bundle/*
 
       - name: Upload macOS .dmg artifact
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
@@ -576,14 +577,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags and
           # would stamp 0.0.0 into the package version, which no later release could upgrade over.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -621,7 +622,7 @@ jobs:
         run: scripts/gates/run-desktop-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
 
       - name: Upload Linux desktop package artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-linux-deb
           path: |
@@ -649,49 +650,49 @@ jobs:
     steps:
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-windows-msix
           path: windows-msix
 
       - name: Download WebAssembly artifact
         if: needs.package-wasm.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: wasm-build
           path: wasm-build
 
       - name: Download Windows Skia MSI artifact
         if: needs.package-desktop.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-windows-skia-msi
           path: windows-skia-msi
 
       - name: Download macOS bundle artifact
         if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-macos-bundle
           path: macos-bundle
 
       - name: Download macOS installer package artifact
         if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-macos-pkg
           path: macos-pkg
 
       - name: Download macOS .dmg artifact
         if: needs.package-macos.outputs.dmg-produced == 'true'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-macos-dmg
           path: macos-dmg
 
       - name: Download Linux desktop package artifact
         if: needs.package-linux-desktop.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-linux-deb
           path: linux-deb

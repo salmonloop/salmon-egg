@@ -51,7 +51,7 @@ Salmon Egg 已在 Microsoft Store 上架，免费下载。商店页面的正式�
 ## 技术栈
 
 - Uno Platform 6.7+（仓库锁定 `Uno.Sdk` 6.7.30）
-- .NET 10（仓库锁定 SDK 10.0.302，允许 10.0.3xx patch 前滚）
+- .NET 10（仓库锁定 SDK 10.0.401，允许 10.0.4xx patch 前滚）
 - WinUI 3（Windows）
 - Clean Architecture + MVVM
 
@@ -80,8 +80,8 @@ iOS 原生 UIKit 在当前 Uno 6.7.103 下使用平台内的官方导航模板�
 
 ### 环境要求
 
-- .NET SDK **10.0.302** 或兼容的 **10.0.3xx** patch（见 `global.json`）
-- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）；Windows 建议 Visual Studio **18.8+**
+- .NET SDK **10.0.401** 或兼容的 **10.0.4xx** patch（见 `global.json`）
+- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）；Windows 建议 Visual Studio **18.9.3+**
 - 或等效命令行工具链（Linux/macOS 可构建 Desktop / WASM）
 
 ### 常用命令

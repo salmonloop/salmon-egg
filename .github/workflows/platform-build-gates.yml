@@ -61,14 +61,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -118,14 +118,14 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -189,18 +189,19 @@ jobs:
     # packaging chain is not, so this gate builds the package unsigned on every change and asserts the
     # package actually carries what its manifest declares.
     name: Windows MSIX Package
-    runs-on: windows-latest
+    # Match the .NET 10.0.4xx SDK with the Visual Studio 2026 XAML/MSIX toolchain.
+    runs-on: windows-2025-vs2026
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -290,14 +291,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -355,19 +356,20 @@ jobs:
     name: iOS Simulator
     # Heavy mobile build fast-gated out of standard PRs; runs on push, schedule, and workflow_dispatch.
     if: github.event_name != 'pull_request'
-    # Pin the OS image because .NET for iOS 26.0 requires Xcode 26.0, while macos-latest can roll forward independently.
-    runs-on: macos-15
+    # The stable Apple workload pinned in global.json requires Xcode 27.
+    # The matching hosted image is currently a public preview: actions/runner-images#14404.
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The version identity is derived from git tags by MinVer; a shallow clone sees no tags
           # and would stamp 0.0.0 into every manifest and binary.
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -377,7 +379,7 @@ jobs:
           xcode_developer_dir="$(python3 - <<'PY'
           import os
 
-          print(os.path.realpath("/Applications/Xcode_26.0.app/Contents/Developer"))
+          print(os.path.realpath("/Applications/Xcode_27.0.app/Contents/Developer"))
           PY
           )"
           if [ ! -d "${xcode_developer_dir}" ]; then
@@ -389,8 +391,8 @@ jobs:
           xcodebuild -version
           xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
           case "${xcode_version}" in
-            26.0*) ;;
-            *) echo "Expected Xcode 26.0.x, got ${xcode_version}." >&2; exit 1 ;;
+            27.0*) ;;
+            *) echo "Expected Xcode 27.0.x, got ${xcode_version}." >&2; exit 1 ;;
           esac
           xcrun --sdk macosx --show-sdk-path
           xcrun --sdk iphonesimulator --show-sdk-path

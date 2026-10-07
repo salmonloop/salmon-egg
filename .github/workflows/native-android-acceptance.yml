@@ -38,12 +38,12 @@ jobs:
       SALMONEGG_ANDROID_REVERSE: ${{ github.event_name == 'workflow_dispatch' && inputs.reverse-verification || false }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
@@ -57,7 +57,7 @@ jobs:
             'platforms;android-36' 'build-tools;36.0.0' platform-tools emulator 'system-images;android-36;google_apis;x86_64'
           echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
           python3 -m venv "$RUNNER_TEMP/android-acp-tools"
-          "$RUNNER_TEMP/android-acp-tools/bin/python" -m pip install aiohttp==3.12.15
+          "$RUNNER_TEMP/android-acp-tools/bin/python" -m pip install aiohttp==3.14.4
 
       - name: Build current installable APK
         run: |
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload acceptance evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-installed-acp-acceptance
           path: artifacts/android-acp-acceptance
