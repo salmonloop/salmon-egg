@@ -25,6 +25,37 @@ def output(command):
     return subprocess.check_output(command, text=True, timeout=90).strip()
 
 
+def capture_hang_evidence(artifacts, simulator, executable):
+    """Record where a stalled product is stuck before cleanup terminates it.
+
+    The app log stops at the first line it cannot get past, which names neither the thread nor the
+    frame; a host stack sample, the device's unified log and any crash report do.
+    """
+    diagnostics = artifacts / "hang-diagnostics"
+    diagnostics.mkdir(exist_ok=True)
+    # Simulator apps run as host processes launched from the device's own bundle container.
+    pattern = f"{simulator}/data/Containers/Bundle/Application/[^ ]*/{executable}.app/{executable}"
+    commands = []
+    try:
+        pids = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, timeout=10).stdout.split()
+    except subprocess.TimeoutExpired:
+        pids = []
+    commands += [(f"sample-{pid}.txt", ["sample", pid, "5"], 60) for pid in pids]
+    commands.append(("device-log.txt", ["xcrun", "simctl", "spawn", simulator, "log", "show", "--last", "20m",
+        "--style", "compact", "--predicate", f'process == "{executable}"'], 90))
+    for name, command, timeout in commands:
+        with (diagnostics / name).open("w") as log:
+            try:
+                subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=timeout, check=False)
+            except subprocess.TimeoutExpired:
+                log.write(f"\n[ios-gate] timed out after {timeout}s\n")
+            except OSError as error:
+                log.write(f"\n[ios-gate] could not run: {error!r}\n")
+    for report in (Path.home() / "Library/Logs/DiagnosticReports").glob(f"{executable}*"):
+        shutil.copyfile(report, diagnostics / report.name)
+    print(f"[ios-gate] hang diagnostics: {len(pids)} product process(es) sampled", flush=True)
+
+
 def seed(container, endpoint):
     root = container / "Library/Application Support/SalmonEgg"
     (root / "config/servers").mkdir(parents=True)
@@ -64,6 +95,7 @@ def main(args):
     test_process = None
     root = None
     installed = False
+    passed = False
     try:
         # Start the peer before first-boot CoreSimulator work competes for the host CPU.
         with socket.socket() as reservation:
@@ -170,7 +202,14 @@ def main(args):
             "systemSafari": True, "browserVisits": 2, "acceptWithoutContent": True,
             "formAnswer": True, "formResponses": 3, "noExternalDataPersistence": True}, indent=2) + "\n")
         print("iOS installed product: consent, form, Safari isolation and completion passed")
+        passed = True
     finally:
+        if installed and not passed:
+            # Sample while the product is still alive: every later step terminates it.
+            try:
+                capture_hang_evidence(artifacts, simulator, binary.name)
+            except Exception as error:  # Evidence is best-effort; never mask the gate's own failure.
+                print(f"[ios-gate] hang diagnostics failed: {error!r}", flush=True)
         if test_process is not None:
             try:
                 os.killpg(test_process.pid, signal.SIGTERM)
