@@ -13,14 +13,14 @@
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="CommunityToolkit.Labs.WinUI.Controls.MarkdownTextBlock" Version="0.1.251217-build.2433" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
     <PackageVersion Include="MinVer" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Graph" Version="6.8.0" />
-    <PackageVersion Include="Microsoft.Identity.Client" Version="4.90.1" />
-    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.90.1" />
+    <PackageVersion Include="Microsoft.Identity.Client" Version="4.91.0" />
+    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.91.0" />
     <!-- Stay on Windows App SDK 1.8 line until Uno 6.7 + WinUI packaging are validated on 2.x.
          WinUI must equal the exact version the meta-package pins in its nuspec. -->
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
@@ -32,8 +32,8 @@
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
-    <PackageVersion Include="System.Security.Permissions" Version="10.0.12" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Permissions" Version="10.0.13" />
     <PackageVersion Include="Uno.WinUI.Lottie" Version="6.7.135" />
     <PackageVersion Include="Uno.Extensions.Reactive" Version="7.3.6" />
     <PackageVersion Include="Uno.Extensions.Reactive.WinUI" Version="7.3.6" />

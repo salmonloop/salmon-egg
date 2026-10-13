@@ -18,7 +18,7 @@
     <PackageReference Include="coverlet.MTP" Version="10.1.0" />
     <PackageReference Include="FsCheck" Version="3.4.0" />
     <PackageReference Include="Moq" Version="4.21.0" />
-    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.1" />
+    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.2" />
   </ItemGroup>
 
   <ItemGroup>
