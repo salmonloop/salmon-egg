@@ -33,9 +33,9 @@ public sealed class MainNavigationViewAdapter
             return Task.FromResult(false);
         }
 
-        if (NavItemTag.TryParseProject(tag, out _))
+        if (NavItemTag.TryParseProject(tag, out _) || NavItemTag.TryParseStatusGroup(tag, out _))
         {
-            // Non-leaf project items are not navigation destinations. Let the native
+            // Non-leaf group items are not navigation destinations. Let the native
             // NavigationView hierarchy handle expand/collapse without translating the
             // click into a semantic selection change.
             return Task.FromResult(true);
@@ -46,6 +46,11 @@ public sealed class MainNavigationViewAdapter
 
     private Task<bool>? HandleActivatableTagAsync(NavigationViewItem navItem, string tag)
     {
+        if (NavItemTag.TryParseMoreStatusGroup(tag, out var statusGroup))
+        {
+            return AwaitActivationHandledAsync(_viewModel.ShowMoreSessionsForStatusGroupAsync(statusGroup));
+        }
+
         if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
         {
             // The entry itself is not a destination: invoking it opens the source chooser

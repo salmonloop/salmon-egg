@@ -43,6 +43,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private readonly TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs> _messagesListContainerContentChangingHandler;
     private readonly RoutedEventHandler _messagesListItemGotFocusHandler;
     private ITranscriptViewportHost? _transcriptViewportHost;
+    private TranscriptReadReceiptObserver? _readReceiptObserver;
     public ChatView()
     {
         ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
@@ -161,6 +162,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     {
         DisposeTranscriptViewportHost();
         var messagesList = MessagesList;
+        if (messagesList is not null)
+        {
+            _readReceiptObserver = new TranscriptReadReceiptObserver(messagesList, ViewModel,
+                App.ServiceProvider.GetRequiredService<SalmonEgg.Presentation.Services.AppActivationSignalSource>());
+        }
         _transcriptViewportHost = messagesList is null
             ? null
             : new ListViewTranscriptViewportHost(messagesList);
@@ -209,6 +215,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
     private void DisposeTranscriptViewportHost()
     {
+        _readReceiptObserver?.Dispose();
+        _readReceiptObserver = null;
         _nativeScrollScheduler.Clear();
         if (_transcriptViewportHost is null)
         {
@@ -222,6 +230,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
     private void OnMessagesListViewportChanged(object? sender, EventArgs e)
     {
+        _readReceiptObserver?.ReportVisible();
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnViewportChanged(

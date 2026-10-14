@@ -37,7 +37,8 @@ public sealed record SetBindingSliceAction(ConversationBindingSlice? Binding) : 
 public sealed record ApplyBindingUpdateAction(
     ConversationBindingSlice Binding,
     IImmutableDictionary<string, ConversationSessionInfoSnapshot?> PreservedSessionInfoByConversationId,
-    IImmutableSet<string> ScrubConversationIds) : ChatAction;
+    IImmutableSet<string> ScrubConversationIds,
+    ActiveTurnState? PreservedTurn = null) : ChatAction;
 
 public sealed record SetConversationRuntimeStateAction(ConversationRuntimeSlice RuntimeState) : ChatAction;
 
@@ -57,7 +58,10 @@ public sealed record ResetConversationRuntimeStatesAction : ChatAction;
 /// <summary>
 /// Dispatched when the user edits the draft prompt text.
 /// </summary>
-public sealed record SetDraftTextAction(string Text) : ChatAction;
+public sealed record SetDraftTextAction(
+    string Text,
+    string? ExpectedConversationId = null,
+    long? ExpectedRevision = null) : ChatAction;
 
 /// <summary>
 /// Dispatched to clear the current chat state.
@@ -65,6 +69,10 @@ public sealed record SetDraftTextAction(string Text) : ChatAction;
 public sealed record ClearChatAction : ChatAction;
 
 public sealed record SetAgentIdentityAction(string? ProfileId, string? AgentName, string? AgentVersion) : ChatAction;
+
+public sealed record SetConversationOperationFailureAction(ConversationOperationFailure Failure) : ChatAction;
+
+public sealed record ClearConversationOperationFailureAction(string ConversationId) : ChatAction;
 
 /// <summary>
 /// Dispatched to update the hydration (history loading) status.
@@ -77,15 +85,48 @@ public sealed record BeginTurnAction(
     ChatTurnPhase InitialPhase,
     string? PendingUserMessageLocalId = null,
     string? PendingUserProtocolMessageId = null,
-    string? PendingUserMessageText = null) : ChatAction;
+    string? PendingUserMessageText = null,
+    string? ProfileId = null,
+    string? RemoteSessionId = null,
+    string? ConnectionInstanceId = null) : ChatAction;
 
-public sealed record AdvanceTurnPhaseAction(string ConversationId, string TurnId, ChatTurnPhase NewPhase, string? ToolCallId = null, string? ToolTitle = null) : ChatAction;
+public sealed record SetTurnBindingAction(
+    string ConversationId,
+    string TurnId,
+    string? ProfileId,
+    string? RemoteSessionId,
+    string? ConnectionInstanceId,
+    string? ExpectedConnectionInstanceId = null) : ChatAction;
 
-public sealed record CompleteTurnAction(string ConversationId, string TurnId) : ChatAction;
+public sealed record AdvanceTurnPhaseAction(
+    string ConversationId,
+    string TurnId,
+    ChatTurnPhase NewPhase,
+    string? ToolCallId = null,
+    string? ToolTitle = null,
+    string? ConnectionInstanceId = null) : ChatAction;
 
-public sealed record FailTurnAction(string ConversationId, string TurnId, string? ErrorMessage = null) : ChatAction;
+public sealed record CompleteTurnAction(
+    string ConversationId,
+    string TurnId,
+    string? StopReason = null,
+    bool HasStopReason = false,
+    string? ConnectionInstanceId = null) : ChatAction;
 
-public sealed record CancelTurnAction(string ConversationId, string TurnId) : ChatAction;
+public sealed record FailTurnAction(
+    string ConversationId,
+    string TurnId,
+    string? ErrorMessage = null,
+    string? StopReason = null,
+    bool HasStopReason = false,
+    string? ConnectionInstanceId = null) : ChatAction;
+
+public sealed record CancelTurnAction(
+    string ConversationId,
+    string TurnId,
+    string? StopReason = null,
+    bool HasStopReason = false,
+    string? ConnectionInstanceId = null) : ChatAction;
 
 public sealed record ClearTerminalTurnAction(string ConversationId) : ChatAction;
 

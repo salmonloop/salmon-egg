@@ -1,4 +1,5 @@
 using System;
+using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.Navigation;
 
@@ -21,6 +22,11 @@ public static class MainNavigationAutomationIds
     public static string SessionUnread(string sessionId) => WithSuffix("MainNav.Session.Unread", sessionId);
 
     public static string MoreItem(string projectId) => WithSuffix("MainNav.More", projectId);
+
+    public static string StatusGroupItem(ConversationStatusGroup group) => WithSuffix("MainNav.StatusGroup", group.ToString());
+
+    public static string MoreGroupItem(string projectId, ConversationStatusGroup? group)
+        => group is { } status ? WithSuffix("MainNav.More.StatusGroup", status.ToString()) : MoreItem(projectId);
 
     public static string SessionsDialogItem(string sessionId) => WithSuffix("SessionsDialog.Session", sessionId);
 

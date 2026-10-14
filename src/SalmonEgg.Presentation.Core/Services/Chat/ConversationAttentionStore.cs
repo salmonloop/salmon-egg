@@ -32,9 +32,9 @@ public sealed class ConversationAttentionStore : IConversationAttentionStore
         await _dispatchGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            var currentState = _cachedState ?? await State ?? ConversationAttentionState.Empty;
+            var currentState = Volatile.Read(ref _cachedState) ?? await State ?? ConversationAttentionState.Empty;
             var updatedState = ConversationAttentionReducer.Reduce(currentState, action);
-            _cachedState = updatedState;
+            Volatile.Write(ref _cachedState, updatedState);
 
             await State.Update(_ => updatedState, default).ConfigureAwait(false);
         }
@@ -45,5 +45,5 @@ public sealed class ConversationAttentionStore : IConversationAttentionStore
     }
 
     public async ValueTask<ConversationAttentionState> GetCurrentStateAsync()
-        => _cachedState ?? await State ?? ConversationAttentionState.Empty;
+        => Volatile.Read(ref _cachedState) ?? await State ?? ConversationAttentionState.Empty;
 }

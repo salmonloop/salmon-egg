@@ -106,13 +106,14 @@ public sealed class ChatAuthenticationCoordinator
         AuthenticationHintPresentation? requiredFallback = null,
         Func<string, AuthenticationHintPresentation>? formatAuthenticationFailed = null,
         AuthenticationHintPresentation? unsupportedMethodTypeFallback = null,
-        Func<AuthMethodDefinition, CancellationToken, Task<bool>>? terminalAuthenticateAsync = null)
+        Func<AuthMethodDefinition, CancellationToken, Task<bool>>? terminalAuthenticateAsync = null,
+        Func<bool>? isCurrent = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(showTransientNotificationToast);
 
-        if (chatService is null || !isInitialized)
+        if (chatService is null || !isInitialized || isCurrent?.Invoke() == false)
         {
             return false;
         }
@@ -127,6 +128,7 @@ public sealed class ChatAuthenticationCoordinator
                 MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast,
                     terminalMethod, requiredFallback: requiredFallback);
                 if (!await terminalAuthenticateAsync(terminalMethod, cancellationToken).ConfigureAwait(false)) return false;
+                if (isCurrent?.Invoke() == false) return false;
                 await coordinator.ClearAuthenticationRequiredAsync(cancellationToken).ConfigureAwait(false);
                 return true;
             }
@@ -167,6 +169,7 @@ public sealed class ChatAuthenticationCoordinator
                 .AuthenticateAsync(new AuthenticateParams(method.Id), cancellationToken)
                 .ConfigureAwait(false);
 
+            if (isCurrent?.Invoke() == false) return false;
             ClearAuthenticationRequirement(coordinator);
             return true;
         }
@@ -180,6 +183,7 @@ public sealed class ChatAuthenticationCoordinator
         }
         catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
         {
+            if (isCurrent?.Invoke() == false) return false;
             MarkAuthenticationRequired(
                 coordinator,
                 logger,
@@ -191,6 +195,7 @@ public sealed class ChatAuthenticationCoordinator
         catch (Exception ex)
         {
             logger.LogError(ex, "Authenticate failed");
+            if (isCurrent?.Invoke() == false) return false;
             var failedPresentation = formatAuthenticationFailed is null
                 ? new AuthenticationHintPresentation($"Authentication failed: {ex.Message}")
                 : formatAuthenticationFailed(ex.Message);

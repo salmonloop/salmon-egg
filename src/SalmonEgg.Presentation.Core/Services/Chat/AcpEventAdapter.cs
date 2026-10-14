@@ -7,6 +7,8 @@ using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
+internal readonly record struct BufferedSessionUpdate(SessionUpdateEventArgs Update, bool IsReplay);
+
 /// <summary>
 /// Serializes ACP session updates onto a target dispatcher.
 /// Provides buffering, backpressure, and resync gating until hydration completes.
@@ -22,7 +24,7 @@ public sealed class AcpEventAdapter
     private readonly IUiDispatcher _uiDispatcher;
     private readonly Func<string?, System.Threading.Tasks.Task>? _resyncRequired;
     private readonly ILogger<AcpEventAdapter>? _logger;
-    private readonly Queue<SessionUpdateEventArgs> _buffer = new();
+    private readonly Queue<BufferedSessionUpdate> _buffer = new();
     private readonly Dictionary<long, HydrationBufferScope> _hydrationScopesByAttemptId = new();
     private readonly Dictionary<string, HydrationBufferScope> _hydrationScopesBySessionId =
         new(StringComparer.Ordinal);
@@ -83,7 +85,7 @@ public sealed class AcpEventAdapter
 
         public string SessionId { get; }
 
-        public Queue<SessionUpdateEventArgs> Buffer { get; } = new();
+        public Queue<BufferedSessionUpdate> Buffer { get; } = new();
 
         public TaskCompletionSource<object?>? DrainIdleTcs { get; set; }
 
@@ -156,6 +158,8 @@ public sealed class AcpEventAdapter
     {
     }
 
+    internal event Action<BufferedSessionUpdate>? UpdateDispatched;
+
     public void OnSessionUpdate(SessionUpdateEventArgs update)
     {
         Enqueue(update);
@@ -186,11 +190,11 @@ public sealed class AcpEventAdapter
                 }
                 else if (!CanDrainBufferedUpdatesLocked(scope))
                 {
-                    scope.Buffer.Enqueue(update);
+                    scope.Buffer.Enqueue(new(update, IsReplay: !scope.IsHydrated));
                 }
                 else
                 {
-                    scope.Buffer.Enqueue(update);
+                    scope.Buffer.Enqueue(new(update, IsReplay: !scope.IsHydrated));
                     if (!scope.DrainScheduled)
                     {
                         scope.DrainScheduled = true;
@@ -211,11 +215,11 @@ public sealed class AcpEventAdapter
                 }
                 else if (!CanDrainBufferedUpdatesLocked())
                 {
-                    _buffer.Enqueue(update);
+                    _buffer.Enqueue(new(update, IsReplay: !_isHydrated && _hydrationAttemptId != 0));
                 }
                 else
                 {
-                    _buffer.Enqueue(update);
+                    _buffer.Enqueue(new(update, IsReplay: !_isHydrated && _hydrationAttemptId != 0));
                     if (!_drainScheduled)
                     {
                         _drainScheduled = true;
@@ -413,6 +417,26 @@ public sealed class AcpEventAdapter
         }
         var completed = Task.WhenAll(drains);
         return cancellationToken.CanBeCanceled ? completed.WaitAsync(cancellationToken) : completed;
+    }
+
+    internal Task WaitForSessionUpdatesDrainedAsync(string? sessionId, CancellationToken cancellationToken)
+    {
+        Task pendingGlobal;
+        Task pendingSession = Task.CompletedTask;
+        lock (_gate)
+        {
+            // A different session can own the latest hydration attempt while this prompt's
+            // final chunks still await steady-state dispatch. Observe both existing queues.
+            pendingGlobal = _buffer.Count == 0 && !_drainScheduled ? Task.CompletedTask
+                : (_drainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            if (sessionId is not null && _hydrationScopesBySessionId.TryGetValue(sessionId, out var scope)
+                && (scope.Buffer.Count != 0 || scope.DrainScheduled))
+            {
+                pendingSession = (scope.DrainIdleTcs ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            }
+        }
+
+        return Task.WhenAll(pendingGlobal, pendingSession).WaitAsync(cancellationToken);
     }
 
     public Task WaitForDrainIdleAsync(long hydrationAttemptId, CancellationToken cancellationToken = default)
@@ -646,7 +670,7 @@ public sealed class AcpEventAdapter
         var drainedCount = 0;
         while (drainedCount < DefaultDrainBatchSize)
         {
-            SessionUpdateEventArgs update;
+            BufferedSessionUpdate update;
             TaskCompletionSource<object?>? drainIdle = null;
             lock (_gate)
             {
@@ -667,7 +691,7 @@ public sealed class AcpEventAdapter
             return;
 
         HandleUpdate:
-            _handler(update);
+            DispatchUpdate(update);
             drainedCount++;
         }
 
@@ -698,7 +722,7 @@ public sealed class AcpEventAdapter
         var scheduleGlobalDrain = false;
         while (drainedCount < DefaultDrainBatchSize)
         {
-            SessionUpdateEventArgs update;
+            BufferedSessionUpdate update;
             TaskCompletionSource<object?>? drainIdle = null;
             lock (_gate)
             {
@@ -734,7 +758,7 @@ public sealed class AcpEventAdapter
             return;
 
         HandleUpdate:
-            _handler(update);
+            DispatchUpdate(update);
             drainedCount++;
         }
 
@@ -773,6 +797,12 @@ public sealed class AcpEventAdapter
 
     private static bool CanDrainBufferedUpdatesLocked(HydrationBufferScope scope)
         => scope.IsHydrated || scope.IsReplayProjectionReleased;
+
+    private void DispatchUpdate(BufferedSessionUpdate update)
+    {
+        _handler(update.Update);
+        UpdateDispatched?.Invoke(update);
+    }
 
     private static bool CanCompleteHydrationScopeLocked(HydrationBufferScope scope)
         => scope.IsHydrated

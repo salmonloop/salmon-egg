@@ -58,7 +58,11 @@ public partial class ChatViewModel
         string TurnId,
         string PromptText,
         string PromptMessageId,
-        ConversationMessageSnapshot UserSnapshot);
+        ConversationMessageSnapshot UserSnapshot,
+        long DraftRevision,
+        long ActivationVersion,
+        long ConnectionGeneration,
+        string? Cwd);
 
     private async Task PublishDisconnectedConnectionStateAsync(string? errorMessage)
     {
@@ -105,73 +109,98 @@ public partial class ChatViewModel
     /// Sends the current prompt to the active agent.
     /// Handles lazy session creation, authentication requirements, and error recovery.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanSendPrompt))]
+    [RelayCommand(CanExecute = nameof(CanSendPrompt), AllowConcurrentExecutions = true)]
     private async Task SendPromptAsync()
     {
-        var promptContext = TryCreatePromptSendContext();
+        if (!CanSendPrompt()) return;
+        var conversationId = CurrentSessionId;
+        var promptText = CurrentPrompt;
+        var source = ResolvePromptSource(_chatService, SelectedProfileId);
+        var activationVersion = _conversationActivationOrchestrator.CurrentActivationVersion;
+        await _promptDraftDispatchTask.ConfigureAwait(true);
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
+        if (conversationId != CurrentSessionId || promptText != CurrentPrompt
+            || !_conversationActivationOrchestrator.IsLatestActivationVersion(activationVersion)) return;
+        var promptContext = TryCreatePromptSendContext(state);
         if (promptContext is null)
         {
             return;
         }
 
-        if (!CanSendPrompt())
+        if (!CanSendPrompt() || source is null)
         {
             return;
         }
 
-        if (IsAuthenticationRequired)
-        {
-            using var authenticationCts = new CancellationTokenSource();
-            _sendPromptCts = authenticationCts;
-
-            var authenticated = await TryAuthenticateAsync(authenticationCts.Token).ConfigureAwait(true);
-            if (!authenticated)
-            {
-                _sendPromptCts = null;
-                ShowTransientNotificationToast(
-                    AuthenticationHintMessage
-                    ?? Localize(
-                        "ChatAuth_Required",
-                        "The agent requires authentication before it can respond."));
-                return;
-            }
-
-            _sendPromptCts = null;
-        }
+        var operation = TryAdmitPromptOperation(promptContext, source.Value);
+        if (operation is null) return;
 
         try
         {
-            await BeginPromptSendAsync(promptContext).ConfigureAwait(true);
-            await EnsurePromptDispatchAsync(promptContext).ConfigureAwait(true);
+            await BeginPromptSendAsync(operation).ConfigureAwait(true);
+            if (IsAuthenticationRequired)
+            {
+                var authenticated = await AuthenticatePromptOperationAsync(operation, operation.CancellationToken).ConfigureAwait(true);
+                if (!authenticated)
+                {
+                    throw new InvalidOperationException(AuthenticationHintMessage ?? Localize(
+                        "ChatAuth_Required",
+                        "The agent requires authentication before it can respond."));
+                }
+            }
+
+            await EnsurePromptDispatchAsync(operation).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             // User-cancelled; keep input cleared.
-            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
+            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId, operation.Source.ConnectionInstanceId).ConfigureAwait(true);
         }
         catch (Exception ex) when (AcpErrorClassifier.IsRequestCancelled(ex))
         {
             // The peer settled the prompt with JSON-RPC -32800. ACP cancellation is terminal but
             // not a user-actionable failure, so it follows the same state path as caller-token
             // cancellation rather than leaving a persistent failure callout.
-            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId).ConfigureAwait(true);
+            await PreemptivelyCancelTurnAsync(promptContext.ConversationId, promptContext.TurnId, operation.Source.ConnectionInstanceId).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "SendPrompt failed");
-            await FailPromptSendAsync(promptContext, ex.Message).ConfigureAwait(true);
+            await FailPromptSendAsync(operation, ex.Message).ConfigureAwait(true);
             Logger.LogInformation(
                 "Chat prompt exception terminal phase applied. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
                 promptContext.ConversationId,
                 promptContext.TurnId,
                 ChatTurnPhase.Failed);
 
-            await RestorePromptTextAfterSendFailureAsync(promptContext.PromptText).ConfigureAwait(true);
+            await RestorePromptTextAfterSendFailureAsync(operation).ConfigureAwait(true);
         }
         finally
         {
-            try { _sendPromptCts?.Dispose(); } catch { }
-            _sendPromptCts = null;
+            try
+            {
+                if (!_disposed)
+                {
+                    await PostToUiAsync(() =>
+                    {
+                        RemovePromptOperation(operation);
+                        NotifyComposerProjectionChanged();
+                    }).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                RemovePromptOperation(operation);
+                operation.ReleaseUsage();
+                try
+                {
+                    await RequestPoolCleanupAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    operation.Dispose();
+                }
+            }
         }
     }
 
@@ -319,7 +348,7 @@ public partial class ChatViewModel
         await ApplySessionNewResponseAsync(localConversationId, response).ConfigureAwait(true);
     }
 
-    private PromptSendContext? TryCreatePromptSendContext()
+    private PromptSendContext? TryCreatePromptSendContext(ChatState state)
     {
         if (string.IsNullOrWhiteSpace(CurrentPrompt)
             || !IsSessionActive
@@ -341,46 +370,56 @@ public partial class ChatViewModel
             Guid.NewGuid().ToString(),
             promptText,
             Guid.NewGuid().ToString("D"),
-            userSnapshot);
+            userSnapshot,
+            state.DraftRevision,
+            _conversationActivationOrchestrator.CurrentActivationVersion,
+            ConnectionGeneration,
+            GetSessionCwdOrDefault(CurrentSessionId));
     }
 
-    private async Task BeginPromptSendAsync(PromptSendContext context)
+    private async Task BeginPromptSendAsync(PromptOperation operation)
     {
+        var context = operation.Context;
         QueueClearConversationOperationFailure(context.ConversationId);
-        _sendPromptCts?.Cancel();
-        _sendPromptCts = new CancellationTokenSource();
+        ThrowIfPromptSourceChanged(operation);
         await _chatStore.Dispatch(new BeginTurnAction(
             context.ConversationId,
             context.TurnId,
             ChatTurnPhase.CreatingRemoteSession,
             PendingUserMessageLocalId: context.UserSnapshot.Id,
             PendingUserProtocolMessageId: context.PromptMessageId,
-            PendingUserMessageText: context.PromptText));
+            PendingUserMessageText: context.PromptText,
+            ProfileId: operation.Source.ProfileId,
+            ConnectionInstanceId: operation.Source.ConnectionInstanceId));
+        var admitted = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(true)).ResolveTurn(context.ConversationId);
+        if (admitted?.TurnId != context.TurnId)
+        {
+            throw new OperationCanceledException("Another turn already owns this conversation.", operation.CancellationToken);
+        }
         Logger.LogInformation(
             "Chat prompt turn began. ConversationId={ConversationId} TurnId={TurnId} TurnPhase={TurnPhase}",
             context.ConversationId,
             context.TurnId,
             ChatTurnPhase.CreatingRemoteSession);
-        ClearCurrentPromptOnUiThread();
+        await ClearPromptForOperationAsync(operation).ConfigureAwait(true);
         await UpsertTranscriptSnapshotAsync(context.ConversationId, context.UserSnapshot).ConfigureAwait(true);
         NotifyComposerProjectionChanged();
     }
 
-    private async Task EnsurePromptDispatchAsync(PromptSendContext context)
+    private async Task EnsurePromptDispatchAsync(PromptOperation operation)
     {
-        if (_chatService is null)
-        {
-            return;
-        }
-
-        var token = _sendPromptCts?.Token ?? CancellationToken.None;
-        token.ThrowIfCancellationRequested();
+        var context = operation.Context;
+        var token = operation.CancellationToken;
+        ThrowIfPromptSourceChanged(operation);
+        var sink = new ScopedAcpChatCoordinatorSink(this,
+            new AcpConnectionContext(context.ConversationId, PreserveConversation: true, context.ActivationVersion), operation);
 
         var sessionResult = await _acpConnectionCommands
-            .EnsureRemoteSessionAsync(this, TryAuthenticateAsync, token)
+            .EnsureRemoteSessionAsync(sink, ct => AuthenticatePromptOperationAsync(operation, ct), token)
             .ConfigureAwait(false);
 
-        token.ThrowIfCancellationRequested();
+        ThrowIfPromptSourceChanged(operation);
+        await BindPromptOperationAsync(operation, operation.Source, sessionResult.RemoteSessionId).ConfigureAwait(false);
 
         if (!sessionResult.UsedExistingBinding)
         {
@@ -392,15 +431,16 @@ public partial class ChatViewModel
         await _chatStore.Dispatch(new AdvanceTurnPhaseAction(
             context.ConversationId,
             context.TurnId,
-            ChatTurnPhase.DispatchingPrompt));
+            ChatTurnPhase.DispatchingPrompt,
+            ConnectionInstanceId: operation.Source.ConnectionInstanceId));
 
         var promptDispatchResult = await _acpConnectionCommands
             .DispatchPromptToRemoteSessionAsync(
                 sessionResult.RemoteSessionId,
                 context.PromptText,
                 context.PromptMessageId,
-                this,
-                TryAuthenticateAsync,
+                sink,
+                ct => AuthenticatePromptOperationAsync(operation, ct),
                 token)
             .ConfigureAwait(false);
 
@@ -408,43 +448,27 @@ public partial class ChatViewModel
             context.ConversationId,
             context.TurnId,
             promptDispatchResult.RemoteSessionId,
-            promptDispatchResult.Response).ConfigureAwait(false);
+            promptDispatchResult.Response,
+            operation.Source,
+            token).ConfigureAwait(false);
     }
 
-    private Task FailPromptSendAsync(PromptSendContext context, string reason)
-        => _chatStore.Dispatch(new FailTurnAction(context.ConversationId, context.TurnId, reason)).AsTask();
-
-    private Task RestorePromptTextAfterSendFailureAsync(string promptText)
-        => PostToUiAsync(() =>
-        {
-            if (string.IsNullOrWhiteSpace(CurrentPrompt))
-            {
-                CurrentPrompt = promptText;
-            }
-        });
+    private Task FailPromptSendAsync(PromptOperation operation, string reason)
+        => _chatStore.Dispatch(new FailTurnAction(operation.Context.ConversationId, operation.Context.TurnId,
+            reason, ConnectionInstanceId: operation.Source.ConnectionInstanceId)).AsTask();
 
     private async Task OnPromptRequestDispatchedAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        var activeTurn = state.ActiveTurn;
-        if (activeTurn is null || activeTurn.Phase != ChatTurnPhase.DispatchingPrompt)
+        var operation = ResolvePromptOperation(state.HydratedConversationId);
+        if (operation is null)
         {
             return;
         }
 
-        var binding = state.ResolveBinding(activeTurn.ConversationId);
-        await _chatStore.Dispatch(new AdvanceTurnPhaseAction(
-            activeTurn.ConversationId,
-            activeTurn.TurnId,
-            ChatTurnPhase.WaitingForAgent)).ConfigureAwait(false);
-        Logger.LogInformation(
-            "Chat prompt request dispatched. ConversationId={ConversationId} TurnId={TurnId} RemoteSessionId={RemoteSessionId} TurnPhase={TurnPhase}",
-            activeTurn.ConversationId,
-            activeTurn.TurnId,
-            binding?.RemoteSessionId,
-            ChatTurnPhase.WaitingForAgent);
+        await OnPromptOperationDispatchedAsync(operation, cancellationToken).ConfigureAwait(false);
     }
 
     Task IAcpChatCoordinatorSink.NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken)
@@ -609,7 +633,7 @@ public partial class ChatViewModel
     private ChatPlanPanelState ResolvePlanPanelState()
         => _planPanelStatePresenter.Present(ShowPlanPanel, PlanEntries.Count);
 
-    private bool CanSendPrompt() => ResolveInputState().CanSendPrompt;
+    private bool CanSendPrompt() => ResolveInputState().CanSendPrompt && ResolvePromptOperation(CurrentSessionId) is null;
 
     [RelayCommand]
     private void SelectChatModeDisplay(ComposerSelectorItemViewModel? item)
@@ -1253,46 +1277,71 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task CancelPromptAsync()
     {
-        if (!IsPromptInFlight)
-        {
-            return;
-        }
-
+        var conversationId = CurrentSessionId;
+        var sourceAtInvocation = ResolvePromptSource(_chatService, SelectedProfileId);
+        var invocationOperation = ResolvePromptOperation(conversationId);
         var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-        var activeTurn = state.ActiveTurn;
+        var activeTurn = state.ResolveTurn(conversationId);
+        if (activeTurn is null || activeTurn.Phase is ChatTurnPhase.Completed or ChatTurnPhase.Failed or ChatTurnPhase.Cancelled) return;
+        var operation = invocationOperation;
+        if (operation is not null && operation.Context.TurnId != activeTurn.TurnId) return;
         var isDispatchedTurn = IsDispatchedPromptTurn(activeTurn);
         if (IsUndispatchedPromptTurn(activeTurn))
         {
-            try
-            {
-                _sendPromptCts?.Cancel();
-            }
-            catch
-            {
-            }
-        }
-
-        if (!IsSessionActive)
-        {
-            return;
+            operation?.Cancel();
         }
 
         try
         {
             if (!isDispatchedTurn)
             {
-                await PreemptivelyCancelTurnAsync().ConfigureAwait(false);
+                await PreemptivelyCancelTurnAsync(activeTurn.ConversationId, activeTurn.TurnId, activeTurn.ConnectionInstanceId).ConfigureAwait(false);
             }
             else
             {
-                await PreemptivelyCancelOutstandingToolCallsAsync().ConfigureAwait(false);
+                await PreemptivelyCancelOutstandingToolCallsAsync(state, activeTurn).ConfigureAwait(false);
             }
 
             if (isDispatchedTurn)
             {
-                var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(false);
-                await CancelPendingPermissionRequestAsync(activeBinding?.RemoteSessionId).ConfigureAwait(false);
-                await _acpConnectionCommands.CancelPromptAsync(this).ConfigureAwait(false);
+                var source = operation?.Source ?? sourceAtInvocation;
+                if (source is not { } capturedSource || !IsPromptSourceCurrent(capturedSource)) return;
+                AskUserRequestViewModel? pendingAsk = null;
+                await PostToUiAsync(() =>
+                {
+                    var request = _panelStateCoordinator.GetPendingAskUserRequest(activeTurn.ConversationId);
+                    if (request?.Source is { } owner && owner.Matches(capturedSource)) pendingAsk = request;
+                }).ConfigureAwait(false);
+                await CancelPendingPermissionRequestAsync(activeTurn.ConversationId, capturedSource).ConfigureAwait(false);
+                if (operation is not null)
+                {
+                    var sink = new ScopedAcpChatCoordinatorSink(this,
+                        new AcpConnectionContext(activeTurn.ConversationId, true, operation.Context.ActivationVersion), operation);
+                    await _acpConnectionCommands.CancelPromptAsync(sink).ConfigureAwait(false);
+                }
+                else
+                {
+                    var context = new PromptSendContext(activeTurn.ConversationId, activeTurn.TurnId, string.Empty,
+                        string.Empty, new ConversationMessageSnapshot(), state.DraftRevision,
+                        _conversationActivationOrchestrator.CurrentActivationVersion, ConnectionGeneration,
+                        GetSessionCwdOrDefault(activeTurn.ConversationId));
+                    using var cancellationTarget = new PromptOperation(context, capturedSource, _disposeCts.Token);
+                    var sink = new ScopedAcpChatCoordinatorSink(this,
+                        new AcpConnectionContext(activeTurn.ConversationId, true), cancellationTarget);
+                    await _acpConnectionCommands.CancelPromptAsync(sink).ConfigureAwait(false);
+                }
+
+                if (pendingAsk is not null)
+                {
+                    await PostToUiAsync(() =>
+                    {
+                        // A completed protocol cancellation retires only the request captured for
+                        // that conversation and connection; a replacement question keeps its owner.
+                        _panelStateCoordinator.RemoveAskUserRequest(activeTurn.ConversationId, pendingAsk);
+                        PendingAskUserRequest = _panelStateCoordinator.GetPendingAskUserRequest(CurrentSessionId);
+                    }).ConfigureAwait(false);
+                    await RequestPoolCleanupAsync().ConfigureAwait(false);
+                }
             }
         }
         catch (Exception ex)
@@ -1663,7 +1712,7 @@ public partial class ChatViewModel
             _pendingLocalPromptText = value;
             _pendingLocalPromptConversationId = CurrentSessionId;
             _hasPendingLocalPromptProjection = true;
-            _ = DispatchDraftTextAsync(value, CurrentSessionId);
+            _promptDraftDispatchTask = DispatchDraftTextAsync(value, CurrentSessionId);
         }
 
         SendPromptCommand.NotifyCanExecuteChanged();

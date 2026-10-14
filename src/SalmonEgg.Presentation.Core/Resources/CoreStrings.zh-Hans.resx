@@ -1525,4 +1525,40 @@
   <data name="SessionConfig_Failed" xml:space="preserve">
     <value>设置未能应用，编辑已保留，请重试。</value>
   </data>
+  <data name="Nav_StatusNeedsAttention" xml:space="preserve">
+    <value>待处理</value>
+  </data>
+  <data name="Nav_StatusWorkingGroup" xml:space="preserve">
+    <value>进行中</value>
+  </data>
+  <data name="Nav_StatusOther" xml:space="preserve">
+    <value>其他会话</value>
+  </data>
+  <data name="Nav_StatusUnread" xml:space="preserve">
+    <value>新回复，未读</value>
+  </data>
+  <data name="Nav_StatusPermission" xml:space="preserve">
+    <value>等待批准</value>
+  </data>
+  <data name="Nav_StatusInput" xml:space="preserve">
+    <value>需要回答</value>
+  </data>
+  <data name="Nav_StatusError" xml:space="preserve">
+    <value>需要处理的问题</value>
+  </data>
+  <data name="Nav_StatusWorking" xml:space="preserve">
+    <value>正在运行</value>
+  </data>
+  <data name="Nav_StatusConversation" xml:space="preserve">
+    <value>会话</value>
+  </data>
+  <data name="ChatOperation_BackgroundResyncFailed" xml:space="preserve">
+    <value>无法恢复此会话。请重新连接后继续。</value>
+  </data>
+  <data name="ChatOperation_ConnectionInterrupted" xml:space="preserve">
+    <value>连接已中断。请重新连接后继续。</value>
+  </data>
+  <data name="ChatOperation_MissingStopReason" xml:space="preserve">
+    <value>Agent 结束了回复，但未提供 ACP 要求的结束原因。</value>
+  </data>
 </root>

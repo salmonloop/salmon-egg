@@ -24,6 +24,8 @@ public sealed class AppSettingValueCatalogTests
     [Theory]
     [InlineData("theme", "Dark")]
     [InlineData("backdrop", "Acrylic")]
+    [InlineData(AppSettingValueCatalog.SidebarConversationGroupingKey, AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(AppSettingValueCatalog.SidebarConversationGroupingKey, AppSettingValueCatalog.StatusConversationGrouping)]
     [InlineData("animation_enabled", "false")]
     [InlineData("save_local_history", "false")]
     [InlineData("telemetry_sharing_enabled", "false")]
@@ -104,5 +106,53 @@ public sealed class AppSettingValueCatalogTests
         // 防止未来有人把目录改坏（例如改名 "Dark" → "Dim" 而存储层不认）。
         Assert.Equal(new[] { "System", "Light", "Dark" }, AppSettingValueCatalog.ThemeValues);
         Assert.Equal(new[] { "System", "Mica", "Acrylic", "Solid" }, AppSettingValueCatalog.BackdropValues);
+    }
+
+    [Theory]
+    [InlineData(null, AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData("", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData("   ", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData("Unknown", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData("project", AppSettingValueCatalog.ProjectConversationGrouping)]
+    [InlineData(" status ", AppSettingValueCatalog.StatusConversationGrouping)]
+    [InlineData("Status", AppSettingValueCatalog.StatusConversationGrouping)]
+    public void NormalizeSidebarConversationGrouping_WithPersistedValue_ReturnsCanonicalIdempotentValue(
+        string? value,
+        string expected)
+    {
+        // Arrange / Act
+        var normalized = AppSettingValueCatalog.NormalizeSidebarConversationGrouping(value);
+
+        // Assert
+        Assert.Equal(expected, normalized);
+        Assert.Contains(normalized, AppSettingValueCatalog.SidebarConversationGroupingValues);
+        Assert.Equal(normalized, AppSettingValueCatalog.NormalizeSidebarConversationGrouping(normalized));
+    }
+
+    [Theory]
+    [InlineData("Unknown")]
+    [InlineData("status")]
+    [InlineData(" Status ")]
+    [InlineData("")]
+    public void TryApply_InvalidSidebarGrouping_PreservesCurrentValue(string value)
+    {
+        // Arrange
+        var settings = new AppSettings
+        {
+            SidebarConversationGrouping = AppSettingValueCatalog.StatusConversationGrouping
+        };
+
+        // Act
+        var applied = AppSettingValueCatalog.TryApply(
+            settings,
+            AppSettingValueCatalog.SidebarConversationGroupingKey,
+            value);
+
+        // Assert
+        Assert.False(applied);
+        Assert.Equal(AppSettingValueCatalog.StatusConversationGrouping, settings.SidebarConversationGrouping);
+        Assert.Equal(
+            AppSettingValueCatalog.SidebarConversationGroupingValues,
+            AppSettingValueCatalog.AllowedValues(AppSettingValueCatalog.SidebarConversationGroupingKey));
     }
 }

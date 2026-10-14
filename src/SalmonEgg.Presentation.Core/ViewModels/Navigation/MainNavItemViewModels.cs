@@ -9,6 +9,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
@@ -117,6 +118,52 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     }
 }
 
+public sealed partial class StatusGroupNavItemViewModel : MainNavItemViewModel
+{
+    private readonly Action<ConversationStatusGroup, bool> _saveExpandedPreference;
+    private string _title;
+    private int _count;
+    private bool _isExpanded;
+
+    public StatusGroupNavItemViewModel(
+        ConversationStatusGroup group,
+        string title,
+        bool isExpanded,
+        Action<ConversationStatusGroup, bool> saveExpandedPreference,
+        INavigationPaneState navigationState,
+        IUiDispatcher uiDispatcher)
+        : base(navigationState, uiDispatcher)
+    {
+        Group = group;
+        _title = title;
+        _isExpanded = isExpanded;
+        _saveExpandedPreference = saveExpandedPreference ?? throw new ArgumentNullException(nameof(saveExpandedPreference));
+    }
+
+    public ConversationStatusGroup Group { get; }
+
+    public string Title
+    {
+        get => _title;
+        set => SetProperty(ref _title, value);
+    }
+
+    public int Count
+    {
+        get => _count;
+        set => SetProperty(ref _count, value);
+    }
+
+    // Compact/flyout transitions also change this projection, so persistence has a separate intent.
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetProperty(ref _isExpanded, value);
+    }
+
+    public void ApplyUserExpandedPreference(bool expanded) => _saveExpandedPreference(Group, expanded);
+}
+
 public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 {
     private readonly IStringLocalizer<CoreStrings> _localizer;
@@ -126,17 +173,28 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
     private readonly IChatSessionCatalog _chatSessionCatalog;
 
     public string SessionId { get; }
-    public string ProjectId { get; }
+    private string _projectId;
+
+    public string ProjectId => _projectId;
 
     private string _title = string.Empty;
     private string _relativeTimeText = string.Empty;
     private string? _remoteSessionId;
     private bool _hasUnreadAttention;
+    private ConversationStatusIcon _statusIcon;
+    private string _projectDisplayName = string.Empty;
+    private bool _showProjectDisplayName;
 
     public string Title
     {
         get => _title;
-        set => SetProperty(ref _title, value);
+        set
+        {
+            if (SetProperty(ref _title, value))
+            {
+                OnPropertyChanged(nameof(AutomationName));
+            }
+        }
     }
 
     public string RelativeTimeText
@@ -169,10 +227,51 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         }
     }
 
-    public string AutomationName
-        => HasUnreadAttention
-            ? $"{Title}, unread"
-            : Title;
+    public ConversationStatusIcon StatusIcon
+    {
+        get => _statusIcon;
+        set
+        {
+            if (SetProperty(ref _statusIcon, value))
+            {
+                RefreshLocalizedText();
+            }
+        }
+    }
+
+    public string ProjectDisplayName
+    {
+        get => _projectDisplayName;
+        private set
+        {
+            if (SetProperty(ref _projectDisplayName, value))
+            {
+                OnPropertyChanged(nameof(AutomationName));
+            }
+        }
+    }
+
+    public bool ShowProjectDisplayName
+    {
+        get => _showProjectDisplayName;
+        private set => SetProperty(ref _showProjectDisplayName, value);
+    }
+
+    public string StatusDescription => _localizer[StatusIcon switch
+    {
+        ConversationStatusIcon.Unread => "Nav_StatusUnread",
+        ConversationStatusIcon.Permission => "Nav_StatusPermission",
+        ConversationStatusIcon.Input => "Nav_StatusInput",
+        ConversationStatusIcon.Error => "Nav_StatusError",
+        ConversationStatusIcon.Working => "Nav_StatusWorking",
+        _ => "Nav_StatusConversation"
+    }];
+
+    public string AutomationName => IsPlaceholder
+        ? Title
+        : string.IsNullOrWhiteSpace(ProjectDisplayName)
+            ? $"{Title}, {StatusDescription}"
+            : $"{Title}, {ProjectDisplayName}, {StatusDescription}";
 
     public bool IsPlaceholder { get; }
 
@@ -223,7 +322,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
     {
         SessionId = sessionId;
         _remoteSessionId = remoteSessionId;
-        ProjectId = projectId;
+        _projectId = projectId;
         Title = title;
         RelativeTimeText = relativeTimeText;
         _ui = ui;
@@ -234,6 +333,23 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 
         ArchiveCommand = new AsyncRelayCommand(ArchiveAsync, CanArchive);
         CopySessionIdCommand = new AsyncRelayCommand(CopySessionIdAsync, CanCopySessionId);
+    }
+
+    public void UpdateProject(string projectId, string displayName, bool showProjectDisplayName)
+    {
+        if (SetProperty(ref _projectId, projectId, nameof(ProjectId)))
+        {
+            OnPropertyChanged(nameof(AutomationName));
+        }
+
+        ProjectDisplayName = displayName;
+        ShowProjectDisplayName = showProjectDisplayName;
+    }
+
+    public void RefreshLocalizedText()
+    {
+        OnPropertyChanged(nameof(StatusDescription));
+        OnPropertyChanged(nameof(AutomationName));
     }
 
     private bool CanArchive()
@@ -318,6 +434,8 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
+    public ConversationStatusGroup? StatusGroup { get; }
+    public string Tag => StatusGroup is { } group ? NavItemTag.MoreStatusGroup(group) : NavItemTag.More(ProjectId);
     private string _titleFormat;
     private int _count;
     public int Count
@@ -351,6 +469,18 @@ public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
         _count = remainingCount;
         _titleFormat = titleFormat;
         ShowMoreCommand = showMoreCommand;
+    }
+
+    public MoreSessionsNavItemViewModel(
+        ConversationStatusGroup group,
+        int remainingCount,
+        IAsyncRelayCommand showMoreCommand,
+        INavigationPaneState navigationState,
+        IUiDispatcher uiDispatcher,
+        string titleFormat = "Show more (+{0})")
+        : this(string.Empty, remainingCount, showMoreCommand, navigationState, uiDispatcher, titleFormat)
+    {
+        StatusGroup = group;
     }
 
     public void UpdateTitleFormat(string titleFormat)

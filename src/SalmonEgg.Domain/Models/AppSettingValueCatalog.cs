@@ -24,10 +24,18 @@ public static class AppSettingValueCatalog
     public const string AnimationEnabledKey = "animation_enabled";
     public const string LanguageKey = "language";
     public const string BackdropKey = "backdrop";
+    public const string SidebarConversationGroupingKey = "sidebar_conversation_grouping";
     public const string SaveLocalHistoryKey = "save_local_history";
     public const string CacheRetentionDaysKey = "cache_retention_days";
     public const string TelemetrySharingEnabledKey = "telemetry_sharing_enabled";
     public const string KeyboardShortcutsEnabledKey = "keyboard_shortcuts_enabled";
+
+    public const string ProjectConversationGrouping = "Project";
+    public const string StatusConversationGrouping = "Status";
+    public const string DefaultSidebarConversationGrouping = ProjectConversationGrouping;
+    public const bool DefaultSidebarAttentionGroupExpanded = true;
+    public const bool DefaultSidebarWorkingGroupExpanded = true;
+    public const bool DefaultSidebarOtherGroupExpanded = false;
 
     /// <summary>
     /// 全部可由 CLI 编辑的设置键，按帮助文本展示顺序排列。
@@ -43,6 +51,7 @@ public static class AppSettingValueCatalog
         AnimationEnabledKey,
         LanguageKey,
         BackdropKey,
+        SidebarConversationGroupingKey,
         SaveLocalHistoryKey,
         CacheRetentionDaysKey,
         TelemetrySharingEnabledKey,
@@ -54,6 +63,9 @@ public static class AppSettingValueCatalog
 
     /// <summary>背景材质合法值，与 GUI 设置页选项一致。</summary>
     public static IReadOnlyList<string> BackdropValues { get; } = ["System", "Mica", "Acrylic", "Solid"];
+
+    public static IReadOnlyList<string> SidebarConversationGroupingValues { get; } =
+        [ProjectConversationGrouping, StatusConversationGrouping];
 
     /// <summary>水合完成模式合法值。</summary>
     public static IReadOnlyList<string> HydrationCompletionModeValues { get; } = ["StrictReplay", "LoadResponse"];
@@ -85,6 +97,10 @@ public static class AppSettingValueCatalog
             case BackdropKey:
                 if (!Matches(BackdropValues, value)) return false;
                 settings.Backdrop = value;
+                return true;
+            case SidebarConversationGroupingKey:
+                if (!Matches(SidebarConversationGroupingValues, value)) return false;
+                settings.SidebarConversationGrouping = value;
                 return true;
             case LanguageKey:
                 // 写入路径显式拒绝未知标签（读路径的宽容回退是 LoadAsync 的事，不在这里）。
@@ -121,6 +137,7 @@ public static class AppSettingValueCatalog
         {
             ThemeKey => settings.Theme,
             BackdropKey => settings.Backdrop,
+            SidebarConversationGroupingKey => settings.SidebarConversationGrouping,
             LanguageKey => settings.Language,
             AnimationEnabledKey => Render(settings.IsAnimationEnabled),
             SaveLocalHistoryKey => Render(settings.SaveLocalHistory),
@@ -138,9 +155,15 @@ public static class AppSettingValueCatalog
     {
         ThemeKey => ThemeValues,
         BackdropKey => BackdropValues,
+        SidebarConversationGroupingKey => SidebarConversationGroupingValues,
         LanguageKey => LanguageTags,
         _ => null
     };
+
+    public static string NormalizeSidebarConversationGrouping(string? value) =>
+        SidebarConversationGroupingValues.FirstOrDefault(candidate =>
+            string.Equals(candidate, value?.Trim(), StringComparison.OrdinalIgnoreCase))
+        ?? DefaultSidebarConversationGrouping;
 
     private static bool Matches(IReadOnlyList<string> allowed, string value) =>
         allowed.Contains(value, StringComparer.Ordinal);

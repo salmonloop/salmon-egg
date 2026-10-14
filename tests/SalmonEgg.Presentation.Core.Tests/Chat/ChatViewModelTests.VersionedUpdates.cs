@@ -105,6 +105,58 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task VersionedUpdates_BackgroundWorkState_UpdatesOnlyItsConversationAndClassification()
+    {
+        // Arrange
+        var dispatcher = new QueueingSynchronizationContext();
+        await using var fixture = CreateInteractionViewModel(dispatcher);
+        using var stablePeer = await PermissionUiPeer.CreateAsync();
+        using var peer = await VersionedUpdatePeer.CreateAsync();
+        await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        Assert.True(fixture.InteractionRegistry!.TryGetByProfile("profile", out var backgroundConnection));
+        RegisterInteractionService(fixture, stablePeer.Service, "foreground-profile");
+        await AwaitWithSynchronizationContextAsync(dispatcher,
+            fixture.ViewModel.ReplaceChatServiceAsync(stablePeer.Service, TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-2",
+            Bindings = state.Bindings!.SetItem("conv-2", new("conv-2", "remote-1", "foreground-profile"))
+        });
+        fixture.ViewModel.CurrentPrompt = "Foreground draft";
+        string? turnId = null;
+        var transitions = new[]
+        {
+            (Wire: "running", Phase: ChatTurnPhase.WaitingForAgent, Group: ConversationStatusGroup.Working, Icon: ConversationStatusIcon.Working),
+            (Wire: "requires_action", Phase: ChatTurnPhase.WaitingForUser, Group: ConversationStatusGroup.NeedsAttention, Icon: ConversationStatusIcon.Input),
+            (Wire: "idle", Phase: ChatTurnPhase.Completed, Group: ConversationStatusGroup.Other, Icon: ConversationStatusIcon.Conversation)
+        };
+
+        foreach (var transition in transitions)
+        {
+            // Act
+            peer.Update("{\"sessionUpdate\":\"state_update\",\"state\":\"" + transition.Wire + "\"}");
+            await DrainVersionedUpdatesAsync(fixture, dispatcher);
+
+            // Assert
+            var state = await fixture.ChatStore.GetCurrentStateAsync();
+            var turn = state.ResolveTurn("conv-1");
+            Assert.NotNull(turn);
+            turnId ??= turn.TurnId;
+            Assert.Equal(turnId, turn.TurnId);
+            Assert.Equal(transition.Phase, turn.Phase);
+            Assert.Equal(backgroundConnection.ProfileId, turn.ProfileId);
+            Assert.Equal(backgroundConnection.ConnectionInstanceId, turn.ConnectionInstanceId);
+            var status = ConversationStatusPolicy.Resolve(turn, default, null);
+            Assert.Equal(transition.Group, status.Group);
+            Assert.Equal(transition.Icon, status.Icon);
+            Assert.Null(state.ResolveTurn("conv-2"));
+            Assert.Equal("conv-2", state.HydratedConversationId);
+            Assert.Equal("Foreground draft", fixture.ViewModel.CurrentPrompt);
+            Assert.Same(stablePeer.Service, fixture.ViewModel.CurrentChatService);
+        }
+    }
+
+    [Fact]
     public async Task VersionedUpdates_UserEcho_ReplacesTheOptimisticMessageWithoutDuplication()
     {
         var dispatcher = new QueueingSynchronizationContext();
@@ -112,11 +164,15 @@ public partial class ChatViewModelTests
         using var stablePeer = await PermissionUiPeer.CreateAsync();
         using var peer = await VersionedUpdatePeer.CreateAsync();
         await AttachPermissionPeerAsync(fixture, dispatcher, stablePeer, peer.Service);
+        Assert.True(fixture.InteractionRegistry!.TryGetByProfile("profile", out var connection));
+        var binding = (await fixture.ChatStore.GetCurrentStateAsync()).ResolveBinding("conv-1")!;
         var timestamp = DateTime.UtcNow;
         await fixture.DispatchAsync(new UpsertTranscriptMessageAction("conv-1",
             new ConversationMessageSnapshot { Id = "local", IsOutgoing = true, TextContent = "question", ContentType = "text", Timestamp = timestamp }));
         await fixture.DispatchAsync(new BeginTurnAction("conv-1", "turn", ChatTurnPhase.WaitingForAgent,
-            PendingUserMessageLocalId: "local", PendingUserMessageText: "question"));
+            PendingUserMessageLocalId: "local", PendingUserMessageText: "question",
+            ProfileId: connection.ProfileId, RemoteSessionId: binding.RemoteSessionId,
+            ConnectionInstanceId: connection.ConnectionInstanceId));
 
         peer.Update("""{"sessionUpdate":"user_message","messageId":"user-1","content":[{"type":"text","text":"question"}]}""");
         await DrainVersionedUpdatesAsync(fixture, dispatcher);
