@@ -77,7 +77,7 @@ jobs:
       # would fail the analysis for a toolchain reason rather than a code reason. The platform heads are
       # thin shells over these libraries, which is where the analyzable logic lives.
       - name: Build analyzable projects
-        run: |\
+        run: |
           set -euo pipefail
           for project in \
             src/SalmonEgg.Domain/SalmonEgg.Domain.csproj \
