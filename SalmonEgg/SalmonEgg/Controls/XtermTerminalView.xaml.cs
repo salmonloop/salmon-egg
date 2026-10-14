@@ -137,12 +137,12 @@ public sealed partial class XtermTerminalView : UserControl
 
         view._sessionGeneration++;
         view.DetachSession(e.OldValue as IInteractiveTerminalSession);
-        view.AttachSession(e.NewValue as IInteractiveTerminalSession);
         view._sessionHasLiveOutput = false;
         view.ClearPendingCommands(static _ => true);
         view._guiLocalTerminalSmokeCommandSent = false;
         view._guiLocalTerminalSmokeCommand = Environment.GetEnvironmentVariable(GuiLocalTerminalSmokeCommandEnvVar);
         _ = view.ResetTerminalBridgeAsync();
+        view.AttachSession(e.NewValue as IInteractiveTerminalSession);
     }
 
     private async Task InitializeTerminalAsync()
